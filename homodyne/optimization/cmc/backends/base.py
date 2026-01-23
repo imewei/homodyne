@@ -102,8 +102,9 @@ def select_backend(
     # (it processes shards one at a time in a for loop, not in parallel)
     if backend_name == "jax":
         logger.warning(
-            "CMC backend 'jax' is deprecated; mapping to 'multiprocessing' for parallel execution. "
-            "Set backend_config.name to 'multiprocessing' or 'auto' instead."
+            "CMC backend 'jax' is deprecated; mapping to 'multiprocessing' "
+            "for parallel execution. Set backend_config.name to "
+            "'multiprocessing' or 'auto' instead."
         )
         backend_name = "multiprocessing"
 
@@ -167,7 +168,8 @@ def combine_shard_samples(
     shard_samples : list[MCMCSamples]
         Samples from each shard.
     method : str
-        Combination method: "consensus_mc" (recommended), "weighted_gaussian", "simple_average", or "auto".
+        Combination method: "consensus_mc" (recommended),
+        "weighted_gaussian", "simple_average", or "auto".
     chunk_size : int
         Number of shards to combine at once for hierarchical combination.
         Default 500 keeps peak memory under ~50MB per combination step.
@@ -186,7 +188,8 @@ def combine_shard_samples(
         import gc
 
         logger.info(
-            f"Hierarchical combination: {len(shard_samples)} shards in chunks of {chunk_size}"
+            f"Hierarchical combination: {len(shard_samples)} shards "
+            f"in chunks of {chunk_size}"
         )
         intermediate_results = []
         n_chunks = (len(shard_samples) + chunk_size - 1) // chunk_size

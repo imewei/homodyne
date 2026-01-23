@@ -64,15 +64,15 @@ class TestShardingLogic:
 
     @patch("homodyne.optimization.cmc.core.select_backend")
     @patch("homodyne.optimization.cmc.core.CMCResult") # Mock result creation
-    @patch("homodyne.optimization.cmc.core.shard_data_random")
+    @patch("homodyne.optimization.cmc.core.shard_data_angle_balanced")
     @patch("homodyne.optimization.cmc.core.shard_data_stratified")
     def test_force_random_sharding_override(
-        self, mock_stratified, mock_random, mock_result_cls, mock_select_backend, multi_angle_data
+        self, mock_stratified, mock_angle_balanced, mock_result_cls, mock_select_backend, multi_angle_data
     ):
-        """Verify core.py forces random sharding for multi-angle data even if stratified requested."""
-        
-        # Setup mocks
-        mock_random.return_value = [multi_angle_data, multi_angle_data] # Return 2 shards
+        """Verify core.py forces angle-balanced sharding for multi-angle data even if stratified requested."""
+
+        # Setup mocks - v2.19.0 uses shard_data_angle_balanced for multi-angle data
+        mock_angle_balanced.return_value = [multi_angle_data, multi_angle_data] # Return 2 shards
         mock_stratified.return_value = [multi_angle_data, multi_angle_data]
         
         mock_backend = MagicMock()
@@ -112,8 +112,8 @@ class TestShardingLogic:
             cmc_config=config_dict
         )
         
-        # Verify shard_data_random WAS called
-        assert mock_random.called, "Should have switched to random sharding"
+        # Verify shard_data_angle_balanced WAS called (v2.19.0+)
+        assert mock_angle_balanced.called, "Should have switched to angle-balanced sharding"
         # Verify shard_data_stratified WAS NOT called
         assert not mock_stratified.called, "Should not have used stratified sharding"
 

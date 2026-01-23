@@ -678,10 +678,22 @@ def run_nuts_sampling(
     # gamma_dot_t0 (~10^-3) causes 0% acceptance rate because no single
     # step size ε works for all dimensions. Dense mass matrix allows NUTS
     # to adapt per-dimension and learn covariance structure during warmup.
+    #
+    # CONVERGENCE FIX (Jan 2026): Elevate target_accept_prob for laminar_flow.
+    # The 28.4% divergence rate in 3-angle laminar_flow was caused by step size
+    # adaptation settling on values too large for the complex posterior geometry.
+    # Higher target_accept_prob forces smaller steps, reducing divergences.
+    effective_target_accept = config.target_accept_prob
+    if analysis_mode == "laminar_flow" and config.target_accept_prob < 0.9:
+        effective_target_accept = 0.9
+        run_logger.info(
+            f"Elevating target_accept_prob from {config.target_accept_prob} to {effective_target_accept} "
+            f"for laminar_flow mode (reduces divergences in complex posterior)"
+        )
     kernel = NUTS(
         model,
         init_strategy=init_strategy,
-        target_accept_prob=config.target_accept_prob,
+        target_accept_prob=effective_target_accept,
         dense_mass=True,
     )
 
@@ -765,6 +777,31 @@ def run_nuts_sampling(
     num_divergent = 0
     if "diverging" in extra_fields:
         num_divergent = int(np.sum(extra_fields["diverging"]))
+
+    # CONVERGENCE CHECK (Jan 2026): Early divergence rate detection
+    # High divergence rates indicate NUTS is struggling with the posterior geometry.
+    # The 28.4% divergence rate in the 3-angle failure case signals unreliable posteriors.
+    total_samples = config.num_samples * config.num_chains
+    if total_samples > 0:
+        divergence_rate = num_divergent / total_samples
+        if divergence_rate > 0.30:
+            run_logger.error(
+                f"CRITICAL: Divergence rate {divergence_rate:.1%} ({num_divergent}/{total_samples}) "
+                f"exceeds 30% threshold. Posterior is likely unreliable. Consider:\n"
+                "  1. Reducing shard size (smaller max_points_per_shard)\n"
+                "  2. Using NLSQ warm-start for better initial values\n"
+                "  3. Widening priors or fixing problematic parameters"
+            )
+        elif divergence_rate > 0.10:
+            run_logger.warning(
+                f"High divergence rate: {divergence_rate:.1%} ({num_divergent}/{total_samples}). "
+                f"Posterior may be biased. Target: <5%"
+            )
+        elif divergence_rate > 0.05:
+            run_logger.info(
+                f"Elevated divergence rate: {divergence_rate:.1%} ({num_divergent}/{total_samples}). "
+                f"Acceptable but monitor closely."
+            )
 
     accept_prob = float("nan")
     accept_prob_arr = None

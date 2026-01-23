@@ -523,8 +523,6 @@ class MultiprocessingBackend(CMCBackend):
                     "q": model_kwargs["q"],
                     "L": model_kwargs["L"],
                     "dt": model_kwargs["dt"],
-                    "fixed_contrast": model_kwargs.get("fixed_contrast"),
-                    "fixed_offset": model_kwargs.get("fixed_offset"),
                     "time_grid": (
                         np.array(model_kwargs["time_grid"])
                         if model_kwargs.get("time_grid") is not None
@@ -564,6 +562,22 @@ class MultiprocessingBackend(CMCBackend):
         completed_count = 0
         recorded_shards: set[int] = set()
         last_heartbeat: dict[int, float] = {}
+
+        # EARLY ABORT TRACKING (Jan 2026): Monitor failure rate for early termination
+        # If too many shards fail early, abort to save compute time
+        early_abort_threshold = 0.5  # Abort if >50% of first N shards fail
+        early_abort_sample_size = min(10, n_shards)  # Check first 10 shards
+        failure_categories: dict[str, int] = {
+            "timeout": 0,
+            "heartbeat_timeout": 0,
+            "crash": 0,
+            "numerical": 0,
+            "convergence": 0,
+            "sampling": 0,
+            "unknown": 0,
+        }
+        success_count = 0
+        early_abort_triggered = False
 
         # Progress bar
         pbar = tqdm(
@@ -614,16 +628,55 @@ class MultiprocessingBackend(CMCBackend):
                         # Reset to fast polling on completion (adaptive polling)
                         last_completion_time = time.time()
                         poll_interval = poll_interval_min
+
+                        # Track success/failure for early abort logic
                         if message.get("success"):
+                            success_count += 1
                             pbar.set_postfix(
                                 shard=message.get("shard_idx", "?"),
                                 time=f"{message.get('duration', 0):.1f}s",
                             )
                         else:
+                            # Track failure category
+                            category = message.get("error_category", "unknown")
+                            if category in failure_categories:
+                                failure_categories[category] += 1
+                            else:
+                                failure_categories["unknown"] += 1
                             pbar.set_postfix(
                                 shard=message.get("shard_idx", "?"),
                                 status="failed",
                             )
+
+                        # EARLY ABORT CHECK (Jan 2026): Abort if too many shards fail early
+                        if (
+                            not early_abort_triggered
+                            and completed_count >= early_abort_sample_size
+                            and completed_count <= early_abort_sample_size + 2
+                        ):
+                            total_failures = sum(failure_categories.values())
+                            failure_rate = total_failures / completed_count
+                            if failure_rate > early_abort_threshold:
+                                early_abort_triggered = True
+                                run_logger.error(
+                                    f"EARLY ABORT: {failure_rate:.1%} failure rate in first "
+                                    f"{completed_count} shards exceeds {early_abort_threshold:.0%} threshold.\n"
+                                    f"Failure breakdown: {failure_categories}\n"
+                                    f"Terminating remaining shards to save compute time."
+                                )
+                                # Clear pending shards and terminate active processes
+                                pending_shards.clear()
+                                for idx, (proc, _) in list(active_processes.items()):
+                                    run_logger.info(
+                                        f"Terminating shard {idx} due to early abort"
+                                    )
+                                    proc.terminate()
+                                    proc.join(timeout=2)
+                                    if proc.is_alive():
+                                        proc.kill()
+                                        proc.join(timeout=1)
+                                    active_processes.pop(idx, None)
+
                         if shard_idx in active_processes:
                             # Clean up completed process tracking
                             proc, _ = active_processes.pop(shard_idx)
@@ -688,6 +741,7 @@ class MultiprocessingBackend(CMCBackend):
                                 }
                             )
                             recorded_shards.add(shard_idx)
+                            failure_categories["crash"] += 1
                             completed_count += 1
                             pbar.update(1)
                             pbar.set_postfix(shard=shard_idx, status="no-result")
@@ -720,6 +774,7 @@ class MultiprocessingBackend(CMCBackend):
                                 }
                             )
                             recorded_shards.add(shard_idx)
+                            failure_categories["timeout"] += 1
                             completed_count += 1
                             pbar.update(1)
                             pbar.set_postfix(shard=shard_idx, status="timeout")
@@ -753,6 +808,7 @@ class MultiprocessingBackend(CMCBackend):
                                 }
                             )
                             recorded_shards.add(shard_idx)
+                            failure_categories["heartbeat_timeout"] += 1
                             completed_count += 1
                             pbar.update(1)
                             pbar.set_postfix(shard=shard_idx, status="frozen")

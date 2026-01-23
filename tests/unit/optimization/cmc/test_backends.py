@@ -533,7 +533,7 @@ class TestTimeoutHandling:
     def test_per_shard_timeout_default(self):
         """Test default per_shard_timeout value."""
         config = CMCConfig()
-        assert config.per_shard_timeout == 7200  # 2 hours
+        assert config.per_shard_timeout == 3600  # 1 hour (reduced in v2.19.0)
 
     def test_per_shard_timeout_from_dict(self):
         """Test per_shard_timeout is parsed from config dict."""

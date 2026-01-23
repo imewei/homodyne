@@ -19,10 +19,13 @@ from homodyne.optimization.cmc.backends import select_backend
 from homodyne.optimization.cmc.config import CMCConfig
 from homodyne.optimization.cmc.data_prep import (
     prepare_mcmc_data,
+    shard_data_angle_balanced,
     shard_data_random,
     shard_data_stratified,
 )
 from homodyne.optimization.cmc.diagnostics import (
+    compute_precision_analysis,
+    log_precision_analysis,
     summarize_diagnostics,
 )
 from homodyne.optimization.cmc.model import get_xpcs_model
@@ -42,19 +45,24 @@ def _resolve_max_points_per_shard(
     n_total: int,
     max_points_per_shard: int | str | None,
     max_shards: int = 2000,
+    n_phi: int = 1,
 ) -> int:
-    """Determine optimal shard size based on mode and data volume.
+    """Determine optimal shard size based on mode, data volume, and angle count.
 
     NUTS MCMC is O(n) per iteration - evaluates ALL points in a shard.
     Laminar flow (7 params) needs ~10x smaller shards than static (3 params)
     due to complex gradient computation (trigonometric functions, cumulative integrals).
 
+    CRITICAL (Jan 2026): Angle-aware scaling for multi-angle datasets.
+    When n_phi is small (e.g., 3 angles), each shard contains points from all angles,
+    making gradient computation ~n_phi times more expensive than single-angle shards.
+    We scale the base shard size inversely with angle count to compensate.
+
     Scaling guidelines (laminar_flow mode with 2 chains, 1000 iterations):
-    - 5K points → ~2-3 min/shard
-    - 10K points → ~5-8 min/shard (sweet spot)
-    - 20K points → ~15-25 min/shard
-    - 50K points → ~45-75 min/shard
-    - 100K points → ~2+ hours/shard (too slow)
+    - 5K points → ~2-3 min/shard (single angle)
+    - 10K points → ~5-8 min/shard (single angle)
+    - 10K points with 3 angles → ~15-25 min/shard (angle scaling effect)
+    - 3K points with 3 angles → ~5-8 min/shard (after angle-aware fix)
 
     Memory scalability for shard combination:
     - Each shard result: ~100KB (13 params × 2 chains × 1500 samples × 8 bytes)
@@ -77,9 +85,27 @@ def _resolve_max_points_per_shard(
     max_shards : int
         Maximum number of shards to create (caps memory usage).
         Default 2000 requires ~12GB for combination phase.
+    n_phi : int
+        Number of phi angles in the dataset. Used for angle-aware scaling.
+        Default 1 (single angle - no scaling applied).
     """
     if max_points_per_shard is not None and max_points_per_shard != "auto":
         return int(max_points_per_shard)
+
+    # =========================================================================
+    # Angle-aware scaling factor (Jan 2026 fix for few-angle timeout issue)
+    # =========================================================================
+    # Multi-angle datasets with random sharding have ALL angles in each shard.
+    # This makes gradient computation ~n_phi times more expensive.
+    # Scale shard size inversely to compensate.
+    if n_phi <= 3:
+        angle_factor = 0.3  # 30% of base size for 1-3 angles
+    elif n_phi <= 5:
+        angle_factor = 0.5  # 50% for 4-5 angles
+    elif n_phi <= 10:
+        angle_factor = 0.7  # 70% for 6-10 angles
+    else:
+        angle_factor = 1.0  # Full size for many angles (stratified sharding preferred)
 
     # Auto-detection based on analysis mode and dataset size
     if analysis_mode == "laminar_flow":
@@ -103,9 +129,21 @@ def _resolve_max_points_per_shard(
         else:
             base = 100_000  # Default for static mode
 
+    # Apply angle-aware scaling
+    scaled_base = int(base * angle_factor)
+    # Enforce minimum shard size to avoid excessive sharding
+    scaled_base = max(scaled_base, 1000)
+
+    # Log angle-aware scaling if factor < 1.0
+    if angle_factor < 1.0:
+        logger.info(
+            f"Angle-aware shard sizing: n_phi={n_phi} → factor={angle_factor:.1f}, "
+            f"base={base:,} → scaled={scaled_base:,}"
+        )
+
     # Cap shard count to prevent memory exhaustion during combination
     # Each shard result ~100KB → max_shards=2000 needs ~12GB peak memory
-    estimated_shards = n_total // base
+    estimated_shards = n_total // scaled_base
     if estimated_shards > max_shards:
         # Increase shard size to respect max_shards limit
         adjusted = (n_total + max_shards - 1) // max_shards
@@ -122,7 +160,7 @@ def _resolve_max_points_per_shard(
             adjusted = min(adjusted, 50_000)
         return adjusted
 
-    return base
+    return scaled_base
 
 
 def _cap_laminar_max_points(max_points_per_shard: int, logger) -> int:
@@ -319,7 +357,6 @@ def _infer_time_step(t1: np.ndarray, t2: np.ndarray) -> float:
     return float(np.median(positive_diffs))
 
 
-
 def fit_mcmc_jax(
     data: np.ndarray,
     t1: np.ndarray,
@@ -336,6 +373,7 @@ def fit_mcmc_jax(
     output_dir: Path | str | None = None,
     progress_bar: bool = True,
     run_id: str | None = None,
+    nlsq_result: dict | None = None,
     **kwargs,
 ) -> CMCResult:
     """Run CMC (Consensus Monte Carlo) analysis on XPCS data.
@@ -374,6 +412,11 @@ def fit_mcmc_jax(
         Whether to show progress bar during sampling.
     run_id : str | None
         Optional identifier used to correlate logs across shards/backends.
+    nlsq_result : dict | None
+        Optional NLSQ result dictionary for warm-start priors. When provided,
+        builds informative priors centered on NLSQ estimates, improving
+        convergence speed and reducing divergences. Should contain parameter
+        values and optionally uncertainties (see extract_nlsq_values_for_cmc).
     **kwargs
         Additional keyword arguments (for compatibility).
 
@@ -462,15 +505,15 @@ def fit_mcmc_jax(
     fixed_contrast: jnp.ndarray | None = None
     fixed_offset: jnp.ndarray | None = None
 
-    if effective_per_angle_mode == "constant":
-        # CONSTANT mode: Use FIXED per-angle values from quantile estimation
+    if effective_per_angle_mode in ("constant", "constant_averaged"):
+        # CONSTANT/CONSTANT_AVERAGED mode: Use FIXED values from quantile estimation
         # Get contrast/offset bounds from parameter_space
         contrast_bounds = parameter_space.get_bounds("contrast")
         offset_bounds = parameter_space.get_bounds("offset")
 
         # Estimate per-angle contrast/offset from quantile analysis
         run_logger.info(
-            "CONSTANT mode: Estimating FIXED per-angle scaling from data quantiles..."
+            f"{effective_per_angle_mode.upper()} mode: Estimating FIXED scaling from data quantiles..."
         )
         scaling_estimates = estimate_per_angle_scaling(
             c2_data=prepared.data,
@@ -483,7 +526,7 @@ def fit_mcmc_jax(
             log=run_logger,
         )
 
-        # Build per-angle arrays from estimates - use directly (different value per angle)
+        # Build per-angle arrays from estimates
         contrast_per_angle = np.array(
             [scaling_estimates[f"contrast_{i}"] for i in range(prepared.n_phi)]
         )
@@ -494,14 +537,26 @@ def fit_mcmc_jax(
         fixed_contrast = jnp.array(contrast_per_angle)
         fixed_offset = jnp.array(offset_per_angle)
 
-        run_logger.info(
-            f"CONSTANT mode: Using FIXED per-angle scaling (NOT sampled):\n"
-            f"  contrast: mean={contrast_per_angle.mean():.4f}, "
-            f"range=[{contrast_per_angle.min():.4f}, {contrast_per_angle.max():.4f}]\n"
-            f"  offset: mean={offset_per_angle.mean():.4f}, "
-            f"range=[{offset_per_angle.min():.4f}, {offset_per_angle.max():.4f}]\n"
-            f"  Parameters: 7 physical + 1 sigma = 8 total (scaling fixed)"
-        )
+        if effective_per_angle_mode == "constant_averaged":
+            # CONSTANT_AVERAGED mode: Model will internally average these
+            run_logger.info(
+                f"CONSTANT_AVERAGED mode: Using FIXED AVERAGED scaling (NLSQ parity):\n"
+                f"  contrast: per-angle range=[{contrast_per_angle.min():.4f}, {contrast_per_angle.max():.4f}], "
+                f"avg={contrast_per_angle.mean():.4f} (will be used)\n"
+                f"  offset: per-angle range=[{offset_per_angle.min():.4f}, {offset_per_angle.max():.4f}], "
+                f"avg={offset_per_angle.mean():.4f} (will be used)\n"
+                f"  Parameters: 7 physical + 1 sigma = 8 total (scaling fixed, averaged)"
+            )
+        else:
+            # CONSTANT mode: Different value per angle
+            run_logger.info(
+                f"CONSTANT mode: Using FIXED per-angle scaling (NOT sampled):\n"
+                f"  contrast: mean={contrast_per_angle.mean():.4f}, "
+                f"range=[{contrast_per_angle.min():.4f}, {contrast_per_angle.max():.4f}]\n"
+                f"  offset: mean={offset_per_angle.mean():.4f}, "
+                f"range=[{offset_per_angle.min():.4f}, {offset_per_angle.max():.4f}]\n"
+                f"  Parameters: 7 physical + 1 sigma = 8 total (scaling fixed)"
+            )
     elif effective_per_angle_mode == "auto":
         # AUTO mode: xpcs_model_averaged will SAMPLE single averaged contrast/offset
         # No fixed arrays needed - log the expected behavior
@@ -526,6 +581,47 @@ def fit_mcmc_jax(
         run_logger.info("No initial values provided, using midpoint defaults")
 
     # =========================================================================
+    # 2d. NLSQ Warm-Start (Jan 2026): Use NLSQ results for better init values
+    # =========================================================================
+    if nlsq_result is not None:
+        from homodyne.optimization.cmc.priors import extract_nlsq_values_for_cmc
+
+        nlsq_values, nlsq_uncertainties = extract_nlsq_values_for_cmc(nlsq_result)
+
+        # Override initial_values with NLSQ estimates (if not already provided)
+        if initial_values is None:
+            initial_values = {}
+
+        # Merge NLSQ values into initial_values (NLSQ takes precedence for physical params)
+        physical_params = ["D0", "alpha", "D_offset"]
+        if analysis_mode == "laminar_flow":
+            physical_params.extend(
+                ["gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"]
+            )
+
+        nlsq_used = []
+        for param in physical_params:
+            if param in nlsq_values:
+                initial_values[param] = nlsq_values[param]
+                nlsq_used.append(param)
+
+        run_logger.info(
+            f"NLSQ warm-start: Using NLSQ estimates for {len(nlsq_used)} params: "
+            f"{', '.join(f'{p}={nlsq_values[p]:.4g}' for p in nlsq_used[:5])}"
+            + ("..." if len(nlsq_used) > 5 else "")
+        )
+
+        # Log NLSQ uncertainties if available (useful for posterior comparison)
+        if nlsq_uncertainties:
+            unc_str = ", ".join(
+                f"{p}±{nlsq_uncertainties[p]:.4g}"
+                for p in nlsq_used[:5]
+                if p in nlsq_uncertainties
+            )
+            if unc_str:
+                run_logger.info(f"NLSQ uncertainties: {unc_str}")
+
+    # =========================================================================
     # 3. Determine if CMC sharding is needed
     # =========================================================================
     def _int_like(val) -> bool:
@@ -540,14 +636,14 @@ def fit_mcmc_jax(
     # Scale inversely with parameter count: more params = fewer points per shard
     max_points_setting = config.max_points_per_shard
     max_per_shard = _resolve_max_points_per_shard(
-        analysis_mode, prepared.n_total, max_points_setting
+        analysis_mode, prepared.n_total, max_points_setting, n_phi=prepared.n_phi
     )
     if analysis_mode == "laminar_flow":
         max_per_shard = _cap_laminar_max_points(max_per_shard, run_logger)
     if max_points_setting is None or max_points_setting == "auto":
         run_logger.info(
             f"Auto-selected max_points_per_shard={max_per_shard} for {analysis_mode} mode "
-            f"(n_total={prepared.n_total:,})"
+            f"(n_total={prepared.n_total:,}, n_phi={prepared.n_phi})"
         )
 
     # Derive a suggested per-shard timeout from cost
@@ -605,17 +701,32 @@ def fit_mcmc_jax(
             analysis_mode=analysis_mode,
         )
     elif use_cmc:
-        # Random sharding (i.i.d.) - statistically correct for Consensus MC
-        # shard_data_random handles num_shards calculation and capping internally
-        shards = shard_data_random(
-            prepared,
-            num_shards=requested_shards,  # Honor explicit shards when provided
-            max_points_per_shard=max_per_shard,
-            max_shards=100,  # Same cap as stratified
-        )
+        # Sharding strategy selection (Jan 2026 enhancement):
+        # - Multi-angle (n_phi > 1): Use angle-balanced sharding for consistent posteriors
+        # - Single-angle: Use random sharding (i.i.d. statistically correct for Consensus MC)
+        if prepared.n_phi > 1:
+            # Angle-balanced sharding ensures each shard has proportional angle coverage
+            # This prevents heterogeneous posteriors (e.g., D_offset CV=1.58)
+            shards = shard_data_angle_balanced(
+                prepared,
+                num_shards=requested_shards,  # Honor explicit shards when provided
+                max_points_per_shard=max_per_shard,
+                max_shards=500,  # Higher cap for multi-angle (smaller shards)
+                min_angle_coverage=0.8,  # Require 80% angle coverage per shard
+            )
+            sharding_desc = "angle-balanced"
+        else:
+            # Single-angle: random sharding is fine
+            shards = shard_data_random(
+                prepared,
+                num_shards=requested_shards,  # Honor explicit shards when provided
+                max_points_per_shard=max_per_shard,
+                max_shards=100,  # Same cap as stratified
+            )
+            sharding_desc = "random"
         total_shard_points = sum(s.n_total for s in shards)
         run_logger.info(
-            f"Using CMC with {len(shards)} shards (random split), "
+            f"Using CMC with {len(shards)} shards ({sharding_desc}), "
             f"{total_shard_points:,} total points"
         )
         estimated_runtime = _log_runtime_estimate(
@@ -856,6 +967,35 @@ def fit_mcmc_jax(
             run_logger.info(
                 f"  {name}: {s['mean']:.4g} +/- {s['std']:.4g} "
                 f"(R-hat={s['r_hat']:.3f}, ESS={s['ess_bulk']:.0f})"
+            )
+
+    # =========================================================================
+    # 8. Precision analysis (Jan 2026): Compare CMC posteriors to NLSQ
+    # =========================================================================
+    if nlsq_result is not None:
+        from homodyne.optimization.cmc.priors import extract_nlsq_values_for_cmc
+
+        nlsq_values, nlsq_uncertainties = extract_nlsq_values_for_cmc(nlsq_result)
+
+        precision_analysis = compute_precision_analysis(
+            cmc_result=stats_dict,
+            nlsq_result=nlsq_values,
+            nlsq_uncertainties=nlsq_uncertainties,
+        )
+
+        # Log comprehensive precision report
+        log_precision_analysis(precision_analysis, log_fn=run_logger.info)
+
+        # Warn if CMC significantly disagrees with NLSQ
+        high_z_params = [
+            (p, m.get("z_score", 0))
+            for p, m in precision_analysis.items()
+            if m.get("z_score", 0) > 3
+        ]
+        if high_z_params:
+            run_logger.warning(
+                "CMC-NLSQ disagreement (z > 3): "
+                + ", ".join(f"{p} (z={z:.1f})" for p, z in high_z_params)
             )
 
     total_time = time.perf_counter() - start_time
