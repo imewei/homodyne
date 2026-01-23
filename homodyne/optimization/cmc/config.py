@@ -138,6 +138,7 @@ class CMCConfig:
     # Validation thresholds
     max_r_hat: float = 1.1
     min_ess: float = 100.0
+    max_divergence_rate: float = 0.10  # Filter shards with >10% divergence rate
 
     # Combination
     combination_method: str = "consensus_mc"  # Correct CMC method (v2.4.3+)
@@ -150,6 +151,9 @@ class CMCConfig:
 
     # Warning thresholds
     min_success_rate_warning: float = 0.80  # Warn if success rate below this
+
+    # Warm-start requirements (Jan 2026)
+    require_nlsq_warmstart: bool = False  # Require NLSQ warm-start for laminar_flow
 
     # Computed fields
     _validation_errors: list[str] = field(default_factory=list, repr=False)
@@ -248,6 +252,7 @@ class CMCConfig:
             # Validation
             max_r_hat=validation.get("max_per_shard_rhat", 1.1),
             min_ess=validation.get("min_per_shard_ess", 100.0),
+            max_divergence_rate=validation.get("max_divergence_rate", 0.10),
             # Combination
             combination_method=combination.get("method", "consensus_mc"),
             min_success_rate=combination.get("min_success_rate", 0.90),
@@ -257,6 +262,8 @@ class CMCConfig:
             heartbeat_timeout=config_dict.get("heartbeat_timeout", 600),
             # Warning thresholds
             min_success_rate_warning=combination.get("min_success_rate_warning", 0.80),
+            # Warm-start requirements
+            require_nlsq_warmstart=validation.get("require_nlsq_warmstart", False),
         )
 
         # Validate and log any issues
@@ -362,6 +369,10 @@ class CMCConfig:
             errors.append(f"max_r_hat must be >= 1.0, got: {self.max_r_hat}")
         if not isinstance(self.min_ess, (int, float)) or self.min_ess < 0:
             errors.append(f"min_ess must be non-negative, got: {self.min_ess}")
+        if not 0.0 <= self.max_divergence_rate <= 1.0:
+            errors.append(
+                f"max_divergence_rate must be in [0, 1], got: {self.max_divergence_rate}"
+            )
 
         # Validate combination settings
         valid_methods = ["consensus_mc", "weighted_gaussian", "simple_average", "auto"]
@@ -551,6 +562,8 @@ class CMCConfig:
             "validation": {
                 "max_per_shard_rhat": self.max_r_hat,
                 "min_per_shard_ess": self.min_ess,
+                "max_divergence_rate": self.max_divergence_rate,
+                "require_nlsq_warmstart": self.require_nlsq_warmstart,
             },
             "combination": {
                 "method": self.combination_method,

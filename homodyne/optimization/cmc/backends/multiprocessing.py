@@ -891,8 +891,9 @@ class MultiprocessingBackend(CMCBackend):
                     process.terminate()
                     process.join(timeout=2)
 
-        # Process results
+        # Process results - collect successful samples with metadata for filtering
         successful_samples = []
+        shard_metadata: list[dict] = []  # Track shard idx, divergences, total samples
         shard_timings: list[tuple[int | None, float | None]] = []
         for result in results:
             if result["success"]:
@@ -906,6 +907,15 @@ class MultiprocessingBackend(CMCBackend):
                 )
                 successful_samples.append(samples)
                 shard_timings.append((result.get("shard_idx"), result.get("duration")))
+                # Track divergence stats for quality filtering
+                stats = result.get("stats", {})
+                total_samples = result["n_chains"] * result["n_samples"]
+                shard_metadata.append({
+                    "shard_idx": result.get("shard_idx"),
+                    "num_divergent": stats.get("num_divergent", 0),
+                    "total_samples": total_samples,
+                    "divergence_rate": stats.get("num_divergent", 0) / max(total_samples, 1),
+                })
             else:
                 error_cat = result.get("error_category", "unknown")
                 run_logger.warning(
@@ -946,6 +956,66 @@ class MultiprocessingBackend(CMCBackend):
             if shard_idx is not None and duration is not None:
                 run_logger.debug(f"Shard {shard_idx} completed in {duration:.2f}s")
 
+        # ──────────────────────────────────────────────────────────────────────
+        # Jan 2026 FIX: Divergence-based shard quality filter
+        # Filter out shards with divergence rate > max_divergence_rate
+        # High-divergence shards have corrupted posteriors that bias the
+        # consensus combination. This is especially critical for laminar_flow
+        # where 28.4% overall divergence rate (from the C020 CMC run) indicated
+        # severe sampling issues that propagated to parameter estimates.
+        # ──────────────────────────────────────────────────────────────────────
+        max_div_rate = getattr(config, "max_divergence_rate", 0.10)
+        if max_div_rate < 1.0 and shard_metadata:
+            # Identify high-divergence shards
+            high_div_shards = []
+            filtered_samples = []
+            filtered_metadata = []
+
+            for samples, meta in zip(successful_samples, shard_metadata, strict=True):
+                div_rate = meta["divergence_rate"]
+                if div_rate > max_div_rate:
+                    high_div_shards.append(
+                        (meta["shard_idx"], div_rate, meta["num_divergent"])
+                    )
+                else:
+                    filtered_samples.append(samples)
+                    filtered_metadata.append(meta)
+
+            if high_div_shards:
+                run_logger.warning(
+                    f"QUALITY FILTER: Excluding {len(high_div_shards)} shards with "
+                    f"divergence rate > {max_div_rate:.0%}:"
+                )
+                for shard_idx, div_rate, num_div in high_div_shards:
+                    run_logger.warning(
+                        f"  Shard {shard_idx}: {div_rate:.1%} divergence ({num_div} transitions)"
+                    )
+
+                # Update samples list for combination
+                n_before = len(successful_samples)
+                successful_samples = filtered_samples
+                shard_metadata = filtered_metadata
+
+                run_logger.info(
+                    f"After quality filtering: {len(successful_samples)}/{n_before} shards retained"
+                )
+
+                # Re-check if we still have enough shards
+                if not successful_samples:
+                    raise RuntimeError(
+                        f"All {n_before} successful shards exceeded max_divergence_rate={max_div_rate:.0%}. "
+                        "Consider: (1) reducing shard size, (2) adjusting priors, "
+                        "(3) increasing max_divergence_rate threshold."
+                    )
+
+                # Warn if filtered rate is too low
+                filtered_rate = len(successful_samples) / n_shards
+                if filtered_rate < config.min_success_rate:
+                    run_logger.error(
+                        f"Post-filter success rate {filtered_rate:.1%} below minimum threshold "
+                        f"{config.min_success_rate:.1%} - analysis may be unreliable"
+                    )
+
         # Log per-shard posterior statistics BEFORE combination
         # This helps diagnose why combined posteriors may differ from initial values
         if len(successful_samples) > 1:
@@ -978,8 +1048,13 @@ class MultiprocessingBackend(CMCBackend):
             method=config.combination_method,
         )
 
+        # Log summary including divergence filtering
+        total_divergences = sum(m.get("num_divergent", 0) for m in shard_metadata) if shard_metadata else 0
+        total_transitions = sum(m.get("total_samples", 0) for m in shard_metadata) if shard_metadata else 0
+        overall_div_rate = total_divergences / max(total_transitions, 1)
         run_logger.info(
-            f"Combined {len(successful_samples)}/{n_shards} successful shards"
+            f"Combined {len(successful_samples)}/{n_shards} shards "
+            f"(overall divergence rate: {overall_div_rate:.1%}, {total_divergences}/{total_transitions})"
         )
 
         return combined

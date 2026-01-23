@@ -581,7 +581,35 @@ def fit_mcmc_jax(
         run_logger.info("No initial values provided, using midpoint defaults")
 
     # =========================================================================
-    # 2d. NLSQ Warm-Start (Jan 2026): Use NLSQ results for better init values
+    # 2d. NLSQ Warm-Start Validation (Jan 2026)
+    # =========================================================================
+    # Warn or error if running laminar_flow without NLSQ warm-start
+    # The 7-parameter laminar_flow model spans 6+ orders of magnitude
+    # (D0 ~ 1e4, gamma_dot_t0 ~ 1e-3) and NUTS struggles to adapt without
+    # good initial values. Cold-start runs showed 28% divergence rates vs <5%
+    # with NLSQ warm-start.
+    no_warmstart = nlsq_result is None and initial_values is None
+    if no_warmstart and analysis_mode == "laminar_flow":
+        require_warmstart = getattr(cmc_config, "require_nlsq_warmstart", False)
+        if require_warmstart:
+            raise ValueError(
+                "CMC WARM-START REQUIRED: laminar_flow mode requires NLSQ warm-start "
+                "when require_nlsq_warmstart=True. Run NLSQ first and pass nlsq_result "
+                "to fit_mcmc_jax(), or set require_nlsq_warmstart=False in CMC config."
+            )
+        else:
+            run_logger.warning(
+                "CMC WARM-START ADVISORY: Running laminar_flow without NLSQ warm-start. "
+                "This is strongly discouraged for production use because:\n"
+                "  1. 7 parameters span 6+ orders of magnitude (D0~1e4, gamma_dot_t0~1e-3)\n"
+                "  2. NUTS adaptation may waste warmup exploring implausible regions\n"
+                "  3. Higher divergence rates and inflated posterior uncertainty expected\n"
+                "Recommendation: Run NLSQ first and pass nlsq_result to fit_mcmc_jax()\n"
+                "To enforce this, set validation.require_nlsq_warmstart=true in CMC config."
+            )
+
+    # =========================================================================
+    # 2e. NLSQ Warm-Start (Jan 2026): Use NLSQ results for better init values
     # =========================================================================
     if nlsq_result is not None:
         from homodyne.optimization.cmc.priors import extract_nlsq_values_for_cmc
@@ -707,11 +735,24 @@ def fit_mcmc_jax(
         if prepared.n_phi > 1:
             # Angle-balanced sharding ensures each shard has proportional angle coverage
             # This prevents heterogeneous posteriors (e.g., D_offset CV=1.58)
+            #
+            # Jan 2026 FIX: Dynamic max_shards based on analysis mode and data size
+            # laminar_flow needs more shards (smaller size) due to O(n) NUTS cost
+            # with 7 physical params vs 3 for static. Target ~5000 pts/shard for
+            # laminar_flow to keep per-shard runtime under 15 min.
+            if analysis_mode == "laminar_flow":
+                # Allow up to 1000 shards for laminar_flow (memory ~60GB for combination)
+                # This enables 3K-5K pts/shard for datasets up to 5M points
+                max_shards_for_mode = 1000
+            else:
+                # Static mode can handle larger shards
+                max_shards_for_mode = 500
+
             shards = shard_data_angle_balanced(
                 prepared,
                 num_shards=requested_shards,  # Honor explicit shards when provided
                 max_points_per_shard=max_per_shard,
-                max_shards=500,  # Higher cap for multi-angle (smaller shards)
+                max_shards=max_shards_for_mode,
                 min_angle_coverage=0.8,  # Require 80% angle coverage per shard
             )
             sharding_desc = "angle-balanced"
