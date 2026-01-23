@@ -885,3 +885,200 @@ def validate_init_values_order(
             f"Expected {len(expected_names)} params: {expected_names}\n"
             f"Actual {len(actual_names)} params: {actual_names}"
         )
+
+
+# =============================================================================
+# NLSQ WARM-START PRIORS (Jan 2026)
+# =============================================================================
+
+
+def build_nlsq_informed_prior(
+    param_name: str,
+    nlsq_value: float,
+    nlsq_std: float | None,
+    bounds: tuple[float, float],
+    width_factor: float = 3.0,
+) -> dist.Distribution:
+    """Build a TruncatedNormal prior centered on NLSQ estimate.
+
+    This provides informative priors for CMC that leverage NLSQ's point
+    estimates. The resulting priors:
+    1. Center at the NLSQ estimate (faster warmup, better mixing)
+    2. Have width based on NLSQ uncertainty or parameter range
+    3. Are truncated to respect parameter bounds
+    4. Enable posterior contraction metrics (comparing prior vs posterior width)
+
+    Parameters
+    ----------
+    param_name : str
+        Parameter name for logging.
+    nlsq_value : float
+        NLSQ point estimate (mean of the prior).
+    nlsq_std : float | None
+        NLSQ standard error estimate. If None, uses 10% of bounds range.
+    bounds : tuple[float, float]
+        Parameter bounds (low, high).
+    width_factor : float
+        Multiplier for NLSQ std to get prior width. Default 3.0 gives
+        ~99.7% coverage assuming Gaussian posterior.
+
+    Returns
+    -------
+    dist.Distribution
+        TruncatedNormal distribution centered at nlsq_value.
+    """
+    low, high = bounds
+
+    # Determine prior standard deviation
+    if nlsq_std is not None and nlsq_std > 0:
+        # Use NLSQ uncertainty scaled by width_factor
+        prior_std = nlsq_std * width_factor
+    else:
+        # Fall back to 10% of range (weak informative prior)
+        prior_std = (high - low) * 0.1
+
+    # Ensure std is reasonable (not too narrow or too wide)
+    min_std = (high - low) * 0.01  # At least 1% of range
+    max_std = (high - low) * 0.5  # At most 50% of range
+    prior_std = np.clip(prior_std, min_std, max_std)
+
+    logger.debug(
+        f"NLSQ-informed prior for {param_name}: "
+        f"TruncatedNormal(loc={nlsq_value:.4g}, scale={prior_std:.4g}, "
+        f"bounds=[{low:.4g}, {high:.4g}])"
+    )
+
+    return dist.TruncatedNormal(
+        loc=nlsq_value,
+        scale=prior_std,
+        low=low,
+        high=high,
+    )
+
+
+def build_nlsq_informed_priors(
+    nlsq_result: dict[str, float],
+    nlsq_uncertainties: dict[str, float] | None,
+    parameter_space: "ParameterSpace",
+    analysis_mode: str,
+    n_phi: int,
+    width_factor: float = 3.0,
+) -> dict[str, dist.Distribution]:
+    """Build informative priors for all physical parameters from NLSQ results.
+
+    Parameters
+    ----------
+    nlsq_result : dict[str, float]
+        NLSQ parameter estimates (e.g., {"D0": 1e10, "alpha": -0.5, ...}).
+    nlsq_uncertainties : dict[str, float] | None
+        NLSQ standard errors for each parameter. If None, uses weak priors.
+    parameter_space : ParameterSpace
+        Parameter space with bounds.
+    analysis_mode : str
+        Analysis mode: "static" or "laminar_flow".
+    n_phi : int
+        Number of phi angles (for per-angle parameters if needed).
+    width_factor : float
+        Width multiplier for priors. Default 3.0.
+
+    Returns
+    -------
+    dict[str, dist.Distribution]
+        Dictionary of informative priors keyed by parameter name.
+    """
+    # Physical params (excluding per-angle scaling like contrast/offset)
+    base_physical = ["D0", "alpha", "D_offset"]
+    if analysis_mode == "laminar_flow":
+        base_physical.extend(["gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"])
+
+    priors = {}
+    for param_name in base_physical:
+        if param_name in nlsq_result:
+            nlsq_value = nlsq_result[param_name]
+            nlsq_std = (
+                nlsq_uncertainties.get(param_name) if nlsq_uncertainties else None
+            )
+            bounds = parameter_space.get_bounds(param_name)
+
+            priors[param_name] = build_nlsq_informed_prior(
+                param_name=param_name,
+                nlsq_value=nlsq_value,
+                nlsq_std=nlsq_std,
+                bounds=bounds,
+                width_factor=width_factor,
+            )
+        else:
+            logger.warning(
+                f"Parameter {param_name} not found in NLSQ result, using default prior"
+            )
+
+    logger.info(
+        f"Built NLSQ-informed priors for {len(priors)} parameters: "
+        f"{list(priors.keys())}"
+    )
+
+    return priors
+
+
+def extract_nlsq_values_for_cmc(
+    nlsq_result: dict,
+) -> tuple[dict[str, float], dict[str, float] | None]:
+    """Extract parameter values and uncertainties from an NLSQ result dict.
+
+    This utility handles various NLSQ result formats and extracts the
+    information needed for CMC warm-start priors.
+
+    Parameters
+    ----------
+    nlsq_result : dict
+        NLSQ result dictionary, may contain:
+        - "params" or "parameters": dict of parameter values
+        - "uncertainties" or "std_errors": dict of standard errors
+        - Or flat structure with parameter names as keys
+
+    Returns
+    -------
+    tuple[dict[str, float], dict[str, float] | None]
+        Tuple of (parameter_values, uncertainties).
+        uncertainties may be None if not available.
+    """
+    # Handle various result formats
+    if "params" in nlsq_result:
+        values = nlsq_result["params"]
+    elif "parameters" in nlsq_result:
+        values = nlsq_result["parameters"]
+    elif "best_params" in nlsq_result:
+        values = nlsq_result["best_params"]
+    else:
+        # Assume flat structure - filter out non-parameter keys
+        exclude_keys = {
+            "success",
+            "message",
+            "iterations",
+            "chi_squared",
+            "r_squared",
+            "residuals",
+            "jacobian",
+            "covariance",
+            "uncertainties",
+            "std_errors",
+        }
+        values = {
+            k: v
+            for k, v in nlsq_result.items()
+            if k not in exclude_keys and isinstance(v, (int, float))
+        }
+
+    # Extract uncertainties if available
+    uncertainties = None
+    if "uncertainties" in nlsq_result:
+        uncertainties = nlsq_result["uncertainties"]
+    elif "std_errors" in nlsq_result:
+        uncertainties = nlsq_result["std_errors"]
+
+    # Ensure values are plain floats
+    values = {k: float(v) for k, v in values.items()}
+    if uncertainties:
+        uncertainties = {k: float(v) for k, v in uncertainties.items()}
+
+    return values, uncertainties

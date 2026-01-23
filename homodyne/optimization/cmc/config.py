@@ -144,8 +144,8 @@ class CMCConfig:
     min_success_rate: float = 0.90
     run_id: str | None = None
 
-    # Timeout
-    per_shard_timeout: int = 7200  # 2 hours per shard in seconds
+    # Timeout (Jan 2026: reduced from 2h to 1h to fail faster on problematic shards)
+    per_shard_timeout: int = 3600  # 1 hour per shard in seconds
     heartbeat_timeout: int = 600  # 10 minutes - terminate unresponsive workers
 
     # Warning thresholds
@@ -253,7 +253,7 @@ class CMCConfig:
             min_success_rate=combination.get("min_success_rate", 0.90),
             run_id=config_dict.get("run_id"),
             # Timeout
-            per_shard_timeout=config_dict.get("per_shard_timeout", 7200),
+            per_shard_timeout=config_dict.get("per_shard_timeout", 3600),
             heartbeat_timeout=config_dict.get("heartbeat_timeout", 600),
             # Warning thresholds
             min_success_rate_warning=combination.get("min_success_rate_warning", 0.80),
@@ -295,7 +295,7 @@ class CMCConfig:
             )
 
         # Validate per_angle_mode (v2.18.0+)
-        valid_per_angle_modes = ["auto", "constant", "individual"]
+        valid_per_angle_modes = ["auto", "constant", "constant_averaged", "individual"]
         if self.per_angle_mode not in valid_per_angle_modes:
             errors.append(
                 f"per_angle_mode must be one of {valid_per_angle_modes}, "

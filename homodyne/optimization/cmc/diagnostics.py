@@ -6,6 +6,7 @@ including R-hat, effective sample size (ESS), and divergence checks.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import arviz as az
@@ -521,3 +522,276 @@ def get_convergence_recommendations(
         pass
 
     return recommendations
+
+
+# =============================================================================
+# PRECISION DIAGNOSTICS (Jan 2026)
+# =============================================================================
+
+
+def compute_posterior_contraction(
+    posterior_std: float,
+    prior_std: float,
+) -> float:
+    """Compute Posterior Contraction Ratio (PCR).
+
+    PCR measures how much the data informed the posterior relative to the prior.
+    PCR = 1 - (posterior_std / prior_std)
+
+    Interpretation:
+    - PCR ≈ 0: Posterior ≈ prior (data didn't constrain the parameter)
+    - PCR ≈ 0.5: Posterior half as wide as prior (moderate constraint)
+    - PCR ≈ 0.9: Posterior 10% as wide as prior (strong constraint)
+    - PCR < 0: Posterior wider than prior (model misspecification or numerical issues)
+
+    Parameters
+    ----------
+    posterior_std : float
+        Standard deviation of the posterior distribution.
+    prior_std : float
+        Standard deviation of the prior distribution.
+
+    Returns
+    -------
+    float
+        Posterior contraction ratio, typically in [0, 1].
+    """
+    if prior_std <= 0 or not np.isfinite(prior_std):
+        return np.nan
+    if posterior_std <= 0 or not np.isfinite(posterior_std):
+        return np.nan
+
+    return 1.0 - (posterior_std / prior_std)
+
+
+def compute_nlsq_comparison_metrics(
+    cmc_mean: float,
+    cmc_std: float,
+    nlsq_value: float,
+    nlsq_std: float | None = None,
+) -> dict[str, float]:
+    """Compute metrics comparing CMC posterior to NLSQ point estimate.
+
+    Parameters
+    ----------
+    cmc_mean : float
+        CMC posterior mean.
+    cmc_std : float
+        CMC posterior standard deviation.
+    nlsq_value : float
+        NLSQ point estimate.
+    nlsq_std : float | None
+        NLSQ standard error. If None, only CMC-based metrics computed.
+
+    Returns
+    -------
+    dict[str, float]
+        Dictionary with comparison metrics:
+        - z_score: |CMC_mean - NLSQ| / CMC_std (should be < 2 for consistency)
+        - uncertainty_ratio: CMC_std / NLSQ_std (should be < 5x ideally)
+        - relative_diff: (CMC_mean - NLSQ) / |NLSQ| (percent difference)
+        - coverage: Whether NLSQ falls within CMC 95% CI
+    """
+    metrics = {}
+
+    # Z-score: How many CMC standard deviations away is NLSQ?
+    if cmc_std > 0 and np.isfinite(cmc_std):
+        z_score = abs(cmc_mean - nlsq_value) / cmc_std
+        metrics["z_score"] = z_score
+        # Coverage: Does 95% CI contain NLSQ?
+        metrics["coverage_95"] = float(z_score < 1.96)
+    else:
+        metrics["z_score"] = np.nan
+        metrics["coverage_95"] = np.nan
+
+    # Relative difference (percent)
+    if nlsq_value != 0 and np.isfinite(nlsq_value):
+        metrics["relative_diff"] = (cmc_mean - nlsq_value) / abs(nlsq_value)
+    else:
+        metrics["relative_diff"] = np.nan
+
+    # Uncertainty ratio (if NLSQ std available)
+    if nlsq_std is not None and nlsq_std > 0 and np.isfinite(nlsq_std):
+        metrics["uncertainty_ratio"] = cmc_std / nlsq_std
+    else:
+        metrics["uncertainty_ratio"] = np.nan
+
+    return metrics
+
+
+def compute_precision_analysis(
+    cmc_result: dict[str, dict],
+    nlsq_result: dict[str, float] | None = None,
+    nlsq_uncertainties: dict[str, float] | None = None,
+    prior_stds: dict[str, float] | None = None,
+) -> dict[str, dict[str, float]]:
+    """Compute comprehensive precision analysis for all parameters.
+
+    Parameters
+    ----------
+    cmc_result : dict[str, dict]
+        CMC posterior statistics, keyed by parameter name.
+        Each entry should have "mean" and "std" keys.
+    nlsq_result : dict[str, float] | None
+        NLSQ point estimates, keyed by parameter name.
+    nlsq_uncertainties : dict[str, float] | None
+        NLSQ standard errors, keyed by parameter name.
+    prior_stds : dict[str, float] | None
+        Prior standard deviations, keyed by parameter name.
+
+    Returns
+    -------
+    dict[str, dict[str, float]]
+        Precision metrics for each parameter.
+    """
+    analysis = {}
+
+    for param_name, stats in cmc_result.items():
+        # Skip non-physical parameters
+        if param_name in ("sigma", "obs", "n_numerical_issues"):
+            continue
+
+        param_metrics = {
+            "cmc_mean": stats.get("mean", np.nan),
+            "cmc_std": stats.get("std", np.nan),
+        }
+
+        # Add posterior contraction if prior_std available
+        if prior_stds and param_name in prior_stds:
+            pcr = compute_posterior_contraction(
+                stats.get("std", np.nan),
+                prior_stds[param_name],
+            )
+            param_metrics["posterior_contraction"] = pcr
+            param_metrics["prior_std"] = prior_stds[param_name]
+
+        # Add NLSQ comparison if available
+        if nlsq_result and param_name in nlsq_result:
+            nlsq_val = nlsq_result[param_name]
+            nlsq_std = (
+                nlsq_uncertainties.get(param_name) if nlsq_uncertainties else None
+            )
+
+            comparison = compute_nlsq_comparison_metrics(
+                cmc_mean=stats.get("mean", np.nan),
+                cmc_std=stats.get("std", np.nan),
+                nlsq_value=nlsq_val,
+                nlsq_std=nlsq_std,
+            )
+            param_metrics.update(comparison)
+            param_metrics["nlsq_value"] = nlsq_val
+            if nlsq_std is not None:
+                param_metrics["nlsq_std"] = nlsq_std
+
+        analysis[param_name] = param_metrics
+
+    return analysis
+
+
+def log_precision_analysis(
+    analysis: dict[str, dict[str, float]],
+    log_fn: Callable[[str], None] | None = None,
+) -> str:
+    """Log a comprehensive precision analysis report.
+
+    Parameters
+    ----------
+    analysis : dict[str, dict[str, float]]
+        Output from compute_precision_analysis().
+    log_fn : callable | None
+        Logging function. If None, uses module logger.
+
+    Returns
+    -------
+    str
+        Formatted analysis report.
+    """
+    if log_fn is None:
+        log_fn = logger.info
+
+    lines = ["=" * 70, "CMC PRECISION ANALYSIS", "=" * 70]
+
+    # Summary statistics
+    z_scores = [
+        m.get("z_score", np.nan)
+        for m in analysis.values()
+        if np.isfinite(m.get("z_score", np.nan))
+    ]
+    unc_ratios = [
+        m.get("uncertainty_ratio", np.nan)
+        for m in analysis.values()
+        if np.isfinite(m.get("uncertainty_ratio", np.nan))
+    ]
+    pcrs = [
+        m.get("posterior_contraction", np.nan)
+        for m in analysis.values()
+        if np.isfinite(m.get("posterior_contraction", np.nan))
+    ]
+
+    if z_scores:
+        lines.append(
+            f"Z-scores (CMC vs NLSQ): max={max(z_scores):.2f}, mean={np.mean(z_scores):.2f}"
+        )
+        high_z = sum(1 for z in z_scores if z > 2)
+        if high_z > 0:
+            lines.append(
+                f"  ⚠️ {high_z}/{len(z_scores)} params have z > 2 (significant disagreement)"
+            )
+
+    if unc_ratios:
+        lines.append(
+            f"Uncertainty ratio (CMC/NLSQ): max={max(unc_ratios):.1f}x, median={np.median(unc_ratios):.1f}x"
+        )
+        high_ratio = sum(1 for r in unc_ratios if r > 10)
+        if high_ratio > 0:
+            lines.append(
+                f"  ⚠️ {high_ratio}/{len(unc_ratios)} params have ratio > 10x (potential precision loss)"
+            )
+
+    if pcrs:
+        lines.append(
+            f"Posterior contraction: max={max(pcrs):.2f}, mean={np.mean(pcrs):.2f}"
+        )
+        low_pcr = sum(1 for p in pcrs if p < 0.3)
+        if low_pcr > 0:
+            lines.append(
+                f"  ℹ️ {low_pcr}/{len(pcrs)} params have PCR < 0.3 (weak data constraint)"
+            )
+
+    lines.append("-" * 70)
+    lines.append(
+        f"{'Parameter':<20} {'CMC Mean':>12} {'CMC Std':>12} {'NLSQ':>12} {'Z-score':>8} {'Ratio':>8}"
+    )
+    lines.append("-" * 70)
+
+    for param_name, metrics in sorted(analysis.items()):
+        cmc_mean = metrics.get("cmc_mean", np.nan)
+        cmc_std = metrics.get("cmc_std", np.nan)
+        nlsq_val = metrics.get("nlsq_value", np.nan)
+        z_score = metrics.get("z_score", np.nan)
+        unc_ratio = metrics.get("uncertainty_ratio", np.nan)
+
+        # Format with appropriate precision
+        cmc_mean_str = f"{cmc_mean:.4g}" if np.isfinite(cmc_mean) else "N/A"
+        cmc_std_str = f"{cmc_std:.4g}" if np.isfinite(cmc_std) else "N/A"
+        nlsq_str = f"{nlsq_val:.4g}" if np.isfinite(nlsq_val) else "N/A"
+        z_str = f"{z_score:.2f}" if np.isfinite(z_score) else "N/A"
+        ratio_str = f"{unc_ratio:.1f}x" if np.isfinite(unc_ratio) else "N/A"
+
+        # Add warning markers
+        marker = ""
+        if np.isfinite(z_score) and z_score > 2:
+            marker = " ⚠️"
+        elif np.isfinite(unc_ratio) and unc_ratio > 10:
+            marker = " ⚠️"
+
+        lines.append(
+            f"{param_name:<20} {cmc_mean_str:>12} {cmc_std_str:>12} "
+            f"{nlsq_str:>12} {z_str:>8} {ratio_str:>8}{marker}"
+        )
+
+    lines.append("=" * 70)
+
+    report = "\n".join(lines)
+    log_fn(report)
+    return report

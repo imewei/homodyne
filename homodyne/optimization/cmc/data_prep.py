@@ -578,6 +578,212 @@ def shard_data_random(
     return shards
 
 
+def shard_data_angle_balanced(
+    prepared: PreparedData,
+    num_shards: int | None = None,
+    max_points_per_shard: int | None = None,
+    max_shards: int = 500,
+    min_angle_coverage: float = 0.8,
+    seed: int = 42,
+) -> list[PreparedData]:
+    """Shard data with balanced angle coverage per shard.
+
+    This is the preferred sharding method for multi-angle datasets (n_phi > 1)
+    when using random/mixed sharding. Unlike pure random sharding, this method
+    ensures each shard has representative coverage from each phi angle.
+
+    CRITICAL (Jan 2026): Prevents heterogeneous posteriors that cause high CV
+    across shards. The D_offset CV=1.58 failure case was caused by pure random
+    sharding creating shards with uneven angle coverage.
+
+    Algorithm:
+    1. Shuffle data within each angle independently
+    2. For each shard, sample proportionally from each angle
+    3. Verify angle coverage meets minimum threshold
+    4. Log coverage statistics for diagnostics
+
+    Parameters
+    ----------
+    prepared : PreparedData
+        Prepared data object with multi-angle data.
+    num_shards : int | None
+        Number of shards to create. If None, calculated from data size
+        and max_points_per_shard.
+    max_points_per_shard : int | None
+        Target points per shard. Used to calculate num_shards if not provided.
+        Recommended: 3000-10000 for laminar_flow with few angles.
+    max_shards : int
+        Maximum number of shards. Default: 500 (higher than random to allow
+        smaller shards for multi-angle data).
+    min_angle_coverage : float
+        Minimum fraction of angles that must be present in each shard.
+        Default: 0.8 (80% of angles). Shards below this threshold are logged.
+    seed : int
+        Random seed for reproducible sampling.
+
+    Returns
+    -------
+    list[PreparedData]
+        List of shard data objects, each with balanced angle coverage.
+
+    Notes
+    -----
+    - ALL data is used (no subsampling)
+    - Each shard aims to have the same proportion of each angle as the full dataset
+    - The last shard may have slightly different proportions to include all data
+    """
+    rng = np.random.default_rng(seed)
+    n_phi = prepared.n_phi
+
+    # If only one angle, fall back to random sharding
+    if n_phi == 1:
+        logger.info("Single angle detected - falling back to random sharding")
+        return shard_data_random(
+            prepared, num_shards, max_points_per_shard, max_shards, seed
+        )
+
+    # Calculate number of shards if not provided
+    if num_shards is None:
+        if max_points_per_shard is not None:
+            num_shards = (
+                prepared.n_total + max_points_per_shard - 1
+            ) // max_points_per_shard
+        else:
+            num_shards = max(1, n_phi)  # At least one shard per angle
+
+    # Cap shards and adjust points per shard
+    if num_shards > max_shards:
+        num_shards = max_shards
+
+    # Ensure at least 1 shard
+    num_shards = max(1, num_shards)
+
+    # Group data indices by angle
+    angle_indices: list[np.ndarray] = []
+    angle_counts: list[int] = []
+    for angle_idx in range(n_phi):
+        mask = prepared.phi_indices == angle_idx
+        indices = np.where(mask)[0]
+        rng.shuffle(indices)  # Shuffle within each angle
+        angle_indices.append(indices)
+        angle_counts.append(len(indices))
+
+    # Calculate target points per shard per angle (proportional allocation)
+    total_points = sum(angle_counts)
+    _ = total_points // num_shards  # For reference in comments
+
+    # Track how many points we've used from each angle
+    angle_positions = [0] * n_phi
+
+    shards: list[PreparedData] = []
+    coverage_stats: list[float] = []
+
+    for shard_num in range(num_shards):
+        shard_indices_list: list[np.ndarray] = []
+
+        # Calculate how many points to take from each angle for this shard
+        is_last_shard = shard_num == num_shards - 1
+
+        for angle_idx in range(n_phi):
+            angle_total = angle_counts[angle_idx]
+            already_used = angle_positions[angle_idx]
+            remaining_in_angle = angle_total - already_used
+
+            if is_last_shard:
+                # Last shard takes all remaining points
+                n_take = remaining_in_angle
+            else:
+                # Proportional allocation: same fraction from each angle
+                target = int(angle_total / num_shards)
+                n_take = min(target, remaining_in_angle)
+                # Ensure we don't leave too few points for remaining shards
+                remaining_shards = num_shards - shard_num
+                min_take = remaining_in_angle // remaining_shards
+                n_take = max(n_take, min_take)
+
+            if n_take > 0:
+                start = angle_positions[angle_idx]
+                end = start + n_take
+                shard_indices_list.append(angle_indices[angle_idx][start:end])
+                angle_positions[angle_idx] = end
+
+        # Combine indices from all angles
+        if shard_indices_list:
+            shard_all_indices = np.concatenate(shard_indices_list)
+        else:
+            # Edge case: empty shard (shouldn't happen but handle gracefully)
+            continue
+
+        # Sort to preserve temporal structure
+        shard_all_indices = np.sort(shard_all_indices)
+
+        # Extract shard data
+        shard_data = prepared.data[shard_all_indices]
+        shard_t1 = prepared.t1[shard_all_indices]
+        shard_t2 = prepared.t2[shard_all_indices]
+        shard_phi = prepared.phi[shard_all_indices]
+
+        # Create shard PreparedData
+        shard_phi_unique, shard_phi_indices = extract_phi_info(shard_phi)
+        shard_noise = estimate_noise_scale(shard_data)
+
+        # Calculate angle coverage for this shard
+        shard_n_phi = len(shard_phi_unique)
+        coverage = shard_n_phi / n_phi
+        coverage_stats.append(coverage)
+
+        shards.append(
+            PreparedData(
+                data=shard_data,
+                t1=shard_t1,
+                t2=shard_t2,
+                phi=shard_phi,
+                phi_unique=shard_phi_unique,
+                phi_indices=shard_phi_indices,
+                n_total=len(shard_data),
+                n_phi=shard_n_phi,
+                noise_scale=shard_noise,
+            )
+        )
+
+        if coverage < min_angle_coverage:
+            logger.warning(
+                f"Shard {shard_num}: {len(shard_data):,} points, "
+                f"angle coverage {coverage:.1%} < {min_angle_coverage:.1%} threshold "
+                f"({shard_n_phi}/{n_phi} angles)"
+            )
+        else:
+            logger.debug(
+                f"Shard {shard_num}: {len(shard_data):,} points, "
+                f"angle coverage {coverage:.1%} ({shard_n_phi}/{n_phi} angles)"
+            )
+
+    # Log summary statistics
+    if coverage_stats:
+        min_cov = min(coverage_stats)
+        max_cov = max(coverage_stats)
+        mean_cov = sum(coverage_stats) / len(coverage_stats)
+        below_threshold = sum(1 for c in coverage_stats if c < min_angle_coverage)
+        total_shard_points = sum(s.n_total for s in shards)
+
+        logger.info(
+            f"Angle-balanced sharding: {prepared.n_total:,} points → {len(shards)} shards "
+            f"(~{total_shard_points // len(shards):,} points each)"
+        )
+        logger.info(
+            f"Angle coverage stats: min={min_cov:.1%}, max={max_cov:.1%}, mean={mean_cov:.1%}, "
+            f"below threshold: {below_threshold}/{len(shards)}"
+        )
+
+        if below_threshold > len(shards) * 0.1:  # More than 10% below threshold
+            logger.warning(
+                f"Many shards ({below_threshold}) have low angle coverage. "
+                f"Consider using fewer shards or larger max_points_per_shard."
+            )
+
+    return shards
+
+
 def create_xdata_dict(
     prepared: PreparedData,
     q: float,

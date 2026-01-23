@@ -343,3 +343,243 @@ class TestDiagonalFiltering:
 
         # Verify no diagonal points remain
         assert np.all(prepared.t1 != prepared.t2)
+
+
+class TestShardDataAngleBalanced:
+    """Tests for shard_data_angle_balanced function (v2.19.0+).
+
+    This function ensures proportional angle coverage per shard for multi-angle
+    datasets, preventing heterogeneous posteriors that cause high CV across shards.
+    """
+
+    @pytest.fixture
+    def multi_angle_prepared(self):
+        """Create multi-angle prepared data for testing."""
+        n_per_angle = 500
+        n_phi = 5
+        n_total = n_per_angle * n_phi
+
+        # Create data with clear angle structure
+        phi_vals = np.array([0.0, 30.0, 60.0, 90.0, 120.0])
+        phi = np.repeat(phi_vals, n_per_angle)
+        data = np.random.randn(n_total) * 0.1 + 1.0
+        t1 = np.random.rand(n_total) * 10
+        t2 = t1 + np.random.rand(n_total) * 0.5  # Off-diagonal
+
+        phi_unique, phi_indices = extract_phi_info(phi)
+        noise = estimate_noise_scale(data)
+
+        return PreparedData(
+            data=data,
+            t1=t1,
+            t2=t2,
+            phi=phi,
+            phi_unique=phi_unique,
+            phi_indices=phi_indices,
+            n_total=n_total,
+            n_phi=n_phi,
+            noise_scale=noise,
+        )
+
+    def test_import(self):
+        """Test shard_data_angle_balanced is importable."""
+        from homodyne.optimization.cmc.data_prep import shard_data_angle_balanced
+
+        assert callable(shard_data_angle_balanced)
+
+    def test_basic_sharding(self, multi_angle_prepared):
+        """Test basic angle-balanced sharding creates valid shards."""
+        from homodyne.optimization.cmc.data_prep import shard_data_angle_balanced
+
+        shards = shard_data_angle_balanced(
+            multi_angle_prepared,
+            num_shards=10,
+            seed=42,
+        )
+
+        # Should create requested number of shards
+        assert len(shards) == 10
+
+        # All data should be distributed (no loss)
+        total_points = sum(s.n_total for s in shards)
+        assert total_points == multi_angle_prepared.n_total
+
+        # Each shard should have valid PreparedData structure
+        for shard in shards:
+            assert isinstance(shard, PreparedData)
+            assert shard.n_total > 0
+            assert shard.n_phi > 0
+            assert shard.noise_scale > 0
+
+    def test_angle_coverage(self, multi_angle_prepared):
+        """Test each shard has good angle coverage."""
+        from homodyne.optimization.cmc.data_prep import shard_data_angle_balanced
+
+        shards = shard_data_angle_balanced(
+            multi_angle_prepared,
+            num_shards=10,
+            min_angle_coverage=0.8,
+            seed=42,
+        )
+
+        # Each shard should have at least 80% of angles
+        min_angles_expected = int(0.8 * multi_angle_prepared.n_phi)
+        for i, shard in enumerate(shards):
+            assert shard.n_phi >= min_angles_expected, (
+                f"Shard {i} has {shard.n_phi} angles, "
+                f"expected at least {min_angles_expected}"
+            )
+
+    def test_proportional_distribution(self, multi_angle_prepared):
+        """Test data is distributed proportionally across shards."""
+        from homodyne.optimization.cmc.data_prep import shard_data_angle_balanced
+
+        shards = shard_data_angle_balanced(
+            multi_angle_prepared,
+            num_shards=5,
+            seed=42,
+        )
+
+        # Points per shard should be roughly equal (within 20% of mean)
+        points_per_shard = [s.n_total for s in shards]
+        mean_points = sum(points_per_shard) / len(points_per_shard)
+        for n_points in points_per_shard:
+            assert 0.8 * mean_points <= n_points <= 1.2 * mean_points
+
+    def test_single_angle_fallback(self):
+        """Test single-angle data falls back to random sharding."""
+        from homodyne.optimization.cmc.data_prep import shard_data_angle_balanced
+
+        # Create single-angle data
+        n = 1000
+        prepared = PreparedData(
+            data=np.random.randn(n) + 1.0,
+            t1=np.random.rand(n) * 10,
+            t2=np.random.rand(n) * 10 + 0.5,
+            phi=np.zeros(n),
+            phi_unique=np.array([0.0]),
+            phi_indices=np.zeros(n, dtype=int),
+            n_total=n,
+            n_phi=1,
+            noise_scale=0.1,
+        )
+
+        shards = shard_data_angle_balanced(
+            prepared,
+            num_shards=5,
+            seed=42,
+        )
+
+        # Should still create shards (falling back to random)
+        assert len(shards) == 5
+        total = sum(s.n_total for s in shards)
+        assert total == n
+
+    def test_max_points_per_shard(self, multi_angle_prepared):
+        """Test sharding respects max_points_per_shard."""
+        from homodyne.optimization.cmc.data_prep import shard_data_angle_balanced
+
+        max_points = 300
+        shards = shard_data_angle_balanced(
+            multi_angle_prepared,
+            max_points_per_shard=max_points,
+            seed=42,
+        )
+
+        # Most shards should be at or below max_points (last shard may vary)
+        for shard in shards[:-1]:
+            assert shard.n_total <= max_points * 1.5  # Allow some tolerance
+
+    def test_reproducibility(self, multi_angle_prepared):
+        """Test sharding is reproducible with same seed."""
+        from homodyne.optimization.cmc.data_prep import shard_data_angle_balanced
+
+        shards1 = shard_data_angle_balanced(
+            multi_angle_prepared,
+            num_shards=5,
+            seed=42,
+        )
+        shards2 = shard_data_angle_balanced(
+            multi_angle_prepared,
+            num_shards=5,
+            seed=42,
+        )
+
+        # Same seed should produce same results
+        for s1, s2 in zip(shards1, shards2):
+            assert s1.n_total == s2.n_total
+            np.testing.assert_array_equal(s1.data, s2.data)
+
+    def test_different_seeds_differ(self, multi_angle_prepared):
+        """Test different seeds produce different shards."""
+        from homodyne.optimization.cmc.data_prep import shard_data_angle_balanced
+
+        shards1 = shard_data_angle_balanced(
+            multi_angle_prepared,
+            num_shards=5,
+            seed=42,
+        )
+        shards2 = shard_data_angle_balanced(
+            multi_angle_prepared,
+            num_shards=5,
+            seed=123,
+        )
+
+        # Different seeds should produce different results
+        # Check first shard's data ordering differs
+        assert not np.array_equal(shards1[0].data, shards2[0].data)
+
+    def test_max_shards_cap(self, multi_angle_prepared):
+        """Test num_shards is capped by max_shards."""
+        from homodyne.optimization.cmc.data_prep import shard_data_angle_balanced
+
+        shards = shard_data_angle_balanced(
+            multi_angle_prepared,
+            num_shards=1000,
+            max_shards=10,
+            seed=42,
+        )
+
+        # Should be capped at max_shards
+        assert len(shards) <= 10
+
+    def test_phi_indices_consistency(self, multi_angle_prepared):
+        """Test phi indices correctly map to phi values in each shard."""
+        from homodyne.optimization.cmc.data_prep import shard_data_angle_balanced
+
+        shards = shard_data_angle_balanced(
+            multi_angle_prepared,
+            num_shards=10,
+            seed=42,
+        )
+
+        for shard in shards:
+            # Each phi value should map correctly through indices
+            for i in range(shard.n_total):
+                expected_phi = shard.phi[i]
+                actual_phi = shard.phi_unique[shard.phi_indices[i]]
+                assert expected_phi == actual_phi, (
+                    f"Phi mismatch at index {i}: "
+                    f"expected {expected_phi}, got {actual_phi}"
+                )
+
+    def test_no_data_loss(self, multi_angle_prepared):
+        """Test all original data points are preserved across shards."""
+        from homodyne.optimization.cmc.data_prep import shard_data_angle_balanced
+
+        shards = shard_data_angle_balanced(
+            multi_angle_prepared,
+            num_shards=10,
+            seed=42,
+        )
+
+        # Collect all data from shards
+        all_shard_data = np.concatenate([s.data for s in shards])
+
+        # Should have same total count
+        assert len(all_shard_data) == multi_angle_prepared.n_total
+
+        # All original values should be present (sorted comparison)
+        np.testing.assert_array_equal(
+            np.sort(all_shard_data), np.sort(multi_angle_prepared.data)
+        )

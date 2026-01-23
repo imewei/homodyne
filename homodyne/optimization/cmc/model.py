@@ -180,7 +180,8 @@ def xpcs_model(
     # to reject all proposals because the sigma prior strongly prefers small values
     # while the data needs larger sigma to account for model-data mismatch.
     # The 3x multiplier allows sigma to explore a wider range during MCMC warmup.
-    sigma_scale = noise_scale * 3.0  # MCMC-safe multiplier
+    # Jan 2026: Reduced from 3.0x to 1.5x for tighter precision
+    sigma_scale = noise_scale * 1.5
     sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
 
     # Observation likelihood
@@ -386,9 +387,10 @@ def xpcs_model_scaled(
     numpyro.deterministic("n_numerical_issues", n_nan)
 
     # =========================================================================
-    # 6. Likelihood with noise model
+    # 6. Likelihood with noise model (tighter sigma prior for precision)
     # =========================================================================
-    sigma_scale = noise_scale * 3.0
+    # Jan 2026: Reduced from 3.0x to 1.5x for tighter precision
+    sigma_scale = noise_scale * 1.5
     sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
 
     numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
@@ -522,9 +524,11 @@ def xpcs_model_constant(
     numpyro.deterministic("n_numerical_issues", n_nan)
 
     # =========================================================================
-    # 5. Likelihood with noise model
+    # 5. Likelihood with noise model (tighter sigma prior for precision)
     # =========================================================================
-    sigma_scale = noise_scale * 3.0
+    # Jan 2026: Reduced from 3.0x to 1.5x to prevent sigma from absorbing
+    # systematic errors and inflating uncertainty estimates
+    sigma_scale = noise_scale * 1.5
     sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
 
     numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
@@ -650,9 +654,154 @@ def xpcs_model_averaged(
     c2_theory = offset_per_point + contrast_per_point * g1**2
 
     # =========================================================================
-    # 5. Likelihood with noise model
+    # 5. Likelihood with noise model (tighter sigma prior for precision)
     # =========================================================================
-    sigma_scale = noise_scale * 3.0
+    # Jan 2026: Reduced from 3.0x to 1.5x to prevent sigma from absorbing
+    # systematic errors and inflating uncertainty estimates
+    sigma_scale = noise_scale * 1.5
+    sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
+
+    numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
+
+
+def xpcs_model_constant_averaged(
+    data: jnp.ndarray,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    phi_unique: jnp.ndarray,
+    phi_indices: jnp.ndarray,
+    q: float,
+    L: float,
+    dt: float,
+    analysis_mode: str,
+    parameter_space: ParameterSpace,
+    n_phi: int,
+    time_grid: jnp.ndarray | None = None,
+    noise_scale: float = 0.1,
+    fixed_contrast: jnp.ndarray | None = None,
+    fixed_offset: jnp.ndarray | None = None,
+) -> None:
+    """NumPyro model with FIXED averaged per-angle scaling (NLSQ parity mode).
+
+    This model uses FIXED contrast/offset values that are the AVERAGE of per-angle
+    estimates. These values are NOT sampled, providing exact parity with NLSQ's
+    "auto" mode behavior.
+
+    CRITICAL (Jan 2026): This mode fixes the parameter shift issue where CMC's
+    "auto" mode (xpcs_model_averaged) samples contrast/offset, introducing extra
+    uncertainty that biases physical parameters. By using FIXED averaged values,
+    the physical parameter posteriors should match NLSQ estimates.
+
+    Parameter count comparison (laminar_flow):
+    - individual mode: 54 params (46 per-angle + 7 physical + 1 sigma)
+    - auto mode (xpcs_model_averaged): 10 params (2 sampled scaling + 7 physical + 1 sigma)
+    - constant mode (xpcs_model_constant): 8 params (7 physical + 1 sigma, per-angle fixed)
+    - constant_averaged mode (this): 8 params (7 physical + 1 sigma, averaged fixed)
+
+    Parameters
+    ----------
+    data : jnp.ndarray
+        Observed C2 correlation data, shape (n_total,).
+    t1, t2 : jnp.ndarray
+        Time coordinates, shape (n_total,).
+    phi_unique : jnp.ndarray
+        Unique phi angles, shape (n_phi,).
+    phi_indices : jnp.ndarray
+        Index into per-angle arrays for each point, shape (n_total,).
+    q : float
+        Wavevector magnitude.
+    L : float
+        Stator-rotor gap length (nm).
+    dt : float
+        Time step.
+    analysis_mode : str
+        Analysis mode: "static" or "laminar_flow".
+    parameter_space : ParameterSpace
+        Parameter space with bounds and priors.
+    n_phi : int
+        Number of unique phi angles.
+    noise_scale : float
+        Initial estimate of observation noise.
+    fixed_contrast : jnp.ndarray
+        Fixed per-angle contrast values, shape (n_phi,). Will be averaged.
+    fixed_offset : jnp.ndarray
+        Fixed per-angle offset values, shape (n_phi,). Will be averaged.
+    """
+    # =========================================================================
+    # 0. Compute AVERAGED fixed scaling (NLSQ parity)
+    # =========================================================================
+    if fixed_contrast is None or fixed_offset is None:
+        raise ValueError(
+            "xpcs_model_constant_averaged requires fixed_contrast and fixed_offset arrays. "
+            "These should be estimated from quantile analysis before calling."
+        )
+
+    # Average the per-angle values and broadcast to all angles
+    avg_contrast = jnp.mean(fixed_contrast)
+    avg_offset = jnp.mean(fixed_offset)
+    contrast_arr = jnp.full(n_phi, avg_contrast)
+    offset_arr = jnp.full(n_phi, avg_offset)
+
+    # Log the averaged values (stored as deterministics for diagnostics)
+    numpyro.deterministic("fixed_contrast_mean", avg_contrast)
+    numpyro.deterministic("fixed_offset_mean", avg_offset)
+
+    # =========================================================================
+    # 1. Compute scaling factors for PHYSICAL parameters only
+    # =========================================================================
+    scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+
+    # =========================================================================
+    # 2. Sample PHYSICAL parameters in z-space (8 params total: 7 physical + sigma)
+    # =========================================================================
+    D0 = sample_scaled_parameter("D0", scalings["D0"])
+    alpha = sample_scaled_parameter("alpha", scalings["alpha"])
+    D_offset = sample_scaled_parameter("D_offset", scalings["D_offset"])
+
+    if analysis_mode == "laminar_flow":
+        gamma_dot_t0 = sample_scaled_parameter("gamma_dot_t0", scalings["gamma_dot_t0"])
+        beta = sample_scaled_parameter("beta", scalings["beta"])
+        gamma_dot_t_offset = sample_scaled_parameter(
+            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"]
+        )
+        phi0 = sample_scaled_parameter("phi0", scalings["phi0"])
+
+        params = jnp.array(
+            [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+        )
+    else:
+        params = jnp.array([D0, alpha, D_offset])
+
+    # =========================================================================
+    # 3. Compute theoretical C2 (same as other models)
+    # =========================================================================
+    from homodyne.core.jax_backend import _compute_g1_total_core
+
+    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
+    sinc_prefactor = 0.5 / jnp.pi * q * L * dt
+
+    g1 = _compute_g1_total_core(
+        params=params,
+        t1=t1,
+        t2=t2,
+        phi=phi_unique[phi_indices],
+        wavevector_q_squared_half_dt=wavevector_q_squared_half_dt,
+        sinc_prefactor=sinc_prefactor,
+        dt=dt,
+    )
+
+    # =========================================================================
+    # 4. Apply FIXED averaged scaling to get C2
+    # =========================================================================
+    contrast_per_point = contrast_arr[phi_indices]
+    offset_per_point = offset_arr[phi_indices]
+    c2_theory = offset_per_point + contrast_per_point * g1**2
+
+    # =========================================================================
+    # 5. Likelihood with noise model (tighter sigma prior for precision)
+    # =========================================================================
+    # Jan 2026: Use tighter sigma prior (1.5x vs 3.0x noise_scale) for better precision
+    sigma_scale = noise_scale * 1.5
     sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
 
     numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
@@ -664,7 +813,7 @@ def get_xpcs_model(per_angle_mode: str = "individual"):
     Parameters
     ----------
     per_angle_mode : str
-        Per-angle scaling mode: "individual", "auto", or "constant".
+        Per-angle scaling mode: "individual", "auto", "constant", or "constant_averaged".
 
     Returns
     -------
@@ -681,6 +830,8 @@ def get_xpcs_model(per_angle_mode: str = "individual"):
       (2 averaged + 7 physical + 1 sigma = 10 params for laminar_flow).
     - constant: Uses xpcs_model_constant which requires fixed_contrast/fixed_offset
       arrays (NOT sampled, 7 physical + 1 sigma = 8 params for laminar_flow).
+    - constant_averaged: Uses xpcs_model_constant_averaged with FIXED averaged scaling
+      (NOT sampled, 7 physical + 1 sigma = 8 params). Provides exact NLSQ parity.
     """
     if per_angle_mode == "auto":
         logger.info("CMC: Using auto mode model (sampled averaged scaling, 10 params)")
@@ -690,6 +841,11 @@ def get_xpcs_model(per_angle_mode: str = "individual"):
             "CMC: Using constant mode model (fixed per-angle scaling, 8 params)"
         )
         return xpcs_model_constant
+    elif per_angle_mode == "constant_averaged":
+        logger.info(
+            "CMC: Using constant_averaged mode model (fixed averaged scaling, 8 params, NLSQ parity)"
+        )
+        return xpcs_model_constant_averaged
     else:
         # Default: individual mode
         logger.info("CMC: Using individual mode model (sampled per-angle scaling)")
