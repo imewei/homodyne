@@ -458,7 +458,7 @@ clean-test:
 		-exec rm -rf {} + 2>/dev/null || true
 	rm -rf .coverage coverage.xml .coverage.* test-results.xml
 	rm -rf homodyne_results/ .homodyne_cache/ cmc_temp_*/ tmp/ .ultra-think/
-	rm -f bandit*report.json phi_angles_list.txt TASK_GROUP_*.md
+	rm -f bandit*report.json phi_angles_list.txt TASK_GROUP_*.md homodyne_*.log
 
 clean-cache:
 	@echo "$(BOLD)$(BLUE)Removing additional caches...$(RESET)"
