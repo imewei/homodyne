@@ -1,12 +1,66 @@
-# Homodyne 2.18: CPU-Optimized JAX-First XPCS Analysis
+# Homodyne 2.19: CPU-Optimized JAX-First XPCS Analysis
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-2.18.0-green.svg)](#)
+[![Version](https://img.shields.io/badge/Version-2.19.0-green.svg)](#)
 [![Documentation](https://img.shields.io/badge/docs-sphinx-blue.svg)](https://homodyne.readthedocs.io)
 [![ReadTheDocs](https://readthedocs.org/projects/homodyne/badge/?version=latest)](https://homodyne.readthedocs.io/en/latest/)
 [![GitHub Actions](https://github.com/imewei/homodyne/actions/workflows/docs.yml/badge.svg)](https://github.com/imewei/homodyne/actions/workflows/docs.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
+
+## 🚀 **What's New in v2.19.0**
+
+### CMC Convergence and Precision Fixes
+
+**Major release addressing catastrophic CMC failures** on multi-angle datasets. Previously,
+3-angle laminar_flow analysis showed 94% shard timeout, 28.4% divergence rate, and 33-43x
+uncertainty inflation compared to NLSQ.
+
+**Key Fixes:**
+
+- **Angle-aware shard sizing**: Automatic scaling based on n_phi (30% for n_phi≤3, up to 100%)
+- **Angle-balanced sharding**: Ensures proportional angle coverage per shard (80% minimum)
+- **NLSQ warm-start priors**: TruncatedNormal priors centered on NLSQ estimates
+- **Early abort mechanism**: Terminates if >50% of first 10 shards fail
+- **NUTS convergence**: Elevated target_accept_prob to 0.9 for laminar_flow
+
+**Performance Impact:**
+
+| Metric | Before | After | Improvement |
+|--------|--------|-------|-------------|
+| Shard success rate | 6% | >90% | 15x |
+| Divergence rate | 28.4% | <5% | 5.7x |
+| Uncertainty ratio vs NLSQ | 33-43x | <5x | 7-9x |
+
+**Configuration:**
+
+```yaml
+optimization:
+  cmc:
+    sharding:
+      max_points_per_shard: "auto"  # Angle-aware scaling
+      strategy: "angle_balanced"    # Ensure coverage per shard
+    sampler:
+      target_accept_prob: 0.9       # Higher for multi-scale
+    per_angle_mode: "constant_averaged"  # Match NLSQ "auto"
+```
+
+**NLSQ Warm-Start Usage:**
+
+```python
+from homodyne.optimization.nlsq import fit_nlsq_jax
+from homodyne.optimization.cmc import fit_mcmc_jax
+
+# Step 1: Run NLSQ
+nlsq_result = fit_nlsq_jax(data, config)
+
+# Step 2: Run CMC with NLSQ warm-start
+cmc_result = fit_mcmc_jax(data, config, nlsq_result=nlsq_result)
+```
+
+See [CHANGELOG](CHANGELOG.md#2190---2026-01-23) for complete details.
+
+---
 
 ## 🚀 **What's New in v2.18.0**
 

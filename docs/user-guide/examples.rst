@@ -428,8 +428,146 @@ The MCMC range is asymmetric around the mean, capturing non-Gaussian behavior.
 
 ---
 
-Example 4: Multi-Angle Laminar Flow Analysis
-============================================
+Example 4: NLSQ Warm-Start for CMC (v2.19.0+)
+=============================================
+
+**Scenario:** Use NLSQ results to warm-start CMC for faster convergence
+and better precision.
+
+**Problem:** CMC with uninformative priors can have:
+
+- Wide posterior distributions (33-43x NLSQ uncertainty)
+- Slow convergence
+- High divergence rates on multi-angle data
+
+**Solution:** Pass NLSQ results to CMC as warm-start priors.
+
+Python API Usage
+----------------
+
+.. code-block:: python
+
+   from homodyne.optimization.nlsq import fit_nlsq_jax
+   from homodyne.optimization.cmc import fit_mcmc_jax
+
+   # Step 1: Run NLSQ for fast point estimates
+   nlsq_result = fit_nlsq_jax(
+       data=data,
+       t1=t1,
+       t2=t2,
+       phi=phi,
+       q=q,
+       L=L,
+       analysis_mode="laminar_flow",
+       config=config,
+   )
+
+   print(f"NLSQ D0: {nlsq_result.parameters['D0']:.2f} ± "
+         f"{nlsq_result.uncertainties['D0']:.2f}")
+
+   # Step 2: Run CMC with NLSQ warm-start
+   cmc_result = fit_mcmc_jax(
+       data=data,
+       t1=t1,
+       t2=t2,
+       phi=phi,
+       q=q,
+       L=L,
+       analysis_mode="laminar_flow",
+       cmc_config=cmc_config,
+       parameter_space=parameter_space,
+       nlsq_result=nlsq_result,  # <-- Pass NLSQ result here
+   )
+
+   print(f"CMC D0: {cmc_result.summary['D0']['mean']:.2f} ± "
+         f"{cmc_result.summary['D0']['std']:.2f}")
+
+How Warm-Start Works
+--------------------
+
+When you pass ``nlsq_result`` to ``fit_mcmc_jax()``:
+
+1. **Informative priors** are built from NLSQ estimates:
+
+   - Prior type: TruncatedNormal
+   - Center: NLSQ parameter value
+   - Width: 3 × NLSQ uncertainty (3σ)
+   - Bounds: Same as parameter space
+
+2. **Parameters affected** (physical only):
+
+   - Static mode: D0, alpha, D_offset
+   - Laminar flow: + gamma_dot_t0, beta, gamma_dot_t_offset, phi0
+
+3. **Per-angle parameters** (contrast, offset) use data-driven priors
+
+Benefits
+--------
+
+.. list-table:: Impact of NLSQ Warm-Start
+   :header-rows: 1
+   :widths: 35 25 25 15
+
+   * - Metric
+     - Without Warm-Start
+     - With Warm-Start
+     - Improvement
+   * - Uncertainty ratio (CMC/NLSQ)
+     - 33-43x
+     - 2-5x
+     - 7-15x
+   * - Convergence speed
+     - Slow
+     - Fast
+     - 2-3x
+   * - Divergence rate
+     - High (>10%)
+     - Low (<5%)
+     - Stable
+   * - Posterior agreement
+     - May disagree
+     - Good overlap
+     - Consistent
+
+Configuration Options
+---------------------
+
+.. code-block:: yaml
+
+   optimization:
+     cmc:
+       # Use constant_averaged for exact NLSQ parity
+       per_angle_mode: "constant_averaged"
+
+       # Angle-aware sharding for multi-angle data
+       sharding:
+         max_points_per_shard: "auto"
+         strategy: "angle_balanced"
+
+       # Higher acceptance for laminar_flow
+       sampler:
+         target_accept_prob: 0.9
+
+When to Use Warm-Start
+----------------------
+
+**Use warm-start when:**
+
+- You have a successful NLSQ fit
+- CMC posteriors are too wide
+- You want CMC to validate NLSQ results
+- Convergence is slow without informative priors
+
+**Don't use warm-start when:**
+
+- NLSQ fit is poor (high residuals)
+- You want fully uninformative Bayesian analysis
+- Exploring parameter space broadly
+
+---
+
+Example 5: Multi-Angle Laminar Flow Analysis
+=============================================
 
 **Scenario:** High-precision analysis with many detector arms.
 

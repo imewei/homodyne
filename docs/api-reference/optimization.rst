@@ -1370,6 +1370,203 @@ Key Functions
    homodyne.optimization.cmc.priors.build_init_values_dict
    homodyne.optimization.cmc.config.CMCConfig.get_effective_per_angle_mode
 
+.. _cmc-convergence-fixes:
+
+CMC Convergence and Precision Fixes (v2.19.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+v2.19.0 introduces comprehensive fixes for CMC failures on multi-angle datasets, addressing
+94% shard timeout rates, 28.4% divergence rates, and 33-43x uncertainty inflation observed
+in 3-angle laminar_flow analysis.
+
+Angle-Aware Shard Sizing
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``_resolve_max_points_per_shard()`` function now accepts an ``n_phi`` parameter that
+scales shard sizes inversely with angle count:
+
+.. list-table:: Angle-Aware Shard Scaling
+   :header-rows: 1
+   :widths: 20 25 55
+
+   * - n_phi
+     - Scale Factor
+     - Rationale
+   * - ≤ 3
+     - 30%
+     - Few-angle data has more complex per-shard posteriors
+   * - 4-5
+     - 50%
+     - Moderate angle count
+   * - 6-10
+     - 70%
+     - Good angle coverage per shard
+   * - > 10
+     - 100%
+     - Full capacity
+
+**Example**: For 3-angle laminar_flow with base 20K shard size, effective size = 6K points.
+
+Angle-Balanced Sharding
+^^^^^^^^^^^^^^^^^^^^^^^
+
+New ``shard_data_angle_balanced()`` function ensures proportional angle coverage per shard:
+
+.. code-block:: python
+
+   from homodyne.optimization.cmc.data_prep import shard_data_angle_balanced
+
+   shards = shard_data_angle_balanced(
+       prepared,
+       num_shards=None,           # Auto-calculate
+       max_points_per_shard=6000, # Angle-aware size
+       min_angle_coverage=0.8,    # 80% minimum coverage
+       seed=42,
+   )
+
+Key features:
+
+- Samples proportionally from each angle group
+- Logs coverage statistics per shard
+- Falls back to random sharding if angle-balanced impossible
+
+NLSQ Warm-Start Priors
+^^^^^^^^^^^^^^^^^^^^^^
+
+New functions in ``homodyne.optimization.cmc.priors`` for NLSQ-informed prior construction:
+
+.. code-block:: python
+
+   from homodyne.optimization.cmc.priors import (
+       build_nlsq_informed_prior,
+       build_nlsq_informed_priors,
+       extract_nlsq_values_for_cmc,
+   )
+
+   # Extract NLSQ values from various result formats
+   nlsq_values = extract_nlsq_values_for_cmc(nlsq_result)
+
+   # Build informative prior for single parameter
+   prior = build_nlsq_informed_prior(
+       param_name="D0",
+       nlsq_value=1234.5,
+       nlsq_std=45.6,
+       bounds=(100, 10000),
+       width_factor=3.0,  # 3σ width
+   )
+
+   # Build priors for all physical parameters
+   priors = build_nlsq_informed_priors(nlsq_values, nlsq_stds, bounds, analysis_mode)
+
+**Usage in fit_mcmc_jax**:
+
+.. code-block:: python
+
+   from homodyne.optimization.cmc import fit_mcmc_jax
+   from homodyne.optimization.nlsq import fit_nlsq_jax
+
+   # Step 1: Run NLSQ
+   nlsq_result = fit_nlsq_jax(data, config)
+
+   # Step 2: Run CMC with NLSQ warm-start
+   cmc_result = fit_mcmc_jax(data, config, nlsq_result=nlsq_result)
+
+Constant-Averaged Per-Angle Mode
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+New ``xpcs_model_constant_averaged()`` model for exact NLSQ "auto" mode parity:
+
+- Uses FIXED averaged contrast/offset (not sampled)
+- 8 parameters (7 physical + sigma) instead of 10
+- Matches NLSQ constant mode averaging behavior
+
+.. code-block:: yaml
+
+   optimization:
+     cmc:
+       per_angle_mode: "constant_averaged"  # Match NLSQ "auto"
+
+Early Abort Mechanism
+^^^^^^^^^^^^^^^^^^^^^
+
+The multiprocessing backend now tracks failure categories and aborts early:
+
+.. list-table:: Failure Categories
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Category
+     - Description
+   * - ``timeout``
+     - Shard exceeded ``per_shard_timeout``
+   * - ``heartbeat_timeout``
+     - Worker stopped responding
+   * - ``crash``
+     - Worker process crashed
+   * - ``numerical``
+     - NaN/Inf in posterior samples
+   * - ``convergence``
+     - High R-hat or low ESS
+
+**Abort condition**: If >50% of first 10 shards fail, the run aborts immediately.
+
+NUTS Convergence Improvements
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For laminar_flow mode:
+
+- ``target_accept_prob`` automatically elevated to 0.9 (from default 0.85)
+- Divergence rate checking with severity levels:
+
+  - >30%: CRITICAL (logged as error, run continues)
+  - >10%: WARNING
+  - >5%: ELEVATED (info)
+
+Precision Diagnostics
+^^^^^^^^^^^^^^^^^^^^^
+
+New functions in ``homodyne.optimization.cmc.diagnostics``:
+
+.. code-block:: python
+
+   from homodyne.optimization.cmc.diagnostics import (
+       compute_posterior_contraction,
+       compute_nlsq_comparison_metrics,
+       compute_precision_analysis,
+       log_precision_analysis,
+   )
+
+   # Posterior Contraction Ratio: PCR = 1 - (posterior_std / prior_std)
+   pcr = compute_posterior_contraction(posterior_std=10.0, prior_std=100.0)
+   # pcr = 0.9 (90% contraction = informative data)
+
+   # Compare CMC to NLSQ
+   metrics = compute_nlsq_comparison_metrics(
+       cmc_mean=1234.5,
+       cmc_std=45.6,
+       nlsq_value=1250.0,
+       nlsq_std=50.0,
+   )
+   # Returns: z_score, uncertainty_ratio, overlap
+
+Configuration Reference (v2.19.0)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: yaml
+
+   optimization:
+     cmc:
+       sharding:
+         max_points_per_shard: "auto"  # Angle-aware scaling
+         strategy: "angle_balanced"    # Ensure coverage per shard
+         min_angle_coverage: 0.8       # 80% of angles per shard
+       sampler:
+         target_accept_prob: 0.9       # Higher for laminar_flow
+       execution:
+         per_shard_timeout: 3600       # 1 hour (down from 2)
+         early_abort_threshold: 0.5    # Abort if >50% of first 10 fail
+       per_angle_mode: "constant_averaged"  # Match NLSQ "auto"
+
 Shared Scaling Utilities
 ^^^^^^^^^^^^^^^^^^^^^^^^
 

@@ -19,7 +19,7 @@ try:
     # Extract base version (before any .post or +dirty suffixes)
     version = _pkg_version.split(".post")[0].split("+")[0]
 except ImportError:
-    version = "2.18.0"  # Fallback for builds without package installed
+    version = "2.19.0"  # Fallback for builds without package installed
 release = version
 
 # Project metadata
