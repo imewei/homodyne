@@ -6,7 +6,7 @@ from the ParameterSpace configuration.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import numpyro.distributions as dist
@@ -1021,20 +1021,20 @@ def build_nlsq_informed_priors(
 
 
 def extract_nlsq_values_for_cmc(
-    nlsq_result: dict,
+    nlsq_result: dict | Any,
 ) -> tuple[dict[str, float], dict[str, float] | None]:
-    """Extract parameter values and uncertainties from an NLSQ result dict.
+    """Extract parameter values and uncertainties from an NLSQ result.
 
     This utility handles various NLSQ result formats and extracts the
     information needed for CMC warm-start priors.
 
     Parameters
     ----------
-    nlsq_result : dict
-        NLSQ result dictionary, may contain:
-        - "params" or "parameters": dict of parameter values
-        - "uncertainties" or "std_errors": dict of standard errors
-        - Or flat structure with parameter names as keys
+    nlsq_result : dict or OptimizationResult
+        NLSQ result, either:
+        - OptimizationResult dataclass with parameters/uncertainties arrays
+        - dict with "params"/"parameters"/"best_params" keys
+        - dict with flat structure (parameter names as keys)
 
     Returns
     -------
@@ -1042,43 +1042,117 @@ def extract_nlsq_values_for_cmc(
         Tuple of (parameter_values, uncertainties).
         uncertainties may be None if not available.
     """
-    # Handle various result formats
-    if "params" in nlsq_result:
-        values = nlsq_result["params"]
-    elif "parameters" in nlsq_result:
-        values = nlsq_result["parameters"]
-    elif "best_params" in nlsq_result:
-        values = nlsq_result["best_params"]
-    else:
-        # Assume flat structure - filter out non-parameter keys
-        exclude_keys = {
-            "success",
-            "message",
-            "iterations",
-            "chi_squared",
-            "r_squared",
-            "residuals",
-            "jacobian",
-            "covariance",
-            "uncertainties",
-            "std_errors",
-        }
+    # Handle OptimizationResult dataclass (has 'parameters' attribute as ndarray)
+    if hasattr(nlsq_result, "parameters") and hasattr(nlsq_result.parameters, "__len__"):
+        import numpy as np
+
+        params_array = np.asarray(nlsq_result.parameters)
+        n_params = len(params_array)
+
+        # Infer parameter names from array length
+        # Static mode: contrast, offset, D0, alpha, D_offset (5 params)
+        # Laminar flow: contrast, offset, D0, alpha, D_offset, gamma_dot_t0, beta,
+        #               gamma_dot_t_offset, phi0 (9 params)
+        # Per-angle scaling adds more params, but physical params are at the end
+        if n_params >= 9:
+            # Laminar flow (7 physical + 2 scaling minimum)
+            # With per-angle scaling, first params are contrast/offset per angle
+            # Last 7 are physical params
+            physical_names = [
+                "D0",
+                "alpha",
+                "D_offset",
+                "gamma_dot_t0",
+                "beta",
+                "gamma_dot_t_offset",
+                "phi0",
+            ]
+            n_physical = 7
+        else:
+            # Static mode (3 physical + 2 scaling minimum)
+            physical_names = ["D0", "alpha", "D_offset"]
+            n_physical = 3
+
+        # Build scaling param names based on array structure
+        n_scaling = n_params - n_physical
+        if n_scaling == 2:
+            # Single contrast/offset (constant mode)
+            scaling_names = ["contrast", "offset"]
+        elif n_scaling > 2 and n_scaling % 2 == 0:
+            # Per-angle scaling
+            n_angles = n_scaling // 2
+            scaling_names = [f"contrast_{i}" for i in range(n_angles)] + [
+                f"offset_{i}" for i in range(n_angles)
+            ]
+        else:
+            # Fallback: generic scaling names
+            scaling_names = [f"scaling_{i}" for i in range(n_scaling)]
+
+        param_names = scaling_names + physical_names
+
+        # Build values dict
         values = {
-            k: v
-            for k, v in nlsq_result.items()
-            if k not in exclude_keys and isinstance(v, (int, float))
+            name: float(params_array[i]) for i, name in enumerate(param_names)
         }
 
-    # Extract uncertainties if available
-    uncertainties = None
-    if "uncertainties" in nlsq_result:
-        uncertainties = nlsq_result["uncertainties"]
-    elif "std_errors" in nlsq_result:
-        uncertainties = nlsq_result["std_errors"]
+        # Extract uncertainties if available
+        uncertainties = None
+        if (
+            hasattr(nlsq_result, "uncertainties")
+            and nlsq_result.uncertainties is not None
+        ):
+            unc_array = np.asarray(nlsq_result.uncertainties)
+            if len(unc_array) == n_params:
+                uncertainties = {
+                    name: float(unc_array[i]) for i, name in enumerate(param_names)
+                }
 
-    # Ensure values are plain floats
-    values = {k: float(v) for k, v in values.items()}
-    if uncertainties:
-        uncertainties = {k: float(v) for k, v in uncertainties.items()}
+        return values, uncertainties
 
-    return values, uncertainties
+    # Handle dict-based result formats
+    if isinstance(nlsq_result, dict):
+        if "params" in nlsq_result:
+            values = nlsq_result["params"]
+        elif "parameters" in nlsq_result:
+            values = nlsq_result["parameters"]
+        elif "best_params" in nlsq_result:
+            values = nlsq_result["best_params"]
+        else:
+            # Assume flat structure - filter out non-parameter keys
+            exclude_keys = {
+                "success",
+                "message",
+                "iterations",
+                "chi_squared",
+                "r_squared",
+                "residuals",
+                "jacobian",
+                "covariance",
+                "uncertainties",
+                "std_errors",
+            }
+            values = {
+                k: v
+                for k, v in nlsq_result.items()
+                if k not in exclude_keys and isinstance(v, (int, float))
+            }
+
+        # Extract uncertainties if available
+        uncertainties = None
+        if "uncertainties" in nlsq_result:
+            uncertainties = nlsq_result["uncertainties"]
+        elif "std_errors" in nlsq_result:
+            uncertainties = nlsq_result["std_errors"]
+
+        # Ensure values are plain floats
+        values = {k: float(v) for k, v in values.items()}
+        if uncertainties:
+            uncertainties = {k: float(v) for k, v in uncertainties.items()}
+
+        return values, uncertainties
+
+    # Unknown format - raise informative error
+    raise TypeError(
+        f"extract_nlsq_values_for_cmc expects dict or OptimizationResult, "
+        f"got {type(nlsq_result).__name__}"
+    )

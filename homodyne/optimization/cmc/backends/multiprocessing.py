@@ -1018,6 +1018,11 @@ class MultiprocessingBackend(CMCBackend):
 
         # Log per-shard posterior statistics BEFORE combination
         # This helps diagnose why combined posteriors may differ from initial values
+        # Also check for heterogeneity abort (Jan 2026 v2)
+        heterogeneity_abort = getattr(config, "heterogeneity_abort", True)
+        max_parameter_cv = getattr(config, "max_parameter_cv", 1.0)
+        high_cv_params: list[tuple[str, float]] = []  # Track (param, cv) pairs
+
         if len(successful_samples) > 1:
             key_params = ["D0", "alpha", "D_offset", "gamma_dot_t0", "beta"]
             run_logger.info(
@@ -1034,13 +1039,35 @@ class MultiprocessingBackend(CMCBackend):
                         f"mean_of_means={np.mean(means):.4g}, "
                         f"std_of_means={np.std(means):.4g}"
                     )
-                    # Warn if shard posteriors are highly heterogeneous
+                    # Check for high heterogeneity
                     cv = np.std(means) / max(abs(np.mean(means)), 1e-10)
-                    if cv > 0.5:
+                    if cv > max_parameter_cv:
+                        high_cv_params.append((param, cv))
                         run_logger.warning(
                             f"    HIGH HETEROGENEITY: {param} has CV={cv:.2f} across shards! "
+                            f"(threshold={max_parameter_cv:.2f})"
+                        )
+                    elif cv > 0.5:
+                        run_logger.warning(
+                            f"    MODERATE HETEROGENEITY: {param} has CV={cv:.2f} across shards. "
                             f"Combined posterior may be unreliable."
                         )
+
+            # HETEROGENEITY ABORT (Jan 2026 v2): Fail fast instead of silently bad results
+            if heterogeneity_abort and high_cv_params:
+                param_summary = ", ".join(f"{p} (CV={cv:.2f})" for p, cv in high_cv_params)
+                raise RuntimeError(
+                    f"HETEROGENEITY ABORT: {len(high_cv_params)} parameter(s) exceed "
+                    f"max_parameter_cv={max_parameter_cv:.2f}: {param_summary}\n\n"
+                    f"This indicates shards are sampling from inconsistent posterior regions, "
+                    f"making consensus combination unreliable.\n\n"
+                    f"Recommended actions:\n"
+                    f"  1. Use --nlsq-first flag to run NLSQ warm-start before CMC\n"
+                    f"  2. Increase min_points_per_shard (current: {getattr(config, 'min_points_per_shard', 10000):,})\n"
+                    f"  3. Check if data quality issues exist (outliers, missing values)\n"
+                    f"  4. Set validation.heterogeneity_abort=false to disable this check (not recommended)\n"
+                    f"  5. Increase max_parameter_cv threshold if heterogeneity is expected"
+                )
 
         # Combine samples
         combined = combine_shard_samples(

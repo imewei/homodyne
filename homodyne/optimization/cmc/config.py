@@ -155,6 +155,12 @@ class CMCConfig:
     # Warm-start requirements (Jan 2026)
     require_nlsq_warmstart: bool = False  # Require NLSQ warm-start for laminar_flow
 
+    # Heterogeneity detection (Jan 2026 v2)
+    # Abort early if shard posteriors are too heterogeneous (high CV)
+    max_parameter_cv: float = 1.0  # Abort if any parameter has CV > 1.0 across shards
+    heterogeneity_abort: bool = True  # Enable heterogeneity abort (fail fast)
+    min_points_per_shard: int = 10000  # Enforced minimum for laminar_flow
+
     # Computed fields
     _validation_errors: list[str] = field(default_factory=list, repr=False)
 
@@ -264,6 +270,10 @@ class CMCConfig:
             min_success_rate_warning=combination.get("min_success_rate_warning", 0.80),
             # Warm-start requirements
             require_nlsq_warmstart=validation.get("require_nlsq_warmstart", False),
+            # Heterogeneity detection (Jan 2026 v2)
+            max_parameter_cv=validation.get("max_parameter_cv", 1.0),
+            heterogeneity_abort=validation.get("heterogeneity_abort", True),
+            min_points_per_shard=sharding.get("min_points_per_shard", 10000),
         )
 
         # Validate and log any issues
@@ -375,7 +385,7 @@ class CMCConfig:
             )
 
         # Validate combination settings
-        valid_methods = ["consensus_mc", "weighted_gaussian", "simple_average", "auto"]
+        valid_methods = ["consensus_mc", "robust_consensus_mc", "weighted_gaussian", "simple_average", "auto"]
         if self.combination_method not in valid_methods:
             errors.append(
                 f"combination_method must be one of {valid_methods}, got: {self.combination_method}"
@@ -400,6 +410,20 @@ class CMCConfig:
             logger.warning(
                 f"min_success_rate_warning ({self.min_success_rate_warning}) > "
                 f"min_success_rate ({self.min_success_rate}); warning will never trigger"
+            )
+
+        # Validate heterogeneity detection settings (Jan 2026 v2)
+        if not isinstance(self.max_parameter_cv, (int, float)) or self.max_parameter_cv <= 0:
+            errors.append(
+                f"max_parameter_cv must be positive number, got: {self.max_parameter_cv}"
+            )
+        if not isinstance(self.heterogeneity_abort, bool):
+            errors.append(
+                f"heterogeneity_abort must be bool, got: {self.heterogeneity_abort}"
+            )
+        if not isinstance(self.min_points_per_shard, int) or self.min_points_per_shard < 1000:
+            errors.append(
+                f"min_points_per_shard must be int >= 1000, got: {self.min_points_per_shard}"
             )
 
         self._validation_errors = errors
@@ -487,18 +511,24 @@ class CMCConfig:
 
         return max(1, n_points // max_per_shard)
 
-    def get_effective_per_angle_mode(self, n_phi: int) -> str:
+    def get_effective_per_angle_mode(
+        self, n_phi: int, nlsq_per_angle_mode: str | None = None
+    ) -> str:
         """Determine effective per-angle mode based on configuration and data.
 
         Parameters
         ----------
         n_phi : int
             Number of phi angles in the dataset.
+        nlsq_per_angle_mode : str | None
+            Optional per-angle mode from NLSQ result. When provided (from warm-start),
+            CMC will use this mode to ensure parameterization parity with NLSQ.
+            This prevents CMC vs NLSQ divergence from different model structures.
 
         Returns
         -------
         str
-            Effective mode: "auto", "constant", or "individual".
+            Effective mode: "auto", "constant", "constant_averaged", or "individual".
 
         Notes
         -----
@@ -507,8 +537,20 @@ class CMCConfig:
         - auto: Sample single averaged contrast/offset (10 params for laminar_flow).
           Only activated when n_phi >= threshold (many angles).
         - constant: Use FIXED per-angle values from quantile estimation (8 params).
+        - constant_averaged: Use FIXED averaged scaling for NLSQ parity.
         - individual: Sample per-angle contrast/offset (n_phi*2 + 7 + 1 params).
+
+        Priority: nlsq_per_angle_mode > explicit config > auto-selection
         """
+        # Jan 2026 v2: When NLSQ warm-start provides per-angle mode, match it
+        # This ensures CMC and NLSQ use identical parameterizations
+        if nlsq_per_angle_mode is not None:
+            logger.info(
+                f"CMC per-angle mode: Using NLSQ warm-start mode '{nlsq_per_angle_mode}' "
+                f"for parameterization parity"
+            )
+            return nlsq_per_angle_mode
+
         if self.per_angle_mode == "auto":
             if n_phi >= self.constant_scaling_threshold:
                 # Return "auto" - this uses the xpcs_model_averaged which samples
@@ -526,7 +568,7 @@ class CMCConfig:
                 )
                 return "individual"
         else:
-            # Explicit mode (constant or individual)
+            # Explicit mode (constant, constant_averaged, or individual)
             return self.per_angle_mode
 
     def to_dict(self) -> dict[str, Any]:
@@ -547,6 +589,7 @@ class CMCConfig:
                 "strategy": self.sharding_strategy,
                 "num_shards": self.num_shards,
                 "max_points_per_shard": self.max_points_per_shard,
+                "min_points_per_shard": self.min_points_per_shard,
             },
             "backend": {
                 "name": self.backend_name,
@@ -564,6 +607,8 @@ class CMCConfig:
                 "min_per_shard_ess": self.min_ess,
                 "max_divergence_rate": self.max_divergence_rate,
                 "require_nlsq_warmstart": self.require_nlsq_warmstart,
+                "max_parameter_cv": self.max_parameter_cv,
+                "heterogeneity_abort": self.heterogeneity_abort,
             },
             "combination": {
                 "method": self.combination_method,

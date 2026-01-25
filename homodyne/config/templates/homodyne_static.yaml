@@ -428,6 +428,10 @@ optimization:
   # ===========================================================================
   # CMC - Consensus Monte Carlo
   # ===========================================================================
+  # AUTOMATIC NLSQ WARM-START (v2.20.0):
+  #   CLI: homodyne --method cmc → NLSQ runs first automatically
+  #   Reduces divergence rate; less critical for static (simpler 3-param model)
+  #
   cmc:
     enable: "auto"
     min_points_for_cmc: 500000        # Higher threshold for simpler model
@@ -460,7 +464,8 @@ optimization:
     sharding:
       strategy: "stratified"
       num_shards: "auto"
-      max_points_per_shard: "auto"    # 100k for static (10x larger than laminar)
+      max_points_per_shard: "auto"    # 50K-100K for static (10x larger than laminar)
+      min_points_per_shard: 5000      # Lower minimum OK for 3-param model
       seed_base: 0
 
     per_shard_timeout: 7200           # 2 hours (static converges faster)
@@ -484,6 +489,13 @@ optimization:
       max_per_shard_rhat: 1.1
       max_between_shard_kl: 2.0
       min_success_rate: 0.90
+
+      # NLSQ warm-start & quality control (v2.20.0)
+      # NOTE: CLI automatically runs NLSQ before CMC (homodyne --method cmc)
+      max_divergence_rate: 0.10       # Filter shards with >10% divergences
+      require_nlsq_warmstart: false   # Optional for static (simpler model)
+      max_parameter_cv: 1.5           # Higher threshold OK for static
+      heterogeneity_abort: true       # Abort with guidance if CV exceeded
 
 # ==============================================================================
 # NOISE ESTIMATION (Optional)

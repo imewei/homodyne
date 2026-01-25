@@ -44,7 +44,7 @@ def _resolve_max_points_per_shard(
     analysis_mode: str,
     n_total: int,
     max_points_per_shard: int | str | None,
-    max_shards: int = 2000,
+    max_shards: int | None = None,
     n_phi: int = 1,
 ) -> int:
     """Determine optimal shard size based on mode, data volume, and angle count.
@@ -58,21 +58,27 @@ def _resolve_max_points_per_shard(
     making gradient computation ~n_phi times more expensive than single-angle shards.
     We scale the base shard size inversely with angle count to compensate.
 
-    Scaling guidelines (laminar_flow mode with 2 chains, 1000 iterations):
-    - 5K points → ~2-3 min/shard (single angle)
-    - 10K points → ~5-8 min/shard (single angle)
-    - 10K points with 3 angles → ~15-25 min/shard (angle scaling effect)
-    - 3K points with 3 angles → ~5-8 min/shard (after angle-aware fix)
+    FIX (Jan 2026 v2): Increased minimum shard size to 10K for laminar_flow.
+    Previous 3K shards with 3 angles created 999 data-starved shards that caused:
+    - High per-shard heterogeneity (D_offset CV=1.80, gamma_dot_t0 CV=1.50)
+    - CMC posteriors diverging 37% from NLSQ on D0
+    - Artificially narrow uncertainties from corrupted precision-weighted combination
+
+    Scaling guidelines (laminar_flow mode with 4 chains, 2000 iterations):
+    - 10K points → ~8-12 min/shard (single angle)
+    - 10K points with 3 angles → ~20-35 min/shard (angle scaling effect)
+    - 15K points with 3 angles → ~30-50 min/shard
 
     Memory scalability for shard combination:
-    - Each shard result: ~100KB (13 params × 2 chains × 1500 samples × 8 bytes)
+    - Each shard result: ~100KB (13 params × 4 chains × 1500 samples × 8 bytes)
     - Peak memory: ~6 × K MB where K = number of shards
-    - Safe limits: K=1000 → ~6GB, K=2000 → ~12GB, K=5000 → ~30GB
+    - Safe limits: K=1000 → ~6GB, K=5000 → ~30GB, K=10000 → ~60GB
 
-    For production HPC environments:
-    - Bebop (36 cores, 128GB): max ~2500 shards → 10K points for <25M datasets
-    - Improv (128 cores, 256GB): max ~5000 shards → 8K points for <40M datasets
-    - Personal (8-36 cores, 32GB): max ~500 shards → ~5M dataset limit
+    Dataset size guidelines:
+    - 1M points: ~100 shards (10K/shard) → ~600MB memory
+    - 10M points: ~1000 shards (10K/shard) → ~6GB memory
+    - 100M points: ~10000 shards (10K/shard) → ~60GB memory
+    - 1B points: ~50000 shards (20K/shard) → ~300GB memory (HPC only)
 
     Parameters
     ----------
@@ -82,44 +88,77 @@ def _resolve_max_points_per_shard(
         Total number of data points.
     max_points_per_shard : int | str | None
         User-specified shard size or "auto".
-    max_shards : int
+    max_shards : int | None
         Maximum number of shards to create (caps memory usage).
-        Default 2000 requires ~12GB for combination phase.
+        If None, dynamically computed based on dataset size:
+        - Small (<10M): up to 2000 shards
+        - Medium (10M-100M): up to 10000 shards
+        - Large (100M-1B): up to 50000 shards
+        - Very large (>1B): up to 100000 shards
     n_phi : int
         Number of phi angles in the dataset. Used for angle-aware scaling.
         Default 1 (single angle - no scaling applied).
     """
+    # Minimum shard sizes to prevent data starvation (Jan 2026 fix)
+    MIN_SHARD_SIZE_LAMINAR = 10_000  # 10K minimum for laminar_flow
+    MIN_SHARD_SIZE_STATIC = 5_000   # 5K minimum for static
+
     if max_points_per_shard is not None and max_points_per_shard != "auto":
-        return int(max_points_per_shard)
+        user_specified = int(max_points_per_shard)
+        # Still enforce minimum for laminar_flow even with user specification
+        if analysis_mode == "laminar_flow" and user_specified < MIN_SHARD_SIZE_LAMINAR:
+            logger.warning(
+                f"Enforcing minimum shard size for laminar_flow: "
+                f"{user_specified:,} → {MIN_SHARD_SIZE_LAMINAR:,} points "
+                "(to prevent data-starved shards)"
+            )
+            return MIN_SHARD_SIZE_LAMINAR
+        return user_specified
 
     # =========================================================================
-    # Angle-aware scaling factor (Jan 2026 fix for few-angle timeout issue)
+    # Dynamic max_shards based on dataset size (Jan 2026 v3)
+    # =========================================================================
+    # Scale max_shards with dataset size to handle 1M to 1B+ point datasets
+    if max_shards is None:
+        if n_total >= 1_000_000_000:  # 1B+ points
+            max_shards = 100_000  # ~600GB memory for combination
+        elif n_total >= 100_000_000:  # 100M+ points
+            max_shards = 50_000  # ~300GB memory
+        elif n_total >= 10_000_000:  # 10M+ points
+            max_shards = 10_000  # ~60GB memory
+        else:
+            max_shards = 2_000  # ~12GB memory (suitable for workstations)
+
+    # =========================================================================
+    # Angle-aware scaling factor (Jan 2026 fix v2: Less aggressive scaling)
     # =========================================================================
     # Multi-angle datasets with random sharding have ALL angles in each shard.
     # This makes gradient computation ~n_phi times more expensive.
-    # Scale shard size inversely to compensate.
+    # Scale shard size inversely, but with higher floor to prevent data starvation.
     if n_phi <= 3:
-        angle_factor = 0.3  # 30% of base size for 1-3 angles
+        angle_factor = 0.6  # 60% of base size for 1-3 angles (was 0.3)
     elif n_phi <= 5:
-        angle_factor = 0.5  # 50% for 4-5 angles
+        angle_factor = 0.7  # 70% for 4-5 angles (was 0.5)
     elif n_phi <= 10:
-        angle_factor = 0.7  # 70% for 6-10 angles
+        angle_factor = 0.85  # 85% for 6-10 angles (was 0.7)
     else:
         angle_factor = 1.0  # Full size for many angles (stratified sharding preferred)
 
     # Auto-detection based on analysis mode and dataset size
     if analysis_mode == "laminar_flow":
-        # Laminar flow needs smaller shards due to complex gradients (7+ params)
-        if n_total >= 100_000_000:  # 100M+ points
-            base = 5_000  # ~20K shards, ~3 min each
+        # Laminar flow: scale shard size with dataset to balance parallelism vs. data per shard
+        if n_total >= 1_000_000_000:  # 1B+ points
+            base = 35_000  # ~28K shards at 20K final (after 0.6 angle factor)
+        elif n_total >= 100_000_000:  # 100M+ points
+            base = 20_000  # ~5K shards at 12K final
         elif n_total >= 50_000_000:  # 50M+ points
-            base = 6_000  # ~8K shards, ~4 min each
+            base = 20_000  # ~2.5K shards
         elif n_total >= 20_000_000:  # 20M+ points
-            base = 8_000  # ~2.5K shards, ~5 min each
+            base = 20_000  # ~1K shards
         elif n_total >= 2_000_000:  # 2M+ points
-            base = 10_000  # ~200-300 shards, ~5-8 min each
+            base = 20_000  # ~150 shards
         else:
-            base = 20_000  # Small datasets can use larger shards
+            base = 25_000  # Small datasets: fewer, larger shards
     else:
         # Static mode (3 params) - simpler gradients, can handle larger shards
         if n_total >= 100_000_000:  # 100M+ points
@@ -131,33 +170,37 @@ def _resolve_max_points_per_shard(
 
     # Apply angle-aware scaling
     scaled_base = int(base * angle_factor)
-    # Enforce minimum shard size to avoid excessive sharding
-    scaled_base = max(scaled_base, 1000)
+
+    # Enforce minimum shard size to avoid data-starved shards (Jan 2026 fix)
+    if analysis_mode == "laminar_flow":
+        scaled_base = max(scaled_base, MIN_SHARD_SIZE_LAMINAR)
+    else:
+        scaled_base = max(scaled_base, MIN_SHARD_SIZE_STATIC)
 
     # Log angle-aware scaling if factor < 1.0
     if angle_factor < 1.0:
         logger.info(
             f"Angle-aware shard sizing: n_phi={n_phi} → factor={angle_factor:.1f}, "
-            f"base={base:,} → scaled={scaled_base:,}"
+            f"base={base:,} → scaled={scaled_base:,} (min={MIN_SHARD_SIZE_LAMINAR if analysis_mode == 'laminar_flow' else MIN_SHARD_SIZE_STATIC:,})"
         )
 
     # Cap shard count to prevent memory exhaustion during combination
-    # Each shard result ~100KB → max_shards=2000 needs ~12GB peak memory
     estimated_shards = n_total // scaled_base
     if estimated_shards > max_shards:
         # Increase shard size to respect max_shards limit
         adjusted = (n_total + max_shards - 1) // max_shards
-        # Don't go too large for laminar_flow - cap at 50K for runtime
+        # Don't go too large for laminar_flow - cap at 100K for runtime
         if analysis_mode == "laminar_flow":
-            if adjusted > 50_000:
-                final_shards = n_total // 50_000
+            MAX_LAMINAR_SHARD = 100_000  # 100K max to keep runtime reasonable
+            if adjusted > MAX_LAMINAR_SHARD:
+                final_shards = n_total // MAX_LAMINAR_SHARD
                 # Warn user: need more memory for very large laminar_flow datasets
                 logger.warning(
-                    f"Dataset ({n_total:,} points) exceeds recommended limits for laminar_flow. "
-                    f"Will create {final_shards:,} shards (>max_shards={max_shards}). "
-                    f"Ensure sufficient memory (~{final_shards * 6 // 1000}GB) or reduce dataset size."
+                    f"Dataset ({n_total:,} points) requires {final_shards:,} shards with "
+                    f"max {MAX_LAMINAR_SHARD:,} pts/shard. "
+                    f"Ensure sufficient memory (~{final_shards * 6 // 1000}GB) for shard combination."
                 )
-            adjusted = min(adjusted, 50_000)
+            adjusted = min(adjusted, MAX_LAMINAR_SHARD)
         return adjusted
 
     return scaled_base
@@ -485,7 +528,20 @@ def fit_mcmc_jax(
     # =========================================================================
     # 2b. Determine per-angle mode and select appropriate model (v2.18.0+)
     # =========================================================================
-    effective_per_angle_mode = config.get_effective_per_angle_mode(prepared.n_phi)
+    # Extract per-angle mode from NLSQ result for parameterization parity (Jan 2026)
+    nlsq_per_angle_mode = None
+    if nlsq_result is not None:
+        # Try to extract per_angle_mode from NLSQ result metadata
+        metadata = nlsq_result.get("metadata", {}) if isinstance(nlsq_result, dict) else {}
+        nlsq_per_angle_mode = metadata.get("per_angle_mode")
+        if nlsq_per_angle_mode:
+            run_logger.info(
+                f"NLSQ warm-start detected per_angle_mode='{nlsq_per_angle_mode}' from NLSQ result"
+            )
+
+    effective_per_angle_mode = config.get_effective_per_angle_mode(
+        prepared.n_phi, nlsq_per_angle_mode=nlsq_per_angle_mode
+    )
     xpcs_model = get_xpcs_model(effective_per_angle_mode)
     run_logger.info(
         f"CMC per-angle mode: {config.per_angle_mode} → {effective_per_angle_mode} "

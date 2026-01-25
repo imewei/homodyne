@@ -224,6 +224,7 @@ def _combine_shard_chunk(
     method : str
         Combination method:
         - "consensus_mc": Correct Consensus Monte Carlo (precision-weighted means)
+        - "robust_consensus_mc": Robust CMC with trimmed statistics (Jan 2026)
         - "weighted_gaussian": Legacy element-wise weighted averaging (deprecated)
         - "simple_average": Simple element-wise averaging (deprecated)
 
@@ -242,9 +243,10 @@ def _combine_shard_chunk(
     3. Combined mean: μ = σ² × Σ_s (μ_s / σ²_s)
     4. Generate new samples from N(μ, σ²)
 
-    The legacy methods do element-wise averaging of sample arrays, which is
-    mathematically incorrect as sample indices have no correspondence across
-    shards.
+    The "robust_consensus_mc" method (Jan 2026) extends this with:
+    - Trimmed statistics to exclude outlier shards
+    - Winsorization of extreme variances
+    - Automatic outlier detection based on median absolute deviation
     """
     import numpy as np
 
@@ -258,10 +260,87 @@ def _combine_shard_chunk(
     n_chains = shard_samples[0].n_chains
     n_samples = shard_samples[0].n_samples
 
-    if method == "consensus_mc":
+    if method == "robust_consensus_mc":
+        # ROBUST Consensus Monte Carlo (Jan 2026):
+        # Uses trimmed statistics to handle heterogeneous shards
+        combined_samples: dict[str, np.ndarray] = {}
+        rng = np.random.default_rng(42)
+
+        for name in param_names:
+            # Compute per-shard posterior mean and variance
+            shard_means = []
+            shard_variances = []
+            for s in shard_samples:
+                samples = s.samples[name].flatten()
+                shard_means.append(np.mean(samples))
+                shard_variances.append(np.var(samples))
+
+            means_arr = np.array(shard_means)
+            vars_arr = np.array(shard_variances)
+
+            # Detect outliers using median absolute deviation (MAD)
+            # More robust than using standard deviation
+            median_mean = np.median(means_arr)
+            mad = np.median(np.abs(means_arr - median_mean))
+            # Modified Z-score threshold (commonly used: 3.5)
+            threshold = 3.5
+            if mad > 0:
+                modified_z = 0.6745 * np.abs(means_arr - median_mean) / mad
+                inlier_mask = modified_z < threshold
+            else:
+                # If MAD is 0 (all means identical), keep all
+                inlier_mask = np.ones(len(means_arr), dtype=bool)
+
+            # Require at least 3 shards for robust statistics
+            n_inliers = np.sum(inlier_mask)
+            if n_inliers < 3:
+                # Fall back to standard CMC if too few inliers
+                logger.warning(
+                    f"Robust CMC: Only {n_inliers} inliers for {name}, "
+                    "falling back to standard combination"
+                )
+                inlier_mask = np.ones(len(means_arr), dtype=bool)
+
+            # Use only inlier shards for combination
+            filtered_means = means_arr[inlier_mask]
+            filtered_vars = vars_arr[inlier_mask]
+
+            # Winsorize extreme variances (cap at 5th and 95th percentiles)
+            if len(filtered_vars) >= 5:
+                var_low, var_high = np.percentile(filtered_vars, [5, 95])
+                filtered_vars = np.clip(filtered_vars, var_low, var_high)
+
+            # Precision-weighted combination on filtered data
+            precisions = [1.0 / max(v, 1e-10) for v in filtered_vars]
+            combined_precision = sum(precisions)
+            combined_variance = 1.0 / combined_precision
+
+            weighted_mean_sum = sum(
+                p * m for p, m in zip(precisions, filtered_means, strict=False)
+            )
+            combined_mean = combined_variance * weighted_mean_sum
+
+            # Generate new samples from the combined Gaussian
+            combined_std = np.sqrt(combined_variance)
+            new_samples = rng.normal(
+                loc=combined_mean,
+                scale=combined_std,
+                size=(n_chains, n_samples),
+            )
+            combined_samples[name] = new_samples
+
+            # Log if outliers were excluded
+            n_excluded = len(means_arr) - n_inliers
+            if n_excluded > 0:
+                logger.debug(
+                    f"Robust CMC: {name} excluded {n_excluded}/{len(means_arr)} "
+                    f"outlier shards (MAD-based detection)"
+                )
+
+    elif method == "consensus_mc":
         # CORRECT Consensus Monte Carlo (Scott et al., 2016):
         # Combine posterior moments, then generate new samples
-        combined_samples: dict[str, np.ndarray] = {}
+        combined_samples = {}
         rng = np.random.default_rng(42)  # Deterministic for reproducibility
 
         for name in param_names:

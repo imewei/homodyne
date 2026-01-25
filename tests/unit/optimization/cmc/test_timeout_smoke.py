@@ -48,11 +48,14 @@ class _MockParameterSpace:
 
 @pytest.mark.unit
 def test_resolve_max_points_per_shard_laminar_large_pool():
-    # v2.19.0: Angle-aware scaling - with n_phi=1 (default), base 10K is scaled to 3K
-    # For n_phi=10+, it would return 10K (angle_factor=1.0)
-    assert _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto") == 3_000
-    # Multi-angle dataset should scale differently
-    assert _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto", n_phi=10) == 7_000
+    # v2.20.0: Increased minimum shard size to 10K for laminar_flow to prevent data starvation
+    # With n_phi=1, angle_factor=0.6, base=20K (for 3M) → scaled=12K
+    # With n_phi=10+, angle_factor=0.85, base=20K → scaled=17K
+    assert _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto") == 12_000
+    # Multi-angle dataset should scale differently (n_phi=10 gets angle_factor=0.85)
+    assert _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto", n_phi=10) == 17_000
+    # 1B dataset should get 20K+ shard size
+    assert _resolve_max_points_per_shard("laminar_flow", 1_000_000_000, "auto", n_phi=3) == 21_000
 
 
 @pytest.mark.unit

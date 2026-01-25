@@ -933,6 +933,17 @@ optimization:
   # Parallelizes MCMC across data shards using per-shard NUTS sampling.
   # Combines subposteriors via Consensus Monte Carlo (precision-weighted means).
   #
+  # AUTOMATIC NLSQ WARM-START (v2.20.0):
+  #   When using CLI: homodyne --method cmc --config config.yaml
+  #   NLSQ is run AUTOMATICALLY first, and results are used as CMC initial values.
+  #   This reduces divergence rate from ~28% to <5%.
+  #
+  #   To disable (NOT recommended): homodyne --method cmc --no-nlsq-warmstart
+  #
+  #   For API usage, pass nlsq_result to fit_mcmc_jax():
+  #     nlsq_result = fit_nlsq_jax(data, config)
+  #     cmc_result = fit_mcmc_jax(data, config, nlsq_result=nlsq_result)
+  #
   # AUTO-ACTIVATION:
   #   CMC used when: enable="auto" AND dataset ≥ min_points_for_cmc
   #
@@ -992,7 +1003,11 @@ optimization:
     sharding:
       strategy: "stratified"        # "stratified" | "random" | "contiguous"
       num_shards: "auto"            # "auto" uses n_phi for stratified
-      max_points_per_shard: "auto"  # "auto" → 20k/10k (laminar) or 100k (static)
+      max_points_per_shard: "auto"  # "auto" → dynamic based on dataset size (v2.20.0)
+                                    # laminar_flow: 12K-21K after angle scaling
+                                    # static: 50K-100K
+      min_points_per_shard: "auto"  # "auto" → 10K (laminar) or 5K (static) (v2.20.0)
+                                    # Prevents data-starved shards
       seed_base: 0                  # Shard seed = seed_base + shard_id
 
     # Per-shard timeout (seconds)
@@ -1012,7 +1027,11 @@ optimization:
 
     # Subposterior combination
     combination:
-      method: "consensus_mc"        # "consensus_mc" | "weighted_gaussian" | "simple_average"
+      method: "consensus_mc"        # "consensus_mc" | "robust_consensus_mc" | "weighted_gaussian" | "simple_average"
+                                    # consensus_mc: Precision-weighted combination (default)
+                                    # robust_consensus_mc: MAD-based outlier detection (v2.20.0)
+                                    #   - Excludes outlier shards before combination
+                                    #   - Auto-enabled if heterogeneity_abort=false and CV > threshold
       validate_results: true        # Validate quality
       min_success_rate: 0.90        # Require 90% shard convergence
                                     # CONSTRAINT: [0, 1]
@@ -1033,6 +1052,42 @@ optimization:
       max_per_shard_rhat: 1.1       # R-hat threshold
       max_between_shard_kl: 2.0     # KL divergence between shards
       min_success_rate: 0.90        # CONSTRAINT: [0, 1]
+
+      # -----------------------------------------------------------------------
+      # NLSQ WARM-START & QUALITY CONTROL (v2.20.0)
+      # -----------------------------------------------------------------------
+      # IMPORTANT: As of v2.20.0, NLSQ warm-start is AUTOMATIC when using CLI:
+      #   homodyne --method cmc --config config.yaml
+      #
+      # The CLI runs NLSQ first, then uses results as CMC initial values.
+      # This reduces divergence rate from ~28% to <5%.
+      #
+      # To disable (NOT recommended):
+      #   homodyne --method cmc --no-nlsq-warmstart
+      #
+      # For API usage, pass nlsq_result to fit_mcmc_jax():
+      #   nlsq_result = fit_nlsq_jax(data, config)
+      #   cmc_result = fit_mcmc_jax(data, config, nlsq_result=nlsq_result)
+      # -----------------------------------------------------------------------
+
+      # Divergence-based quality filtering
+      max_divergence_rate: 0.10     # Filter shards with >10% divergences
+                                    # CONSTRAINT: [0, 1]
+                                    # Shards exceeding this are excluded from combination
+
+      # NLSQ warm-start requirement (API-level only; CLI is automatic)
+      require_nlsq_warmstart: false # Set true to REQUIRE nlsq_result in API calls
+                                    # When true, fit_mcmc_jax() raises ValueError without it
+
+      # Heterogeneity detection and abort (v2.20.0)
+      max_parameter_cv: 1.0         # Maximum coefficient of variation across shard means
+                                    # CONSTRAINT: > 0
+                                    # CV = std(shard_means) / |mean(shard_means)|
+                                    # High CV indicates shards sampling different posteriors
+
+      heterogeneity_abort: true     # Abort if heterogeneity exceeds max_parameter_cv
+                                    # When true: raises RuntimeError with guidance
+                                    # When false: falls back to robust_consensus_mc
 
 # ==============================================================================
 # NOISE ESTIMATION (Optional)

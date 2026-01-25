@@ -522,6 +522,11 @@ optimization:
   # ===========================================================================
   # CMC - Consensus Monte Carlo
   # ===========================================================================
+  # AUTOMATIC NLSQ WARM-START (v2.20.0):
+  #   CLI: homodyne --method cmc → NLSQ runs first automatically
+  #   Reduces divergence rate from ~28% to <5% for laminar_flow
+  #   Disable with --no-nlsq-warmstart (NOT recommended for 7-param model)
+  #
   cmc:
     enable: "auto"
     min_points_for_cmc: 100000        # Lower for 7-parameter model
@@ -558,14 +563,15 @@ optimization:
     sharding:
       strategy: "stratified"
       num_shards: "auto"
-      max_points_per_shard: "auto"    # 20k/10k auto for laminar_flow
+      max_points_per_shard: "auto"    # Dynamic: 12K-21K after angle scaling (v2.20.0)
+      min_points_per_shard: 10000     # CRITICAL: Prevents data-starved shards
       seed_base: 0
 
     per_shard_timeout: 7200
     heartbeat_timeout: 600
 
     combination:
-      method: "consensus_mc"
+      method: "consensus_mc"          # Use robust_consensus_mc if heterogeneity detected
       validate_results: true
       min_success_rate: 0.80          # Lower for complex 7-param model
       min_success_rate_warning: 0.70
@@ -577,11 +583,19 @@ optimization:
       target_accept_prob: 0.85
 
     validation:
-      strict_mode: false
+      strict_mode: false              # Relaxed for complex 7-param model
       min_per_shard_ess: 100.0
       max_per_shard_rhat: 1.2
       max_between_shard_kl: 0.5
       min_success_rate: 0.80
+
+      # NLSQ warm-start & quality control (v2.20.0)
+      # NOTE: CLI automatically runs NLSQ before CMC (homodyne --method cmc)
+      # Disable with: --no-nlsq-warmstart (NOT recommended for laminar_flow)
+      max_divergence_rate: 0.10       # Filter shards with >10% divergences
+      require_nlsq_warmstart: false   # Set true to enforce in API calls
+      max_parameter_cv: 1.0           # Heterogeneity threshold
+      heterogeneity_abort: true       # Abort with guidance if CV exceeded
 
 # ==============================================================================
 # NOISE ESTIMATION (Optional)
