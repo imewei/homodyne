@@ -2,7 +2,7 @@
 
 Complete documentation of the CMC (Consensus Monte Carlo) fitting system in homodyne.
 
-**Version:** 2.19.0
+**Version:** 2.20.0
 **Last Updated:** January 2026
 
 ## Table of Contents
@@ -28,10 +28,22 @@ Complete documentation of the CMC (Consensus Monte Carlo) fitting system in homo
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              USER ENTRY POINT                                    │
+│                              USER ENTRY POINTS                                   │
 │                                                                                  │
-│                         fit_mcmc_jax(data, config)                               │
-│                               (core.py)                                          │
+│    CLI: homodyne --method cmc              API: fit_mcmc_jax(data, config)      │
+│              │                                         │                         │
+│              ▼                                         │                         │
+│    ┌────────────────────────┐                          │                         │
+│    │ AUTOMATIC NLSQ WARMUP  │ (v2.20.0)                │                         │
+│    │ fit_nlsq_jax() first   │◄────────────────────────┤ (optional nlsq_result)  │
+│    │ unless --no-nlsq-...   │                          │                         │
+│    └────────────────────────┘                          │                         │
+│              │                                         │                         │
+│              └──────────────────┬──────────────────────┘                         │
+│                                 │                                                │
+│                                 ▼                                                │
+│                     fit_mcmc_jax(data, config, nlsq_result=...)                  │
+│                                  (core.py)                                       │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                     │
 ════════════════════════════════════╪══════════════════════════════════════════════
@@ -194,19 +206,58 @@ def fit_mcmc_jax(
 
 **Function:** `_resolve_max_points_per_shard()` in core.py
 
+### Critical Design Principles (v2.20.0)
+
+**Minimum Shard Size Enforcement:**
+- **laminar_flow**: 10,000 points minimum (prevents data-starved shards)
+- **static**: 5,000 points minimum
+
+**Dynamic max_shards Scaling:**
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ max_shards by Dataset Size (v2.20.0)                                       │
+│                                                                            │
+│   Dataset Size    │ max_shards │ Rationale                                 │
+│   ────────────────┼────────────┼──────────────────────────────────────────  │
+│   < 10M points    │ 2,000      │ Standard parallel workload                │
+│   10M - 100M      │ 10,000     │ Balanced shard count                      │
+│   100M - 1B       │ 50,000     │ High parallelism for large datasets       │
+│   1B+             │ 100,000    │ Extreme scale support                     │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+### Angle-Aware Scaling
+
+The shard size is adjusted based on the number of phi angles to ensure each shard has sufficient data per angle:
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Angle Factor by n_phi                                                      │
+│                                                                            │
+│   n_phi  │ angle_factor │ Effect on Shard Size                            │
+│   ───────┼──────────────┼─────────────────────────────────────────────────  │
+│   ≤ 3    │ 0.6          │ 40% reduction (ensures coverage per angle)      │
+│   4-5    │ 0.7          │ 30% reduction                                   │
+│   6-10   │ 0.85         │ 15% reduction                                   │
+│   > 10   │ 1.0          │ No reduction (many angles spread data)          │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
 ### Decision Logic by Mode
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
 │ LAMINAR FLOW MODE (7 parameters, complex gradients)                        │
 │                                                                            │
-│   Dataset Size    │ max_points_per_shard │ Est. Shards │ Per-Shard Time   │
-│   ────────────────┼──────────────────────┼─────────────┼─────────────────  │
-│   < 2M points     │ 20K                  │ ~100        │ ~10-15 min       │
-│   2M - 20M        │ 10K (sweet spot)     │ 200-2000    │ ~5-8 min         │
-│   20M - 50M       │ 8K                   │ 2.5K-6K     │ ~5 min           │
-│   50M - 100M      │ 6K                   │ 8K-17K      │ ~4 min           │
-│   100M+           │ 5K                   │ 20K+        │ ~3 min           │
+│   Dataset Size    │ Base Size │ After n_phi≤3 │ Est. Shards │ Per-Shard   │
+│   ────────────────┼───────────┼───────────────┼─────────────┼─────────────  │
+│   < 2M points     │ 20K       │ 12K           │ ~150        │ ~10-15 min  │
+│   2M - 10M        │ 17K       │ 10K           │ 200-1000    │ ~5-8 min    │
+│   10M - 100M      │ 25K       │ 15K           │ 700-6500    │ ~5 min      │
+│   100M - 1B       │ 30K       │ 18K           │ 5K-55K      │ ~4 min      │
+│   1B+             │ 35K       │ 21K           │ 47K+        │ ~3 min      │
+│                                                                            │
+│   MINIMUM ENFORCED: 10,000 points per shard (prevents data starvation)    │
 └───────────────────────────────────────────────────────────────────────────┘
 
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -217,6 +268,8 @@ def fit_mcmc_jax(
 │   < 50M points    │ 100K                 │ ~500                            │
 │   50M - 100M      │ 80K                  │ ~1K                             │
 │   100M+           │ 50K                  │ ~2K+                            │
+│                                                                            │
+│   MINIMUM ENFORCED: 5,000 points per shard                                │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -229,16 +282,17 @@ def fit_mcmc_jax(
 │   Per-shard result size: ~100KB                                            │
 │     (13 params × 2 chains × 1500 samples × 8 bytes)                        │
 │                                                                            │
-│   Default max_shards = 2000 → ~12GB peak memory during combination         │
+│   Dynamic max_shards by dataset size (see table above)                     │
 │                                                                            │
-│   If exceeded:                                                             │
+│   If shard count would exceed max_shards:                                  │
 │     • Increases shard size (no subsampling, all data used)                 │
 │     • For laminar_flow: caps adjusted shard size at 50K max                │
+│     • Enforces minimum shard size (10K laminar_flow, 5K static)            │
 │                                                                            │
-│   Platform Limits:                                                         │
-│   ├─ Personal (32GB):  ~500 shards  → ~5M points practical max            │
-│   ├─ Bebop (128GB):    ~2500 shards → ~25M points practical max           │
-│   └─ Improv (256GB):   ~5000 shards → ~50M points practical max           │
+│   Platform Scaling (based on dynamic max_shards):                          │
+│   ├─ 3M dataset:    ~150-300 shards (manageable on personal systems)      │
+│   ├─ 100M dataset:  ~5K-10K shards (requires cluster)                     │
+│   └─ 1B dataset:    ~50K shards (extreme scale, HPC required)             │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -665,7 +719,7 @@ def select_backend(config: CMCConfig) -> CMCBackend:
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║ CONSENSUS_MC (Recommended, v2.12.0+)                                       ║
+║ CONSENSUS_MC (Default, v2.12.0+)                                           ║
 ║ Implements Scott et al. (2016) correctly                                   ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
 ║                                                                            ║
@@ -676,6 +730,26 @@ def select_backend(config: CMCConfig) -> CMCBackend:
 ║     4. Generate new samples: N(μ, σ²_combined)                             ║
 ║                                                                            ║
 ║   Precision-weighted combination of posterior moments                      ║
+║                                                                            ║
+║   LIMITATION: Biases toward low-variance shards when heterogeneity exists ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║ ROBUST_CONSENSUS_MC (v2.20.0+)                                             ║
+║ Outlier-resistant combination for heterogeneous shards                     ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║                                                                            ║
+║   Algorithm:                                                               ║
+║     1. Compute per-shard means and variances                               ║
+║     2. Detect outlier shards using MAD (Median Absolute Deviation):        ║
+║        median_mean = median(shard_means)                                   ║
+║        mad = median(|shard_means - median_mean|)                           ║
+║        outlier if |mean - median_mean| > 3 × 1.4826 × mad                  ║
+║     3. Exclude outlier shards from combination                             ║
+║     4. Apply standard consensus_mc to retained shards                      ║
+║                                                                            ║
+║   Use when: High per-shard heterogeneity detected (CV > 0.5)              ║
+║   Auto-enabled: When heterogeneity_abort=False but CV > threshold         ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -828,17 +902,19 @@ CMCResult.from_mcmc_samples()
 
 ## Quick Reference Tables
 
-### Auto Shard Size Selection
+### Auto Shard Size Selection (v2.20.0)
 
-#### Laminar Flow Mode
+#### Laminar Flow Mode (with n_phi ≤ 3, angle_factor = 0.6)
 
-| Dataset Size | max_points_per_shard | Est. Shards | Per-Shard Time |
-|--------------|---------------------|-------------|----------------|
-| < 2M | 20K | ~100 | ~10-15 min |
-| 2M - 20M | 10K | 200-2000 | ~5-8 min |
-| 20M - 50M | 8K | 2.5K-6K | ~5 min |
-| 50M - 100M | 6K | 8K-17K | ~4 min |
-| 100M+ | 5K | 20K+ | ~3 min |
+| Dataset Size | Base Size | After Scaling | max_shards | Est. Shards |
+|--------------|-----------|---------------|------------|-------------|
+| < 2M | 20K | 12K | 2,000 | ~150 |
+| 2M - 10M | 17K | 10K | 2,000 | 200-1000 |
+| 10M - 100M | 25K | 15K | 10,000 | 700-6500 |
+| 100M - 1B | 30K | 18K | 50,000 | 5K-55K |
+| 1B+ | 35K | 21K | 100,000 | 47K+ |
+
+**Minimum shard size: 10,000 points** (prevents data-starved shards)
 
 #### Static Mode (10× larger shards)
 
@@ -848,13 +924,16 @@ CMCResult.from_mcmc_samples()
 | 50M - 100M | 80K | ~1K |
 | 100M+ | 50K | ~2K+ |
 
-### Platform Shard Limits
+**Minimum shard size: 5,000 points**
 
-| Platform | Memory | Max Shards | Max Dataset (laminar) |
-|----------|--------|------------|----------------------|
-| Personal (32GB) | ~20GB | ~500 | ~5M points |
-| Bebop (128GB) | ~100GB | ~2500 | ~25M points |
-| Improv (256GB) | ~200GB | ~5000 | ~50M points |
+### Dynamic max_shards by Dataset Size
+
+| Dataset Size | max_shards | Rationale |
+|--------------|------------|-----------|
+| < 10M points | 2,000 | Standard parallel workload |
+| 10M - 100M | 10,000 | Balanced shard count |
+| 100M - 1B | 50,000 | High parallelism for large datasets |
+| 1B+ | 100,000 | Extreme scale support |
 
 ### Mode-Specific Parameters
 
@@ -863,7 +942,7 @@ CMCResult.from_mcmc_samples()
 | static | 3: D₀, α, D_offset | 46: contrast + offset | 49 + σ |
 | laminar_flow | 7: + γ̇₀, β, γ̇_offset, φ₀ | 46: contrast + offset | 53 + σ |
 
-### CMC Configuration Defaults
+### CMC Configuration Defaults (v2.20.0)
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -876,10 +955,13 @@ CMCResult.from_mcmc_samples()
 | target_accept_prob | 0.85 | NUTS target acceptance |
 | max_r_hat | 1.1 | Convergence threshold |
 | min_ess | 100.0 | Minimum effective sample size |
-| max_divergence_rate | 0.10 | Quality filter threshold (v2.19.0) |
-| require_nlsq_warmstart | False | Enforce NLSQ warm-start (v2.19.0) |
+| max_divergence_rate | 0.10 | Quality filter threshold |
+| require_nlsq_warmstart | False | Enforce NLSQ warm-start |
 | combination_method | "consensus_mc" | Shard combination algorithm |
-| per_shard_timeout | 3600 | 1 hour max per shard (reduced from 2h) |
+| per_shard_timeout | 3600 | 1 hour max per shard |
+| **min_points_per_shard** | 10,000 (laminar) / 5,000 (static) | **NEW**: Minimum shard size |
+| **max_parameter_cv** | 1.0 | **NEW**: Heterogeneity abort threshold |
+| **heterogeneity_abort** | True | **NEW**: Abort on high heterogeneity |
 
 ---
 
@@ -927,7 +1009,7 @@ CMCResult.from_mcmc_samples()
 - Learns parameter covariance during warmup
 - Handles 10⁶:1 gradient imbalance from different parameter scales
 
-### January 2026: Quality Filtering & Warm-Start
+### January 2026: Quality Filtering & Warm-Start (v2.19.0)
 
 **Divergence-Based Shard Quality Filter**
 
@@ -950,47 +1032,139 @@ After root cause analysis of CMC runs with 28% divergence rates, automatic quali
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-**NLSQ Warm-Start Validation**
+### January 2026: CMC Divergence & Precision Loss Fix (v2.20.0)
+
+**Root Cause Analysis**
+
+CMC was producing parameter estimates diverging significantly from NLSQ:
+- D0: -37% difference (12,444 vs 19,665)
+- D_offset: -92% difference (71 vs 844)
+- CMC uncertainties artificially small (precision-weighted bias)
+
+Root causes identified:
+1. **Excessive sharding**: 999 shards with only 3000 points each (data-starved)
+2. **No NLSQ warm-start**: Cold start from config values → 28% divergence rate
+3. **Consensus MC bias**: Precision-weighted combination biased toward low-variance shards
+
+**Automatic NLSQ→CMC Warm-Start (CLI)**
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
-│ NLSQ Warm-Start Advisory (core.py)                                        │
+│ AUTOMATIC NLSQ Warm-Start (cli/commands.py, v2.20.0)                      │
 │                                                                           │
-│   When running laminar_flow without nlsq_result or initial_values:       │
+│   When user runs: homodyne --method cmc --config my_config.yaml          │
 │                                                                           │
-│   If require_nlsq_warmstart=True (from CMCConfig):                       │
-│     → Raises ValueError (hard failure)                                   │
+│   The CLI AUTOMATICALLY:                                                  │
+│   1. Runs NLSQ optimization first (unless --no-nlsq-warmstart)           │
+│   2. Uses NLSQ results as initial values for CMC                         │
+│   3. Reduces divergence rate from ~28% to <5%                            │
 │                                                                           │
-│   If require_nlsq_warmstart=False (default):                             │
-│     → Logs warning explaining:                                           │
-│       • 7 parameters span 6+ orders of magnitude                         │
-│       • NUTS adaptation wastes warmup without good initial values        │
-│       • Higher divergence rates expected (~28% vs <5% with warm-start)   │
+│   To disable (NOT recommended):                                          │
+│     homodyne --method cmc --no-nlsq-warmstart --config my_config.yaml   │
 │                                                                           │
-│   Best practice: Always run NLSQ first, pass nlsq_result to fit_mcmc_jax │
+│   Note: --nlsq-first flag is deprecated (warm-start is now automatic)    │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Dynamic Shard Size Caps for laminar_flow**
+**Heterogeneity Detection & Abort**
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
-│ Dynamic max_shards by Analysis Mode (core.py)                             │
+│ Heterogeneity Detection (backends/multiprocessing.py, v2.20.0)            │
 │                                                                           │
-│   laminar_flow mode:                                                     │
-│     • max_shards = 1000 (up from 500)                                    │
-│     • Allows 3K-5K points per shard for datasets up to 5M points         │
-│     • NUTS is O(n) per step; smaller shards prevent timeout              │
+│   After collecting all shard results:                                    │
 │                                                                           │
-│   static mode:                                                           │
-│     • max_shards = 500 (unchanged)                                       │
-│     • 3 parameters handle larger shards efficiently                      │
+│   1. Compute coefficient of variation (CV) for each parameter:           │
+│      CV = std(shard_means) / |mean(shard_means)|                         │
+│                                                                           │
+│   2. Check against threshold (max_parameter_cv, default 1.0):            │
+│      • CV > threshold for critical params → high heterogeneity detected  │
+│      • Critical params: D0, D_offset (static); + gamma_dot_t0 (laminar)  │
+│                                                                           │
+│   3. If heterogeneity_abort=True (default):                              │
+│      → Raises RuntimeError with actionable guidance:                     │
+│        "High heterogeneity detected (D0 CV=1.80). Consider:              │
+│         1. Run NLSQ first for warm-start                                 │
+│         2. Increase min_points_per_shard                                 │
+│         3. Reduce n_shards"                                              │
+│                                                                           │
+│   4. If heterogeneity_abort=False:                                       │
+│      → Falls back to robust_consensus_mc combination                     │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-### New CMCConfig Fields (v2.19.0)
+**Robust Consensus MC Combination**
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Robust Combination (backends/base.py, v2.20.0)                            │
+│                                                                           │
+│   When standard consensus_mc would produce biased results:               │
+│                                                                           │
+│   1. Compute per-shard means for each parameter                          │
+│   2. Detect outlier shards using MAD (Median Absolute Deviation):        │
+│      • median_mean = median(shard_means)                                 │
+│      • mad = median(|shard_means - median_mean|)                         │
+│      • threshold = 3 × 1.4826 × mad                                      │
+│      • outlier if |mean - median_mean| > threshold                       │
+│   3. Exclude outlier shards from combination                             │
+│   4. Apply standard consensus_mc to retained shards                      │
+│                                                                           │
+│   Auto-enabled when: combination_method="robust_consensus_mc"            │
+│   Or when heterogeneity detected but heterogeneity_abort=False          │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Dynamic Shard Sizing for Large Datasets**
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Dynamic Shard Sizing (core.py, v2.20.0)                                   │
+│                                                                           │
+│   Problem: Fixed max_shards=500/1000 doesn't scale to 100M+ datasets     │
+│                                                                           │
+│   Solution: Dynamic max_shards based on dataset size                     │
+│                                                                           │
+│   Dataset Size    │ max_shards │ Rationale                               │
+│   ────────────────┼────────────┼─────────────────────────────────────────  │
+│   < 10M          │ 2,000      │ Standard parallelism                     │
+│   10M - 100M     │ 10,000     │ Balanced shard count                     │
+│   100M - 1B      │ 50,000     │ High parallelism                         │
+│   1B+            │ 100,000    │ Extreme scale                            │
+│                                                                           │
+│   Additionally enforces MINIMUM shard size:                              │
+│   • laminar_flow: 10,000 points (prevents data starvation)               │
+│   • static: 5,000 points                                                 │
+│                                                                           │
+│   Angle-aware scaling factor (less aggressive, 0.3→0.6 for n_phi≤3)     │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Enhanced CMC vs NLSQ Diagnostics**
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Enhanced Precision Analysis (diagnostics.py, v2.20.0)                     │
+│                                                                           │
+│   When comparing CMC to NLSQ results:                                    │
+│                                                                           │
+│   1. Logs detailed comparison table:                                     │
+│      Parameter │ NLSQ Value │ CMC Value │ Diff% │ Z-Score │ Status      │
+│      ──────────┼────────────┼───────────┼───────┼─────────┼─────────────  │
+│      D0        │ 19665 ±68  │ 12444 ±14 │ -37%  │ 106.2   │ ⚠ EXCEEDS   │
+│      D_offset  │ 844 ±0.9   │ 71 ±0.4   │ -92%  │ 858.9   │ ⚠ EXCEEDS   │
+│                                                                           │
+│   2. Flags parameters exceeding tolerance (default 3σ)                   │
+│   3. Provides actionable guidance if discrepancies detected              │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+### New CMCConfig Fields (v2.20.0)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `max_divergence_rate` | float | 0.10 | Filter shards exceeding this divergence rate |
-| `require_nlsq_warmstart` | bool | False | Require NLSQ warm-start for laminar_flow |
+| `require_nlsq_warmstart` | bool | False | Require NLSQ warm-start (API-level) |
+| `min_points_per_shard` | int | 10,000 (laminar) / 5,000 (static) | **NEW**: Enforced minimum shard size |
+| `max_parameter_cv` | float | 1.0 | **NEW**: Heterogeneity abort threshold |
+| `heterogeneity_abort` | bool | True | **NEW**: Abort on high heterogeneity |

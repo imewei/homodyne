@@ -2,7 +2,7 @@
 
 Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in homodyne.
 
-**Version:** 2.15.0
+**Version:** 2.20.0
 **Last Updated:** January 2026
 
 ## Table of Contents
@@ -38,6 +38,13 @@ Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in h
 │              │                           │                        │              │
 │              └───────────────────────────┴────────────────────────┘              │
 │                                          │                                       │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│   NLSQ ALSO SERVES AS WARM-START FOR CMC (v2.20.0)                              │
+│                                                                                  │
+│   CLI: homodyne --method cmc → Automatically runs NLSQ first                    │
+│   API: fit_mcmc_jax(data, config, nlsq_result=fit_nlsq_jax(...))               │
+│                                                                                  │
+│   Impact: Reduces CMC divergence rate from ~28% to <5%                          │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                            │
 ═══════════════════════════════════════════╪═══════════════════════════════════════
@@ -969,3 +976,81 @@ class OptimizationResult:
 | `shear_weighting.py` | Layer 5: Angle-dependent loss weighting |
 | `multistart.py` | Multi-start optimization with LHS |
 | `result_builder.py` | Result construction and quality assessment |
+
+---
+
+## NLSQ as CMC Warm-Start Provider (v2.20.0)
+
+### The Problem: Cold-Start CMC Divergence
+
+When CMC (Consensus Monte Carlo) starts from configuration initial values without NLSQ warm-start:
+
+| Metric | Cold-Start CMC | NLSQ Warm-Start CMC |
+|--------|----------------|---------------------|
+| Divergence Rate | ~28% | <5% |
+| D0 Accuracy | -37% from NLSQ | Within 10% |
+| D_offset Accuracy | -92% from NLSQ | Within 20% |
+| Uncertainty Quality | Artificially small | Proper magnitude |
+
+Root cause: NUTS adaptation wastes warmup iterations searching a 6+ order-of-magnitude parameter space when initial values are far from the posterior mode.
+
+### Automatic Warm-Start via CLI (v2.20.0)
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ CLI AUTOMATIC NLSQ→CMC WORKFLOW                                           │
+│                                                                           │
+│   User runs: homodyne --method cmc --config my_config.yaml               │
+│                                                                           │
+│   CLI internally:                                                        │
+│   1. Runs fit_nlsq_jax(data, config) FIRST                               │
+│   2. Extracts optimized parameters from NLSQ result                      │
+│   3. Passes to fit_mcmc_jax(data, config, nlsq_result=nlsq_result)       │
+│   4. CMC uses NLSQ parameters as initial values                          │
+│                                                                           │
+│   To disable (NOT RECOMMENDED):                                          │
+│     homodyne --method cmc --no-nlsq-warmstart                            │
+│                                                                           │
+│   NOTE: --nlsq-first flag is DEPRECATED (warm-start is now automatic)    │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+### API Usage
+
+```python
+from homodyne.optimization.nlsq import fit_nlsq_jax
+from homodyne.optimization.cmc import fit_mcmc_jax
+
+# Step 1: Run NLSQ first
+nlsq_result = fit_nlsq_jax(
+    data=pooled_data,
+    t1=t1_pooled,
+    t2=t2_pooled,
+    phi=phi_pooled,
+    q=q,
+    L=L,
+    analysis_mode="laminar_flow",
+    config=config.optimization.nlsq,
+)
+
+# Step 2: Pass NLSQ result to CMC for warm-start
+cmc_result = fit_mcmc_jax(
+    data=pooled_data,
+    t1=t1_pooled,
+    t2=t2_pooled,
+    phi=phi_pooled,
+    q=q,
+    L=L,
+    analysis_mode="laminar_flow",
+    cmc_config=config.optimization.cmc,
+    nlsq_result=nlsq_result,  # CRITICAL: Provides warm-start
+)
+```
+
+### Benefits of NLSQ Warm-Start
+
+1. **Reduced Divergences**: ~28% → <5% divergence rate
+2. **Accurate Parameter Estimates**: CMC results within 10-20% of NLSQ
+3. **Proper Uncertainties**: No artificial precision from biased combination
+4. **Faster Convergence**: NUTS adapts from near-mode instead of searching
+5. **Consistent Parameterization**: NLSQ's per_angle_mode propagates to CMC
