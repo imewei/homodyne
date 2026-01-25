@@ -194,6 +194,20 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
         "This flag is kept for backward compatibility but has no effect.",
     )
 
+    cmc_group.add_argument(
+        "--nlsq-first",
+        action="store_true",
+        help="[DEPRECATED] NLSQ warm-start is now automatic for --method cmc. "
+        "This flag is kept for backward compatibility but has no effect.",
+    )
+
+    cmc_group.add_argument(
+        "--no-nlsq-warmstart",
+        action="store_true",
+        help="Disable automatic NLSQ warm-start for CMC. NOT RECOMMENDED - "
+        "without warm-start, CMC may have ~28%% divergence rate vs <5%% with warm-start.",
+    )
+
     # Parameter override options
     override_group = parser.add_argument_group(
         "Parameter Override Options",
