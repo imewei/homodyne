@@ -17,7 +17,6 @@ Part of Architecture Refactoring v2.9.1.
 from __future__ import annotations
 
 import warnings
-
 from typing import Any
 
 from homodyne.utils.logging import get_logger

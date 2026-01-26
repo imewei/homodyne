@@ -42,7 +42,8 @@ Date: 2025-11-13
 Version: 1.0.0
 """
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import jax
 import jax.numpy as jnp

@@ -417,7 +417,7 @@ class MultiStartProgressTracker:
             )
             logger.info(f"Timing: total={elapsed:.1f}s, avg={avg_time:.1f}s/start")
 
-    def __enter__(self) -> "MultiStartProgress":
+    def __enter__(self) -> MultiStartProgressTracker:
         """Context manager entry."""
         return self
 

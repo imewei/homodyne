@@ -959,7 +959,7 @@ def build_nlsq_informed_prior(
 def build_nlsq_informed_priors(
     nlsq_result: dict[str, float],
     nlsq_uncertainties: dict[str, float] | None,
-    parameter_space: "ParameterSpace",
+    parameter_space: ParameterSpace,
     analysis_mode: str,
     n_phi: int,
     width_factor: float = 3.0,
