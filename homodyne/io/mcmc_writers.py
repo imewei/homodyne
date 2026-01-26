@@ -6,13 +6,12 @@ Extracted from cli/commands.py for better modularity.
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 
 from homodyne.config.parameter_names import get_physical_param_names
 from homodyne.utils.logging import get_logger
-from typing import Literal
 
 logger = get_logger(__name__)
 
