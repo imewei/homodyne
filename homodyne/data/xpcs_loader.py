@@ -26,13 +26,13 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 # Handle optional dependencies with graceful fallback
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-    from types import ModuleType
 else:
     NDArray = Any
 
@@ -76,8 +76,14 @@ except ImportError:
 try:
     from homodyne.utils.logging import (
         get_logger as _get_logger,
+    )
+    from homodyne.utils.logging import (
         log_calls as _log_calls,
+    )
+    from homodyne.utils.logging import (
         log_performance as _log_performance,
+    )
+    from homodyne.utils.logging import (
         log_phase as _log_phase,
     )
 
@@ -89,8 +95,8 @@ try:
 except ImportError:
     # Fallback to standard logging if v2 logging not available
     import logging
+    from collections.abc import Iterator
     from contextlib import contextmanager
-    from typing import Iterator
 
     HAS_V2_LOGGING = False
 
@@ -121,6 +127,8 @@ except ImportError:
 try:
     from homodyne.core.physics import (
         PhysicsConstants as _PhysicsConstants,
+    )
+    from homodyne.core.physics import (
         validate_experimental_setup as _validate_experimental_setup,
     )
 
@@ -146,8 +154,12 @@ except ImportError:
 
 # Performance engine integration
 try:
-    from homodyne.data.memory_manager import AdvancedMemoryManager as _AdvancedMemoryManager
-    from homodyne.data.optimization import AdvancedDatasetOptimizer as _AdvancedDatasetOptimizer
+    from homodyne.data.memory_manager import (
+        AdvancedMemoryManager as _AdvancedMemoryManager,
+    )
+    from homodyne.data.optimization import (
+        AdvancedDatasetOptimizer as _AdvancedDatasetOptimizer,
+    )
     from homodyne.data.performance_engine import PerformanceEngine as _PerformanceEngine
 
     HAS_PERFORMANCE_ENGINE = True

@@ -25,8 +25,9 @@ from typing import Any
 
 # Handle YAML dependency
 try:
-    import yaml
     from types import ModuleType
+
+    import yaml
 
     HAS_YAML = True
     yaml_module: ModuleType | None = yaml
@@ -49,7 +50,7 @@ try:
     HAS_VALIDATORS = True
 except ImportError:
     import logging
-    from typing import Callable
+    from collections.abc import Callable
 
     HAS_V2_LOGGING = False
     HAS_VALIDATORS = False

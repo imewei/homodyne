@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from collections.abc import Iterator
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable, Iterator
+from typing import Any, TypeVar
 
 import numpy as np
 
