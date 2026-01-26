@@ -39,18 +39,15 @@ Examples:
   %(prog)s --static-mode                      # Force static mode (3 parameters)
   %(prog)s --laminar-flow --method cmc        # Force laminar flow (7 parameters) with CMC
 
-Manual NLSQ → CMC Workflow:
+Recommended NLSQ → CMC Workflow:
   Step 1: Run NLSQ to get point estimates
-    %(prog)s --method nlsq --config config.yaml
+    %(prog)s --method nlsq --config config.yaml --output-dir results/
 
-  Step 2: Manually copy best-fit parameters from NLSQ output
+  Step 2: Run CMC with pre-computed NLSQ warm-start (RECOMMENDED)
+    %(prog)s --method cmc --config config.yaml --nlsq-result results/
 
-  Step 3: Update config.yaml with NLSQ results:
-    initial_parameters:
-      values: [1234.5, -1.234, 567.8]  # From NLSQ output
-
-  Step 4: Run CMC with initialized parameters
-    %(prog)s --method cmc --config config.yaml
+  The --nlsq-result flag loads parameters from results/nlsq/parameters.json,
+  avoiding redundant NLSQ computation and ensuring consistent warm-start values.
 
 Optimization Methods:
   nlsq:    NLSQ trust-region nonlinear least squares (PRIMARY)
@@ -206,6 +203,15 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
         action="store_true",
         help="Disable automatic NLSQ warm-start for CMC. NOT RECOMMENDED - "
         "without warm-start, CMC may have ~28%% divergence rate vs <5%% with warm-start.",
+    )
+
+    cmc_group.add_argument(
+        "--nlsq-result",
+        type=Path,
+        default=None,
+        help="Path to pre-computed NLSQ results directory (from hm-nlsq pipeline). "
+        "If provided, CMC will use parameters from <path>/nlsq/parameters.json "
+        "for warm-start instead of running NLSQ inline. RECOMMENDED for production workflows.",
     )
 
     # Parameter override options

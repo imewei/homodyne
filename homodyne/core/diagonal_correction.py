@@ -48,7 +48,8 @@ try:
 
     HAS_JAX = True
 except ImportError:
-    from typing import Callable, TypeVar
+    from collections.abc import Callable
+    from typing import TypeVar
 
     HAS_JAX = False
     jnp = np  # type: ignore[misc]

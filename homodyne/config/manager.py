@@ -14,8 +14,9 @@ from typing import Any
 
 # Handle YAML dependency
 try:
-    import yaml
     from types import ModuleType
+
+    import yaml
 
     HAS_YAML = True
     yaml_module: ModuleType | None = yaml

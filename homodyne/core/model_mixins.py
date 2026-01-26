@@ -27,7 +27,7 @@ from homodyne.core.jax_backend import (
 from homodyne.utils.logging import get_logger
 
 if TYPE_CHECKING:
-    import numpy.typing as npt
+    pass
 
 logger = get_logger(__name__)
 

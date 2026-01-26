@@ -25,6 +25,8 @@ Where g₁ = g₁_diffusion × g₁_shear captures:
 - Time-dependent shear: g₁_shear = [sinc(Φ)]²
 """
 
+from collections.abc import Callable
+
 # Handle JAX import with graceful fallback
 try:
     import jax

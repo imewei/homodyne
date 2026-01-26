@@ -19,11 +19,11 @@ Key Features:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 import numpy as np
-from numpy.typing import NDArray
 
 from homodyne.utils.logging import get_logger, log_performance
 
