@@ -417,8 +417,8 @@ class CMCConfig:
             errors.append(
                 f"max_parameter_cv must be positive number, got: {self.max_parameter_cv}"
             )
-        if not isinstance(self.heterogeneity_abort, bool):
-            errors.append(
+        if not isinstance(self.heterogeneity_abort, bool):  # runtime check for YAML input
+            errors.append(  # type: ignore[unreachable]
                 f"heterogeneity_abort must be bool, got: {self.heterogeneity_abort}"
             )
         if not isinstance(self.min_points_per_shard, int) or self.min_points_per_shard < 1000:

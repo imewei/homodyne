@@ -192,13 +192,6 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
     )
 
     cmc_group.add_argument(
-        "--nlsq-first",
-        action="store_true",
-        help="[DEPRECATED] NLSQ warm-start is now automatic for --method cmc. "
-        "This flag is kept for backward compatibility but has no effect.",
-    )
-
-    cmc_group.add_argument(
         "--no-nlsq-warmstart",
         action="store_true",
         help="Disable automatic NLSQ warm-start for CMC. NOT RECOMMENDED - "

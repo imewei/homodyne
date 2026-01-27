@@ -306,8 +306,8 @@ When adding new features:
 
 ### Common Issues
 
-- **JAX version mismatch**: Install exact version with
-  `pip install jax==0.8.0 jaxlib==0.8.0`
+- **JAX version mismatch**: Install minimum version with
+  `pip install "jax>=0.8.2" "jaxlib>=0.8.2"`
 - **MCMC tests slow**: Reduce sample sizes in test configuration
 - **H5PY issues**: Install with `pip install h5py`
 - **Import errors after refactor**: Check `homodyne/optimization/{nlsq,mcmc}/` paths

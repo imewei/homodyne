@@ -4443,6 +4443,8 @@ class NLSQWrapper(NLSQAdapterBase):
                 logger.info("ANTI-DEGENERACY DEFENSE: Enabled for Stratified LS")
                 logger.info(f"  per_angle_mode: {ad_controller.per_angle_mode_actual}")
                 logger.info(f"  use_constant: {ad_controller.use_constant}")
+                logger.info(f"  use_fixed_scaling: {ad_controller.use_fixed_scaling}")
+                logger.info(f"  use_averaged_scaling: {ad_controller.use_averaged_scaling}")
                 logger.info(f"  use_fourier: {ad_controller.use_fourier}")
                 logger.info(
                     f"  use_shear_weighting: {ad_controller.use_shear_weighting}"
@@ -4452,10 +4454,18 @@ class NLSQWrapper(NLSQAdapterBase):
                 # Transform initial parameters for Fourier mode only
                 # CONSTANT MODE (v2.17.0): Parameter transformation is handled later
                 # when computing fixed per-angle scaling from quantiles
-                if ad_controller.use_constant:
+                if ad_controller.use_fixed_scaling:
                     logger.info(
-                        "Constant mode enabled: parameter transformation deferred to "
+                        "Fixed constant mode: parameter transformation deferred to "
                         "quantile-based fixed scaling computation"
+                    )
+                    # Store original bounds for quantile computation later
+                    # The transformation will happen in the residual function creation section
+
+                elif ad_controller.use_averaged_scaling:
+                    logger.info(
+                        "Auto averaged mode: parameter transformation deferred to "
+                        "quantile-based averaged scaling computation"
                     )
                     # Store original bounds for quantile computation later
                     # The transformation will happen in the residual function creation section
@@ -4520,12 +4530,13 @@ class NLSQWrapper(NLSQAdapterBase):
         fixed_contrast = None
         fixed_offset = None
 
-        if ad_controller is not None and ad_controller.use_constant:
-            # CONSTANT MODE: Compute fixed per-angle scaling from quantiles
-            # and use them in the residual function (not optimized)
+        if ad_controller is not None and ad_controller.use_fixed_scaling:
+            # FIXED_CONSTANT MODE (v2.18.0): Compute fixed per-angle scaling
+            # from quantiles. Per-angle values are FIXED (not optimized).
+            # Result: 7 physical params only.
             logger.info("=" * 60)
             logger.info(
-                "CONSTANT MODE: Computing fixed per-angle scaling from quantiles"
+                "FIXED_CONSTANT MODE: Computing fixed per-angle scaling from quantiles"
             )
             logger.info("=" * 60)
 
@@ -4584,8 +4595,109 @@ class NLSQWrapper(NLSQAdapterBase):
                 )
             else:
                 logger.warning(
-                    "Failed to compute fixed per-angle scaling, falling back to standard constant mode"
+                    "Failed to compute fixed per-angle scaling, "
+                    "falling back to standard mode"
                 )
+                effective_per_angle_scaling = False
+
+        elif ad_controller is not None and ad_controller.use_averaged_scaling:
+            # AUTO_AVERAGED MODE (v2.18.0): Estimate per-angle scaling from
+            # quantiles, AVERAGE to single values, then OPTIMIZE them.
+            # Result: 9 params (7 physical + 1 contrast_avg + 1 offset_avg).
+            logger.info("=" * 60)
+            logger.info(
+                "AUTO_AVERAGED MODE: Computing averaged scaling initial values"
+            )
+            logger.info("=" * 60)
+
+            # Get contrast/offset bounds from initial bounds
+            if bounds is not None:
+                contrast_bounds = (
+                    float(np.min(bounds[0][:n_phi])),
+                    float(np.max(bounds[1][:n_phi])),
+                )
+                offset_bounds = (
+                    float(np.min(bounds[0][n_phi : 2 * n_phi])),
+                    float(np.max(bounds[1][n_phi : 2 * n_phi])),
+                )
+            else:
+                contrast_bounds = (0.0, 1.0)
+                offset_bounds = (0.5, 1.5)
+
+            # Compute per-angle scaling from quantiles for initial estimates
+            ad_controller.compute_fixed_per_angle_scaling(
+                stratified_data=stratified_data,
+                contrast_bounds=contrast_bounds,
+                offset_bounds=offset_bounds,
+            )
+
+            # Get per-angle estimates and AVERAGE them for optimization start
+            fixed_scaling = ad_controller.get_fixed_per_angle_scaling()
+            if fixed_scaling is not None:
+                contrast_per_angle, offset_per_angle = fixed_scaling
+                avg_contrast = float(np.mean(contrast_per_angle))
+                avg_offset = float(np.mean(offset_per_angle))
+
+                # Build 9-param initial_params: [contrast_avg, offset_avg, physical(7)]
+                physical_params_init = initial_params[2 * n_phi :]
+                initial_params = np.concatenate(
+                    [[avg_contrast, avg_offset], physical_params_init]
+                )
+                logger.info(
+                    f"Averaged initial parameters: {len(initial_params)} params "
+                    f"(contrast={avg_contrast:.4f}, offset={avg_offset:.4f})"
+                )
+
+                # Update bounds: [contrast_bounds, offset_bounds, physical_bounds]
+                if bounds is not None:
+                    lower, upper = bounds
+                    bounds = (
+                        np.concatenate(
+                            [[contrast_bounds[0], offset_bounds[0]], lower[2 * n_phi :]]
+                        ),
+                        np.concatenate(
+                            [[contrast_bounds[1], offset_bounds[1]], upper[2 * n_phi :]]
+                        ),
+                    )
+                    logger.info(
+                        f"Updated bounds for averaged mode: {len(bounds[0])} params"
+                    )
+
+                # Scalar contrast/offset will be OPTIMIZED (not fixed)
+                # per_angle_scaling=False + no fixed arrays → residual mode 3
+                effective_per_angle_scaling = False
+                # Do NOT set fixed_contrast/fixed_offset — they are optimized
+                logger.info(
+                    f"Averaged scaling will be OPTIMIZED (not fixed):\n"
+                    f"  Initial contrast: {avg_contrast:.4f} "
+                    f"(from per-angle range [{np.min(contrast_per_angle):.4f}, "
+                    f"{np.max(contrast_per_angle):.4f}])\n"
+                    f"  Initial offset: {avg_offset:.4f} "
+                    f"(from per-angle range [{np.min(offset_per_angle):.4f}, "
+                    f"{np.max(offset_per_angle):.4f}])"
+                )
+            else:
+                logger.warning(
+                    "Failed to compute per-angle scaling estimates, "
+                    "falling back to mean of initial per-angle values"
+                )
+                # Fallback: average the initial per-angle values
+                avg_contrast = float(np.mean(initial_params[:n_phi]))
+                avg_offset = float(np.mean(initial_params[n_phi : 2 * n_phi]))
+                physical_params_init = initial_params[2 * n_phi :]
+                initial_params = np.concatenate(
+                    [[avg_contrast, avg_offset], physical_params_init]
+                )
+                if bounds is not None:
+                    lower, upper = bounds
+                    bounds = (
+                        np.concatenate(
+                            [[contrast_bounds[0], offset_bounds[0]], lower[2 * n_phi :]]
+                        ),
+                        np.concatenate(
+                            [[contrast_bounds[1], offset_bounds[1]], upper[2 * n_phi :]]
+                        ),
+                    )
                 effective_per_angle_scaling = False
 
         logger.info("Creating JIT-compatible stratified residual function...")
@@ -4862,21 +4974,23 @@ class NLSQWrapper(NLSQAdapterBase):
             )
 
         # =====================================================================
-        # Anti-Degeneracy: Inverse Transformation (v2.14.0+, v2.17.0 update)
+        # Anti-Degeneracy: Inverse Transformation (v2.14.0+, v2.18.0 update)
         # =====================================================================
-        # If constant or Fourier mode was used, expand back to per-angle params
+        # Expand optimized params back to per-angle form:
+        #   fixed_constant: 7 physical → [contrast(n_phi), offset(n_phi), physical(7)]
+        #   auto_averaged:  9 params   → [contrast(n_phi), offset(n_phi), physical(7)]
+        #   fourier:        n_coeffs   → [contrast(n_phi), offset(n_phi), physical(7)]
         anti_degeneracy_info = {}
         if ad_controller is not None and ad_controller.is_enabled:
-            if ad_controller.use_constant:
-                # CONSTANT MODE (v2.17.0): Use fixed per-angle scaling from quantiles
-                # popt contains ONLY physical parameters
-                # We combine them with the fixed per-angle scaling values
+            if ad_controller.use_fixed_scaling:
+                # FIXED_CONSTANT MODE (v2.18.0): Use fixed per-angle scaling
+                # popt contains ONLY physical parameters (7 params)
                 if ad_controller.has_fixed_per_angle_scaling():
                     fixed_scaling = ad_controller.get_fixed_per_angle_scaling()
                     fixed_contrast, fixed_offset = fixed_scaling
 
                     logger.info(
-                        f"Expanding parameters from constant mode with fixed scaling:\n"
+                        f"Expanding parameters from fixed_constant mode:\n"
                         f"  Physical params: {len(popt)}\n"
                         f"  Fixed contrast: mean={np.mean(fixed_contrast):.4f}\n"
                         f"  Fixed offset: mean={np.mean(fixed_offset):.4f}\n"
@@ -4896,8 +5010,6 @@ class NLSQWrapper(NLSQAdapterBase):
                     # Covariance for fixed scaling parameters is zero (they're fixed)
                     # Only physical parameters have non-zero covariance
                     pcov_expanded = np.zeros((len(popt_expanded), len(popt_expanded)))
-                    # Fixed contrast/offset have zero variance (they were not optimized)
-                    # Physical params covariance from optimizer
                     pcov_expanded[2 * n_phi :, 2 * n_phi :] = pcov
 
                     popt = popt_expanded
@@ -4905,7 +5017,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     logger.info(
                         f"Expanded to {len(popt)} parameters with fixed per-angle scaling"
                     )
-                    anti_degeneracy_info["mode"] = "constant_fixed_quantile"
+                    anti_degeneracy_info["mode"] = "fixed_constant_quantile"
                     anti_degeneracy_info["original_n_params"] = n_physical
                     anti_degeneracy_info["expanded_n_params"] = len(popt)
                     anti_degeneracy_info["fixed_contrast_mean"] = float(
@@ -4915,44 +5027,52 @@ class NLSQWrapper(NLSQAdapterBase):
                         np.mean(fixed_offset)
                     )
                 else:
-                    # Fallback to old constant mode (mean-based)
-                    logger.info(
-                        f"Expanding parameters from constant mode ({len(popt)} -> "
-                        f"{2 * n_phi + n_physical})"
+                    logger.warning(
+                        "Fixed constant mode but no fixed scaling available. "
+                        "Unexpected state - results may be unreliable."
                     )
-                    popt_expanded = ad_controller.transform_params_from_constant(popt)
+                    anti_degeneracy_info["mode"] = "fixed_constant_fallback"
 
-                    # Transform covariance matrix (expand diagonal)
-                    # For constant mode: each per-angle param gets same variance as the constant
-                    pcov_expanded = np.zeros((len(popt_expanded), len(popt_expanded)))
-                    # Contrast variance: duplicate for all angles
-                    pcov_expanded[:n_phi, :n_phi] = np.eye(n_phi) * pcov[0, 0]
-                    # Offset variance: duplicate for all angles
-                    pcov_expanded[n_phi : 2 * n_phi, n_phi : 2 * n_phi] = (
-                        np.eye(n_phi) * pcov[1, 1]
-                    )
-                    # Physical params covariance
-                    pcov_expanded[2 * n_phi :, 2 * n_phi :] = pcov[2:, 2:]
-                    # Cross-terms (physical with constant) - approximate
-                    pcov_expanded[2 * n_phi :, :n_phi] = np.tile(
-                        pcov[2:, 0:1], (1, n_phi)
-                    )
-                    pcov_expanded[:n_phi, 2 * n_phi :] = np.tile(
-                        pcov[0:1, 2:], (n_phi, 1)
-                    )
-                    pcov_expanded[2 * n_phi :, n_phi : 2 * n_phi] = np.tile(
-                        pcov[2:, 1:2], (1, n_phi)
-                    )
-                    pcov_expanded[n_phi : 2 * n_phi, 2 * n_phi :] = np.tile(
-                        pcov[1:2, 2:], (n_phi, 1)
-                    )
+            elif ad_controller.use_averaged_scaling:
+                # AUTO_AVERAGED MODE (v2.18.0): Expand 9-param optimized result
+                # popt = [contrast_avg, offset_avg, physical(7)]
+                logger.info(
+                    f"Expanding parameters from auto_averaged mode ({len(popt)} -> "
+                    f"{2 * n_phi + n_physical})"
+                )
+                popt_expanded = ad_controller.transform_params_from_constant(popt)
 
-                    popt = popt_expanded
-                    pcov = pcov_expanded
-                    logger.info(f"Expanded to {len(popt)} per-angle parameters")
-                    anti_degeneracy_info["mode"] = "constant"
-                    anti_degeneracy_info["original_n_params"] = 2 + n_physical
-                    anti_degeneracy_info["expanded_n_params"] = len(popt)
+                # Transform covariance: broadcast averaged scaling to per-angle
+                # Each per-angle param gets same variance as the averaged value
+                pcov_expanded = np.zeros((len(popt_expanded), len(popt_expanded)))
+                # Contrast variance: duplicate for all angles
+                pcov_expanded[:n_phi, :n_phi] = np.eye(n_phi) * pcov[0, 0]
+                # Offset variance: duplicate for all angles
+                pcov_expanded[n_phi : 2 * n_phi, n_phi : 2 * n_phi] = (
+                    np.eye(n_phi) * pcov[1, 1]
+                )
+                # Physical params covariance
+                pcov_expanded[2 * n_phi :, 2 * n_phi :] = pcov[2:, 2:]
+                # Cross-terms (physical with averaged scaling)
+                pcov_expanded[2 * n_phi :, :n_phi] = np.tile(
+                    pcov[2:, 0:1], (1, n_phi)
+                )
+                pcov_expanded[:n_phi, 2 * n_phi :] = np.tile(
+                    pcov[0:1, 2:], (n_phi, 1)
+                )
+                pcov_expanded[2 * n_phi :, n_phi : 2 * n_phi] = np.tile(
+                    pcov[2:, 1:2], (1, n_phi)
+                )
+                pcov_expanded[n_phi : 2 * n_phi, 2 * n_phi :] = np.tile(
+                    pcov[1:2, 2:], (n_phi, 1)
+                )
+
+                popt = popt_expanded
+                pcov = pcov_expanded
+                logger.info(f"Expanded to {len(popt)} per-angle parameters")
+                anti_degeneracy_info["mode"] = "auto_averaged"
+                anti_degeneracy_info["original_n_params"] = 2 + n_physical
+                anti_degeneracy_info["expanded_n_params"] = len(popt)
 
             elif ad_controller.use_fourier:
                 logger.info(

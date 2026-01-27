@@ -9,11 +9,10 @@ Key Improvements over original StratifiedResidualFunction:
 - Pads chunks to uniform size for static shapes (JIT-compatible)
 - Fully JIT-compiled for maximum performance
 - Maintains angle stratification guarantee
-- Buffer donation for memory efficiency (FR-003)
 
 Author: Homodyne Development Team
 Date: 2025-11-13
-Version: 2.4.0 (updated with buffer donation in 2.14.0)
+Version: 2.4.0
 """
 
 from __future__ import annotations
@@ -127,23 +126,18 @@ class StratifiedResidualFunctionJIT:
             f"padding overhead: {(1 - self.n_real_points / (self.n_chunks * self.max_chunk_size)) * 100:.2f}%"
         )
 
-        # JIT-compile the main residual computation with buffer donation
-        # Performance Optimization (Spec 001 - FR-003, T038): Buffer donation allows
-        # JAX to reuse input buffers for output, reducing peak memory by avoiding
-        # the need to allocate new buffers for intermediate results.
-        # donate_argnums=(0,) tells JAX the params array can be reused after the call.
-        self.logger.info("JIT-compiling residual function with buffer donation...")
+        # JIT-compile the main residual computation
+        # Note: Buffer donation (donate_argnums) is not used here because the
+        # params array (small, e.g. 9 elements) never matches the output shape
+        # (n_chunks * max_chunk_size), so JAX cannot reuse the buffer.
+        self.logger.info("JIT-compiling residual function...")
         # T035: Add log_phase for JIT compilation timing with memory tracking
         with log_phase(
             "jit_residual_compilation", logger=self.logger, track_memory=True
         ) as phase:
-            self._residual_fn_jit = jax.jit(
-                self._compute_all_residuals,
-                donate_argnums=(0,),  # FR-003: Donate params buffer to reduce memory
-            )
+            self._residual_fn_jit = jax.jit(self._compute_all_residuals)
         self.logger.info(
-            f"✓ JIT compilation setup complete in {phase.duration:.3f}s "
-            f"(buffer donation enabled)"
+            f"JIT compilation setup complete in {phase.duration:.3f}s"
         )
 
     def _extract_global_metadata(self) -> tuple[float, float, float | None]:

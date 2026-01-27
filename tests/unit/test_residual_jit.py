@@ -2,7 +2,6 @@
 Unit tests for JIT-compatible stratified residual function.
 
 Tests cover:
-- Buffer donation for memory efficiency (T033, FR-003)
 - JIT compilation correctness
 - Chunk validation and structure
 - Residual computation accuracy
@@ -40,12 +39,8 @@ class MockStratifiedData:
         self.sigma = np.asarray(sigma, dtype=np.float64)
 
 
-class TestBufferDonation:
-    """Tests for buffer donation optimization (T033, FR-003).
-
-    Buffer donation allows JAX to reuse input buffers for output,
-    reducing peak memory usage during JIT-compiled operations.
-    """
+class TestJITCompilation:
+    """Tests for JIT compilation of stratified residual function."""
 
     @pytest.fixture
     def simple_stratified_data(self):
@@ -86,12 +81,8 @@ class TestBufferDonation:
 
         return MockStratifiedData(chunks, sigma.reshape(n_phi, -1, 1))
 
-    def test_buffer_donation_compile_flag(self, simple_stratified_data):
-        """T033: Verify donate_argnums is applied in JIT compilation.
-
-        Performance Optimization (Spec 001 - FR-003, T033): Buffer donation
-        allows JAX to reuse input buffers for output, reducing memory.
-        """
+    def test_jit_compile_flag(self, simple_stratified_data):
+        """Verify JIT compilation is applied to the residual function."""
         # Create residual function
         residual_fn = StratifiedResidualFunctionJIT(
             stratified_data=simple_stratified_data,
@@ -105,16 +96,11 @@ class TestBufferDonation:
 
         # The _compute_all_residuals should be JIT compiled
         # Check that it's a traced function (JAX compiled)
-        # Note: Direct check for donate_argnums requires inspecting lowered HLO
-        # Here we verify the function is JIT-wrapped and callable
+        # Verify the function is JIT-wrapped and callable
         assert callable(residual_fn._residual_fn_jit)
 
-    def test_buffer_donation_no_memory_leak(self, simple_stratified_data):
-        """Test that buffer donation doesn't cause memory accumulation.
-
-        Performance Optimization (Spec 001 - FR-003): Verify repeated calls
-        don't accumulate memory due to improper buffer handling.
-        """
+    def test_repeated_calls_no_drift(self, simple_stratified_data):
+        """Test that repeated JIT calls produce consistent results."""
         residual_fn = StratifiedResidualFunctionJIT(
             stratified_data=simple_stratified_data,
             per_angle_scaling=True,

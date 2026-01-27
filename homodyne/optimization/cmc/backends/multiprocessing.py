@@ -332,11 +332,8 @@ def _run_shard_worker(
                 "num_divergent": stats.num_divergent,
             },
         }
-        if result_queue is not None:
-            try:
-                result_queue.put_nowait(result)
-            except Exception:  # noqa: S110 - Best-effort queue put
-                pass
+        # Result is returned to _run_shard_in_process, which puts it on the queue.
+        # Do NOT put it here — that would cause double-queuing.
         return result
 
     except Exception as e:
@@ -370,11 +367,8 @@ def _run_shard_worker(
             "error_category": error_category,
             "duration": duration,
         }
-        if result_queue is not None:
-            try:
-                result_queue.put_nowait(result)
-            except Exception:  # noqa: S110 - Best-effort queue put
-                pass
+        # Result is returned to _run_shard_in_process, which puts it on the queue.
+        # Do NOT put it here — that would cause double-queuing.
         return result
     finally:
         stop_hb.set()
@@ -1062,7 +1056,7 @@ class MultiprocessingBackend(CMCBackend):
                     f"This indicates shards are sampling from inconsistent posterior regions, "
                     f"making consensus combination unreliable.\n\n"
                     f"Recommended actions:\n"
-                    f"  1. Use --nlsq-first flag to run NLSQ warm-start before CMC\n"
+                    f"  1. Ensure NLSQ warm-start is active (--nlsq-result <path> or automatic)\n"
                     f"  2. Increase min_points_per_shard (current: {getattr(config, 'min_points_per_shard', 10000):,})\n"
                     f"  3. Check if data quality issues exist (outliers, missing values)\n"
                     f"  4. Set validation.heterogeneity_abort=false to disable this check (not recommended)\n"

@@ -587,9 +587,9 @@ def compute_nlsq_comparison_metrics(
     -------
     dict[str, float]
         Dictionary with comparison metrics:
-        - z_score: |CMC_mean - NLSQ| / CMC_std (should be < 2 for consistency)
+        - z_score: abs(CMC_mean - NLSQ) / CMC_std (should be < 2 for consistency)
         - uncertainty_ratio: CMC_std / NLSQ_std (should be < 5x ideally)
-        - relative_diff: (CMC_mean - NLSQ) / |NLSQ| (percent difference)
+        - relative_diff: (CMC_mean - NLSQ) / abs(NLSQ) (percent difference)
         - coverage: Whether NLSQ falls within CMC 95% CI
     """
     metrics = {}
