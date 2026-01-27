@@ -595,7 +595,6 @@ Per-angle parameter handling:
 **StratifiedResidualFunctionJIT:**
 - Padded arrays to max_chunk_size (static shapes for JIT)
 - vmap parallelization over chunks
-- Buffer donation (`donate_argnums`) reduces peak memory
 - Boolean mask for real vs padded data
 
 ---
@@ -1010,8 +1009,6 @@ Root cause: NUTS adaptation wastes warmup iterations searching a 6+ order-of-mag
 │                                                                           │
 │   To disable (NOT RECOMMENDED):                                          │
 │     homodyne --method cmc --no-nlsq-warmstart                            │
-│                                                                           │
-│   NOTE: --nlsq-first flag is DEPRECATED (warm-start is now automatic)    │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 

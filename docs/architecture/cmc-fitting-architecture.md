@@ -1061,8 +1061,6 @@ Root causes identified:
 │                                                                           │
 │   To disable (NOT recommended):                                          │
 │     homodyne --method cmc --no-nlsq-warmstart --config my_config.yaml   │
-│                                                                           │
-│   Note: --nlsq-first flag is deprecated (warm-start is now automatic)    │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 

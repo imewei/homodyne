@@ -209,9 +209,9 @@ This is the **most important configuration choice** for laminar flow fitting wit
    * - Mode
      - Description
    * - ``auto``
-     - **DEFAULT (v2.17.0+)** Auto-selects between ``individual`` (n_phi < constant_scaling_threshold) and ``constant`` (n_phi >= constant_scaling_threshold). Default threshold is 3.
+     - **DEFAULT (v2.17.0+)** For n_phi >= 3: quantile-estimated per-angle scaling is averaged and **optimized** as 9 parameters (7 physical + 2 averaged scaling). For n_phi < 3: falls back to ``individual``. Most robust against degeneracy.
    * - ``constant``
-     - Per-angle scaling computed from quantile estimation, **averaged** to single values, and optimized as 9 parameters (7 physical + 2 averaged scaling). Most robust against degeneracy.
+     - Per-angle scaling computed from quantile estimation and **fixed** (not optimized). Result: 7 physical parameters only. Fastest convergence but no scaling optimization.
    * - ``individual``
      - Each angle has independent contrast and offset (2 × n_phi + 7 optimized params). Full flexibility but high degeneracy risk for n_phi > 6.
    * - ``fourier``
@@ -219,9 +219,11 @@ This is the **most important configuration choice** for laminar flow fitting wit
 
 .. note::
 
-   **v2.17.0 Change**: The default ``per_angle_mode`` is now ``"auto"``, which selects
-   ``constant`` mode for datasets with 3+ phi angles. The ``constant`` mode optimizes
-   9 parameters (7 physical + 2 averaged scaling) for maximum robustness.
+   **v2.17.0+ Change**: The default ``per_angle_mode`` is ``"auto"``, which for
+   datasets with 3+ phi angles uses averaged scaling (``auto_averaged`` internally):
+   quantile-estimated contrast/offset are averaged and optimized alongside 7 physical
+   parameters (9 total). Explicit ``"constant"`` mode (``fixed_constant`` internally)
+   instead fixes scaling from quantiles without optimizing it (7 params only).
 
 Mode Comparison
 ^^^^^^^^^^^^^^^
@@ -238,8 +240,8 @@ Mode Comparison
      - Recommendation
      - Notes
    * - **Optimized Params**
-     - 9 or varies
-     - 9
+     - 9 (N≥3) or 2N+7 (N<3)
+     - 7 (scaling fixed)
      - 2N + 7
      - 10-17 + 7
      - auto/constant
@@ -266,8 +268,8 @@ Mode Comparison
      - constant
      - Fewer params = faster convergence
    * - **Angular Variation**
-     - Adaptive
      - Uniform (averaged)
+     - Fixed per-angle (not optimized)
      - Fully flexible
      - Smooth only
      - depends
@@ -287,7 +289,7 @@ Use this flowchart to select the appropriate ``per_angle_mode``:
                                     │
                         ┌───────────▼───────────┐
                         │ Use "auto" (DEFAULT)  │
-                        │ N >= 3 → constant     │
+                        │ N >= 3 → averaged     │
                         │ N < 3  → individual   │
                         └───────────┬───────────┘
                                     │
@@ -328,55 +330,60 @@ The different modes provide varying degrees of parameter reduction:
    * - n_phi
      - Individual
      - Fourier (K=2)
-     - Constant
+     - Constant (fixed)
      - Auto Selection
-     - Total Params
+     - Auto Params
    * - 2
      - 4 + 7 = 11
      - 4 + 7 = 11*
-     - 2 + 7 = 9
+     - 0 + 7 = 7
      - individual (N<3)
      - 11
    * - 3
      - 6 + 7 = 13
      - 6 + 7 = 13*
-     - 2 + 7 = 9
-     - constant (N>=3)
+     - 0 + 7 = 7
+     - averaged (N>=3)
      - 9
    * - 6
      - 12 + 7 = 19
      - 10 + 7 = 17
-     - 2 + 7 = 9
-     - constant
+     - 0 + 7 = 7
+     - averaged
      - 9
    * - 10
      - 20 + 7 = 27
      - 10 + 7 = 17
-     - 2 + 7 = 9
-     - constant
+     - 0 + 7 = 7
+     - averaged
      - 9
    * - 23
      - 46 + 7 = 53
      - 10 + 7 = 17
-     - 2 + 7 = 9
-     - constant
+     - 0 + 7 = 7
+     - averaged
      - **9**
    * - 100
      - 200 + 7 = 207
      - 10 + 7 = 17
-     - 2 + 7 = 9
-     - constant
+     - 0 + 7 = 7
+     - averaged
      - **9**
 
 | \* For n_phi <= 2×(order+1), Fourier mode provides no reduction over individual
-| Constant mode: 2 averaged scaling params (contrast + offset) are optimized along with 7 physical
+| Constant (fixed): Scaling fixed from quantile estimation, NOT optimized (7 params)
+| Auto averaged: 2 averaged scaling params (contrast + offset) ARE optimized (9 params)
 
-Constant Mode with Quantile-Based Estimation (v2.17.0+)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Quantile-Based Scaling Estimation (v2.17.0+)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Constant mode** is selected by default via ``per_angle_mode: "auto"`` when n_phi >= 3.
-It provides robust parameter estimation by computing per-angle scaling from data quantiles,
-**averaging** them to single values, and optimizing only 9 parameters (7 physical + 2 averaged).
+Both ``auto`` and ``constant`` modes use quantile-based estimation to compute per-angle
+contrast/offset from data. The key difference is how these estimates are used:
+
+- **Auto mode** (``auto_averaged`` internally): Averages per-angle estimates to single values
+  and **optimizes** them alongside 7 physical parameters (9 total).
+- **Constant mode** (``fixed_constant`` internally): Uses per-angle estimates as **fixed** values
+  (not optimized), fitting only 7 physical parameters.
 
 **Physics Foundation**:
 
@@ -453,8 +460,8 @@ For each phi angle independently:
 
 .. code-block:: text
 
-   CONSTANT MODE 9-PARAMETER OPTIMIZATION (v2.17.0)
-   =================================================
+   AUTO (AVERAGED) MODE 9-PARAMETER OPTIMIZATION (v2.17.0+)
+   =========================================================
 
    Before optimization:
        1. Compute per-angle scaling from data quantiles
@@ -477,12 +484,39 @@ For each phi angle independently:
        Expand for output: [contrast..., offset..., physical_opt]
                           (2*n_phi + 7 values for backward compatibility)
 
-**When to Use Constant Mode** (Default):
+   CONSTANT (FIXED) MODE 7-PARAMETER OPTIMIZATION (v2.18.0+)
+   ==========================================================
+
+   Before optimization:
+       1. Compute per-angle scaling from data quantiles
+          contrast_per_angle[n_phi] ← quantile estimation
+          offset_per_angle[n_phi]   ← quantile estimation
+
+       2. FIX per-angle values (not optimized)
+
+   During optimization:
+       Parameter vector: [D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
+                         (7 physical params only)
+
+       Model evaluation:
+          contrast = fixed_contrast_per_angle[n_phi]  # Fixed per angle
+          offset = fixed_offset_per_angle[n_phi]      # Fixed per angle
+
+   After optimization:
+       Expand for output: [fixed_contrast..., fixed_offset..., physical_opt]
+                          (2*n_phi + 7 values for backward compatibility)
+
+**When to Use Auto Mode** (Default):
 
 - Most XPCS datasets where detector response is reasonably uniform
 - Large datasets (>1M points) where parameter reduction improves convergence
 - Multi-start optimization with many angles (tractable parameter count)
 - When per-angle variation is primarily noise, not physics
+
+**When to Use Constant Mode**:
+
+- When you want zero per-angle optimization (fastest, 7 physical params only)
+- When quantile estimates are trusted and no further tuning is needed
 
 **When to Switch to Other Modes**:
 
@@ -497,14 +531,14 @@ For each phi angle independently:
      nlsq:
        anti_degeneracy:
          enable: true
-         per_angle_mode: "constant"      # Default in v2.17.0+
-         # per_angle_mode: "auto"        # Use "auto" to select fourier/individual
-         # per_angle_mode: "fourier"     # Use "fourier" for smooth angular variation
-         # per_angle_mode: "individual"  # Use "individual" for full flexibility
+         per_angle_mode: "auto"          # Default: averaged scaling, 9 params (N≥3)
+         # per_angle_mode: "constant"    # Fixed scaling from quantiles, 7 params
+         # per_angle_mode: "fourier"     # Truncated Fourier series
+         # per_angle_mode: "individual"  # Independent per-angle params
 
 **Impact on Multi-Start and Global Optimization**:
 
-Constant mode makes multi-start and CMA-ES optimization tractable for many-angle datasets:
+Auto/constant modes make multi-start and CMA-ES optimization tractable for many-angle datasets:
 
 .. list-table:: Multi-Start/CMA-ES Tractability (23-angle laminar_flow)
    :header-rows: 1

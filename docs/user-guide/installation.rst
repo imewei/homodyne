@@ -2,7 +2,7 @@ Installation
 =============
 
 This guide covers installing Homodyne on your system. Homodyne is CPU-optimized and requires
-Python 3.12+ with JAX 0.8.0 (CPU-only).
+Python 3.12+ with JAX ≥0.8.2 (CPU-only).
 
 Prerequisites
 =============
@@ -86,9 +86,9 @@ You should see output like:
 
 .. code-block:: text
 
-   JAX 0.8.0
+   JAX 0.8.2
 
-**Important:** Verify you have exactly JAX 0.8.0. Other versions may have compatibility issues.
+**Important:** Verify you have JAX ≥0.8.2. Older versions may have compatibility issues.
 
 Verify Homodyne Installation
 -----------------------------
@@ -117,7 +117,7 @@ This runs a ~0.15 second system validation. You should see:
    Homodyne.4.1 System Validation
    ==================================
    [✓] Python version: 3.12.x
-   [✓] JAX 0.8.0 (CPU)
+   [✓] JAX 0.8.x (CPU)
    [✓] Homodyne core modules
    [✓] Configuration system
    ...
@@ -126,28 +126,22 @@ This runs a ~0.15 second system validation. You should see:
 JAX and Version Pinning
 =======================
 
-**Why JAX 0.8.0?**
+**Why JAX ≥0.8.2?**
 
-Homodyne uses JAX 0.8.0 specifically for:
+Homodyne uses JAX 0.8.x (CPU-only) for:
 
 - **JIT Compilation:** ``compute_g2_scaled()`` and ``compute_chi_squared()`` are JIT-compiled for optimal CPU performance
 - **Automatic Differentiation:** Jacobian computation for NLSQ optimization
 - **Numerical Stability:** Float32 and Float64 both fully supported
-- **Compatibility:** Tested extensively with NumPyro 0.18+ and BlackJAX 1.2+
-
-**Important:** Using a different JAX version may cause:
-
-- Compilation failures
-- Silent numerical errors
-- Incompatibility with MCMC inference
+- **Compatibility:** Tested with NumPyro 0.19+ and BlackJAX 1.3+
 
 **Fixing Version Issues:**
 
-If you have the wrong JAX version:
+If you have an older JAX version:
 
 .. code-block:: bash
 
-   pip install jax==0.8.0 jaxlib==0.8.0
+   pip install "jax>=0.8.2" "jaxlib>=0.8.2"
    # Verify installation
    python -c "import jax; print(jax.__version__)"
 
@@ -219,16 +213,16 @@ Solution:
 
 .. code-block:: bash
 
-   pip install jax==0.8.0 jaxlib==0.8.0
+   pip install "jax>=0.8.2" "jaxlib>=0.8.2"
 
 **Problem: "JAX version X.X.X not compatible"**
 
-Solution: Reinstall exact version:
+Solution: Reinstall minimum version:
 
 .. code-block:: bash
 
    pip uninstall jax jaxlib
-   pip install jax==0.8.0 jaxlib==0.8.0
+   pip install "jax>=0.8.2" "jaxlib>=0.8.2"
 
 **Problem: "ImportError: cannot import name 'compute_chi_squared'"**
 
@@ -261,9 +255,9 @@ After installation, verify:
    python --version
    # Expected: Python 3.12.x
 
-   # 2. Check JAX version (must be 0.8.0)
+   # 2. Check JAX version (must be >=0.8.2)
    python -c "import jax; print(jax.__version__)"
-   # Expected: 0.8.0
+   # Expected: 0.8.2 or higher
 
    # 3. Check Homodyne CLI
    homodyne --help

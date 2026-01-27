@@ -376,7 +376,6 @@ Key Features (v2.4.0)
 - **Static shapes**: Pads chunks to uniform size for JIT compatibility
 - **vmap vectorization**: Parallel chunk processing without Python loops
 - **Angle stratification**: Maintains all angles in each chunk
-- **Buffer donation (v2.14.0)**: Memory-efficient with ``donate_argnums``
 
 Sequential Optimization
 ^^^^^^^^^^^^^^^^^^^^^^^

@@ -20,7 +20,7 @@ time-dependent dynamics, this guide provides step-by-step instructions and pract
 
 **Getting Started in 5 Steps:**
 
-1. :doc:`installation` - Install Homodyne with Python 3.12+ and JAX 0.8.0
+1. :doc:`installation` - Install Homodyne with Python 3.12+ and JAX ≥0.8.2
 2. :doc:`quickstart` - Run your first analysis with a minimal example
 3. :doc:`cli` - Learn the command-line interface and available options
 4. :doc:`configuration` - Understand how to configure your analysis

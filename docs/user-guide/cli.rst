@@ -15,16 +15,71 @@ The main command for running XPCS analyses.
 
    homodyne [OPTIONS]
 
-**Common Options:**
+**Core Options:**
 
 .. code-block:: text
 
-   -c, --config FILE              Configuration YAML file (required)
-   -m, --method {nlsq,cmc}        Analysis method (default: nlsq)
-   --plot-experimental-data       Display experimental data plots
-   --verbose                      Enable debug logging (INFO level)
-   --quiet                        Suppress non-error messages
    --help                         Show help message
+   --version                      Show version information
+   --method {nlsq,cmc}            Optimization method (default: nlsq)
+   --config PATH                  Configuration file, YAML (default: ./homodyne_config.yaml)
+   --output-dir PATH              Output directory (default: ./homodyne_results)
+   --data-file PATH               Experimental data file, HDF5 (overrides config)
+   --output-format {yaml,json,npz} Output format (default: yaml)
+   --verbose                      Enable verbose logging
+   --quiet                        Suppress all output except errors
+
+**Analysis Mode Options (mutually exclusive):**
+
+.. code-block:: text
+
+   --static-mode                  Force static analysis (3 parameters)
+   --laminar-flow                 Force laminar flow analysis (7 parameters)
+
+**NLSQ Options:**
+
+.. code-block:: text
+
+   --max-iterations INT           Maximum iterations (default: 10000)
+   --tolerance FLOAT              Convergence tolerance (default: 1e-8)
+
+**CMC Options:**
+
+.. code-block:: text
+
+   --n-samples INT                Samples per chain (default: from config or 1000)
+   --n-warmup INT                 Warmup samples (default: from config or 500)
+   --n-chains INT                 Number of chains (default: from config or 4)
+   --cmc-num-shards INT           Data shards for CMC (default: auto-detect)
+   --cmc-backend {auto,pjit,multiprocessing,pbs}  Parallel backend
+   --nlsq-result PATH             Pre-computed NLSQ results directory for warm-start
+   --no-nlsq-warmstart            Disable automatic NLSQ warm-start (NOT RECOMMENDED)
+   --dense-mass-matrix            Use dense mass matrix for NUTS/CMC
+
+**Parameter Override Options:**
+
+.. code-block:: text
+
+   --initial-d0 FLOAT             Override D0 (nm²/s)
+   --initial-alpha FLOAT          Override alpha (diffusion exponent)
+   --initial-d-offset FLOAT       Override D_offset (nm²/s)
+   --initial-gamma-dot-t0 FLOAT   Override gamma_dot_t0 (s⁻¹, laminar flow)
+   --initial-beta FLOAT           Override beta (shear exponent, laminar flow)
+   --initial-gamma-dot-offset FLOAT Override gamma_dot_offset (s⁻¹, laminar flow)
+   --initial-phi0 FLOAT           Override phi0 (radians, laminar flow)
+
+**Plotting Options:**
+
+.. code-block:: text
+
+   --save-plots                   Save result plots to output directory
+   --plot-experimental-data       Generate data validation plots
+   --plot-simulated-data          Plot theoretical C₂ heatmaps (no data required)
+   --plotting-backend {auto,matplotlib,datashader}  Backend (default: auto)
+   --parallel-plots               Generate plots in parallel (requires Datashader)
+   --contrast FLOAT               Contrast for simulated data (default: 0.3)
+   --offset FLOAT                 Offset for simulated data (default: 1.0)
+   --phi-angles STRING            Comma-separated phi angles in degrees
 
 **Examples:**
 
@@ -101,48 +156,24 @@ Full Bayesian inference using Consensus Monte Carlo (CMC) for uncertainty quanti
 - You want to compare models (model selection)
 - You need confidence intervals on derived quantities
 
-**Requirements Before CMC:**
-
-1. Run NLSQ first to get good initial parameters:
+**Recommended NLSQ → CMC Workflow:**
 
 .. code-block:: bash
 
-   homodyne --config config.yaml --method nlsq
+   # Step 1: Run NLSQ to get point estimates
+   homodyne --config config.yaml --method nlsq --output-dir results/
 
-2. Copy best-fit parameters from ``results.json`` or console output
+   # Step 2: Run CMC with pre-computed NLSQ warm-start (RECOMMENDED)
+   homodyne --config config.yaml --method cmc --nlsq-result results/
 
-3. Update initial parameters in config YAML:
+The ``--nlsq-result`` flag loads parameters from ``results/nlsq/parameters.json``,
+avoiding redundant NLSQ computation and ensuring consistent warm-start values.
+This reduces CMC divergence from ~28% to <5%.
 
-.. code-block:: yaml
+.. note::
 
-   optimization:
-     initial_parameters:
-       values: [1234.5, 0.567, 123.4]  # From NLSQ results
-
-4. Run CMC:
-
-.. code-block:: bash
-
-   homodyne --config config.yaml --method cmc
-
-**Complete NLSQ → CMC Workflow:**
-
-.. code-block:: bash
-
-   # Step 1: Run NLSQ
-   homodyne --config config.yaml --method nlsq
-
-   # Step 2: View results in console or results.json
-   cat homodyne_results/results.json
-
-   # Step 3: Update config with best-fit values (manually)
-   # Edit config.yaml:
-   # optimization:
-   #   initial_parameters:
-   #     values: [1234.5, 0.567, 123.4]
-
-   # Step 4: Run CMC
-   homodyne --config config.yaml --method cmc --verbose
+   NLSQ warm-start is automatic when using ``--method cmc`` without ``--nlsq-result``.
+   Use ``--no-nlsq-warmstart`` to disable (NOT RECOMMENDED).
 
 **Output:**
 
@@ -311,46 +342,173 @@ Checks:
 
 **Output:** Creates validated config with warnings/errors reported.
 
-Shell Completion Setup
-======================
+homodyne-config-xla Command
+===========================
 
-Enable tab-completion for Homodyne commands:
+Configure XLA device settings for different workflows.
 
-**For Bash:**
+**Syntax:**
 
 .. code-block:: bash
 
-   eval "$(homodyne-complete bash)"
+   homodyne-config-xla [OPTIONS]
+
+**Options:**
+
+.. code-block:: text
+
+   --mode {cmc,cmc-hpc,nlsq,auto}  Set XLA mode
+   --show                           Show current XLA configuration
+
+**Modes:**
+
+.. list-table::
+   :header-rows: 1
+
+   * - Mode
+     - Devices
+     - Use Case
+   * - ``cmc``
+     - 4
+     - Multi-core workstations
+   * - ``cmc-hpc``
+     - 8
+     - HPC with 36+ cores
+   * - ``nlsq``
+     - 1
+     - NLSQ-only workflows
+   * - ``auto``
+     - Varies
+     - Auto-detect based on CPU cores
+
+**Examples:**
+
+.. code-block:: bash
+
+   homodyne-config-xla --mode cmc      # 4 devices for CMC
+   homodyne-config-xla --mode auto     # Auto-detect
+   homodyne-config-xla --show          # Show current config
+
+homodyne-post-install Command
+=============================
+
+Set up shell completion and environment configuration.
+
+**Options:**
+
+.. code-block:: text
+
+   -i, --interactive    Interactive setup
+   --shell {bash,zsh,fish}  Specify shell type
+   --xla-mode {cmc,cmc-hpc,nlsq,auto}  Configure XLA mode
+   --advanced           Install advanced features (caching, validation)
+   -f, --force          Force setup even if not in virtual environment
+
+**Example:**
+
+.. code-block:: bash
+
+   homodyne-post-install --interactive
+   homodyne-post-install --shell bash --xla-mode auto
+
+homodyne-cleanup Command
+========================
+
+Remove Homodyne shell completion and configuration files.
+
+**Options:**
+
+.. code-block:: text
+
+   -i, --interactive    Interactive cleanup
+   -n, --dry-run        Show what would be removed without removing
+   -f, --force          Skip confirmation prompt
+
+**Example:**
+
+.. code-block:: bash
+
+   homodyne-cleanup --dry-run     # Preview changes
+   homodyne-cleanup --force       # Remove all files
+
+Shell Completion & Aliases
+==========================
+
+Homodyne provides context-aware tab completion for all commands and a set of
+shell aliases for common operations.
+
+**Setup via post-install (recommended):**
+
+.. code-block:: bash
+
+   homodyne-post-install --interactive
+
+**Manual setup (Bash):**
 
 Add to your ``.bashrc``:
 
 .. code-block:: bash
 
-   eval "$(homodyne-complete bash)"
+   source "$(python -c 'import homodyne; print(homodyne.__path__[0])')/runtime/shell/completion.sh"
 
-**For Zsh:**
-
-.. code-block:: bash
-
-   eval "$(homodyne-complete zsh)"
+**Manual setup (Zsh):**
 
 Add to your ``.zshrc``:
 
 .. code-block:: bash
 
-   eval "$(homodyne-complete zsh)"
+   source "$(python -c 'import homodyne; print(homodyne.__path__[0])')/runtime/shell/completion.sh"
 
-**For Fish:**
+Shell Aliases
+-------------
 
-.. code-block:: bash
+Once completion is sourced, the following aliases are available:
 
-   homodyne-complete fish | source
+.. list-table::
+   :header-rows: 1
+   :widths: 15 40 45
 
-Add to your ``config.fish``:
+   * - Alias
+     - Expands To
+     - Purpose
+   * - ``hm``
+     - ``homodyne``
+     - Base command
+   * - ``hconfig``
+     - ``homodyne-config``
+     - Configuration generator
+   * - ``hm-nlsq``
+     - ``homodyne --method nlsq``
+     - NLSQ optimization
+   * - ``hm-cmc``
+     - ``homodyne --method cmc``
+     - Consensus Monte Carlo
+   * - ``hc-stat``
+     - ``homodyne-config --mode static``
+     - Generate static config
+   * - ``hc-flow``
+     - ``homodyne-config --mode laminar_flow``
+     - Generate laminar flow config
+   * - ``hexp``
+     - ``homodyne --plot-experimental-data``
+     - Plot experimental data
+   * - ``hsim``
+     - ``homodyne --plot-simulated-data``
+     - Plot simulated data
+   * - ``hxla``
+     - ``homodyne-config-xla``
+     - XLA configuration
+   * - ``hsetup``
+     - ``homodyne-post-install``
+     - Post-install setup
+   * - ``hclean``
+     - ``homodyne-cleanup``
+     - Cleanup shell files
 
-.. code-block:: fish
+**Interactive functions:**
 
-   homodyne-complete fish | source
+- ``homodyne_build`` — Interactive command builder (guides method and config selection)
+- ``homodyne_help`` — Display all aliases and shortcuts
 
 Common Workflows
 ================
@@ -382,13 +540,10 @@ Workflow 2: Laminar Flow with Uncertainty
    # 2. Configure parameters (7 physical parameters)
 
    # 3. Run NLSQ for initial estimate
-   homodyne --config config.yaml --method nlsq
+   homodyne --config config.yaml --method nlsq --output-dir results/
 
-   # 4. Copy best-fit parameters to config
-   # (Edit config.yaml manually)
-
-   # 5. Run CMC for posteriors
-   homodyne --config config.yaml --method cmc --verbose
+   # 4. Run CMC with NLSQ warm-start (automatic parameter loading)
+   homodyne --config config.yaml --method cmc --nlsq-result results/ --verbose
 
 Workflow 3: Parameter Space Exploration
 ----------------------------------------
@@ -524,27 +679,47 @@ Quick Reference Card
 
    BASIC COMMANDS
    ==============
-   homodyne --config config.yaml              Run analysis (NLSQ)
-   homodyne --config config.yaml --method cmc  Run Bayesian inference
-   homodyne --help                            Show help
+   homodyne --config config.yaml                Run analysis (NLSQ default)
+   homodyne --config config.yaml --method cmc   Run Bayesian inference
+   homodyne --method cmc --nlsq-result results/ CMC with NLSQ warm-start
+   homodyne --help                              Show help
+   homodyne --version                           Show version
 
    CONFIGURATION
    =============
-   homodyne-config --interactive              Interactive builder
-   homodyne-config --mode static              Create template
-   homodyne-config --validate config.yaml     Validate config
+   homodyne-config --interactive                Interactive builder
+   homodyne-config --mode static                Create static template
+   homodyne-config --mode laminar_flow          Create laminar flow template
+   homodyne-config --validate config.yaml       Validate config
+   homodyne-config-xla --mode auto              Configure XLA devices
+   homodyne-config-xla --show                   Show current XLA config
 
    DEBUGGING
    =========
    homodyne --config config.yaml --verbose                Enable logging
    homodyne --config config.yaml --plot-experimental-data View data
+   homodyne --plot-simulated-data --contrast 0.5          Simulated heatmaps
    JAX_LOG_COMPILES=1 homodyne --config config.yaml      Show JAX compilation
 
-   UTILITIES
-   =========
-   homodyne --version                         Show version
-   homodyne-complete bash                     Enable bash completion
-   python -m homodyne.runtime.utils.system_validator --quick  Check system
+   SETUP & CLEANUP
+   ===============
+   homodyne-post-install --interactive          Setup shell completion
+   homodyne-cleanup --dry-run                   Preview cleanup
+   homodyne-cleanup --force                     Remove shell files
+
+   SHELL ALIASES (after sourcing completion.sh)
+   ============================================
+   hm            homodyne
+   hm-nlsq       homodyne --method nlsq
+   hm-cmc        homodyne --method cmc
+   hconfig       homodyne-config
+   hc-stat       homodyne-config --mode static
+   hc-flow       homodyne-config --mode laminar_flow
+   hexp          homodyne --plot-experimental-data
+   hsim          homodyne --plot-simulated-data
+   hxla          homodyne-config-xla
+   hsetup        homodyne-post-install
+   hclean        homodyne-cleanup
 
 Next Steps
 ==========

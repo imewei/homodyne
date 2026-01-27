@@ -46,7 +46,7 @@ Installing Development Environment
        uv pip install -e ".[dev,docs]"
 
    This installs:
-   - Core dependencies (JAX 0.8.0 CPU-only, NumPyro, BlackJAX)
+   - Core dependencies (JAX ≥0.8.2 CPU-only, NumPyro, BlackJAX)
    - Development tools (pytest, black, ruff, mypy)
    - Documentation tools (sphinx, sphinx-rtd-theme, myst-parser)
 
@@ -318,7 +318,7 @@ View coverage report:
 JAX and CPU Debugging
 ^^^^^^^^^^^^^^^^^^^^^
 
-Homodyne.3.0+ uses JAX 0.8.0 with CPU-only optimization.
+Homodyne uses JAX ≥0.8.2 with CPU-only optimization.
 
 Common JAX Debugging Commands
 """"""""""""""""""""""""""""""

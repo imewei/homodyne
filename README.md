@@ -115,8 +115,8 @@ See [CMC Per-Angle Modes Documentation](docs/api-reference/optimization.rst#cmc-
 optimization:
   nlsq:
     anti_degeneracy:
-      per_angle_mode: "constant"  # Use constant (global) scaling mode
-      # Or "auto" for automatic selection based on phi count
+      per_angle_mode: "auto"       # Default: averaged scaling, 9 params (N≥3)
+      # per_angle_mode: "constant" # Fixed scaling from quantiles, 7 params
 ```
 
 See [Anti-Degeneracy Defense Documentation](docs/research/anti_degeneracy_defense.rst) for details.
@@ -508,7 +508,7 @@ print(f"✓ CMC used with {result.num_shards} shards")
 pip install homodyne
 ```
 
-This installs Homodyne with CPU-optimized JAX 0.8.0, suitable for:
+This installs Homodyne with CPU-optimized JAX (≥0.8.2), suitable for:
 
 - Development and prototyping
 - Datasets up to 100M points on multi-core CPUs
@@ -602,9 +602,6 @@ homodyne --method nlsq --config config.yaml
 
 # CMC sampling for uncertainty quantification (v2.4.1+: CMC-only architecture)
 homodyne --method cmc --config config.yaml
-
-# Force CPU-only computation
-homodyne --method nlsq --force-cpu
 
 # Custom output directory
 homodyne --method nlsq --output-dir ./results
@@ -1153,7 +1150,7 @@ optimized for multi-core systems and HPC clusters.
 ### Minimum
 
 - Python 3.12+
-- NumPy >= 2.0, SciPy >= 1.14
+- NumPy >= 2.3, SciPy >= 1.17
 - 4+ CPU cores
 - 8+ GB RAM
 
@@ -1171,30 +1168,31 @@ optimized for multi-core systems and HPC clusters.
 - NUMA-aware configuration
 - High-speed storage (NVMe/parallel filesystem)
 
-## Dependencies (v2.3.0 - CPU-Only)
+## Dependencies (CPU-Only)
 
 ### Required Dependencies
 
-- `jax==0.8.0` - JAX CPU framework (exact version required)
-- `jaxlib==0.8.0` - JAX XLA library (must match JAX version)
-- `numpy>=2.0.0,<3.0.0` - Core numerical operations (NumPy 2.x series)
-- `scipy>=1.14.0,<2.0.0` - Scientific computing
-- `nlsq>=0.1.0` - **NLSQ trust-region optimizer** for JAX-native nonlinear least squares
-- `numpyro>=0.18.0,<0.20.0` - MCMC with built-in progress bars
-- `h5py>=3.10.0,<4.0.0` - HDF5 file support
-- `pyyaml>=6.0.2` - YAML configuration
+- `jax>=0.8.2` - JAX CPU framework
+- `jaxlib>=0.8.2` - JAX XLA library
+- `numpy>=2.3` - Core numerical operations
+- `scipy>=1.17` - Scientific computing
+- `nlsq>=0.6.4` - NLSQ trust-region optimizer for JAX-native nonlinear least squares
+- `numpyro>=0.19.0` - MCMC with built-in progress bars
+- `blackjax>=1.3` - MCMC backend
+- `arviz>=0.23` - Bayesian diagnostics
+- `h5py>=3.15,<4.0` - HDF5 file support
+- `pyyaml>=6.0.3` - YAML configuration
 
 ### Optional Dependencies
 
-- `blackjax>=1.2.0,<2.0.0` - Alternative MCMC backend
-- `psutil>=6.0.0` - Enhanced CPU optimization
-- `tqdm>=4.65.0` - Progress bars for NLSQ optimization
-- `matplotlib>=3.8.0,<4.0.0` - Plotting capabilities
+- `psutil>=7.2` - Enhanced CPU optimization
+- `matplotlib>=3.10` - Plotting capabilities
+- `datashader>=0.18` - Fast large-dataset visualization
 
 ### Version Notes
 
-- **JAX 0.8.0**: CPU-only, exact version match required for stability
-- **NumPy 2.x**: Required for JAX 0.8.0 compatibility
+- **JAX ≥0.8.2**: CPU-only, minimum version for stability
+- **NumPy ≥2.3**: Required for JAX compatibility
 - **Python 3.12+**: Minimum version for all dependencies
 
 ## Testing
