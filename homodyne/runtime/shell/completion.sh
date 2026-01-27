@@ -86,7 +86,7 @@ _homodyne_advanced_completion() {
     local nlsq_opts="--max-iterations --tolerance"
 
     # CMC-specific options
-    local cmc_opts="--n-samples --n-warmup --n-chains --cmc-num-shards --cmc-backend --cmc-plot-diagnostics --dense-mass-matrix"
+    local cmc_opts="--n-samples --n-warmup --n-chains --cmc-num-shards --cmc-backend --cmc-plot-diagnostics --no-nlsq-warmstart --nlsq-result --dense-mass-matrix"
 
     # Parameter override options
     local override_opts="--initial-d0 --initial-alpha --initial-d-offset --initial-gamma-dot-t0 --initial-beta --initial-gamma-dot-offset --initial-phi0"
@@ -247,6 +247,13 @@ _homodyne_advanced_completion() {
             COMPREPLY=($(compgen -W "$values" -- "$cur"))
             return 0
             ;;
+        --nlsq-result)
+            # Directory completion for pre-computed NLSQ results
+            local common_dirs="./homodyne_results ./results ./output"
+            COMPREPLY=($(compgen -W "$common_dirs" -- "$cur"))
+            COMPREPLY+=($(compgen -d -- "$cur"))
+            return 0
+            ;;
     esac
 
     # Check for incompatible options
@@ -330,6 +337,69 @@ _homodyne_config_completion() {
     fi
 }
 
+# Bash completion for homodyne-config-xla
+_homodyne_xla_completion() {
+    local cur prev
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    local main_opts="--help -h --mode --show"
+
+    case $prev in
+        --mode)
+            local modes="cmc cmc-hpc nlsq auto"
+            COMPREPLY=($(compgen -W "$modes" -- "$cur"))
+            return 0
+            ;;
+    esac
+
+    if [[ $cur == -* ]]; then
+        COMPREPLY=($(compgen -W "$main_opts" -- "$cur"))
+    fi
+}
+
+# Bash completion for homodyne-post-install
+_homodyne_post_install_completion() {
+    local cur prev
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    local main_opts="--help -h --interactive -i --shell --xla-mode --advanced --force -f"
+
+    case $prev in
+        --shell)
+            local shells="bash zsh fish"
+            COMPREPLY=($(compgen -W "$shells" -- "$cur"))
+            return 0
+            ;;
+        --xla-mode)
+            local modes="cmc cmc-hpc nlsq auto"
+            COMPREPLY=($(compgen -W "$modes" -- "$cur"))
+            return 0
+            ;;
+    esac
+
+    if [[ $cur == -* ]]; then
+        COMPREPLY=($(compgen -W "$main_opts" -- "$cur"))
+    fi
+}
+
+# Bash completion for homodyne-cleanup
+_homodyne_cleanup_completion() {
+    local cur prev
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    local main_opts="--help -h --interactive -i --dry-run -n --force -f"
+
+    if [[ $cur == -* ]]; then
+        COMPREPLY=($(compgen -W "$main_opts" -- "$cur"))
+    fi
+}
+
 # Advanced zsh completion
 if [[ -n "$ZSH_VERSION" ]]; then
     _homodyne_advanced_zsh() {
@@ -357,6 +427,8 @@ if [[ -n "$ZSH_VERSION" ]]; then
             '--cmc-num-shards[Data shards for CMC]:shards:(4 8 10 16 20 32)'
             '--cmc-backend[CMC parallel backend]:backend:(auto pjit multiprocessing pbs)'
             '--cmc-plot-diagnostics[DEPRECATED - ArviZ plots always generated]'
+            '--no-nlsq-warmstart[Disable automatic NLSQ warm-start for CMC]'
+            '--nlsq-result[Path to pre-computed NLSQ results directory]:dir:_directories'
             '--dense-mass-matrix[Use dense mass matrix for NUTS/CMC]'
             # Parameter overrides
             '--initial-d0[Override initial D0 (nm^2/s)]:value:'
@@ -397,9 +469,52 @@ if [[ -n "$ZSH_VERSION" ]]; then
         _arguments -C $args
     }
 
+    # Zsh completion for homodyne-config-xla
+    _homodyne_xla_zsh() {
+        local -a args
+        args=(
+            '(--help -h)'{--help,-h}'[Show help message]'
+            '--mode[Set XLA mode]:mode:(cmc cmc-hpc nlsq auto)'
+            '--show[Show current XLA configuration]'
+        )
+
+        _arguments -C $args
+    }
+
+    # Zsh completion for homodyne-post-install
+    _homodyne_post_install_zsh() {
+        local -a args
+        args=(
+            '(--help -h)'{--help,-h}'[Show help message]'
+            '(--interactive -i)'{--interactive,-i}'[Interactive setup]'
+            '--shell[Specify shell type]:shell:(bash zsh fish)'
+            '--xla-mode[Configure XLA_FLAGS mode]:mode:(cmc cmc-hpc nlsq auto)'
+            '--advanced[Install advanced features]'
+            '(--force -f)'{--force,-f}'[Force setup even if not in virtual environment]'
+        )
+
+        _arguments -C $args
+    }
+
+    # Zsh completion for homodyne-cleanup
+    _homodyne_cleanup_zsh() {
+        local -a args
+        args=(
+            '(--help -h)'{--help,-h}'[Show help message]'
+            '(--interactive -i)'{--interactive,-i}'[Interactive cleanup]'
+            '(--dry-run -n)'{--dry-run,-n}'[Show what would be removed without removing]'
+            '(--force -f)'{--force,-f}'[Skip confirmation and force cleanup]'
+        )
+
+        _arguments -C $args
+    }
+
     # Register completion for all homodyne commands
     compdef _homodyne_advanced_zsh homodyne 2>/dev/null || true
     compdef _homodyne_config_zsh homodyne-config 2>/dev/null || true
+    compdef _homodyne_xla_zsh homodyne-config-xla 2>/dev/null || true
+    compdef _homodyne_post_install_zsh homodyne-post-install 2>/dev/null || true
+    compdef _homodyne_cleanup_zsh homodyne-cleanup 2>/dev/null || true
 
     # Register completion for method aliases (hm- prefix)
     compdef _homodyne_advanced_zsh hm 2>/dev/null || true         # homodyne
@@ -414,6 +529,11 @@ if [[ -n "$ZSH_VERSION" ]]; then
     # Register completion for utility aliases
     compdef _homodyne_advanced_zsh hexp 2>/dev/null || true       # homodyne --plot-experimental-data
     compdef _homodyne_advanced_zsh hsim 2>/dev/null || true       # homodyne --plot-simulated-data
+
+    # Register completion for tool aliases
+    compdef _homodyne_xla_zsh hxla 2>/dev/null || true            # homodyne-config-xla
+    compdef _homodyne_post_install_zsh hsetup 2>/dev/null || true # homodyne-post-install
+    compdef _homodyne_cleanup_zsh hclean 2>/dev/null || true      # homodyne-cleanup
 fi
 
 # Register bash completion
@@ -421,6 +541,9 @@ if [[ -n "$BASH_VERSION" ]]; then
     # Register completion for all homodyne commands
     complete -F _homodyne_advanced_completion homodyne 2>/dev/null || true
     complete -F _homodyne_config_completion homodyne-config 2>/dev/null || true
+    complete -F _homodyne_xla_completion homodyne-config-xla 2>/dev/null || true
+    complete -F _homodyne_post_install_completion homodyne-post-install 2>/dev/null || true
+    complete -F _homodyne_cleanup_completion homodyne-cleanup 2>/dev/null || true
 
     # Register completion for method aliases (hm- prefix)
     complete -F _homodyne_advanced_completion hm 2>/dev/null || true         # homodyne
@@ -435,6 +558,11 @@ if [[ -n "$BASH_VERSION" ]]; then
     # Register completion for utility aliases
     complete -F _homodyne_advanced_completion hexp 2>/dev/null || true       # homodyne --plot-experimental-data
     complete -F _homodyne_advanced_completion hsim 2>/dev/null || true       # homodyne --plot-simulated-data
+
+    # Register completion for tool aliases
+    complete -F _homodyne_xla_completion hxla 2>/dev/null || true            # homodyne-config-xla
+    complete -F _homodyne_post_install_completion hsetup 2>/dev/null || true # homodyne-post-install
+    complete -F _homodyne_cleanup_completion hclean 2>/dev/null || true      # homodyne-cleanup
 fi
 
 # Define aliases for convenience
@@ -455,6 +583,11 @@ if [[ -n "$BASH_VERSION" ]] || [[ -n "$ZSH_VERSION" ]]; then
     # Utility aliases
     alias hexp='homodyne --plot-experimental-data'        # Plot experimental data
     alias hsim='homodyne --plot-simulated-data'           # Plot simulated data
+
+    # Tool aliases
+    alias hxla='homodyne-config-xla'                     # XLA configuration
+    alias hsetup='homodyne-post-install'                  # Post-install setup
+    alias hclean='homodyne-cleanup'                       # Cleanup shell files
 fi
 
 # Quick command builder function
@@ -536,6 +669,11 @@ homodyne_help() {
     echo "Utility Aliases:"
     echo "  hexp                  homodyne --plot-experimental-data"
     echo "  hsim                  homodyne --plot-simulated-data"
+    echo ""
+    echo "Tool Aliases:"
+    echo "  hxla                  homodyne-config-xla"
+    echo "  hsetup                homodyne-post-install"
+    echo "  hclean                homodyne-cleanup"
     echo ""
     echo "Interactive:"
     echo "  homodyne_build        Interactive command builder"
