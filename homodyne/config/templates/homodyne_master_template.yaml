@@ -1089,6 +1089,47 @@ optimization:
                                     # When true: raises RuntimeError with guidance
                                     # When false: falls back to robust_consensus_mc
 
+    # -------------------------------------------------------------------------
+    # REPARAMETERIZATION (v2.21.0 / Jan 2026)
+    # -------------------------------------------------------------------------
+    # Transforms sampling space to break parameter degeneracies and improve
+    # NUTS sampling efficiency for challenging parameter combinations.
+    #
+    # D_total Reparameterization (D0 + D_offset → D_total):
+    #   Instead of sampling D0 and D_offset independently (which can be
+    #   degenerate - the model only depends on their sum), sample:
+    #     D_total = D0 + D_offset (the physically meaningful quantity)
+    #     D_offset directly
+    #   Then transform back: D0 = D_total - D_offset
+    #   This breaks the linear degeneracy between D0 and D_offset.
+    #
+    # Log-Gamma Reparameterization (laminar_flow only):
+    #   Sample log(gamma_dot_t0) instead of gamma_dot_t0 directly.
+    #   Improves NUTS sampling for small shear rates spanning orders of
+    #   magnitude (e.g., 1e-6 to 0.5 s⁻¹). The log transform makes the
+    #   posterior more Gaussian and reduces step size adaptation issues.
+    #
+    # Bimodal Detection:
+    #   After sampling, checks each parameter's marginal posterior for
+    #   bimodality using Gaussian Mixture Models (GMM). Bimodal posteriors
+    #   may indicate:
+    #     - Model identifiability issues
+    #     - Multimodal likelihood (multiple local minima)
+    #     - Insufficient data to constrain parameters
+    #   Alerts are logged when bimodality is detected.
+    #
+    reparameterization:
+      enable_d_total: true            # Sample D_total = D0 + D_offset
+                                      # Breaks D0/D_offset degeneracy
+      enable_log_gamma: true          # Sample log(gamma_dot_t0) (laminar_flow)
+                                      # Improves sampling for small shear rates
+      bimodal_min_weight: 0.2         # Minimum GMM component weight for bimodal
+                                      # CONSTRAINT: (0, 0.5]
+                                      # Both components must exceed this weight
+      bimodal_min_separation: 0.5     # Minimum relative separation for bimodal
+                                      # CONSTRAINT: (0, 2.0]
+                                      # Separation = |μ1 - μ2| / sqrt(σ1² + σ2²)
+
 # ==============================================================================
 # NOISE ESTIMATION (Optional)
 # ==============================================================================

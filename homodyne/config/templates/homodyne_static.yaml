@@ -497,6 +497,31 @@ optimization:
       max_parameter_cv: 1.5           # Higher threshold OK for static
       heterogeneity_abort: true       # Abort with guidance if CV exceeded
 
+    # -------------------------------------------------------------------------
+    # REPARAMETERIZATION (v2.21.0 / Jan 2026)
+    # -------------------------------------------------------------------------
+    # Transforms sampling space to break D0/D_offset degeneracy.
+    # Less critical for static mode (no shear parameters) but still beneficial.
+    #
+    # D_total Reparameterization:
+    #   Sample D_total = D0 + D_offset instead of D0 directly.
+    #   Breaks the linear degeneracy between D0 and D_offset.
+    #
+    # Log-Gamma Reparameterization:
+    #   Not applicable to static mode (no gamma_dot_t0 parameter).
+    #   Included for consistency; has no effect.
+    #
+    # Bimodal Detection:
+    #   Post-sampling GMM analysis to detect bimodal posteriors.
+    #
+    reparameterization:
+      enable_d_total: true            # Sample D_total = D0 + D_offset
+      enable_log_gamma: false         # N/A for static (no shear params)
+      bimodal_min_weight: 0.2         # Minimum GMM component weight
+                                      # CONSTRAINT: (0, 0.5]
+      bimodal_min_separation: 0.5     # Minimum relative separation
+                                      # CONSTRAINT: (0, 2.0]
+
 # ==============================================================================
 # NOISE ESTIMATION (Optional)
 # ==============================================================================

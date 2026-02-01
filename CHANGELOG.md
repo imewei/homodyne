@@ -13,6 +13,124 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
+## [2.20.0] - 2026-02-01
+
+### CMC Reparameterization and Heterogeneity Prevention
+
+Major release adding reparameterization transforms to break parameter degeneracies and
+improve NUTS sampling efficiency in CMC.
+
+#### Added
+
+**Reparameterization Transforms:**
+
+- **feat(cmc)**: Add `xpcs_model_reparameterized` for transformed sampling space
+  - Samples `D_total = D0 + D_offset` instead of D0 directly (breaks linear degeneracy)
+  - Samples `log(gamma_dot_t0)` instead of gamma_dot_t0 (improves NUTS for small shear rates)
+  - Transforms back to physical parameters after sampling
+  - New `get_xpcs_model()` factory with `use_reparameterization` parameter
+
+- **feat(cmc)**: Add `ReparamConfig` dataclass for reparameterization settings
+  - `enable_d_total`: Enable D_total reparameterization (default: True)
+  - `enable_log_gamma`: Enable log-gamma reparameterization (default: True)
+  - Transform functions: `to_reparameterized()`, `from_reparameterized()`
+
+- **feat(cmc)**: Add reparameterization config options to `CMCConfig`
+  - `reparameterization_d_total: bool = True`
+  - `reparameterization_log_gamma: bool = True`
+  - `bimodal_min_weight: float = 0.2`
+  - `bimodal_min_separation: float = 0.5`
+
+**Bimodal Detection:**
+
+- **feat(cmc)**: Add GMM-based bimodal detection for posterior diagnostics
+  - Detects bimodal posteriors that may indicate model identifiability issues
+  - Configurable via `bimodal_min_weight` and `bimodal_min_separation`
+  - Alerts logged when bimodality detected
+
+- **feat(cmc)**: Integrate bimodal detection alerts in multiprocessing backend
+  - Per-shard bimodal detection during CMC execution
+  - Summary alerts in combined results
+
+**Param-Aware Shard Sizing:**
+
+- **feat(cmc)**: Add param-aware shard sizing to `get_num_shards()`
+  - Scales `max_points_per_shard` based on model parameter count
+  - `min_points_per_param` ensures adequate data per parameter
+  - Prevents data-starved shards for complex models
+
+**CLI Enhancements:**
+
+- **feat(cli)**: Enable automatic NLSQ warm-start for CMC
+  - `homodyne --method cmc` now runs NLSQ first automatically
+  - Pass `--no-nlsq-warmstart` to disable (not recommended)
+  - Reduces divergence rate from ~28% to <5%
+
+**Configuration Templates:**
+
+- **docs(config)**: Add reparameterization section to all YAML templates
+  - `homodyne_master_template.yaml`
+  - `homodyne_laminar_flow.yaml`
+  - `homodyne_static.yaml`
+
+#### Changed
+
+- **refactor(cmc)**: Optimize sharding logic and enforce NLSQ parity
+  - CMC per-angle mode now matches NLSQ behavior exactly
+  - `constant_averaged` mode uses fixed averaged scaling
+
+- **refactor(core)**: Modernize type hints and imports
+  - Use `collections.abc` for type hints
+  - Cleanup imports and type annotations across modules
+
+- **docs(cmc)**: Document parameter degeneracy in laminar_flow mode
+  - Comprehensive explanation of D0/D_offset degeneracy
+  - Reparameterization rationale and usage
+
+#### Fixed
+
+- **fix(lint)**: Resolve ruff lint errors across codebase
+- **fix(types)**: Resolve mypy type errors across codebase
+- **fix(tests)**: Resolve deprecation and runtime warnings
+
+#### Testing
+
+- **test(cmc)**: Add tests for `get_model_param_count` verification
+- **test(cmc)**: Add reparameterization integration tests
+  - MCMC sampling with reparameterized model
+  - Transform roundtrip verification
+
+#### Configuration
+
+**New CMC Reparameterization Options:**
+
+```yaml
+optimization:
+  cmc:
+    # Reparameterization (v2.20.0)
+    reparameterization:
+      enable_d_total: true            # Sample D_total = D0 + D_offset
+      enable_log_gamma: true          # Sample log(gamma_dot_t0)
+      bimodal_min_weight: 0.2         # GMM component weight threshold
+      bimodal_min_separation: 0.5     # Relative separation threshold
+```
+
+**When to Use Reparameterization:**
+
+- laminar_flow mode with D0/D_offset degeneracy
+- Small shear rates spanning orders of magnitude (1e-6 to 0.5 s⁻¹)
+- Posteriors showing linear correlation between D0 and D_offset
+
+**Files Modified:**
+
+- `homodyne/optimization/cmc/model.py` - Reparameterized model
+- `homodyne/optimization/cmc/config.py` - Reparameterization config options
+- `homodyne/optimization/cmc/reparameterization.py` - Transform functions
+- `homodyne/optimization/cmc/backends/multiprocessing.py` - Bimodal alerts
+- `homodyne/config/templates/*.yaml` - Reparameterization section
+
+______________________________________________________________________
+
 ## [2.19.0] - 2026-01-23
 
 ### CMC Convergence and Precision Fixes
