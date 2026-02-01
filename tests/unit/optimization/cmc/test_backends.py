@@ -650,3 +650,48 @@ class TestErrorCategorization:
         # Single shard should also work
         combined_single = combine_shard_samples(shards[:1], method="consensus_mc")
         assert combined_single is not None
+
+
+class TestBimodalDetectionIntegration:
+    """Tests for bimodal detection integration in backend."""
+
+    def test_check_shard_bimodality_importable(self):
+        """Bimodal detection function is importable from diagnostics."""
+        from homodyne.optimization.cmc.diagnostics import check_shard_bimodality
+
+        assert callable(check_shard_bimodality)
+
+    def test_bimodal_check_on_unimodal_samples(self):
+        """Bimodal check returns no alerts for unimodal samples."""
+        from homodyne.optimization.cmc.diagnostics import check_shard_bimodality
+
+        rng = np.random.default_rng(42)
+        samples = {
+            "D0": rng.normal(20000, 1000, size=500),
+            "alpha": rng.normal(-1.0, 0.1, size=500),
+        }
+
+        results = check_shard_bimodality(samples, params_to_check=["D0", "alpha"])
+
+        # Unimodal samples should not trigger bimodal detection
+        assert not any(r.is_bimodal for r in results.values())
+
+    def test_bimodal_check_on_bimodal_samples(self):
+        """Bimodal check detects clearly bimodal samples."""
+        from homodyne.optimization.cmc.diagnostics import check_shard_bimodality
+
+        rng = np.random.default_rng(42)
+        # Create bimodal D0 samples
+        mode1 = rng.normal(15000, 500, size=250)
+        mode2 = rng.normal(25000, 500, size=250)
+        samples = {
+            "D0": np.concatenate([mode1, mode2]),
+            "alpha": rng.normal(-1.0, 0.1, size=500),  # Unimodal
+        }
+
+        results = check_shard_bimodality(samples, params_to_check=["D0", "alpha"])
+
+        # D0 should be detected as bimodal
+        assert results["D0"].is_bimodal == True  # noqa: E712 (numpy bool)
+        # alpha should not be bimodal
+        assert results["alpha"].is_bimodal == False  # noqa: E712 (numpy bool)

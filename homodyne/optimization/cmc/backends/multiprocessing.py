@@ -22,6 +22,7 @@ import numpy as np
 from tqdm import tqdm
 
 from homodyne.optimization.cmc.backends.base import CMCBackend, combine_shard_samples
+from homodyne.optimization.cmc.diagnostics import check_shard_bimodality
 from homodyne.utils.logging import get_logger, log_exception, with_context
 
 if TYPE_CHECKING:
@@ -1062,6 +1063,26 @@ class MultiprocessingBackend(CMCBackend):
                     f"  4. Set validation.heterogeneity_abort=false to disable this check (not recommended)\n"
                     f"  5. Increase max_parameter_cv threshold if heterogeneity is expected"
                 )
+
+        # Check for bimodal posteriors (per-shard) - Jan 2026
+        # This helps detect local minima or model misspecification
+        bimodal_alerts: list[tuple[int, str, float, float]] = []  # (shard_idx, param, sep, weights)
+        for i, shard_result in enumerate(successful_samples):
+            bimodal_results = check_shard_bimodality(shard_result.samples)
+            for param, result in bimodal_results.items():
+                if result.is_bimodal:
+                    bimodal_alerts.append((i, param, result.separation, min(result.weights)))
+                    run_logger.warning(
+                        f"BIMODAL POSTERIOR: Shard {i}, {param}: "
+                        f"modes at {result.means[0]:.4g} and {result.means[1]:.4g} "
+                        f"(weights: {result.weights[0]:.2f}/{result.weights[1]:.2f})"
+                    )
+
+        if bimodal_alerts:
+            run_logger.warning(
+                f"Detected {len(bimodal_alerts)} bimodal posteriors across shards. "
+                f"This may indicate model misspecification or local minima."
+            )
 
         # Combine samples
         combined = combine_shard_samples(
