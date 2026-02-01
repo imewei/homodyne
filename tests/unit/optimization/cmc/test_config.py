@@ -282,3 +282,65 @@ class TestParamAwareShardSizing:
 
         # More params → larger adjusted_max → fewer shards
         assert n_shards_14 < n_shards_7
+
+
+class TestReparameterizationConfig:
+    """Tests for reparameterization and bimodal config options."""
+
+    def test_default_reparameterization_values(self):
+        """Default reparameterization config values."""
+        config = CMCConfig()
+
+        assert config.reparameterization_d_total is True
+        assert config.reparameterization_log_gamma is True
+        assert config.bimodal_min_weight == 0.2
+        assert config.bimodal_min_separation == 0.5
+
+    def test_from_dict_reparameterization_section(self):
+        """Reparameterization settings parsed from nested dict."""
+        config_dict = {
+            "reparameterization": {
+                "enable_d_total": False,
+                "enable_log_gamma": True,
+                "bimodal_min_weight": 0.15,
+                "bimodal_min_separation": 0.8,
+            }
+        }
+        config = CMCConfig.from_dict(config_dict)
+
+        assert config.reparameterization_d_total is False
+        assert config.reparameterization_log_gamma is True
+        assert config.bimodal_min_weight == 0.15
+        assert config.bimodal_min_separation == 0.8
+
+    def test_to_dict_includes_reparameterization(self):
+        """Reparameterization settings serialized to dict."""
+        config = CMCConfig(
+            reparameterization_d_total=False,
+            reparameterization_log_gamma=True,
+            bimodal_min_weight=0.25,
+            bimodal_min_separation=0.6,
+        )
+
+        result = config.to_dict()
+
+        assert "reparameterization" in result
+        reparam = result["reparameterization"]
+        assert reparam["enable_d_total"] is False
+        assert reparam["enable_log_gamma"] is True
+        assert reparam["bimodal_min_weight"] == 0.25
+        assert reparam["bimodal_min_separation"] == 0.6
+
+    def test_validate_bimodal_thresholds(self):
+        """Bimodal thresholds must be in valid range."""
+        config = CMCConfig(bimodal_min_weight=-0.1)
+        errors = config.validate()
+        assert any("bimodal_min_weight" in e for e in errors)
+
+        config = CMCConfig(bimodal_min_weight=0.6)  # > 0.5 not sensible
+        errors = config.validate()
+        assert any("bimodal_min_weight" in e for e in errors)
+
+        config = CMCConfig(bimodal_min_separation=-0.1)
+        errors = config.validate()
+        assert any("bimodal_min_separation" in e for e in errors)

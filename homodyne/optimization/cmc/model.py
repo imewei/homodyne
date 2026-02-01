@@ -807,13 +807,156 @@ def xpcs_model_constant_averaged(
     numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
 
 
-def get_xpcs_model(per_angle_mode: str = "individual"):
+def xpcs_model_reparameterized(
+    data: jnp.ndarray,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    phi_unique: jnp.ndarray,
+    phi_indices: jnp.ndarray,
+    q: float,
+    L: float,
+    dt: float,
+    analysis_mode: str,
+    parameter_space: ParameterSpace,
+    n_phi: int,
+    time_grid: jnp.ndarray | None = None,
+    noise_scale: float = 0.1,
+    fixed_contrast: jnp.ndarray | None = None,
+    fixed_offset: jnp.ndarray | None = None,
+    reparam_config: "ReparamConfig | None" = None,
+) -> None:
+    """NumPyro model with reparameterized sampling space.
+
+    This model transforms correlated parameters to orthogonal sampling space:
+    - D0, D_offset → D_total, D_offset_frac (breaks linear degeneracy)
+    - gamma_dot_t0 → log_gamma_dot_t0 (improves conditioning)
+
+    The original physics parameters (D0, D_offset, gamma_dot_t0) are computed
+    as deterministic transforms and included in the trace for output.
+
+    Parameters
+    ----------
+    reparam_config : ReparamConfig, optional
+        Reparameterization configuration. If None, uses defaults.
+    [Other parameters same as xpcs_model_averaged]
+    """
+    from homodyne.optimization.cmc.reparameterization import ReparamConfig
+
+    if reparam_config is None:
+        reparam_config = ReparamConfig()
+
+    # =========================================================================
+    # 0. Compute scaling factors
+    # =========================================================================
+    scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+
+    # =========================================================================
+    # 1. Sample SINGLE averaged contrast and offset (same as auto mode)
+    # =========================================================================
+    contrast = sample_scaled_parameter("contrast", scalings["contrast_0"])
+    offset = sample_scaled_parameter("offset", scalings["offset_0"])
+
+    contrast_arr = jnp.full(n_phi, contrast)
+    offset_arr = jnp.full(n_phi, offset)
+
+    # =========================================================================
+    # 2. Sample REPARAMETERIZED physical parameters
+    # =========================================================================
+    # Always sample alpha (not reparameterized)
+    alpha = sample_scaled_parameter("alpha", scalings["alpha"])
+
+    if reparam_config.enable_d_total:
+        # Sample D_total and D_offset_frac instead of D0 and D_offset
+        # D_total = D0 + D_offset, so use D0 scaling as base for D_total
+        D_total = sample_scaled_parameter("D_total", scalings["D0"])
+
+        # D_offset_frac in [0, 0.5] - offset is typically small fraction of total
+        D_offset_frac = numpyro.sample(
+            "D_offset_frac",
+            dist.TruncatedNormal(loc=0.05, scale=0.1, low=0.0, high=0.5),
+        )
+
+        # Compute physics parameters as deterministic
+        D0 = numpyro.deterministic("D0", D_total * (1 - D_offset_frac))
+        D_offset = numpyro.deterministic("D_offset", D_total * D_offset_frac)
+    else:
+        # Standard sampling
+        D0 = sample_scaled_parameter("D0", scalings["D0"])
+        D_offset = sample_scaled_parameter("D_offset", scalings["D_offset"])
+
+    if analysis_mode == "laminar_flow":
+        if reparam_config.enable_log_gamma:
+            # Sample log(gamma_dot_t0) for better conditioning
+            # gamma_dot_t0 typically in [1e-4, 1e-1], so log in [-9, -2]
+            log_gamma_dot_t0 = numpyro.sample(
+                "log_gamma_dot_t0",
+                dist.Normal(loc=-5.0, scale=2.0),  # Centered around ~0.007
+            )
+            gamma_dot_t0 = numpyro.deterministic(
+                "gamma_dot_t0", jnp.exp(log_gamma_dot_t0)
+            )
+        else:
+            gamma_dot_t0 = sample_scaled_parameter(
+                "gamma_dot_t0", scalings["gamma_dot_t0"]
+            )
+
+        beta = sample_scaled_parameter("beta", scalings["beta"])
+        gamma_dot_t_offset = sample_scaled_parameter(
+            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"]
+        )
+        phi0 = sample_scaled_parameter("phi0", scalings["phi0"])
+
+        params = jnp.array(
+            [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
+        )
+    else:
+        params = jnp.array([D0, alpha, D_offset])
+
+    # =========================================================================
+    # 3. Compute theoretical C2
+    # =========================================================================
+    from homodyne.core.jax_backend import _compute_g1_total_core
+
+    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
+    sinc_prefactor = 0.5 / jnp.pi * q * L * dt
+
+    g1 = _compute_g1_total_core(
+        params=params,
+        t1=t1,
+        t2=t2,
+        phi=phi_unique[phi_indices],
+        wavevector_q_squared_half_dt=wavevector_q_squared_half_dt,
+        sinc_prefactor=sinc_prefactor,
+        dt=dt,
+    )
+
+    # =========================================================================
+    # 4. Apply per-point contrast and offset
+    # =========================================================================
+    contrast_per_point = contrast_arr[phi_indices]
+    offset_per_point = offset_arr[phi_indices]
+    c2_theory = offset_per_point + contrast_per_point * g1**2
+
+    # =========================================================================
+    # 5. Likelihood with noise model
+    # =========================================================================
+    sigma_scale = noise_scale * 1.5
+    sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
+
+    numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
+
+
+def get_xpcs_model(per_angle_mode: str = "individual", use_reparameterization: bool = False):
     """Get the appropriate NumPyro model function for the given per-angle mode.
 
     Parameters
     ----------
     per_angle_mode : str
         Per-angle scaling mode: "individual", "auto", "constant", or "constant_averaged".
+    use_reparameterization : bool
+        If True and per_angle_mode is "auto", use reparameterized model for
+        better sampling of correlated parameters (D_total instead of D0/D_offset,
+        log_gamma_dot_t0 instead of gamma_dot_t0).
 
     Returns
     -------
@@ -828,14 +971,22 @@ def get_xpcs_model(per_angle_mode: str = "individual"):
       (n_phi*2 + 7 physical + 1 sigma params for laminar_flow).
     - auto: Uses xpcs_model_averaged which samples SINGLE averaged contrast/offset
       (2 averaged + 7 physical + 1 sigma = 10 params for laminar_flow).
+      If use_reparameterization=True, uses xpcs_model_reparameterized instead.
     - constant: Uses xpcs_model_constant which requires fixed_contrast/fixed_offset
       arrays (NOT sampled, 7 physical + 1 sigma = 8 params for laminar_flow).
     - constant_averaged: Uses xpcs_model_constant_averaged with FIXED averaged scaling
       (NOT sampled, 7 physical + 1 sigma = 8 params). Provides exact NLSQ parity.
     """
     if per_angle_mode == "auto":
-        logger.info("CMC: Using auto mode model (sampled averaged scaling, 10 params)")
-        return xpcs_model_averaged
+        if use_reparameterization:
+            logger.info(
+                "CMC: Using reparameterized auto mode model "
+                "(D_total + log_gamma_dot_t0 sampling)"
+            )
+            return xpcs_model_reparameterized
+        else:
+            logger.info("CMC: Using auto mode model (sampled averaged scaling, 10 params)")
+            return xpcs_model_averaged
     elif per_angle_mode == "constant":
         logger.info(
             "CMC: Using constant mode model (fixed per-angle scaling, 8 params)"

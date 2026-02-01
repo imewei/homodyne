@@ -162,6 +162,13 @@ class CMCConfig:
     min_points_per_shard: int = 10000  # Enforced minimum for laminar_flow
     min_points_per_param: int = 1500  # Minimum points per parameter per shard
 
+    # Reparameterization (Jan 2026 v3)
+    # Transform to break D0/D_offset degeneracy
+    reparameterization_d_total: bool = True  # Sample D_total = D0 + D_offset
+    reparameterization_log_gamma: bool = True  # Sample log(gamma_dot_t0)
+    bimodal_min_weight: float = 0.2  # Minimum weight for GMM bimodal detection
+    bimodal_min_separation: float = 0.5  # Minimum relative separation for bimodal
+
     # Computed fields
     _validation_errors: list[str] = field(default_factory=list, repr=False)
 
@@ -191,6 +198,7 @@ class CMCConfig:
         per_shard = config_dict.get("per_shard_mcmc", {})
         validation = config_dict.get("validation", {})
         combination = config_dict.get("combination", {})
+        reparameterization = config_dict.get("reparameterization", {})
 
         # Handle multiple schema variants for backend configuration:
         # 1. New schema: backend_config.name (preferred)
@@ -275,6 +283,11 @@ class CMCConfig:
             max_parameter_cv=validation.get("max_parameter_cv", 1.0),
             heterogeneity_abort=validation.get("heterogeneity_abort", True),
             min_points_per_shard=sharding.get("min_points_per_shard", 10000),
+            # Reparameterization (Jan 2026 v3)
+            reparameterization_d_total=reparameterization.get("enable_d_total", True),
+            reparameterization_log_gamma=reparameterization.get("enable_log_gamma", True),
+            bimodal_min_weight=reparameterization.get("bimodal_min_weight", 0.2),
+            bimodal_min_separation=reparameterization.get("bimodal_min_separation", 0.5),
         )
 
         # Validate and log any issues
@@ -425,6 +438,16 @@ class CMCConfig:
         if not isinstance(self.min_points_per_shard, int) or self.min_points_per_shard < 1000:
             errors.append(
                 f"min_points_per_shard must be int >= 1000, got: {self.min_points_per_shard}"
+            )
+
+        # Validate bimodal detection thresholds (Jan 2026 v3)
+        if not (0.0 < self.bimodal_min_weight <= 0.5):
+            errors.append(
+                f"bimodal_min_weight must be in (0, 0.5], got: {self.bimodal_min_weight}"
+            )
+        if not (0.0 < self.bimodal_min_separation <= 2.0):
+            errors.append(
+                f"bimodal_min_separation must be in (0, 2.0], got: {self.bimodal_min_separation}"
             )
 
         self._validation_errors = errors
@@ -636,4 +659,10 @@ class CMCConfig:
             },
             "per_shard_timeout": self.per_shard_timeout,
             "heartbeat_timeout": self.heartbeat_timeout,
+            "reparameterization": {
+                "enable_d_total": self.reparameterization_d_total,
+                "enable_log_gamma": self.reparameterization_log_gamma,
+                "bimodal_min_weight": self.bimodal_min_weight,
+                "bimodal_min_separation": self.bimodal_min_separation,
+            },
         }

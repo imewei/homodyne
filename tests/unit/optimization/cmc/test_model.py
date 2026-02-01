@@ -488,3 +488,113 @@ class TestModelPhysics:
             f"Expected {n_phi} contrast params, got {n_contrast}"
         )
         assert n_offset == n_phi, f"Expected {n_phi} offset params, got {n_offset}"
+
+
+class TestReparameterizedModel:
+    """Tests for xpcs_model_reparameterized."""
+
+    def test_model_samples_d_total_not_d0(self, mock_parameter_space_laminar):
+        """Reparameterized model samples D_total instead of D0."""
+        import numpyro
+
+        from homodyne.optimization.cmc.model import xpcs_model_reparameterized
+        from homodyne.optimization.cmc.reparameterization import ReparamConfig
+
+        # Minimal test data
+        n_points = 100
+        data = jnp.ones(n_points)
+        t1 = jnp.linspace(0.1, 1.0, n_points)
+        t2 = jnp.linspace(0.1, 1.0, n_points)
+        phi_unique = jnp.array([0.0, 0.5, 1.0])
+        phi_indices = jnp.zeros(n_points, dtype=jnp.int32)
+
+        config = ReparamConfig(enable_d_total=True, enable_log_gamma=True)
+
+        # Trace the model to see what's sampled
+        with numpyro.handlers.seed(rng_seed=0):
+            with numpyro.handlers.trace() as trace:
+                xpcs_model_reparameterized(
+                    data=data,
+                    t1=t1,
+                    t2=t2,
+                    phi_unique=phi_unique,
+                    phi_indices=phi_indices,
+                    q=0.005,
+                    L=2e6,
+                    dt=0.1,
+                    analysis_mode="laminar_flow",
+                    parameter_space=mock_parameter_space_laminar,
+                    n_phi=3,
+                    reparam_config=config,
+                )
+
+        sampled_params = [k for k, v in trace.items() if v.get("type") == "sample"]
+        deterministic_params = [
+            k for k, v in trace.items() if v.get("type") == "deterministic"
+        ]
+
+        # Should sample D_total_z (z-space scaled), not D0_z
+        assert "D_total_z" in sampled_params
+        assert "D0_z" not in sampled_params
+
+        # D0 should be deterministic (computed from D_total and D_offset_frac)
+        assert "D0" in deterministic_params
+
+        # Should sample log_gamma_dot_t0, not gamma_dot_t0_z
+        assert "log_gamma_dot_t0" in sampled_params
+        assert "gamma_dot_t0_z" not in sampled_params
+
+        # gamma_dot_t0 should be deterministic
+        assert "gamma_dot_t0" in deterministic_params
+
+    def test_deterministic_outputs_correct(self, mock_parameter_space_laminar):
+        """D0, D_offset, gamma_dot_t0 have correct values from transforms."""
+        import numpyro
+
+        from homodyne.optimization.cmc.model import xpcs_model_reparameterized
+        from homodyne.optimization.cmc.reparameterization import ReparamConfig
+
+        n_points = 50
+        data = jnp.ones(n_points)
+        t1 = jnp.linspace(0.1, 1.0, n_points)
+        t2 = jnp.linspace(0.1, 1.0, n_points)
+        phi_unique = jnp.array([0.0])
+        phi_indices = jnp.zeros(n_points, dtype=jnp.int32)
+
+        config = ReparamConfig(enable_d_total=True, enable_log_gamma=True)
+
+        with numpyro.handlers.seed(rng_seed=42):
+            with numpyro.handlers.trace() as trace:
+                xpcs_model_reparameterized(
+                    data=data,
+                    t1=t1,
+                    t2=t2,
+                    phi_unique=phi_unique,
+                    phi_indices=phi_indices,
+                    q=0.005,
+                    L=2e6,
+                    dt=0.1,
+                    analysis_mode="laminar_flow",
+                    parameter_space=mock_parameter_space_laminar,
+                    n_phi=1,
+                    reparam_config=config,
+                )
+
+        # Get sampled values
+        D_total = float(trace["D_total"]["value"])
+        D_offset_frac = float(trace["D_offset_frac"]["value"])
+        log_gamma = float(trace["log_gamma_dot_t0"]["value"])
+
+        # Get deterministic values
+        D0 = float(trace["D0"]["value"])
+        D_offset = float(trace["D_offset"]["value"])
+        gamma_dot_t0 = float(trace["gamma_dot_t0"]["value"])
+
+        # Verify transforms are correct
+        expected_D0 = D_total * (1 - D_offset_frac)
+        expected_D_offset = D_total * D_offset_frac
+        expected_gamma = np.exp(log_gamma)
+
+        np.testing.assert_allclose(D0, expected_D0, rtol=1e-5)
+        np.testing.assert_allclose(D_offset, expected_D_offset, rtol=1e-5)
+        np.testing.assert_allclose(gamma_dot_t0, expected_gamma, rtol=1e-5)
