@@ -1166,3 +1166,112 @@ Root causes identified:
 | `min_points_per_shard` | int | 10,000 (laminar) / 5,000 (static) | **NEW**: Enforced minimum shard size |
 | `max_parameter_cv` | float | 1.0 | **NEW**: Heterogeneity abort threshold |
 | `heterogeneity_abort` | bool | True | **NEW**: Abort on high heterogeneity |
+| `min_points_per_param` | int | 1,500 | **NEW**: Param-aware shard sizing floor |
+
+### January 2026: Heterogeneity Prevention (v2.21.0)
+
+**Parameter Degeneracy in Laminar Flow Mode**
+
+The `laminar_flow` model has two known parameter degeneracies that can cause
+high heterogeneity across CMC shards:
+
+**1. D₀/D_offset Linear Degeneracy**
+
+The diffusion contribution depends on `D₀ + D_offset`, creating a linear manifold
+in parameter space where different (D₀, D_offset) pairs produce equivalent fits.
+
+| Symptom | Cause |
+|---------|-------|
+| `D_offset` CV > 1.0 | Shards find different points along the D₀ + D_offset = const ridge |
+| `D_offset` spans positive and negative | Ridge crosses zero for D_offset |
+| High `D₀` range despite good NLSQ fit | Compensating D_offset values |
+
+**Mitigation (automatic in v2.21.0+):**
+CMC internally reparameterizes to `D_total = D₀ + D_offset` and
+`D_offset_frac = D_offset / D_total`, which are orthogonal and well-constrained.
+Results are automatically converted back to D₀/D_offset for output.
+
+**2. γ̇₀/β Multiplicative Correlation**
+
+The shear contribution scales as `γ̇₀ · t^(1+β)`. Higher γ̇₀ with more negative β
+can produce similar effects to lower γ̇₀ with less negative β.
+
+| Symptom | Cause |
+|---------|-------|
+| `gamma_dot_t0` CV > 1.0 | Shards explore the γ̇₀-β correlation ridge |
+| `gamma_dot_t0` spans 10-100× range | Compensating β values |
+| `beta` moderate heterogeneity (CV ~0.5-0.8) | Correlated with γ̇₀ |
+
+**Mitigation (automatic in v2.21.0+):**
+CMC samples `log(γ̇₀)` instead of γ̇₀ directly, which improves conditioning
+and reduces posterior ridge exploration.
+
+**Bimodal Detection**
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Bimodal Posterior Detection (diagnostics.py, v2.21.0)                     │
+│                                                                           │
+│   After MCMC sampling, each shard is checked for bimodal posteriors:     │
+│                                                                           │
+│   1. Fit 2-component GMM to each parameter's samples                     │
+│   2. Flag as bimodal if:                                                 │
+│      • min(weights) > 0.2 (both modes significant)                       │
+│      • relative_separation > 0.5 (modes well-separated)                  │
+│                                                                           │
+│   3. Log warnings for bimodal posteriors:                                │
+│      "BIMODAL POSTERIOR: Shard 3, D_offset: modes at 500 and 1500        │
+│       (weights: 0.45/0.55)"                                              │
+│                                                                           │
+│   Purpose: Early warning of model misspecification or local minima       │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Param-Aware Shard Sizing**
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Param-Aware Shard Sizing (config.py, v2.21.0)                             │
+│                                                                           │
+│   Problem: High-dimensional models need more points per shard             │
+│   Solution: Scale shard size with parameter count                         │
+│                                                                           │
+│   adjusted_max = max(base_max × param_factor, min_points_per_param × n)  │
+│   where param_factor = max(1.0, n_params / 7.0)                           │
+│                                                                           │
+│   Example (laminar_flow + individual scaling, 23 angles):                │
+│   • n_params = 7 + 46 + 1 = 54                                           │
+│   • param_factor = 54/7 = 7.71                                           │
+│   • min_required = 1500 × 54 = 81,000 points                             │
+│   • For 500K points → ~6 shards (vs 50+ with default sizing)             │
+│                                                                           │
+│   Prevents data starvation in high-dimensional per-angle modes           │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Diagnostic Indicators**
+
+When heterogeneity abort triggers, check these indicators:
+
+| Indicator | Healthy | Problematic |
+|-----------|---------|-------------|
+| D_offset CV | < 0.5 | > 1.0 |
+| D_offset range | Within ±20% of D₀ | Spans ±D₀ or sign changes |
+| gamma_dot_t0 CV | < 0.5 | > 1.0 |
+| Bimodal warnings | 0 | Multiple shards |
+
+**Configuration Options**
+
+If heterogeneity persists after v2.21.0+ mitigations:
+
+```yaml
+optimization:
+  cmc:
+    reparameterization:
+      d_total: true           # Default: true for laminar_flow
+      log_gamma_dot: true     # Default: true for laminar_flow
+    sharding:
+      max_points_per_shard: 50000  # Increase for more statistical power
+    validation:
+      max_parameter_cv: 1.5   # Relax threshold if physical heterogeneity expected
+```
