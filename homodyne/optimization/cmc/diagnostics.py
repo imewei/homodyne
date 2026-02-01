@@ -839,3 +839,111 @@ def log_precision_analysis(
     report = "\n".join(lines)
     log_fn(report)
     return report
+
+
+# =============================================================================
+# BIMODAL DETECTION (Jan 2026)
+# =============================================================================
+
+
+from dataclasses import dataclass
+
+from sklearn.mixture import GaussianMixture
+
+
+@dataclass
+class BimodalResult:
+    """Result of bimodal detection for a single parameter.
+
+    Attributes
+    ----------
+    is_bimodal : bool
+        Whether the posterior appears bimodal.
+    weights : tuple[float, float]
+        Component weights from GMM.
+    means : tuple[float, float]
+        Component means from GMM.
+    separation : float
+        Absolute distance between means.
+    relative_separation : float
+        Separation relative to scale (separation / |mean(means)|).
+    """
+
+    is_bimodal: bool
+    weights: tuple[float, float]
+    means: tuple[float, float]
+    separation: float
+    relative_separation: float
+
+
+def detect_bimodal(
+    samples: np.ndarray,
+    min_weight: float = 0.2,
+    min_relative_separation: float = 0.5,
+) -> BimodalResult:
+    """Detect bimodality using 2-component Gaussian Mixture Model.
+
+    Parameters
+    ----------
+    samples : np.ndarray
+        1D array of posterior samples.
+    min_weight : float
+        Minimum weight for both components to be considered bimodal.
+    min_relative_separation : float
+        Minimum separation between means (relative to scale) for bimodality.
+
+    Returns
+    -------
+    BimodalResult
+        Detection result with component details.
+    """
+    samples_2d = samples.reshape(-1, 1)
+
+    gmm = GaussianMixture(n_components=2, random_state=42, n_init=3)
+    gmm.fit(samples_2d)
+
+    weights = tuple(gmm.weights_.tolist())
+    means = tuple(gmm.means_.flatten().tolist())
+    separation = abs(means[0] - means[1])
+    scale = max(abs(np.mean(means)), 1e-10)
+    relative_separation = separation / scale
+
+    # Bimodal if: both components significant AND well-separated
+    is_bimodal = min(weights) > min_weight and relative_separation > min_relative_separation
+
+    return BimodalResult(
+        is_bimodal=is_bimodal,
+        weights=weights,
+        means=means,
+        separation=separation,
+        relative_separation=relative_separation,
+    )
+
+
+def check_shard_bimodality(
+    samples: dict[str, np.ndarray],
+    params_to_check: list[str] | None = None,
+) -> dict[str, BimodalResult]:
+    """Check multiple parameters for bimodality.
+
+    Parameters
+    ----------
+    samples : dict[str, np.ndarray]
+        Parameter samples from a shard.
+    params_to_check : list[str], optional
+        Parameters to check. Defaults to key physical parameters.
+
+    Returns
+    -------
+    dict[str, BimodalResult]
+        Mapping from param name to BimodalResult.
+    """
+    if params_to_check is None:
+        params_to_check = ["D0", "D_offset", "gamma_dot_t0", "beta", "alpha"]
+
+    results = {}
+    for param in params_to_check:
+        if param in samples:
+            results[param] = detect_bimodal(samples[param].flatten())
+
+    return results

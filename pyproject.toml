@@ -81,6 +81,8 @@ dependencies = [
     # Fast visualization (includes numba as transitive dependency)
     "datashader>=0.18",
     "xarray>=2025.12",
+    # Machine learning utilities (for GMM bimodal detection)
+    "scikit-learn>=1.6",
 ]
 
 [project.optional-dependencies]

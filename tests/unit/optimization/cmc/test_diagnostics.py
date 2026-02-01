@@ -369,3 +369,94 @@ class TestLogAnalysisSummary:
             shards_succeeded=4,
             execution_time=300.0,
         )
+
+
+# =============================================================================
+# Bimodal Detection Tests
+# =============================================================================
+
+import numpy as np
+
+
+class TestBimodalDetection:
+    """Tests for GMM-based bimodal detection."""
+
+    def test_unimodal_samples_not_detected_as_bimodal(self):
+        """Unimodal samples should not be flagged as bimodal."""
+        from homodyne.optimization.cmc.diagnostics import detect_bimodal
+
+        # Generate unimodal samples
+        rng = np.random.default_rng(42)
+        samples = rng.normal(loc=100.0, scale=10.0, size=1000)
+
+        result = detect_bimodal(samples)
+
+        assert result.is_bimodal == False  # noqa: E712 (numpy bool)
+
+    def test_bimodal_samples_detected(self):
+        """Clearly bimodal samples should be detected."""
+        from homodyne.optimization.cmc.diagnostics import detect_bimodal
+
+        # Generate bimodal samples (two well-separated modes)
+        rng = np.random.default_rng(42)
+        mode1 = rng.normal(loc=-50.0, scale=5.0, size=500)
+        mode2 = rng.normal(loc=50.0, scale=5.0, size=500)
+        samples = np.concatenate([mode1, mode2])
+
+        result = detect_bimodal(samples)
+
+        assert result.is_bimodal == True  # noqa: E712 (numpy bool)
+        assert min(result.weights) > 0.2  # Both modes significant
+        assert result.separation > 50.0  # Modes well separated
+
+    def test_bimodal_result_contains_expected_fields(self):
+        """BimodalResult has all expected fields."""
+        from homodyne.optimization.cmc.diagnostics import detect_bimodal
+
+        rng = np.random.default_rng(42)
+        samples = rng.normal(loc=0.0, scale=1.0, size=100)
+
+        result = detect_bimodal(samples)
+
+        assert hasattr(result, "is_bimodal")
+        assert hasattr(result, "weights")
+        assert hasattr(result, "means")
+        assert hasattr(result, "separation")
+        assert hasattr(result, "relative_separation")
+        assert len(result.weights) == 2
+        assert len(result.means) == 2
+
+    def test_unbalanced_bimodal_not_detected(self):
+        """Unbalanced modes (one < 20%) should not be flagged."""
+        from homodyne.optimization.cmc.diagnostics import detect_bimodal
+
+        # 90% from mode1, 10% from mode2
+        rng = np.random.default_rng(42)
+        mode1 = rng.normal(loc=0.0, scale=1.0, size=900)
+        mode2 = rng.normal(loc=10.0, scale=1.0, size=100)
+        samples = np.concatenate([mode1, mode2])
+
+        result = detect_bimodal(samples, min_weight=0.2)
+
+        assert result.is_bimodal == False  # noqa: E712 (numpy bool)
+
+
+class TestCheckShardBimodality:
+    """Tests for check_shard_bimodality function."""
+
+    def test_checks_multiple_parameters(self):
+        """Function checks all specified parameters."""
+        from homodyne.optimization.cmc.diagnostics import check_shard_bimodality
+
+        rng = np.random.default_rng(42)
+        samples = {
+            "D0": rng.normal(20000, 1000, size=500),
+            "alpha": rng.normal(-1.0, 0.1, size=500),
+            "D_offset": rng.normal(1000, 100, size=500),
+        }
+
+        results = check_shard_bimodality(samples, params_to_check=["D0", "alpha"])
+
+        assert "D0" in results
+        assert "alpha" in results
+        assert "D_offset" not in results  # Not in params_to_check
