@@ -223,3 +223,62 @@ class TestGetModelParamCount:
         count = get_model_param_count(n_phi=23, analysis_mode="laminar_flow", per_angle_mode="constant")
         # 7 physical + 0 scaling + 1 sigma = 8
         assert count == 8
+
+
+class TestParamAwareShardSizing:
+    """Tests for param-aware shard sizing in get_num_shards."""
+
+    def test_no_adjustment_for_7_params(self):
+        """No significant adjustment when n_params = 7 (param_factor = 1.0)."""
+        # Use a larger base to avoid floor effects from min_points_per_param
+        config = CMCConfig(max_points_per_shard=20000, min_points_per_param=1000)
+
+        # 7 params: param_factor = 1.0, min_required = 7000
+        # adjusted_max = max(20000, 7000) = 20000
+        n_shards = config.get_num_shards(n_points=100000, n_phi=3, n_params=7)
+
+        assert n_shards == 5  # 100000 / 20000
+
+    def test_scales_up_for_10_params(self):
+        """Shard size scales up for n_params > 7."""
+        config = CMCConfig(max_points_per_shard=10000, min_points_per_param=1000)
+
+        # 10 params: param_factor = 10/7 ≈ 1.43, min_required = 10000
+        # adjusted_max = max(10000 * 1.43, 10000) = 14286
+        n_shards = config.get_num_shards(n_points=100000, n_phi=3, n_params=10)
+
+        # n_shards = 100000 / 14286 ≈ 7
+        assert n_shards == 7
+
+    def test_min_points_per_param_floor(self):
+        """Shard size respects min_points_per_param floor."""
+        # With 54 params and min_points_per_param=1500
+        # min_required = 54 * 1500 = 81000
+        config = CMCConfig(max_points_per_shard=10000, min_points_per_param=1500)
+
+        n_shards = config.get_num_shards(n_points=500000, n_phi=23, n_params=54)
+
+        # param_factor = 54/7 = 7.71, so 10000 * 7.71 = 77143
+        # But min_required = 81000 takes precedence
+        # n_shards = 500000 / 81000 ≈ 6
+        assert n_shards == 6
+
+    def test_backward_compatible_without_n_params(self):
+        """get_num_shards works without n_params for backward compatibility."""
+        config = CMCConfig(max_points_per_shard=20000, min_points_per_param=1000)
+
+        # Default n_params=7: param_factor=1.0, min_required=7000
+        # adjusted_max = max(20000, 7000) = 20000
+        n_shards = config.get_num_shards(n_points=100000, n_phi=3)
+
+        assert n_shards == 5  # 100000 / 20000
+
+    def test_fewer_shards_with_more_params(self):
+        """More parameters results in larger shards (fewer shards)."""
+        config = CMCConfig(max_points_per_shard=20000, min_points_per_param=1000)
+
+        n_shards_7 = config.get_num_shards(n_points=200000, n_phi=5, n_params=7)
+        n_shards_14 = config.get_num_shards(n_points=200000, n_phi=5, n_params=14)
+
+        # More params → larger adjusted_max → fewer shards
+        assert n_shards_14 < n_shards_7

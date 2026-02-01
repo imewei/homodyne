@@ -160,6 +160,7 @@ class CMCConfig:
     max_parameter_cv: float = 1.0  # Abort if any parameter has CV > 1.0 across shards
     heterogeneity_abort: bool = True  # Enable heterogeneity abort (fail fast)
     min_points_per_shard: int = 10000  # Enforced minimum for laminar_flow
+    min_points_per_param: int = 1500  # Minimum points per parameter per shard
 
     # Computed fields
     _validation_errors: list[str] = field(default_factory=list, repr=False)
@@ -480,8 +481,8 @@ class CMCConfig:
 
         return n_points >= threshold
 
-    def get_num_shards(self, n_points: int, n_phi: int) -> int:
-        """Calculate number of shards for given data.
+    def get_num_shards(self, n_points: int, n_phi: int, n_params: int = 7) -> int:
+        """Calculate number of shards with param-aware sizing.
 
         Parameters
         ----------
@@ -489,6 +490,8 @@ class CMCConfig:
             Total number of data points.
         n_phi : int
             Number of phi angles.
+        n_params : int
+            Number of model parameters (default: 7 for static).
 
         Returns
         -------
@@ -504,12 +507,28 @@ class CMCConfig:
 
         # For other strategies, calculate based on max_points_per_shard
         if isinstance(self.max_points_per_shard, int):
-            max_per_shard = self.max_points_per_shard
+            base_max = self.max_points_per_shard
         else:
             # Default: ~100k points per shard
-            max_per_shard = 100000
+            base_max = 100000
 
-        return max(1, n_points // max_per_shard)
+        # Param-aware adjustment: scale up for n_params > 7
+        param_factor = max(1.0, n_params / 7.0)
+        min_required = int(self.min_points_per_param * n_params)
+
+        adjusted_max = max(
+            int(base_max * param_factor),
+            min_required,
+        )
+
+        if param_factor > 1.0:
+            logger.debug(
+                f"Param-aware shard sizing: {n_params} params detected. "
+                f"Adjusted max_points_per_shard: {base_max:,} → {adjusted_max:,} "
+                f"(factor={param_factor:.2f})"
+            )
+
+        return max(1, n_points // adjusted_max)
 
     def get_effective_per_angle_mode(
         self, n_phi: int, nlsq_per_angle_mode: str | None = None
