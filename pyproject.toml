@@ -109,10 +109,11 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/homodyne"
+Homepage = "https://github.com/imewei/homodyne"
 Documentation = "https://homodyne.readthedocs.io"
-Repository = "https://github.com/your-org/homodyne.git"
-Issues = "https://github.com/your-org/homodyne/issues"
+Repository = "https://github.com/imewei/homodyne.git"
+Issues = "https://github.com/imewei/homodyne/issues"
+Changelog = "https://github.com/imewei/homodyne/blob/main/CHANGELOG.md"
 
 [project.scripts]
 homodyne = "homodyne.cli.main:main"
