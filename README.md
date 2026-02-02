@@ -1,12 +1,58 @@
-# Homodyne 2.19: CPU-Optimized JAX-First XPCS Analysis
+# Homodyne 2.22: CPU-Optimized JAX-First XPCS Analysis
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-2.19.0-green.svg)](#)
+[![Version](https://img.shields.io/badge/Version-2.22.0-green.svg)](#)
 [![Documentation](https://img.shields.io/badge/docs-sphinx-blue.svg)](https://homodyne.readthedocs.io)
 [![ReadTheDocs](https://readthedocs.org/projects/homodyne/badge/?version=latest)](https://homodyne.readthedocs.io/en/latest/)
 [![GitHub Actions](https://github.com/imewei/homodyne/actions/workflows/docs.yml/badge.svg)](https://github.com/imewei/homodyne/actions/workflows/docs.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
+
+## 🚀 **What's New in v2.22.0**
+
+### CMC Adaptive Sampling and Performance Profiling
+
+**Performance optimization release** adding adaptive NUTS sampling for small datasets and
+JAX profiler integration for XLA-level performance analysis.
+
+**Key Features:**
+
+- **Adaptive sampling**: Automatically reduces warmup/samples for small datasets (60-80% speedup)
+- **max_tree_depth**: Configurable NUTS tree depth to limit leapfrog steps
+- **JAX profiling**: Capture XLA-level performance data invisible to Python profilers
+
+**Adaptive Scaling:**
+
+| Shard Size | Warmup | Samples | Reduction |
+|------------|--------|---------|-----------|
+| 50 points | 140 | 350 | 75% fewer |
+| 5,000 points | 250 | 750 | 50% fewer |
+| 50,000+ points | 500 | 1,500 | Full default |
+
+**Configuration:**
+
+```yaml
+optimization:
+  cmc:
+    per_shard_mcmc:
+      adaptive_sampling: true       # Enable automatic scaling
+      max_tree_depth: 10            # NUTS depth (max 2^10 leapfrog steps)
+      min_warmup: 100               # Minimum warmup
+      min_samples: 200              # Minimum samples
+      enable_jax_profiling: false   # XLA-level profiling
+      jax_profile_dir: ./profiles/jax
+```
+
+**JAX Profiling Usage:**
+
+```bash
+# Enable in config, run analysis, then view with TensorBoard
+tensorboard --logdir=./profiles/jax
+```
+
+See [CHANGELOG](CHANGELOG.md#2220---2026-02-02) for complete details.
+
+---
 
 ## 🚀 **What's New in v2.19.0**
 
