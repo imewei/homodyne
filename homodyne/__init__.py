@@ -122,7 +122,7 @@ logging.getLogger("jax._src.compiler").setLevel(logging.ERROR)
 try:
     from homodyne._version import __version__
 except ImportError:
-    __version__ = "2.19.0"
+    __version__ = "2.22.0"
 
 # Core imports with graceful fallback
 # These are re-exported for public API

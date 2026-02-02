@@ -483,6 +483,31 @@ optimization:
       num_chains: 2
       target_accept_prob: 0.85
 
+      # -----------------------------------------------------------------------
+      # ADAPTIVE SAMPLING (v2.22.0 / Feb 2026)
+      # -----------------------------------------------------------------------
+      # Automatically reduces warmup/samples for small datasets to decrease
+      # NUTS overhead. Profiling showed 1310s for 50 points with defaults;
+      # adaptive scaling reduces this by 60-80%.
+      #
+      # Scaling: shard_size / 10000 → scale factor (capped at 1.0)
+      #   50 pts → 140 warmup, 350 samples (75% reduction)
+      #   5000 pts → 250 warmup, 750 samples (50% reduction)
+      #   50000+ pts → full defaults (no reduction)
+      adaptive_sampling: true         # Enable adaptive sample count
+      max_tree_depth: 10              # NUTS tree depth (max 2^depth leapfrog steps)
+      min_warmup: 100                 # Minimum warmup even for tiny datasets
+      min_samples: 200                # Minimum samples for statistical validity
+
+      # -----------------------------------------------------------------------
+      # JAX PROFILING (v2.22.0 / Feb 2026)
+      # -----------------------------------------------------------------------
+      # py-spy only profiles Python code; XLA runs native code invisible to it.
+      # Enable JAX profiling to capture XLA-level performance data.
+      # View with: tensorboard --logdir=./profiles/jax
+      enable_jax_profiling: false     # Enable jax.profiler tracing
+      jax_profile_dir: ./profiles/jax # Output directory for JAX traces
+
     validation:
       strict_mode: true               # Strict OK for simpler model
       min_per_shard_ess: 100.0

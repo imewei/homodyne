@@ -695,13 +695,26 @@ def run_nuts_sampling(
         init_strategy=init_strategy,
         target_accept_prob=effective_target_accept,
         dense_mass=True,
+        max_tree_depth=config.max_tree_depth,
     )
 
-    # Create MCMC runner
+    # Get shard size for adaptive sampling
+    data = model_kwargs.get("data")
+    shard_size = len(data) if data is not None else 10000
+
+    # Calculate adaptive sample counts based on shard size
+    # Profiling showed 1310s for 50 points with 500/1500 defaults.
+    # Adaptive scaling reduces overhead for small datasets.
+    num_warmup, num_samples = config.get_adaptive_sample_counts(
+        shard_size=shard_size,
+        n_params=len(param_names_with_sigma),
+    )
+
+    # Create MCMC runner with adaptive sample counts
     mcmc = MCMC(
         kernel,
-        num_warmup=config.num_warmup,
-        num_samples=config.num_samples,
+        num_warmup=num_warmup,
+        num_samples=num_samples,
         num_chains=config.num_chains,
         progress_bar=progress_bar,
     )
@@ -711,13 +724,29 @@ def run_nuts_sampling(
         rng_key = jax.random.PRNGKey(42)
 
     # Run sampling with timing
+    adaptive_note = ""
+    if config.adaptive_sampling and (
+        num_warmup != config.num_warmup or num_samples != config.num_samples
+    ):
+        adaptive_note = f" (adaptive: {shard_size:,} pts)"
     run_logger.info(
         f"Starting NUTS sampling: {config.num_chains} chains, "
-        f"{config.num_warmup} warmup, {config.num_samples} samples"
+        f"{num_warmup} warmup, {num_samples} samples{adaptive_note}"
     )
 
     start_time = time.perf_counter()
     run_logger.info("NUTS phase: JIT compile + sampling started (may take minutes)...")
+
+    # JAX profiler setup (Feb 2026): Capture XLA-level performance data
+    # py-spy can only profile Python code; XLA runs native code invisible to py-spy.
+    # When enabled, trace XLA operations to identify HLO graph bottlenecks.
+    profile_context = None
+    if config.enable_jax_profiling:
+        import os
+        os.makedirs(config.jax_profile_dir, exist_ok=True)
+        run_logger.info(f"JAX profiling enabled, output: {config.jax_profile_dir}")
+        profile_context = jax.profiler.trace(config.jax_profile_dir)
+        profile_context.__enter__()
 
     try:
         # Request only essential extra fields to minimize extraction overhead.
@@ -738,6 +767,10 @@ def run_nuts_sampling(
     except Exception as e:
         run_logger.error(f"MCMC sampling failed: {e}")
         raise RuntimeError(f"MCMC sampling failed: {e}") from e
+    finally:
+        if profile_context is not None:
+            profile_context.__exit__(None, None, None)
+            run_logger.info(f"JAX profile saved to {config.jax_profile_dir}")
 
     # Force JAX to complete all pending computations before timing extraction.
     # JAX uses lazy evaluation, so without this the actual computation happens
@@ -962,7 +995,8 @@ def run_nuts_sampling(
             pass
 
     # Estimate warmup vs sampling time (rough estimate)
-    warmup_ratio = config.num_warmup / (config.num_warmup + config.num_samples)
+    # Use actual num_warmup/num_samples (may differ from config if adaptive sampling)
+    warmup_ratio = num_warmup / (num_warmup + num_samples)
     warmup_time = total_time * warmup_ratio
     sampling_time = total_time * (1 - warmup_ratio)
 
@@ -989,7 +1023,7 @@ def run_nuts_sampling(
         samples=samples_np,
         param_names=[k for k in samples_np.keys() if k != "obs"],
         n_chains=config.num_chains,
-        n_samples=config.num_samples,
+        n_samples=num_samples,  # Use actual samples count (may be adaptive)
         extra_fields=extra_fields,
     )
 

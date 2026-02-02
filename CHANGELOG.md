@@ -13,6 +13,79 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
+## [2.22.0] - 2026-02-02
+
+### CMC Adaptive Sampling and Performance Profiling
+
+Performance optimization release adding adaptive NUTS sampling for small datasets and
+JAX profiler integration for XLA-level performance analysis.
+
+#### Added
+
+**Adaptive Sampling:**
+
+- **feat(cmc)**: Add adaptive sample count based on shard size
+  - Automatically reduces warmup/samples for small datasets
+  - Reference: 10K points → full samples; smaller → proportionally fewer
+  - 50 points → 140 warmup, 350 samples (75% reduction)
+  - 5000 points → 250 warmup, 750 samples (50% reduction)
+  - New `CMCConfig.get_adaptive_sample_counts(shard_size, n_params)` method
+
+- **feat(cmc)**: Add `adaptive_sampling` config option (default: `true`)
+  - Enable/disable automatic sample count reduction
+  - `min_warmup: int = 100` - minimum warmup even for tiny datasets
+  - `min_samples: int = 200` - minimum samples for statistical validity
+
+- **feat(cmc)**: Add `max_tree_depth` config option (default: `10`)
+  - Limits NUTS leapfrog steps to 2^depth per sample
+  - Reduces overhead for posteriors requiring many integration steps
+  - Passed directly to NumPyro NUTS kernel
+
+**JAX Profiler Integration:**
+
+- **feat(cmc)**: Add JAX profiler tracing for XLA-level performance analysis
+  - py-spy only profiles Python frames; XLA runs native code invisible to it
+  - New `enable_jax_profiling: bool = False` config option
+  - New `jax_profile_dir: str = "./profiles/jax"` config option
+  - Output compatible with TensorBoard and Perfetto
+
+**Configuration Templates:**
+
+- **docs(config)**: Add adaptive sampling section to all YAML templates
+  - `homodyne_master_template.yaml`
+  - `homodyne_laminar_flow.yaml`
+  - `homodyne_static.yaml`
+
+**Performance Benchmarks:**
+
+- **test(perf)**: Add CMC profiling infrastructure (`tests/performance/benchmark_cmc.py`)
+  - `benchmark_nuts_single_shard()` - profiles NUTS sampling on single shard
+  - `benchmark_multiprocessing_overhead()` - measures IPC serialization
+  - `benchmark_consensus_aggregation()` - measures posterior aggregation
+  - `generate_flamegraph()` - generates py-spy flamegraphs
+
+- **test(perf)**: Add regression test suite (`tests/performance/test_cmc_benchmarks.py`)
+  - 18 benchmark tests for multiprocessing, memory, throughput, scaling
+  - CI/CD integration tests for performance monitoring
+
+#### Changed
+
+- **refactor(cmc)**: Use adaptive sample counts in `run_nuts_sampling()`
+  - Automatically adjusts warmup/samples based on shard size
+  - Logs adaptive adjustment: `"(adaptive: 50 pts)"`
+
+- **refactor(cmc)**: Pass `max_tree_depth` to NUTS kernel
+  - Limits maximum leapfrog steps per NUTS sample
+
+#### Performance
+
+- **perf(cmc)**: Profiling revealed XLA JIT as dominant bottleneck
+  - NUTS sampling: ~2.3 samples/sec, 437ms per sample
+  - IPC overhead negligible: 0.07ms/shard serialization
+  - Adaptive sampling reduces small-dataset overhead by 60-80%
+
+______________________________________________________________________
+
 ## [2.20.0] - 2026-02-01
 
 ### CMC Reparameterization and Heterogeneity Prevention
