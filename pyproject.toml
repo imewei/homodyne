@@ -138,7 +138,7 @@ version_scheme = "guess-next-dev"
 local_scheme = "no-local-version"
 
 # Fallback version when git is unavailable (e.g., installing from tarball)
-fallback_version = "2.19.0"
+fallback_version = "2.22.0"
 
 # Only match semantic version tags (v1.2.3 or 1.2.3 format)
 tag_regex = "^(?:v)?(?P<version>\\d+\\.\\d+\\.\\d+)$"
@@ -270,8 +270,9 @@ module = [
 ignore_errors = true
 
 [tool.pytest.ini_options]
+# Pytest configuration for Homodyne test suite (CPU-only)
 minversion = "9.0"
-addopts = "-ra -q --strict-markers --strict-config"
+addopts = "-ra -q --strict-markers --strict-config --tb=short --maxfail=10 --durations=10"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
@@ -291,13 +292,31 @@ markers = [
     "visualization: marks tests as visualization tests",
 ]
 filterwarnings = [
+    # JAX warnings
+    "ignore::DeprecationWarning:jax.*",
+    "ignore::FutureWarning:jax.*",
+    "ignore::UserWarning:jax.*",
+    # NumPyro warnings
+    "ignore::UserWarning:numpyro.*",
+    "ignore::DeprecationWarning:numpyro.*",
+    # General warnings
+    "ignore::PendingDeprecationWarning",
+    "ignore::matplotlib.MatplotlibDeprecationWarning",
+    "ignore::RuntimeWarning:homodyne.optimization.sequential_angle",
+    # Specific warnings
     "ignore:There are not enough devices to run parallel chains:UserWarning",
     "ignore:Covariance of the parameters could not be estimated:scipy.optimize.OptimizeWarning",
+    "ignore:scatter inputs have incompatible types.*:FutureWarning",
     "ignore:invalid escape sequence:SyntaxWarning",
     # NumPyro uses deprecated JAX internals (xla_pmap_p) - awaiting upstream fix
-    # See: https://github.com/pyro-ppl/numpyro/issues (JAX 0.8.2+ compatibility)
     "ignore:jax.interpreters.pxla.xla_pmap_p is deprecated:DeprecationWarning",
 ]
+# Logging
+log_cli = false
+log_cli_level = "WARNING"
+# Performance
+junit_family = "xunit2"
+cache_dir = ".pytest_cache"
 
 [tool.coverage.run]
 source = ["homodyne"]
