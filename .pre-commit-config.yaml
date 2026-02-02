@@ -1,5 +1,6 @@
-# Pre-commit hooks for Homodyne Analysis Package v2.4+
-# Install: pip install pre-commit && pre-commit install
+# Pre-commit hooks for Homodyne Analysis Package v2.22.0
+# Install: uv run pre-commit install
+# Run manually: uv run pre-commit run --all-files
 
 repos:
   # Basic file checks

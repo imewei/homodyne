@@ -1,4 +1,4 @@
-# Read the Docs configuration file for Homodyne
+# Read the Docs configuration file for Homodyne v2.22.0
 # See https://docs.readthedocs.io/en/stable/config-file/v2.html
 
 version: 2
@@ -9,6 +9,7 @@ build:
     python: "3.13"
   jobs:
     post_install:
+      # Install package with docs dependencies
       - pip install -e ".[docs]"
 
 python:
@@ -21,8 +22,14 @@ python:
 
 sphinx:
   configuration: docs/conf.py
+  # Allow warnings during build (intersphinx offline, etc.)
   fail_on_warning: false
 
 formats:
   - pdf
   - epub
+
+# Submodules (if any)
+submodules:
+  include: []
+  recursive: false
