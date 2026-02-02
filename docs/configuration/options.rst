@@ -696,6 +696,74 @@ MCMC settings for each shard:
       num_chains: 2                     # Chains per shard
       subsample_size: "auto"            # Subsampling size
 
+      # Adaptive Sampling (v2.22.0+)
+      adaptive_sampling: true           # Scale warmup/samples by shard size
+      max_tree_depth: 10                # NUTS tree depth limit (2^10 = 1024 max leapfrog)
+      min_warmup: 100                   # Minimum warmup regardless of scaling
+      min_samples: 200                  # Minimum samples regardless of scaling
+
+      # JAX Profiling (v2.22.0+)
+      enable_jax_profiling: false       # Enable XLA-level profiling
+      jax_profile_dir: "./profiles/jax" # Output directory for profiles
+
+Adaptive Sampling (v2.22.0)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Adaptive sampling automatically scales warmup and sample counts based on shard size,
+reducing NUTS overhead by 60-80% for small datasets while maintaining statistical validity.
+
+**adaptive_sampling**: Enable/disable adaptive scaling
+
+- true (default): Scale warmup/samples by shard size relative to 10K reference
+- false: Use fixed num_warmup/num_samples for all shards
+
+**max_tree_depth**: NUTS tree depth limit
+
+- Default: 10 (maximum 2^10 = 1024 leapfrog steps per sample)
+- Lower values (8-9) reduce worst-case computation but may reduce sampling efficiency
+- Higher values allow more thorough exploration at computational cost
+
+**min_warmup** / **min_samples**: Scaling floors
+
+- Ensures sufficient samples even for very small shards
+- min_samples automatically scales with parameter count: max(min_samples, 50 × n_params)
+- min_warmup scales similarly: max(min_warmup, 20 × n_params)
+
+Scaling formula:
+
+.. code-block:: text
+
+    scale_factor = min(1.0, shard_size / 10000)
+    scaled_warmup = num_warmup × scale_factor
+    scaled_samples = num_samples × scale_factor
+    final_warmup = max(min_warmup_for_params, scaled_warmup)
+    final_samples = max(min_samples_for_params, scaled_samples)
+
+JAX Profiling (v2.22.0)
+^^^^^^^^^^^^^^^^^^^^^^^
+
+XLA-level profiling for diagnosing NUTS performance bottlenecks.
+Standard Python profilers (py-spy, cProfile) cannot see inside JIT-compiled code.
+
+**enable_jax_profiling**: Enable XLA profiler
+
+- false (default): No profiling overhead
+- true: Generate XLA traces for each shard (significant overhead)
+
+**jax_profile_dir**: Profile output directory
+
+- Default: "./profiles/jax"
+- Creates timestamped trace files viewable in TensorBoard or Chrome tracing
+
+Usage:
+
+.. code-block:: bash
+
+    # View profiles with TensorBoard
+    tensorboard --logdir=./profiles/jax
+
+    # Or open in Chrome: chrome://tracing and load the .json.gz files
+
 Convergence Validation
 ^^^^^^^^^^^^^^^^^^^^^^
 

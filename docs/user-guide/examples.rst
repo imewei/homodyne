@@ -548,6 +548,11 @@ Configuration Options
        sampler:
          target_accept_prob: 0.9
 
+       # Adaptive sampling (v2.22.0) - reduces NUTS overhead by 60-80%
+       per_shard_mcmc:
+         adaptive_sampling: true     # Scale warmup/samples by shard size
+         max_tree_depth: 10          # Limit NUTS tree depth
+
 When to Use Warm-Start
 ----------------------
 

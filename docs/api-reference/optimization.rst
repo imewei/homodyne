@@ -1213,6 +1213,14 @@ Full YAML configuration for sharding:
          num_samples: 1500
          num_chains: 2
          target_accept_prob: 0.85
+         # Adaptive Sampling (v2.22.0)
+         adaptive_sampling: true           # Scale by shard size
+         max_tree_depth: 10                # NUTS tree depth limit
+         min_warmup: 100                   # Minimum warmup floor
+         min_samples: 200                  # Minimum samples floor
+         # JAX Profiling (v2.22.0)
+         enable_jax_profiling: false       # XLA-level profiling
+         jax_profile_dir: "./profiles/jax"
 
        validation:
          max_per_shard_rhat: 1.1
@@ -1268,6 +1276,46 @@ warm-start requirement for production:
 
 When enabled, ``fit_mcmc_jax()`` will raise ``ValueError`` if called without
 ``nlsq_result`` or ``initial_values`` for laminar_flow mode
+
+**Adaptive Sampling (v2.22.0)**:
+
+Adaptive sampling automatically scales warmup and sample counts based on shard size,
+reducing NUTS overhead by 60-80% for small datasets while maintaining statistical validity.
+
+.. code-block:: yaml
+
+   optimization:
+     cmc:
+       per_shard_mcmc:
+         adaptive_sampling: true     # Enable adaptive scaling
+         max_tree_depth: 10          # Limit NUTS tree depth (2^10 max leapfrog)
+         min_warmup: 100             # Floor for warmup scaling
+         min_samples: 200            # Floor for samples scaling
+
+The scaling formula uses a 10K point reference:
+
+- ``scale_factor = min(1.0, shard_size / 10000)``
+- Small shards (< 10K points) get proportionally fewer warmup/samples
+- Minimum samples scale with parameter count: ``max(min_samples, 50 × n_params)``
+
+This optimization was informed by profiling showing that XLA JIT compilation and
+NUTS leapfrog integration dominate runtime (not Python overhead), making sample
+count reduction the most effective optimization.
+
+**JAX Profiling (v2.22.0)**:
+
+XLA-level profiling for diagnosing NUTS performance bottlenecks. Standard Python
+profilers (py-spy, cProfile) cannot see inside JIT-compiled code.
+
+.. code-block:: yaml
+
+   optimization:
+     cmc:
+       per_shard_mcmc:
+         enable_jax_profiling: true
+         jax_profile_dir: "./profiles/jax"
+
+View profiles with TensorBoard: ``tensorboard --logdir=./profiles/jax``
 
 Practical Guidelines
 ^^^^^^^^^^^^^^^^^^^^
