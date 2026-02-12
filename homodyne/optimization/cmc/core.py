@@ -100,7 +100,7 @@ def _resolve_max_points_per_shard(
         Default 1 (single angle - no scaling applied).
     """
     # Minimum shard sizes to prevent data starvation (Jan 2026 fix)
-    MIN_SHARD_SIZE_LAMINAR = 10_000  # 10K minimum for laminar_flow
+    MIN_SHARD_SIZE_LAMINAR = 20_000  # 20K minimum for laminar_flow (increased for pts/param ratio)
     MIN_SHARD_SIZE_STATIC = 5_000   # 5K minimum for static
 
     if max_points_per_shard is not None and max_points_per_shard != "auto":
@@ -147,18 +147,20 @@ def _resolve_max_points_per_shard(
     # Auto-detection based on analysis mode and dataset size
     if analysis_mode == "laminar_flow":
         # Laminar flow: scale shard size with dataset to balance parallelism vs. data per shard
+        # Jan 2026 v4: Increased bases for better pts/param ratio (was 20K/25K → 30K/35K)
+        # With n_phi=3 and angle_factor=0.6: 30K*0.6=18K pts/shard, ~2250 pts/param
         if n_total >= 1_000_000_000:  # 1B+ points
-            base = 35_000  # ~28K shards at 20K final (after 0.6 angle factor)
+            base = 50_000  # ~28K shards at 30K final (after 0.6 angle factor)
         elif n_total >= 100_000_000:  # 100M+ points
-            base = 20_000  # ~5K shards at 12K final
+            base = 30_000  # ~5K shards at 18K final
         elif n_total >= 50_000_000:  # 50M+ points
-            base = 20_000  # ~2.5K shards
+            base = 30_000  # ~2.5K shards
         elif n_total >= 20_000_000:  # 20M+ points
-            base = 20_000  # ~1K shards
+            base = 30_000  # ~1K shards
         elif n_total >= 2_000_000:  # 2M+ points
-            base = 20_000  # ~150 shards
+            base = 30_000  # ~100 shards
         else:
-            base = 25_000  # Small datasets: fewer, larger shards
+            base = 35_000  # Small datasets: fewer, larger shards
     else:
         # Static mode (3 params) - simpler gradients, can handle larger shards
         if n_total >= 100_000_000:  # 100M+ points
@@ -540,9 +542,23 @@ def fit_mcmc_jax(
             )
 
     effective_per_angle_mode = config.get_effective_per_angle_mode(
-        prepared.n_phi, nlsq_per_angle_mode=nlsq_per_angle_mode
+        prepared.n_phi,
+        nlsq_per_angle_mode=nlsq_per_angle_mode,
+        has_nlsq_warmstart=(nlsq_result is not None),
     )
-    xpcs_model = get_xpcs_model(effective_per_angle_mode)
+    # Only use reparameterization for auto mode + laminar_flow (not constant_averaged)
+    # When Fix 1 is active (NLSQ warm-start → constant_averaged), the reparameterized
+    # model is NOT used because effective_per_angle_mode is "constant_averaged".
+    # Reparameterization is the fallback for runs without NLSQ warm-start.
+    use_reparam = (
+        effective_per_angle_mode == "auto"
+        and analysis_mode == "laminar_flow"
+        and (config.reparameterization_d_total or config.reparameterization_log_gamma)
+    )
+    xpcs_model = get_xpcs_model(
+        effective_per_angle_mode,
+        use_reparameterization=use_reparam,
+    )
     run_logger.info(
         f"CMC per-angle mode: {config.per_angle_mode} → {effective_per_angle_mode} "
         f"(n_phi={prepared.n_phi}, threshold={config.constant_scaling_threshold})"
@@ -704,6 +720,22 @@ def fit_mcmc_jax(
             )
             if unc_str:
                 run_logger.info(f"NLSQ uncertainties: {unc_str}")
+
+        # =====================================================================
+        # Feb 2026: Build NLSQ-informed prior config for model functions
+        # =====================================================================
+        # Store as plain dict (serializable for multiprocessing workers)
+        # Distribution objects aren't picklable, so we pass the raw values
+        # and let each model function build its own TruncatedNormal priors.
+        if config.use_nlsq_informed_priors:
+            nlsq_prior_config = {
+                "values": nlsq_values,
+                "uncertainties": nlsq_uncertainties,
+                "width_factor": config.nlsq_prior_width_factor,
+            }
+            run_logger.info(
+                f"NLSQ-informed priors: enabled (width_factor={config.nlsq_prior_width_factor})"
+            )
 
     # =========================================================================
     # 3. Determine if CMC sharding is needed
@@ -936,10 +968,35 @@ def fit_mcmc_jax(
         "noise_scale": prepared.noise_scale,
     }
 
-    # Add fixed scaling arrays for constant mode (v2.18.0+)
-    if effective_per_angle_mode == "constant" and fixed_contrast is not None:
+    # Add fixed scaling arrays for constant/constant_averaged mode (v2.18.0+)
+    if effective_per_angle_mode in ("constant", "constant_averaged") and fixed_contrast is not None:
         model_kwargs["fixed_contrast"] = fixed_contrast
         model_kwargs["fixed_offset"] = fixed_offset
+
+    # Prior tempering (Feb 2026): pass actual shard count so each shard's model
+    # uses prior^(1/K) via Normal(0, sqrt(K)) instead of Normal(0, 1).
+    # Single-shard mode (num_shards=1) produces identical behavior to untampered priors.
+    if config.prior_tempering and shards is not None:
+        model_kwargs["num_shards"] = len(shards)
+    else:
+        model_kwargs["num_shards"] = 1
+
+    # Propagate per_angle_mode for sampler and workers to build correct init dicts
+    model_kwargs["per_angle_mode"] = effective_per_angle_mode
+
+    # Add NLSQ-informed prior config if available (Feb 2026)
+    # nlsq_prior_config is built in section 2e above when both conditions hold
+    if nlsq_result is not None and config.use_nlsq_informed_priors:
+        model_kwargs["nlsq_prior_config"] = nlsq_prior_config
+
+    # Add reparameterization config when active (Feb 2026)
+    if use_reparam:
+        from homodyne.optimization.cmc.reparameterization import ReparamConfig
+
+        model_kwargs["reparam_config"] = ReparamConfig(
+            enable_d_total=config.reparameterization_d_total,
+            enable_log_gamma=config.reparameterization_log_gamma,
+        )
 
     # DEBUG: Log model_kwargs for diagnosis
     run_logger.info(
@@ -1019,6 +1076,7 @@ def fit_mcmc_jax(
             n_phi=prepared.n_phi,
             analysis_mode=analysis_mode,
             progress_bar=progress_bar,
+            per_angle_mode=effective_per_angle_mode,
         )
         stats_warmup = stats.warmup_time
         stats_total = stats.total_time

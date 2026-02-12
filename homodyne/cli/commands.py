@@ -3040,24 +3040,36 @@ def _compute_theoretical_c2_from_mcmc(
             "(fixes CMC sharding aggregation issue)"
         )
 
-    for i, phi in enumerate(phi_angles):
-        # Convert parameters to JAX arrays
-        params_jax = jnp.array(mean_params)
+    # Pre-compute angle-independent factors outside the loop
+    from homodyne.core.jax_backend import _compute_g1_total_core
 
-        # Compute UNSCALED g2_theory first (contrast=1.0, offset=0.0)
-        # This gives us the theoretical correlation shape without scaling
-        g2_theory = compute_g2_scaled(
+    params_jax = jnp.array(mean_params)
+    wavevector_q_squared_half_dt = 0.5 * (q_val**2) * dt
+    sinc_prefactor = 0.5 / jnp.pi * q_val * L * dt
+    t1_jax = jnp.array(t1)
+    t2_jax = jnp.array(t2)
+
+    for i, phi in enumerate(phi_angles):
+        # Compute g1 directly (no clipping) — avoids jnp.clip(g2, 0.5, 2.5) in
+        # _compute_g2_scaled_core which destroys off-diagonal structure when
+        # g1² < 0.5 (i.e., most of the heatmap away from the diagonal).
+        # Create 2D grid for single angle
+        t1_grid, t2_grid = jnp.meshgrid(t1_jax, t2_jax, indexing="ij")
+        t1_flat = t1_grid.ravel()
+        t2_flat = t2_grid.ravel()
+        phi_flat = jnp.full_like(t1_flat, phi)
+
+        g1_flat = _compute_g1_total_core(
             params=params_jax,
-            t1=jnp.array(t1),
-            t2=jnp.array(t2),
-            phi=jnp.array([phi]),  # Single angle as array
-            q=q_val,
-            L=L,
-            contrast=1.0,  # Unscaled
-            offset=0.0,  # Unscaled
+            t1=t1_flat,
+            t2=t2_flat,
+            phi=phi_flat,
+            wavevector_q_squared_half_dt=wavevector_q_squared_half_dt,
+            sinc_prefactor=sinc_prefactor,
             dt=dt,
         )
-        g2_theory_np = np.array(g2_theory[0])  # Shape: (n_t1, n_t2)
+        # g2 = g1^2, no clipping applied
+        g2_theory_np = np.array(g1_flat**2).reshape(len(t1), len(t2))
 
         if use_per_angle_lstsq and c2_exp is not None:
             # Per-angle least squares: c2_exp[i] = contrast_i * g2_theory + offset_i

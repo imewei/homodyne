@@ -156,7 +156,7 @@ class CMCConfig:
     max_divergence_rate: float = 0.10  # Filter shards with >10% divergence rate
 
     # Combination
-    combination_method: str = "consensus_mc"  # Correct CMC method (v2.4.3+)
+    combination_method: str = "robust_consensus_mc"  # Robust CMC with MAD outlier filtering (v2.23.0+)
     min_success_rate: float = 0.90
     run_id: str | None = None
 
@@ -169,6 +169,16 @@ class CMCConfig:
 
     # Warm-start requirements (Jan 2026)
     require_nlsq_warmstart: bool = False  # Require NLSQ warm-start for laminar_flow
+
+    # NLSQ-informed priors (Feb 2026): Use NLSQ estimates to build tighter priors
+    use_nlsq_informed_priors: bool = True  # Build TruncatedNormal priors from NLSQ
+    nlsq_prior_width_factor: float = 3.0  # Width = NLSQ_std * factor (~99.7% coverage)
+
+    # Prior tempering (Feb 2026): Scale priors by 1/K per shard (Scott et al. 2016)
+    # Without tempering, K shards each apply the full prior → combined posterior = prior^K × likelihood.
+    # With tempering, each shard uses prior^(1/K) → combined posterior = prior × likelihood (correct).
+    # For Normal(μ,σ): prior^(1/K) ∝ Normal(μ, σ√K), i.e., widen std by √num_shards.
+    prior_tempering: bool = True  # Enable prior tempering for multi-shard CMC
 
     # Heterogeneity detection (Jan 2026 v2)
     # Abort early if shard posteriors are too heterogeneous (high CV)
@@ -277,7 +287,7 @@ class CMCConfig:
             # Sampling
             num_warmup=per_shard.get("num_warmup", 500),
             num_samples=per_shard.get("num_samples", 1500),
-            num_chains=per_shard.get("num_chains", 2),
+            num_chains=per_shard.get("num_chains", 4),
             target_accept_prob=per_shard.get("target_accept_prob", 0.85),
             # Adaptive sampling (Feb 2026)
             adaptive_sampling=per_shard.get("adaptive_sampling", True),
@@ -292,7 +302,7 @@ class CMCConfig:
             min_ess=validation.get("min_per_shard_ess", 100.0),
             max_divergence_rate=validation.get("max_divergence_rate", 0.10),
             # Combination
-            combination_method=combination.get("method", "consensus_mc"),
+            combination_method=combination.get("method", "robust_consensus_mc"),
             min_success_rate=combination.get("min_success_rate", 0.90),
             run_id=config_dict.get("run_id"),
             # Timeout
@@ -302,6 +312,11 @@ class CMCConfig:
             min_success_rate_warning=combination.get("min_success_rate_warning", 0.80),
             # Warm-start requirements
             require_nlsq_warmstart=validation.get("require_nlsq_warmstart", False),
+            # NLSQ-informed priors (Feb 2026)
+            use_nlsq_informed_priors=validation.get("use_nlsq_informed_priors", True),
+            nlsq_prior_width_factor=validation.get("nlsq_prior_width_factor", 3.0),
+            # Prior tempering (Feb 2026)
+            prior_tempering=config_dict.get("prior_tempering", True),
             # Heterogeneity detection (Jan 2026 v2)
             max_parameter_cv=validation.get("max_parameter_cv", 1.0),
             heterogeneity_abort=validation.get("heterogeneity_abort", True),
@@ -487,6 +502,12 @@ class CMCConfig:
                 f"bimodal_min_separation must be in (0, 2.0], got: {self.bimodal_min_separation}"
             )
 
+        # Validate NLSQ-informed priors (Feb 2026)
+        if not (1.0 <= self.nlsq_prior_width_factor <= 10.0):
+            errors.append(
+                f"nlsq_prior_width_factor must be in [1.0, 10.0], got: {self.nlsq_prior_width_factor}"
+            )
+
         self._validation_errors = errors
         return errors
 
@@ -648,7 +669,10 @@ class CMCConfig:
         return final_warmup, final_samples
 
     def get_effective_per_angle_mode(
-        self, n_phi: int, nlsq_per_angle_mode: str | None = None
+        self,
+        n_phi: int,
+        nlsq_per_angle_mode: str | None = None,
+        has_nlsq_warmstart: bool = False,
     ) -> str:
         """Determine effective per-angle mode based on configuration and data.
 
@@ -660,6 +684,10 @@ class CMCConfig:
             Optional per-angle mode from NLSQ result. When provided (from warm-start),
             CMC will use this mode to ensure parameterization parity with NLSQ.
             This prevents CMC vs NLSQ divergence from different model structures.
+        has_nlsq_warmstart : bool
+            Whether an NLSQ warm-start result is available. When True and both
+            CMC and NLSQ use "auto" mode, upgrades to "constant_averaged" for
+            fewer sampled parameters and better stability.
 
         Returns
         -------
@@ -677,10 +705,28 @@ class CMCConfig:
         - individual: Sample per-angle contrast/offset (n_phi*2 + 7 + 1 params).
 
         Priority: nlsq_per_angle_mode > explicit config > auto-selection
+
+        When NLSQ warm-start is present and both sides use "auto", upgrades to
+        "constant_averaged" to fix scaling values and reduce parameter count.
+        This prevents contrast/offset sampling from absorbing physical parameter
+        signal, which was the root cause of heterogeneous shard posteriors.
         """
         # Jan 2026 v2: When NLSQ warm-start provides per-angle mode, match it
         # This ensures CMC and NLSQ use identical parameterizations
         if nlsq_per_angle_mode is not None:
+            # Feb 2026: When NLSQ warm-start present and both sides use "auto",
+            # upgrade to constant_averaged for fewer params and better stability
+            if (
+                has_nlsq_warmstart
+                and nlsq_per_angle_mode == "auto"
+                and self.per_angle_mode == "auto"
+            ):
+                logger.info(
+                    "CMC per-angle mode: auto -> constant_averaged "
+                    "(NLSQ warm-start present, fixing scaling for stability)"
+                )
+                return "constant_averaged"
+
             logger.info(
                 f"CMC per-angle mode: Using NLSQ warm-start mode '{nlsq_per_angle_mode}' "
                 f"for parameterization parity"
@@ -749,6 +795,8 @@ class CMCConfig:
                 "min_per_shard_ess": self.min_ess,
                 "max_divergence_rate": self.max_divergence_rate,
                 "require_nlsq_warmstart": self.require_nlsq_warmstart,
+                "use_nlsq_informed_priors": self.use_nlsq_informed_priors,
+                "nlsq_prior_width_factor": self.nlsq_prior_width_factor,
                 "max_parameter_cv": self.max_parameter_cv,
                 "heterogeneity_abort": self.heterogeneity_abort,
             },
@@ -757,6 +805,7 @@ class CMCConfig:
                 "min_success_rate": self.min_success_rate,
                 "min_success_rate_warning": self.min_success_rate_warning,
             },
+            "prior_tempering": self.prior_tempering,
             "per_shard_timeout": self.per_shard_timeout,
             "heartbeat_timeout": self.heartbeat_timeout,
             "reparameterization": {

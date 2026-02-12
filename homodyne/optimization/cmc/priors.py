@@ -652,12 +652,12 @@ def build_init_values_dict(
     # =========================================================================
     # Handle per_angle_mode: "constant", "auto", or "individual"
     # =========================================================================
-    if per_angle_mode == "constant":
-        # CONSTANT MODE: No per-angle params are sampled - they're fixed from
-        # quantile estimation and passed directly to the model.
+    if per_angle_mode in ("constant", "constant_averaged"):
+        # CONSTANT/CONSTANT_AVERAGED MODE: No per-angle params are sampled -
+        # they're fixed from quantile estimation and passed directly to the model.
         # Only physical parameters need initialization.
         logger.info(
-            f"Constant mode: contrast/offset are FIXED (not sampled). "
+            f"{per_angle_mode.upper()} mode: contrast/offset are FIXED (not sampled). "
             f"Only initializing {len(physical_params)} physical parameters."
         )
 
@@ -830,7 +830,7 @@ def get_param_names_in_order(
         # 2. Per-angle offset
         for i in range(n_phi):
             names.append(f"offset_{i}")
-    # constant mode: no contrast/offset sampled (fixed)
+    # constant/constant_averaged mode: no contrast/offset sampled (fixed)
 
     # 3. Physical parameters
     if analysis_mode == "laminar_flow":

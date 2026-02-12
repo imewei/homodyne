@@ -233,6 +233,7 @@ def sample_scaled_parameter(
     name: str,
     scaling: ParameterScaling,
     initial_z: float | None = None,
+    prior_scale: float = 1.0,
 ) -> jnp.ndarray:
     """Sample a parameter in normalized space and transform to original.
 
@@ -244,17 +245,23 @@ def sample_scaled_parameter(
         Scaling parameters.
     initial_z : float | None
         Initial value in normalized space (for initialization).
+    prior_scale : float
+        Prior tempering scale factor. For CMC with K shards, set to sqrt(K)
+        to implement prior^(1/K) tempering (Scott et al. 2016). The z-space
+        prior Normal(0, 1) becomes Normal(0, prior_scale), effectively
+        widening the prior so the combined posterior across K shards has
+        the correct single-prior contribution.
 
     Returns
     -------
     jnp.ndarray
         Parameter value in original space.
     """
-    # Sample in normalized space (unit scale)
-    # Use TruncatedNormal to softly encourage values within ~3 sigma of center
+    # Sample in normalized space
+    # prior_scale > 1.0 widens the prior for CMC prior tempering
     z = numpyro.sample(
         f"{name}_z",
-        dist.Normal(0.0, 1.0),
+        dist.Normal(0.0, prior_scale),
     )
 
     # Transform to original space with smooth bounds

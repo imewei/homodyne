@@ -12,6 +12,7 @@ Optimizations (v2.9.1):
 from __future__ import annotations
 
 import multiprocessing as mp
+import os
 import queue
 import threading
 import time
@@ -188,11 +189,17 @@ def _run_shard_worker(
     """
     import os
 
-    # Limit threads BEFORE importing JAX to enable true parallelism across workers
-    os.environ["XLA_FLAGS"] = "--xla_cpu_multi_thread_eigen=false"
+    # Configure worker threading to avoid oversubscription across workers.
+    # The parent process clears these before spawning, but we set them here
+    # as a safety net in case the spawn context inherited stale values.
     os.environ["OMP_NUM_THREADS"] = str(threads_per_worker)
     os.environ["MKL_NUM_THREADS"] = str(threads_per_worker)
     os.environ["OPENBLAS_NUM_THREADS"] = str(threads_per_worker)
+    # CRITICAL: Clear OMP_PROC_BIND and OMP_PLACES to prevent thread pinning.
+    # When set, each worker's OpenMP runtime tries to pin threads to the same
+    # physical cores, causing severe contention across concurrent workers.
+    os.environ.pop("OMP_PROC_BIND", None)
+    os.environ.pop("OMP_PLACES", None)
 
     import jax
     import jax.numpy as jnp
@@ -259,6 +266,12 @@ def _run_shard_worker(
     if shard_data.get("fixed_offset") is not None:
         model_kwargs["fixed_offset"] = shard_data["fixed_offset"]
 
+    # Restore per_angle_mode and nlsq_prior_config
+    per_angle_mode = shard_data.get("per_angle_mode", "individual")
+    model_kwargs["per_angle_mode"] = per_angle_mode
+    if shard_data.get("nlsq_prior_config") is not None:
+        model_kwargs["nlsq_prior_config"] = shard_data["nlsq_prior_config"]
+
     # Heartbeat thread to emit liveness updates back to the parent.
     # Optimization: Use Event.wait(timeout) instead of busy-wait loop.
     # This reduces wake-ups by 75% (from 4 per interval to 1).
@@ -299,6 +312,7 @@ def _run_shard_worker(
             analysis_mode=analysis_mode,
             rng_key=rng_key,
             progress_bar=False,  # Disable in worker
+            per_angle_mode=per_angle_mode,
         )
 
         duration = time.perf_counter() - start_time
@@ -472,6 +486,7 @@ class MultiprocessingBackend(CMCBackend):
                 n_phi=model_kwargs.get("n_phi", 1),
                 analysis_mode=analysis_mode,
                 progress_bar=True,
+                per_angle_mode=model_kwargs.get("per_angle_mode", "individual"),
             )
             return samples
 
@@ -527,6 +542,10 @@ class MultiprocessingBackend(CMCBackend):
                     # Propagate fixed parameters for constant mode (v2.18.0+)
                     "fixed_contrast": model_kwargs.get("fixed_contrast"),
                     "fixed_offset": model_kwargs.get("fixed_offset"),
+                    # Propagate per_angle_mode for correct init dict building
+                    "per_angle_mode": model_kwargs.get("per_angle_mode", "individual"),
+                    # Propagate NLSQ prior config for informed priors
+                    "nlsq_prior_config": model_kwargs.get("nlsq_prior_config"),
                 }
             )
 
@@ -549,6 +568,27 @@ class MultiprocessingBackend(CMCBackend):
         # Use spawn context for clean process isolation
         ctx = mp.get_context(self.spawn_method)
         result_queue = ctx.Queue()
+
+        # Temporarily adjust parent environment before spawning workers.
+        # spawn'd children inherit the parent's env at Process.start() time.
+        # configure_optimal_device() sets OMP_PROC_BIND=true and
+        # OMP_NUM_THREADS=<physical_cores> for the parent process, but workers
+        # must NOT inherit these — they cause massive thread oversubscription
+        # (e.g. 9 workers × 14 OMP threads = 126 threads on 14 cores).
+        _saved_env: dict[str, str | None] = {}
+        _worker_env_overrides = {
+            "OMP_NUM_THREADS": str(threads_per_worker),
+            "MKL_NUM_THREADS": str(threads_per_worker),
+            "OPENBLAS_NUM_THREADS": str(threads_per_worker),
+            "VECLIB_MAXIMUM_THREADS": str(threads_per_worker),
+        }
+        _worker_env_clear = ["OMP_PROC_BIND", "OMP_PLACES"]
+
+        for key in _worker_env_clear:
+            _saved_env[key] = os.environ.pop(key, None)
+        for key, val in _worker_env_overrides.items():
+            _saved_env[key] = os.environ.get(key)
+            os.environ[key] = val
 
         # Track active processes: {shard_idx: (process, start_time)}
         active_processes: dict[int, tuple[mp.Process, float]] = {}
@@ -886,6 +926,13 @@ class MultiprocessingBackend(CMCBackend):
                     process.terminate()
                     process.join(timeout=2)
 
+            # Restore parent environment after all workers are done
+            for key, val in _saved_env.items():
+                if val is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = val
+
         # Process results - collect successful samples with metadata for filtering
         successful_samples = []
         shard_metadata: list[dict] = []  # Track shard idx, divergences, total samples
@@ -1089,6 +1136,11 @@ class MultiprocessingBackend(CMCBackend):
             successful_samples,
             method=config.combination_method,
         )
+
+        # Explicitly set num_shards to surviving shard count for diagnostics.
+        # Without this, per-shard MCMCSamples reconstruction defaults num_shards=1,
+        # and the hierarchical combination may not accumulate correctly.
+        combined.num_shards = len(successful_samples)
 
         # Log summary including divergence filtering
         total_divergences = sum(m.get("num_divergent", 0) for m in shard_metadata) if shard_metadata else 0

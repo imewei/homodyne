@@ -544,6 +544,7 @@ def run_nuts_sampling(
     analysis_mode: str,
     rng_key: jax.random.PRNGKey | None = None,
     progress_bar: bool = True,
+    per_angle_mode: str = "individual",
 ) -> tuple[MCMCSamples, SamplingStats]:
     """Run NUTS sampling with configuration.
 
@@ -567,6 +568,9 @@ def run_nuts_sampling(
         Random key. If None, creates from seed.
     progress_bar : bool
         Whether to show progress bar.
+    per_angle_mode : str
+        Per-angle scaling mode: "individual", "auto", "constant", or
+        "constant_averaged". Controls which parameters are sampled vs fixed.
 
     Returns
     -------
@@ -576,7 +580,7 @@ def run_nuts_sampling(
     run_logger = with_context(logger, run=getattr(config, "run_id", None))
 
     # Get parameter names in correct order
-    param_names = get_param_names_in_order(n_phi, analysis_mode)
+    param_names = get_param_names_in_order(n_phi, analysis_mode, per_angle_mode)
     # Add sigma (noise parameter)
     param_names_with_sigma = param_names + ["sigma"]
 
@@ -633,6 +637,7 @@ def run_nuts_sampling(
         t1=t1_data,
         t2=t2_data,
         phi_indices=phi_indices,
+        per_angle_mode=per_angle_mode,
     )
 
     # =========================================================================

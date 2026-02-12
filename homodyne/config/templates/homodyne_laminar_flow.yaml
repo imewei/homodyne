@@ -620,7 +620,7 @@ optimization:
       max_divergence_rate: 0.10       # Filter shards with >10% divergences
       require_nlsq_warmstart: false   # Set true to enforce in API calls
       max_parameter_cv: 1.0           # Heterogeneity threshold
-      heterogeneity_abort: true       # Abort with guidance if CV exceeded
+      heterogeneity_abort: false      # Abort with guidance if CV exceeded
 
     # -------------------------------------------------------------------------
     # REPARAMETERIZATION (v2.21.0 / Jan 2026)

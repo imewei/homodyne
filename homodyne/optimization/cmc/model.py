@@ -16,6 +16,7 @@ Per-Angle Modes (v2.18.0+):
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 import jax.numpy as jnp
@@ -32,6 +33,7 @@ from homodyne.utils.logging import get_logger
 
 if TYPE_CHECKING:
     from homodyne.config.parameter_space import ParameterSpace
+    from homodyne.optimization.cmc.reparameterization import ReparamConfig
 
 logger = get_logger(__name__)
 
@@ -50,6 +52,7 @@ def xpcs_model(
     n_phi: int,
     time_grid: jnp.ndarray | None = None,
     noise_scale: float = 0.1,
+    **kwargs,
 ) -> None:
     """NumPyro model for XPCS two-time correlation function.
 
@@ -279,6 +282,8 @@ def xpcs_model_scaled(
     n_phi: int,
     time_grid: jnp.ndarray | None = None,
     noise_scale: float = 0.1,
+    num_shards: int = 1,
+    **kwargs,
 ) -> None:
     """NumPyro model with non-centered parameterization for gradient balancing.
 
@@ -316,16 +321,19 @@ def xpcs_model_scaled(
         Initial estimate of observation noise.
     """
     # =========================================================================
-    # 0. Compute scaling factors for all parameters
+    # 0. Compute scaling factors and prior tempering scale
     # =========================================================================
     scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+    prior_scale = math.sqrt(num_shards)
 
     # =========================================================================
     # 1. Sample per-angle CONTRAST parameters in z-space (FIRST)
     # =========================================================================
     contrasts = []
     for i in range(n_phi):
-        c_i = sample_scaled_parameter(f"contrast_{i}", scalings[f"contrast_{i}"])
+        c_i = sample_scaled_parameter(
+            f"contrast_{i}", scalings[f"contrast_{i}"], prior_scale=prior_scale
+        )
         contrasts.append(c_i)
     contrast_arr = jnp.array(contrasts)
 
@@ -334,24 +342,28 @@ def xpcs_model_scaled(
     # =========================================================================
     offsets = []
     for i in range(n_phi):
-        o_i = sample_scaled_parameter(f"offset_{i}", scalings[f"offset_{i}"])
+        o_i = sample_scaled_parameter(
+            f"offset_{i}", scalings[f"offset_{i}"], prior_scale=prior_scale
+        )
         offsets.append(o_i)
     offset_arr = jnp.array(offsets)
 
     # =========================================================================
-    # 3. Sample PHYSICAL parameters in z-space (THIRD)
+    # 3. Sample PHYSICAL parameters in z-space (THIRD, with prior tempering)
     # =========================================================================
-    D0 = sample_scaled_parameter("D0", scalings["D0"])
-    alpha = sample_scaled_parameter("alpha", scalings["alpha"])
-    D_offset = sample_scaled_parameter("D_offset", scalings["D_offset"])
+    D0 = sample_scaled_parameter("D0", scalings["D0"], prior_scale=prior_scale)
+    alpha = sample_scaled_parameter("alpha", scalings["alpha"], prior_scale=prior_scale)
+    D_offset = sample_scaled_parameter("D_offset", scalings["D_offset"], prior_scale=prior_scale)
 
     if analysis_mode == "laminar_flow":
-        gamma_dot_t0 = sample_scaled_parameter("gamma_dot_t0", scalings["gamma_dot_t0"])
-        beta = sample_scaled_parameter("beta", scalings["beta"])
-        gamma_dot_t_offset = sample_scaled_parameter(
-            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"]
+        gamma_dot_t0 = sample_scaled_parameter(
+            "gamma_dot_t0", scalings["gamma_dot_t0"], prior_scale=prior_scale
         )
-        phi0 = sample_scaled_parameter("phi0", scalings["phi0"])
+        beta = sample_scaled_parameter("beta", scalings["beta"], prior_scale=prior_scale)
+        gamma_dot_t_offset = sample_scaled_parameter(
+            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"], prior_scale=prior_scale
+        )
+        phi0 = sample_scaled_parameter("phi0", scalings["phi0"], prior_scale=prior_scale)
 
         params = jnp.array(
             [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
@@ -390,7 +402,8 @@ def xpcs_model_scaled(
     # 6. Likelihood with noise model (tighter sigma prior for precision)
     # =========================================================================
     # Jan 2026: Reduced from 3.0x to 1.5x for tighter precision
-    sigma_scale = noise_scale * 1.5
+    # Prior tempering: widen sigma prior by sqrt(K)
+    sigma_scale = noise_scale * 1.5 * prior_scale
     sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
 
     numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
@@ -412,6 +425,8 @@ def xpcs_model_constant(
     noise_scale: float = 0.1,
     fixed_contrast: jnp.ndarray | None = None,
     fixed_offset: jnp.ndarray | None = None,
+    num_shards: int = 1,
+    **kwargs,
 ) -> None:
     """NumPyro model with FIXED per-angle scaling (anti-degeneracy constant mode).
 
@@ -471,24 +486,27 @@ def xpcs_model_constant(
     offset_arr = fixed_offset
 
     # =========================================================================
-    # 1. Compute scaling factors for PHYSICAL parameters only
+    # 1. Compute scaling factors and prior tempering scale
     # =========================================================================
     scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+    prior_scale = math.sqrt(num_shards)
 
     # =========================================================================
-    # 2. Sample PHYSICAL parameters in z-space
+    # 2. Sample PHYSICAL parameters in z-space (with prior tempering)
     # =========================================================================
-    D0 = sample_scaled_parameter("D0", scalings["D0"])
-    alpha = sample_scaled_parameter("alpha", scalings["alpha"])
-    D_offset = sample_scaled_parameter("D_offset", scalings["D_offset"])
+    D0 = sample_scaled_parameter("D0", scalings["D0"], prior_scale=prior_scale)
+    alpha = sample_scaled_parameter("alpha", scalings["alpha"], prior_scale=prior_scale)
+    D_offset = sample_scaled_parameter("D_offset", scalings["D_offset"], prior_scale=prior_scale)
 
     if analysis_mode == "laminar_flow":
-        gamma_dot_t0 = sample_scaled_parameter("gamma_dot_t0", scalings["gamma_dot_t0"])
-        beta = sample_scaled_parameter("beta", scalings["beta"])
-        gamma_dot_t_offset = sample_scaled_parameter(
-            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"]
+        gamma_dot_t0 = sample_scaled_parameter(
+            "gamma_dot_t0", scalings["gamma_dot_t0"], prior_scale=prior_scale
         )
-        phi0 = sample_scaled_parameter("phi0", scalings["phi0"])
+        beta = sample_scaled_parameter("beta", scalings["beta"], prior_scale=prior_scale)
+        gamma_dot_t_offset = sample_scaled_parameter(
+            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"], prior_scale=prior_scale
+        )
+        phi0 = sample_scaled_parameter("phi0", scalings["phi0"], prior_scale=prior_scale)
 
         params = jnp.array(
             [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
@@ -526,9 +544,8 @@ def xpcs_model_constant(
     # =========================================================================
     # 5. Likelihood with noise model (tighter sigma prior for precision)
     # =========================================================================
-    # Jan 2026: Reduced from 3.0x to 1.5x to prevent sigma from absorbing
-    # systematic errors and inflating uncertainty estimates
-    sigma_scale = noise_scale * 1.5
+    # Prior tempering: widen sigma prior by sqrt(K)
+    sigma_scale = noise_scale * 1.5 * prior_scale
     sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
 
     numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
@@ -550,6 +567,9 @@ def xpcs_model_averaged(
     noise_scale: float = 0.1,
     fixed_contrast: jnp.ndarray | None = None,
     fixed_offset: jnp.ndarray | None = None,
+    nlsq_prior_config: dict | None = None,
+    num_shards: int = 1,
+    **kwargs,
 ) -> None:
     """NumPyro model with SAMPLED averaged per-angle scaling (auto mode).
 
@@ -592,16 +612,25 @@ def xpcs_model_averaged(
         Ignored in this model. Present for API compatibility.
     """
     # =========================================================================
-    # 0. Compute scaling factors
+    # 0. Compute scaling factors and prior tempering scale
     # =========================================================================
     scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+
+    # Prior tempering (Scott et al. 2016): widen priors by sqrt(K) so that
+    # the combined posterior across K shards has exactly one prior contribution.
+    # num_shards=1 → prior_scale=1.0 (no tempering, single-shard behavior).
+    prior_scale = math.sqrt(num_shards)
 
     # =========================================================================
     # 1. Sample SINGLE averaged contrast and offset (SAMPLED, not fixed)
     # =========================================================================
     # Use contrast_0 and offset_0 scaling as representative for the averaged values
-    contrast = sample_scaled_parameter("contrast", scalings["contrast_0"])
-    offset = sample_scaled_parameter("offset", scalings["offset_0"])
+    contrast = sample_scaled_parameter(
+        "contrast", scalings["contrast_0"], prior_scale=prior_scale
+    )
+    offset = sample_scaled_parameter(
+        "offset", scalings["offset_0"], prior_scale=prior_scale
+    )
 
     # Broadcast to all angles
     contrast_arr = jnp.full(n_phi, contrast)
@@ -609,18 +638,44 @@ def xpcs_model_averaged(
 
     # =========================================================================
     # 2. Sample PHYSICAL parameters in z-space
+    #    When NLSQ-informed priors are available, use TruncatedNormal centered
+    #    on NLSQ estimates instead of the default scaled Normal priors.
+    #    Prior tempering is applied via width_factor scaling for NLSQ priors,
+    #    or via prior_scale for z-space priors.
     # =========================================================================
-    D0 = sample_scaled_parameter("D0", scalings["D0"])
-    alpha = sample_scaled_parameter("alpha", scalings["alpha"])
-    D_offset = sample_scaled_parameter("D_offset", scalings["D_offset"])
+    def _sample_param(name: str) -> jnp.ndarray:
+        """Sample a parameter, using NLSQ-informed prior if available."""
+        if (
+            nlsq_prior_config is not None
+            and name in nlsq_prior_config.get("values", {})
+        ):
+            from homodyne.optimization.cmc.priors import build_nlsq_informed_prior
+
+            # Apply prior tempering: scale width_factor by sqrt(K)
+            base_width = nlsq_prior_config.get("width_factor", 3.0)
+            tempered_width = base_width * prior_scale
+
+            prior = build_nlsq_informed_prior(
+                param_name=name,
+                nlsq_value=nlsq_prior_config["values"][name],
+                nlsq_std=nlsq_prior_config.get("uncertainties", {}).get(name)
+                if nlsq_prior_config.get("uncertainties")
+                else None,
+                bounds=parameter_space.get_bounds(name),
+                width_factor=tempered_width,
+            )
+            return numpyro.sample(name, prior)
+        return sample_scaled_parameter(name, scalings[name], prior_scale=prior_scale)
+
+    D0 = _sample_param("D0")
+    alpha = _sample_param("alpha")
+    D_offset = _sample_param("D_offset")
 
     if analysis_mode == "laminar_flow":
-        gamma_dot_t0 = sample_scaled_parameter("gamma_dot_t0", scalings["gamma_dot_t0"])
-        beta = sample_scaled_parameter("beta", scalings["beta"])
-        gamma_dot_t_offset = sample_scaled_parameter(
-            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"]
-        )
-        phi0 = sample_scaled_parameter("phi0", scalings["phi0"])
+        gamma_dot_t0 = _sample_param("gamma_dot_t0")
+        beta = _sample_param("beta")
+        gamma_dot_t_offset = _sample_param("gamma_dot_t_offset")
+        phi0 = _sample_param("phi0")
 
         params = jnp.array(
             [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
@@ -658,7 +713,8 @@ def xpcs_model_averaged(
     # =========================================================================
     # Jan 2026: Reduced from 3.0x to 1.5x to prevent sigma from absorbing
     # systematic errors and inflating uncertainty estimates
-    sigma_scale = noise_scale * 1.5
+    # Prior tempering: widen sigma prior by sqrt(K)
+    sigma_scale = noise_scale * 1.5 * prior_scale
     sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
 
     numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
@@ -680,6 +736,9 @@ def xpcs_model_constant_averaged(
     noise_scale: float = 0.1,
     fixed_contrast: jnp.ndarray | None = None,
     fixed_offset: jnp.ndarray | None = None,
+    nlsq_prior_config: dict | None = None,
+    num_shards: int = 1,
+    **kwargs,
 ) -> None:
     """NumPyro model with FIXED averaged per-angle scaling (NLSQ parity mode).
 
@@ -747,24 +806,49 @@ def xpcs_model_constant_averaged(
     numpyro.deterministic("fixed_offset_mean", avg_offset)
 
     # =========================================================================
-    # 1. Compute scaling factors for PHYSICAL parameters only
+    # 1. Compute scaling factors and prior tempering scale
     # =========================================================================
     scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+    prior_scale = math.sqrt(num_shards)
 
     # =========================================================================
     # 2. Sample PHYSICAL parameters in z-space (8 params total: 7 physical + sigma)
+    #    When NLSQ-informed priors are available, use TruncatedNormal centered
+    #    on NLSQ estimates instead of the default scaled Normal priors.
+    #    Prior tempering applied via width_factor or prior_scale.
     # =========================================================================
-    D0 = sample_scaled_parameter("D0", scalings["D0"])
-    alpha = sample_scaled_parameter("alpha", scalings["alpha"])
-    D_offset = sample_scaled_parameter("D_offset", scalings["D_offset"])
+    def _sample_param(name: str) -> jnp.ndarray:
+        """Sample a parameter, using NLSQ-informed prior if available."""
+        if (
+            nlsq_prior_config is not None
+            and name in nlsq_prior_config.get("values", {})
+        ):
+            from homodyne.optimization.cmc.priors import build_nlsq_informed_prior
+
+            base_width = nlsq_prior_config.get("width_factor", 3.0)
+            tempered_width = base_width * prior_scale
+
+            prior = build_nlsq_informed_prior(
+                param_name=name,
+                nlsq_value=nlsq_prior_config["values"][name],
+                nlsq_std=nlsq_prior_config.get("uncertainties", {}).get(name)
+                if nlsq_prior_config.get("uncertainties")
+                else None,
+                bounds=parameter_space.get_bounds(name),
+                width_factor=tempered_width,
+            )
+            return numpyro.sample(name, prior)
+        return sample_scaled_parameter(name, scalings[name], prior_scale=prior_scale)
+
+    D0 = _sample_param("D0")
+    alpha = _sample_param("alpha")
+    D_offset = _sample_param("D_offset")
 
     if analysis_mode == "laminar_flow":
-        gamma_dot_t0 = sample_scaled_parameter("gamma_dot_t0", scalings["gamma_dot_t0"])
-        beta = sample_scaled_parameter("beta", scalings["beta"])
-        gamma_dot_t_offset = sample_scaled_parameter(
-            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"]
-        )
-        phi0 = sample_scaled_parameter("phi0", scalings["phi0"])
+        gamma_dot_t0 = _sample_param("gamma_dot_t0")
+        beta = _sample_param("beta")
+        gamma_dot_t_offset = _sample_param("gamma_dot_t_offset")
+        phi0 = _sample_param("phi0")
 
         params = jnp.array(
             [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
@@ -801,7 +885,8 @@ def xpcs_model_constant_averaged(
     # 5. Likelihood with noise model (tighter sigma prior for precision)
     # =========================================================================
     # Jan 2026: Use tighter sigma prior (1.5x vs 3.0x noise_scale) for better precision
-    sigma_scale = noise_scale * 1.5
+    # Prior tempering: widen sigma prior by sqrt(K)
+    sigma_scale = noise_scale * 1.5 * prior_scale
     sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
 
     numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
@@ -823,7 +908,10 @@ def xpcs_model_reparameterized(
     noise_scale: float = 0.1,
     fixed_contrast: jnp.ndarray | None = None,
     fixed_offset: jnp.ndarray | None = None,
-    reparam_config: "ReparamConfig | None" = None,
+    reparam_config: ReparamConfig | None = None,
+    nlsq_prior_config: dict | None = None,
+    num_shards: int = 1,
+    **kwargs,
 ) -> None:
     """NumPyro model with reparameterized sampling space.
 
@@ -846,34 +934,42 @@ def xpcs_model_reparameterized(
         reparam_config = ReparamConfig()
 
     # =========================================================================
-    # 0. Compute scaling factors
+    # 0. Compute scaling factors and prior tempering scale
     # =========================================================================
     scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+    prior_scale = math.sqrt(num_shards)
 
     # =========================================================================
     # 1. Sample SINGLE averaged contrast and offset (same as auto mode)
     # =========================================================================
-    contrast = sample_scaled_parameter("contrast", scalings["contrast_0"])
-    offset = sample_scaled_parameter("offset", scalings["offset_0"])
+    contrast = sample_scaled_parameter(
+        "contrast", scalings["contrast_0"], prior_scale=prior_scale
+    )
+    offset = sample_scaled_parameter(
+        "offset", scalings["offset_0"], prior_scale=prior_scale
+    )
 
     contrast_arr = jnp.full(n_phi, contrast)
     offset_arr = jnp.full(n_phi, offset)
 
     # =========================================================================
-    # 2. Sample REPARAMETERIZED physical parameters
+    # 2. Sample REPARAMETERIZED physical parameters (with prior tempering)
     # =========================================================================
     # Always sample alpha (not reparameterized)
-    alpha = sample_scaled_parameter("alpha", scalings["alpha"])
+    alpha = sample_scaled_parameter("alpha", scalings["alpha"], prior_scale=prior_scale)
 
     if reparam_config.enable_d_total:
         # Sample D_total and D_offset_frac instead of D0 and D_offset
-        # D_total = D0 + D_offset, so use D0 scaling as base for D_total
-        D_total = sample_scaled_parameter("D_total", scalings["D0"])
+        D_total = sample_scaled_parameter(
+            "D_total", scalings["D0"], prior_scale=prior_scale
+        )
 
-        # D_offset_frac in [0, 0.5] - offset is typically small fraction of total
+        # D_offset_frac in [0, 0.5] - prior tempering applied
         D_offset_frac = numpyro.sample(
             "D_offset_frac",
-            dist.TruncatedNormal(loc=0.05, scale=0.1, low=0.0, high=0.5),
+            dist.TruncatedNormal(
+                loc=0.05, scale=0.1 * prior_scale, low=0.0, high=0.5
+            ),
         )
 
         # Compute physics parameters as deterministic
@@ -881,30 +977,31 @@ def xpcs_model_reparameterized(
         D_offset = numpyro.deterministic("D_offset", D_total * D_offset_frac)
     else:
         # Standard sampling
-        D0 = sample_scaled_parameter("D0", scalings["D0"])
-        D_offset = sample_scaled_parameter("D_offset", scalings["D_offset"])
+        D0 = sample_scaled_parameter("D0", scalings["D0"], prior_scale=prior_scale)
+        D_offset = sample_scaled_parameter(
+            "D_offset", scalings["D_offset"], prior_scale=prior_scale
+        )
 
     if analysis_mode == "laminar_flow":
         if reparam_config.enable_log_gamma:
-            # Sample log(gamma_dot_t0) for better conditioning
-            # gamma_dot_t0 typically in [1e-4, 1e-1], so log in [-9, -2]
+            # Sample log(gamma_dot_t0) - prior tempering applied
             log_gamma_dot_t0 = numpyro.sample(
                 "log_gamma_dot_t0",
-                dist.Normal(loc=-5.0, scale=2.0),  # Centered around ~0.007
+                dist.Normal(loc=-5.0, scale=2.0 * prior_scale),
             )
             gamma_dot_t0 = numpyro.deterministic(
                 "gamma_dot_t0", jnp.exp(log_gamma_dot_t0)
             )
         else:
             gamma_dot_t0 = sample_scaled_parameter(
-                "gamma_dot_t0", scalings["gamma_dot_t0"]
+                "gamma_dot_t0", scalings["gamma_dot_t0"], prior_scale=prior_scale
             )
 
-        beta = sample_scaled_parameter("beta", scalings["beta"])
+        beta = sample_scaled_parameter("beta", scalings["beta"], prior_scale=prior_scale)
         gamma_dot_t_offset = sample_scaled_parameter(
-            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"]
+            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"], prior_scale=prior_scale
         )
-        phi0 = sample_scaled_parameter("phi0", scalings["phi0"])
+        phi0 = sample_scaled_parameter("phi0", scalings["phi0"], prior_scale=prior_scale)
 
         params = jnp.array(
             [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
@@ -938,9 +1035,9 @@ def xpcs_model_reparameterized(
     c2_theory = offset_per_point + contrast_per_point * g1**2
 
     # =========================================================================
-    # 5. Likelihood with noise model
+    # 5. Likelihood with noise model (with prior tempering)
     # =========================================================================
-    sigma_scale = noise_scale * 1.5
+    sigma_scale = noise_scale * 1.5 * prior_scale
     sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
 
     numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
