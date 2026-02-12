@@ -59,10 +59,6 @@ warnings.filterwarnings(
 # This MUST be set before JAX/XLA is initialized (import time)
 # Default: 4 devices for parallel MCMC, can be overridden by user
 
-# DEBUG: Print XLA_FLAGS state BEFORE modification
-_xla_flags_before = os.environ.get("XLA_FLAGS", "NOT SET")
-print(f"[DEBUG __init__.py] XLA_FLAGS BEFORE: {_xla_flags_before}", file=sys.stderr)
-
 # Default XLA flags for homodyne:
 # - xla_force_host_platform_device_count=4: Enable parallel MCMC chains
 # - xla_disable_hlo_passes=constant_folding: Prevent slow compilation warnings
@@ -78,11 +74,8 @@ _DEFAULT_XLA_FLAGS = [
 if "XLA_FLAGS" not in os.environ:
     # No existing XLA_FLAGS, set defaults
     os.environ["XLA_FLAGS"] = " ".join(_DEFAULT_XLA_FLAGS)
-    print(
-        "[DEBUG __init__.py] XLA_FLAGS was NOT SET, setting to default", file=sys.stderr
-    )
 else:
-    # XLA_FLAGS exists, append missing flags
+    # XLA_FLAGS exists, append any missing default flags
     existing = os.environ["XLA_FLAGS"]
     flags_to_add = []
     for flag in _DEFAULT_XLA_FLAGS:
@@ -91,19 +84,6 @@ else:
             flags_to_add.append(flag)
     if flags_to_add:
         os.environ["XLA_FLAGS"] += " " + " ".join(flags_to_add)
-        print(
-            f"[DEBUG __init__.py] XLA_FLAGS exists, appending: {flags_to_add}",
-            file=sys.stderr,
-        )
-    else:
-        print(
-            "[DEBUG __init__.py] XLA_FLAGS already has all required flags",
-            file=sys.stderr,
-        )
-
-# DEBUG: Print XLA_FLAGS state AFTER modification
-_xla_flags_after = os.environ.get("XLA_FLAGS", "NOT SET")
-print(f"[DEBUG __init__.py] XLA_FLAGS AFTER: {_xla_flags_after}", file=sys.stderr)
 
 # Suppress NLSQ GPU warnings (v2.3.0 is CPU-only)
 os.environ.setdefault("NLSQ_SKIP_GPU_CHECK", "1")
@@ -196,16 +176,8 @@ try:
     import jax
 
     __features__["jax_acceleration"] = True
-
-    # DEBUG: Check how many devices JAX detected
-    print("[DEBUG __init__.py] JAX imported successfully", file=sys.stderr)
-    print(
-        f"[DEBUG __init__.py] JAX device count: {jax.device_count()}", file=sys.stderr
-    )
-    print(f"[DEBUG __init__.py] JAX devices: {jax.devices()}", file=sys.stderr)
 except ImportError:
     __features__["jax_acceleration"] = False
-    print("[DEBUG __init__.py] JAX import failed", file=sys.stderr)
 
 # Main exports (only available components)
 __all__ = ["__version__", "__features__", "get_package_info"]

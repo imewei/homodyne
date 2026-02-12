@@ -322,8 +322,17 @@ def _configure_jax_cpu(
         else:
             jax_config["onednn"] = "disabled"
 
-        # Set the combined XLA flags
-        os.environ["XLA_FLAGS"] = " ".join(xla_flags)
+        # Merge CPU-specific XLA flags into existing flags (preserving
+        # device_count and other flags set by homodyne/__init__.py).
+        # CRITICAL: Do NOT overwrite — __init__.py sets
+        # --xla_force_host_platform_device_count and
+        # --xla_disable_hlo_passes which must be preserved.
+        existing_flags = os.environ.get("XLA_FLAGS", "")
+        for flag in xla_flags:
+            flag_name = flag.split("=")[0]
+            if flag_name not in existing_flags:
+                existing_flags = existing_flags + " " + flag
+        os.environ["XLA_FLAGS"] = existing_flags.strip()
 
         # Memory optimization
         jax.config.update("jax_default_device", jax.devices("cpu")[0])
