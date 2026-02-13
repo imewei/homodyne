@@ -493,8 +493,8 @@ class TestModelPhysics:
 class TestReparameterizedModel:
     """Tests for xpcs_model_reparameterized."""
 
-    def test_model_samples_d_total_not_d0(self, mock_parameter_space_laminar):
-        """Reparameterized model samples D_total instead of D0."""
+    def test_model_samples_d_ref_not_d0(self, mock_parameter_space_laminar):
+        """Reparameterized model samples log_D_ref instead of D0."""
         import numpyro
 
         from homodyne.optimization.cmc.model import xpcs_model_reparameterized
@@ -508,7 +508,7 @@ class TestReparameterizedModel:
         phi_unique = jnp.array([0.0, 0.5, 1.0])
         phi_indices = jnp.zeros(n_points, dtype=jnp.int32)
 
-        config = ReparamConfig(enable_d_total=True, enable_log_gamma=True)
+        config = ReparamConfig(enable_d_ref=True, enable_gamma_ref=True)
 
         # Trace the model to see what's sampled
         with numpyro.handlers.seed(rng_seed=0):
@@ -533,15 +533,15 @@ class TestReparameterizedModel:
             k for k, v in trace.items() if v.get("type") == "deterministic"
         ]
 
-        # Should sample D_total_z (z-space scaled), not D0_z
-        assert "D_total_z" in sampled_params
+        # Should sample log_D_ref (reference-time reparam), not D0_z
+        assert "log_D_ref" in sampled_params
         assert "D0_z" not in sampled_params
 
-        # D0 should be deterministic (computed from D_total and D_offset_frac)
+        # D0 should be deterministic (computed from D_ref and t_ref)
         assert "D0" in deterministic_params
 
-        # Should sample log_gamma_dot_t0, not gamma_dot_t0_z
-        assert "log_gamma_dot_t0" in sampled_params
+        # Should sample log_gamma_ref, not gamma_dot_t0_z
+        assert "log_gamma_ref" in sampled_params
         assert "gamma_dot_t0_z" not in sampled_params
 
         # gamma_dot_t0 should be deterministic
@@ -561,7 +561,8 @@ class TestReparameterizedModel:
         phi_unique = jnp.array([0.0])
         phi_indices = jnp.zeros(n_points, dtype=jnp.int32)
 
-        config = ReparamConfig(enable_d_total=True, enable_log_gamma=True)
+        t_ref = 3.16
+        config = ReparamConfig(enable_d_ref=True, enable_gamma_ref=True, t_ref=t_ref)
 
         with numpyro.handlers.seed(rng_seed=42):
             with numpyro.handlers.trace() as trace:
@@ -578,22 +579,26 @@ class TestReparameterizedModel:
                     parameter_space=mock_parameter_space_laminar,
                     n_phi=1,
                     reparam_config=config,
+                    t_ref=t_ref,
                 )
 
         # Get sampled values
-        D_total = float(trace["D_total"]["value"])
+        log_D_ref = float(trace["log_D_ref"]["value"])
         D_offset_frac = float(trace["D_offset_frac"]["value"])
-        log_gamma = float(trace["log_gamma_dot_t0"]["value"])
+        alpha = float(trace["alpha"]["value"])
+        log_gamma_ref = float(trace["log_gamma_ref"]["value"])
+        beta = float(trace["beta"]["value"])
 
         # Get deterministic values
         D0 = float(trace["D0"]["value"])
         D_offset = float(trace["D_offset"]["value"])
         gamma_dot_t0 = float(trace["gamma_dot_t0"]["value"])
 
-        # Verify transforms are correct
-        expected_D0 = D_total * (1 - D_offset_frac)
-        expected_D_offset = D_total * D_offset_frac
-        expected_gamma = np.exp(log_gamma)
+        # Verify D_ref transforms: D0 = D_ref * t_ref^(-alpha)
+        D_ref = np.exp(log_D_ref)
+        expected_D0 = D_ref * t_ref ** (-alpha)
+        expected_D_offset = D_ref * D_offset_frac / max(1 - D_offset_frac, 1e-10)
+        expected_gamma = np.exp(log_gamma_ref) * t_ref ** (-beta)
 
         np.testing.assert_allclose(D0, expected_D0, rtol=1e-5)
         np.testing.assert_allclose(D_offset, expected_D_offset, rtol=1e-5)

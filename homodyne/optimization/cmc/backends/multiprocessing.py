@@ -266,11 +266,25 @@ def _run_shard_worker(
     if shard_data.get("fixed_offset") is not None:
         model_kwargs["fixed_offset"] = shard_data["fixed_offset"]
 
-    # Restore per_angle_mode and nlsq_prior_config
+    # Restore per_angle_mode, nlsq_prior_config, and propagated kwargs
     per_angle_mode = shard_data.get("per_angle_mode", "individual")
     model_kwargs["per_angle_mode"] = per_angle_mode
     if shard_data.get("nlsq_prior_config") is not None:
         model_kwargs["nlsq_prior_config"] = shard_data["nlsq_prior_config"]
+
+    # Restore num_shards for prior tempering (Feb 2026 fix)
+    if shard_data.get("num_shards") is not None:
+        model_kwargs["num_shards"] = shard_data["num_shards"]
+
+    # Restore reparam_config from serialized dict (Feb 2026 fix)
+    if shard_data.get("reparam_config_dict") is not None:
+        from homodyne.optimization.cmc.reparameterization import ReparamConfig
+
+        model_kwargs["reparam_config"] = ReparamConfig(**shard_data["reparam_config_dict"])
+
+    # Restore t_ref for reference-time reparameterization
+    if shard_data.get("t_ref") is not None:
+        model_kwargs["t_ref"] = shard_data["t_ref"]
 
     # Heartbeat thread to emit liveness updates back to the parent.
     # Optimization: Use Event.wait(timeout) instead of busy-wait loop.
@@ -546,6 +560,20 @@ class MultiprocessingBackend(CMCBackend):
                     "per_angle_mode": model_kwargs.get("per_angle_mode", "individual"),
                     # Propagate NLSQ prior config for informed priors
                     "nlsq_prior_config": model_kwargs.get("nlsq_prior_config"),
+                    # Propagate num_shards for prior tempering (Feb 2026 fix)
+                    "num_shards": model_kwargs.get("num_shards", 1),
+                    # Propagate t_ref for reference-time reparameterization
+                    "t_ref": model_kwargs.get("t_ref"),
+                    # Serialize reparam_config as dict for pickling
+                    "reparam_config_dict": (
+                        {
+                            "enable_d_ref": model_kwargs["reparam_config"].enable_d_ref,
+                            "enable_gamma_ref": model_kwargs["reparam_config"].enable_gamma_ref,
+                            "t_ref": model_kwargs["reparam_config"].t_ref,
+                        }
+                        if model_kwargs.get("reparam_config") is not None
+                        else None
+                    ),
                 }
             )
 

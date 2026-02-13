@@ -29,6 +29,7 @@ from homodyne.optimization.cmc.diagnostics import (
     summarize_diagnostics,
 )
 from homodyne.optimization.cmc.model import get_xpcs_model
+from homodyne.optimization.cmc.reparameterization import compute_t_ref
 from homodyne.optimization.cmc.priors import get_param_names_in_order
 from homodyne.optimization.cmc.results import CMCResult
 from homodyne.optimization.cmc.sampler import run_nuts_sampling
@@ -100,7 +101,7 @@ def _resolve_max_points_per_shard(
         Default 1 (single angle - no scaling applied).
     """
     # Minimum shard sizes to prevent data starvation (Jan 2026 fix)
-    MIN_SHARD_SIZE_LAMINAR = 20_000  # 20K minimum for laminar_flow (increased for pts/param ratio)
+    MIN_SHARD_SIZE_LAMINAR = 3_000  # Reduced: reparameterization fixes bimodal posteriors
     MIN_SHARD_SIZE_STATIC = 5_000   # 5K minimum for static
 
     if max_points_per_shard is not None and max_points_per_shard != "auto":
@@ -147,20 +148,21 @@ def _resolve_max_points_per_shard(
     # Auto-detection based on analysis mode and dataset size
     if analysis_mode == "laminar_flow":
         # Laminar flow: scale shard size with dataset to balance parallelism vs. data per shard
-        # Jan 2026 v4: Increased bases for better pts/param ratio (was 20K/25K → 30K/35K)
-        # With n_phi=3 and angle_factor=0.6: 30K*0.6=18K pts/shard, ~2250 pts/param
+        # Feb 2026: Reduced from 30K-50K to 5K-10K. Reparameterization (D_ref, gamma_ref)
+        # fixes bimodal posteriors, so shards no longer need 20K+ points per mode.
+        # Adaptive sampling + prior tempering handle small shards correctly.
         if n_total >= 1_000_000_000:  # 1B+ points
-            base = 50_000  # ~28K shards at 30K final (after 0.6 angle factor)
+            base = 10_000  # Large datasets: moderate shards for combination overhead
         elif n_total >= 100_000_000:  # 100M+ points
-            base = 30_000  # ~5K shards at 18K final
+            base = 8_000
         elif n_total >= 50_000_000:  # 50M+ points
-            base = 30_000  # ~2.5K shards
+            base = 5_000
         elif n_total >= 20_000_000:  # 20M+ points
-            base = 30_000  # ~1K shards
+            base = 5_000
         elif n_total >= 2_000_000:  # 2M+ points
-            base = 30_000  # ~100 shards
+            base = 5_000
         else:
-            base = 35_000  # Small datasets: fewer, larger shards
+            base = 8_000  # Small datasets: fewer, larger shards
     else:
         # Static mode (3 params) - simpler gradients, can handle larger shards
         if n_total >= 100_000_000:  # 100M+ points
@@ -728,14 +730,28 @@ def fit_mcmc_jax(
         # Distribution objects aren't picklable, so we pass the raw values
         # and let each model function build its own TruncatedNormal priors.
         if config.use_nlsq_informed_priors:
+            # Transform NLSQ values to reparameterized space for log_D_ref/log_gamma_ref priors
+            from homodyne.optimization.cmc.reparameterization import transform_nlsq_to_reparam_space
+
+            reparam_vals, reparam_uncs = transform_nlsq_to_reparam_space(
+                nlsq_values, nlsq_uncertainties, t_ref
+            )
+
             nlsq_prior_config = {
                 "values": nlsq_values,
                 "uncertainties": nlsq_uncertainties,
                 "width_factor": config.nlsq_prior_width_factor,
+                "reparam_values": reparam_vals,
+                "reparam_uncertainties": reparam_uncs,
             }
             run_logger.info(
                 f"NLSQ-informed priors: enabled (width_factor={config.nlsq_prior_width_factor})"
             )
+            if reparam_vals:
+                run_logger.info(
+                    f"NLSQ reparam values: "
+                    + ", ".join(f"{k}={v:.4g}" for k, v in reparam_vals.items())
+                )
 
     # =========================================================================
     # 3. Determine if CMC sharding is needed
@@ -933,6 +949,12 @@ def fit_mcmc_jax(
     time_grid_np = np.linspace(t_min, t_max, n_time_points)
     time_grid = jnp.array(time_grid_np)
 
+    # Compute reference time for reparameterization (geometric mean of time range)
+    t_ref = compute_t_ref(dt_used, t_max)
+    run_logger.info(
+        f"[CMC] Reference time: t_ref={t_ref:.6g}s (sqrt({dt_used:.6g} * {t_max:.6g}))"
+    )
+
     # Log time_grid construction details
     run_logger.info(
         f"[CMC] time_grid constructed with dt={dt_used:.6g}s: "
@@ -989,14 +1011,16 @@ def fit_mcmc_jax(
     if nlsq_result is not None and config.use_nlsq_informed_priors:
         model_kwargs["nlsq_prior_config"] = nlsq_prior_config
 
-    # Add reparameterization config when active (Feb 2026)
+    # Add reparameterization config and t_ref when active (Feb 2026)
     if use_reparam:
         from homodyne.optimization.cmc.reparameterization import ReparamConfig
 
         model_kwargs["reparam_config"] = ReparamConfig(
-            enable_d_total=config.reparameterization_d_total,
-            enable_log_gamma=config.reparameterization_log_gamma,
+            enable_d_ref=config.reparameterization_d_total,
+            enable_gamma_ref=config.reparameterization_log_gamma,
+            t_ref=t_ref,
         )
+        model_kwargs["t_ref"] = t_ref
 
     # DEBUG: Log model_kwargs for diagnosis
     run_logger.info(

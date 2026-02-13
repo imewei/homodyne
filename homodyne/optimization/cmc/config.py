@@ -172,7 +172,7 @@ class CMCConfig:
 
     # NLSQ-informed priors (Feb 2026): Use NLSQ estimates to build tighter priors
     use_nlsq_informed_priors: bool = True  # Build TruncatedNormal priors from NLSQ
-    nlsq_prior_width_factor: float = 3.0  # Width = NLSQ_std * factor (~99.7% coverage)
+    nlsq_prior_width_factor: float = 2.0  # Width = NLSQ_std * factor (~95.4% coverage)
 
     # Prior tempering (Feb 2026): Scale priors by 1/K per shard (Scott et al. 2016)
     # Without tempering, K shards each apply the full prior → combined posterior = prior^K × likelihood.
@@ -314,7 +314,7 @@ class CMCConfig:
             require_nlsq_warmstart=validation.get("require_nlsq_warmstart", False),
             # NLSQ-informed priors (Feb 2026)
             use_nlsq_informed_priors=validation.get("use_nlsq_informed_priors", True),
-            nlsq_prior_width_factor=validation.get("nlsq_prior_width_factor", 3.0),
+            nlsq_prior_width_factor=validation.get("nlsq_prior_width_factor", 2.0),
             # Prior tempering (Feb 2026)
             prior_tempering=config_dict.get("prior_tempering", True),
             # Heterogeneity detection (Jan 2026 v2)
@@ -398,11 +398,12 @@ class CMCConfig:
         # Warn about small max_points_per_shard (creates excessive shards)
         if (
             isinstance(self.max_points_per_shard, int)
-            and self.max_points_per_shard < 10000
+            and self.max_points_per_shard < 3000
         ):
             logger.warning(
                 f"max_points_per_shard={self.max_points_per_shard:,} is very small. "
-                "This will create many shards with high overhead. Recommended: 50000-100000."
+                "This will create many shards with high overhead. "
+                "Recommended: 3000-10000 for laminar_flow, 50000-100000 for static."
             )
 
         # Validate backend_name (allow legacy 'jax' but normalize earlier)

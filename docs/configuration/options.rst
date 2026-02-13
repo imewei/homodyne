@@ -620,7 +620,7 @@ Data sharding for parallel subposterior computation:
 
 **max_points_per_shard**: Points per shard
 
-- "auto": 10,000-100,000 typically
+- "auto": 3,000-100,000 typically (3K-10K for laminar_flow, 50K-100K for static)
 - Larger = faster inference, fewer shards
 
 Initial Values Configuration

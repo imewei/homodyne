@@ -209,7 +209,7 @@ def fit_mcmc_jax(
 ### Critical Design Principles (v2.20.0)
 
 **Minimum Shard Size Enforcement:**
-- **laminar_flow**: 10,000 points minimum (prevents data-starved shards)
+- **laminar_flow**: 3,000 points minimum (reparameterization fixes bimodal posteriors)
 - **static**: 5,000 points minimum
 
 **Dynamic max_shards Scaling:**
@@ -251,13 +251,13 @@ The shard size is adjusted based on the number of phi angles to ensure each shar
 │                                                                            │
 │   Dataset Size    │ Base Size │ After n_phi≤3 │ Est. Shards │ Per-Shard   │
 │   ────────────────┼───────────┼───────────────┼─────────────┼─────────────  │
-│   < 2M points     │ 20K       │ 12K           │ ~150        │ ~10-15 min  │
-│   2M - 10M        │ 17K       │ 10K           │ 200-1000    │ ~5-8 min    │
-│   10M - 100M      │ 25K       │ 15K           │ 700-6500    │ ~5 min      │
-│   100M - 1B       │ 30K       │ 18K           │ 5K-55K      │ ~4 min      │
-│   1B+             │ 35K       │ 21K           │ 47K+        │ ~3 min      │
+│   < 2M points     │ 8K        │ 4.8K          │ ~400        │ ~1-2 min    │
+│   2M - 50M        │ 5K        │ 3K            │ 600-16K     │ ~1 min      │
+│   50M - 100M      │ 8K        │ 4.8K          │ 10K-20K     │ ~1 min      │
+│   100M - 1B       │ 8K        │ 4.8K          │ 20K-50K     │ <1 min      │
+│   1B+             │ 10K       │ 6K            │ 100K+       │ <1 min      │
 │                                                                            │
-│   MINIMUM ENFORCED: 10,000 points per shard (prevents data starvation)    │
+│   MINIMUM ENFORCED: 3,000 points per shard (reparameterization fixes bimodal posteriors)    │
 └───────────────────────────────────────────────────────────────────────────┘
 
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -287,12 +287,12 @@ The shard size is adjusted based on the number of phi angles to ensure each shar
 │   If shard count would exceed max_shards:                                  │
 │     • Increases shard size (no subsampling, all data used)                 │
 │     • For laminar_flow: caps adjusted shard size at 50K max                │
-│     • Enforces minimum shard size (10K laminar_flow, 5K static)            │
+│     • Enforces minimum shard size (3K laminar_flow, 5K static)             │
 │                                                                            │
 │   Platform Scaling (based on dynamic max_shards):                          │
-│   ├─ 3M dataset:    ~150-300 shards (manageable on personal systems)      │
-│   ├─ 100M dataset:  ~5K-10K shards (requires cluster)                     │
-│   └─ 1B dataset:    ~50K shards (extreme scale, HPC required)             │
+│   ├─ 3M dataset:    ~600-1000 shards (manageable on personal systems)     │
+│   ├─ 100M dataset:  ~10K-20K shards (requires cluster)                    │
+│   └─ 1B dataset:    ~100K shards (extreme scale, HPC required)            │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -908,13 +908,13 @@ CMCResult.from_mcmc_samples()
 
 | Dataset Size | Base Size | After Scaling | max_shards | Est. Shards |
 |--------------|-----------|---------------|------------|-------------|
-| < 2M | 20K | 12K | 2,000 | ~150 |
-| 2M - 10M | 17K | 10K | 2,000 | 200-1000 |
-| 10M - 100M | 25K | 15K | 10,000 | 700-6500 |
-| 100M - 1B | 30K | 18K | 50,000 | 5K-55K |
-| 1B+ | 35K | 21K | 100,000 | 47K+ |
+| < 2M | 8K | 4.8K | 2,000 | ~400 |
+| 2M - 50M | 5K | 3K | 2,000 | 600-16K |
+| 50M - 100M | 8K | 4.8K | 10,000 | 10K-20K |
+| 100M - 1B | 8K | 4.8K | 50,000 | 20K-50K |
+| 1B+ | 10K | 6K | 100,000 | 100K+ |
 
-**Minimum shard size: 10,000 points** (prevents data-starved shards)
+**Minimum shard size: 3,000 points** (reparameterization fixes bimodal posteriors)
 
 #### Static Mode (10× larger shards)
 
@@ -959,7 +959,7 @@ CMCResult.from_mcmc_samples()
 | require_nlsq_warmstart | False | Enforce NLSQ warm-start |
 | combination_method | "consensus_mc" | Shard combination algorithm |
 | per_shard_timeout | 3600 | 1 hour max per shard |
-| **min_points_per_shard** | 10,000 (laminar) / 5,000 (static) | **NEW**: Minimum shard size |
+| **min_points_per_shard** | 3,000 (laminar) / 5,000 (static) | **NEW**: Minimum shard size |
 | **max_parameter_cv** | 1.0 | **NEW**: Heterogeneity abort threshold |
 | **heterogeneity_abort** | True | **NEW**: Abort on high heterogeneity |
 
@@ -1131,7 +1131,7 @@ Root causes identified:
 │   1B+            │ 100,000    │ Extreme scale                            │
 │                                                                           │
 │   Additionally enforces MINIMUM shard size:                              │
-│   • laminar_flow: 10,000 points (prevents data starvation)               │
+│   • laminar_flow: 3,000 points (reparameterization fixes bimodal posteriors) │
 │   • static: 5,000 points                                                 │
 │                                                                           │
 │   Angle-aware scaling factor (less aggressive, 0.3→0.6 for n_phi≤3)     │
@@ -1163,7 +1163,7 @@ Root causes identified:
 |-------|------|---------|-------------|
 | `max_divergence_rate` | float | 0.10 | Filter shards exceeding this divergence rate |
 | `require_nlsq_warmstart` | bool | False | Require NLSQ warm-start (API-level) |
-| `min_points_per_shard` | int | 10,000 (laminar) / 5,000 (static) | **NEW**: Enforced minimum shard size |
+| `min_points_per_shard` | int | 3,000 (laminar) / 5,000 (static) | **NEW**: Enforced minimum shard size |
 | `max_parameter_cv` | float | 1.0 | **NEW**: Heterogeneity abort threshold |
 | `heterogeneity_abort` | bool | True | **NEW**: Abort on high heterogeneity |
 | `min_points_per_param` | int | 1,500 | **NEW**: Param-aware shard sizing floor |

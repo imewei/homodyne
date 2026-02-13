@@ -656,6 +656,43 @@ def run_nuts_sampling(
         f"{max(s.scale for s in scalings.values()):.2e}"
     )
 
+    # =========================================================================
+    # REPARAMETERIZED INIT VALUES: Add log_D_ref, D_offset_frac, log_gamma_ref
+    # =========================================================================
+    # When using the reparameterized model, the sampled parameters are different
+    # from the z-space params. Add init values for the reparam parameters.
+    reparam_config = model_kwargs.get("reparam_config")
+    if reparam_config is not None:
+        t_ref_init = model_kwargs.get("t_ref", getattr(reparam_config, "t_ref", 1.0))
+
+        # Compute reparameterized init values from physics init values
+        D0_init = full_init.get("D0", 1e4)
+        alpha_init = full_init.get("alpha", -0.5)
+        D_offset_init = full_init.get("D_offset", 1e3)
+
+        if getattr(reparam_config, "enable_d_ref", False):
+            D_ref_init = D0_init * (t_ref_init ** alpha_init)
+            D_ref_init = max(D_ref_init, 1e-10)
+            z_space_init["log_D_ref"] = float(np.log(D_ref_init))
+            denom = D_ref_init + D_offset_init
+            z_space_init["D_offset_frac"] = float(D_offset_init / denom) if denom > 0 else 0.05
+
+        if getattr(reparam_config, "enable_gamma_ref", False) and analysis_mode == "laminar_flow":
+            gamma_dot_t0_init = full_init.get("gamma_dot_t0", 1e-3)
+            beta_init = full_init.get("beta", -0.3)
+            gamma_ref_init = gamma_dot_t0_init * (t_ref_init ** beta_init)
+            gamma_ref_init = max(gamma_ref_init, 1e-20)
+            z_space_init["log_gamma_ref"] = float(np.log(gamma_ref_init))
+
+        run_logger.info(
+            f"Reparameterized init: t_ref={t_ref_init:.4g}, "
+            + ", ".join(
+                f"{k}={z_space_init[k]:.4g}"
+                for k in ["log_D_ref", "D_offset_frac", "log_gamma_ref"]
+                if k in z_space_init
+            )
+        )
+
     # Create init strategy with z-space values for scaled model
     init_strategy = create_init_strategy(
         full_init, param_names_with_sigma, z_space_values=z_space_init

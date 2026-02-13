@@ -911,13 +911,15 @@ def xpcs_model_reparameterized(
     reparam_config: ReparamConfig | None = None,
     nlsq_prior_config: dict | None = None,
     num_shards: int = 1,
+    t_ref: float = 1.0,
     **kwargs,
 ) -> None:
-    """NumPyro model with reparameterized sampling space.
+    """NumPyro model with reference-time reparameterized sampling space.
 
     This model transforms correlated parameters to orthogonal sampling space:
-    - D0, D_offset → D_total, D_offset_frac (breaks linear degeneracy)
-    - gamma_dot_t0 → log_gamma_dot_t0 (improves conditioning)
+    - D0, alpha → log_D_ref, alpha where D_ref = D0 * t_ref^alpha (decorrelates)
+    - D_offset → D_offset_frac = D_offset / (D_ref + D_offset)
+    - gamma_dot_t0, beta → log_gamma_ref, beta where gamma_ref = gamma_dot_t0 * t_ref^beta
 
     The original physics parameters (D0, D_offset, gamma_dot_t0) are computed
     as deterministic transforms and included in the trace for output.
@@ -926,12 +928,24 @@ def xpcs_model_reparameterized(
     ----------
     reparam_config : ReparamConfig, optional
         Reparameterization configuration. If None, uses defaults.
+    nlsq_prior_config : dict, optional
+        NLSQ-informed prior configuration with keys:
+        - "values": dict of NLSQ parameter estimates
+        - "uncertainties": dict of NLSQ standard errors
+        - "width_factor": prior width multiplier
+        - "reparam_values": dict of reparameterized NLSQ values (log_D_ref, etc.)
+        - "reparam_uncertainties": dict of reparameterized uncertainties
+    t_ref : float
+        Reference time for reparameterization (default: 1.0).
     [Other parameters same as xpcs_model_averaged]
     """
     from homodyne.optimization.cmc.reparameterization import ReparamConfig
 
     if reparam_config is None:
         reparam_config = ReparamConfig()
+
+    # Use t_ref from reparam_config if set, otherwise from kwarg
+    effective_t_ref = reparam_config.t_ref if reparam_config.t_ref != 1.0 else t_ref
 
     # =========================================================================
     # 0. Compute scaling factors and prior tempering scale
@@ -953,55 +967,94 @@ def xpcs_model_reparameterized(
     offset_arr = jnp.full(n_phi, offset)
 
     # =========================================================================
-    # 2. Sample REPARAMETERIZED physical parameters (with prior tempering)
+    # Helper: sample parameter with NLSQ-informed prior if available
     # =========================================================================
-    # Always sample alpha (not reparameterized)
-    alpha = sample_scaled_parameter("alpha", scalings["alpha"], prior_scale=prior_scale)
+    def _sample_param(name: str) -> jnp.ndarray:
+        """Sample a parameter, using NLSQ-informed prior if available."""
+        if (
+            nlsq_prior_config is not None
+            and name in nlsq_prior_config.get("values", {})
+        ):
+            from homodyne.optimization.cmc.priors import build_nlsq_informed_prior
 
-    if reparam_config.enable_d_total:
-        # Sample D_total and D_offset_frac instead of D0 and D_offset
-        D_total = sample_scaled_parameter(
-            "D_total", scalings["D0"], prior_scale=prior_scale
+            base_width = nlsq_prior_config.get("width_factor", 2.0)
+            tempered_width = base_width * prior_scale
+
+            prior = build_nlsq_informed_prior(
+                param_name=name,
+                nlsq_value=nlsq_prior_config["values"][name],
+                nlsq_std=nlsq_prior_config.get("uncertainties", {}).get(name)
+                if nlsq_prior_config.get("uncertainties")
+                else None,
+                bounds=parameter_space.get_bounds(name),
+                width_factor=tempered_width,
+            )
+            return numpyro.sample(name, prior)
+        return sample_scaled_parameter(name, scalings[name], prior_scale=prior_scale)
+
+    # =========================================================================
+    # 2. Sample REPARAMETERIZED physical parameters
+    # =========================================================================
+    # Alpha is sampled directly (not reparameterized, nearly orthogonal to D_ref)
+    alpha = _sample_param("alpha")
+
+    if reparam_config.enable_d_ref:
+        # --- Reference-time diffusion reparameterization ---
+        # Sample log_D_ref where D_ref = D0 * t_ref^alpha (well-constrained by data)
+        reparam_vals = nlsq_prior_config.get("reparam_values", {}) if nlsq_prior_config else {}
+        reparam_uncs = nlsq_prior_config.get("reparam_uncertainties", {}) if nlsq_prior_config else {}
+
+        log_D_ref_loc = reparam_vals.get("log_D_ref", 10.0)  # ~exp(10) ≈ 22K
+        log_D_ref_scale = reparam_uncs.get("log_D_ref", 1.0)
+        # Prior tempering: widen by sqrt(K)
+        log_D_ref = numpyro.sample(
+            "log_D_ref",
+            dist.Normal(loc=log_D_ref_loc, scale=log_D_ref_scale * prior_scale),
         )
+        D_ref = jnp.exp(log_D_ref)
 
-        # D_offset_frac in [0, 0.5] - prior tempering applied
+        # D_offset_frac in [0, 0.5]
+        frac_loc = reparam_vals.get("D_offset_frac", 0.05)
+        frac_scale = reparam_uncs.get("D_offset_frac", 0.1)
         D_offset_frac = numpyro.sample(
             "D_offset_frac",
             dist.TruncatedNormal(
-                loc=0.05, scale=0.1 * prior_scale, low=0.0, high=0.5
+                loc=frac_loc, scale=frac_scale * prior_scale, low=0.0, high=0.5
             ),
         )
 
-        # Compute physics parameters as deterministic
-        D0 = numpyro.deterministic("D0", D_total * (1 - D_offset_frac))
-        D_offset = numpyro.deterministic("D_offset", D_total * D_offset_frac)
+        # Recover physics parameters as deterministics
+        D0 = numpyro.deterministic("D0", D_ref * effective_t_ref ** (-alpha))
+        D_offset = numpyro.deterministic(
+            "D_offset", D_ref * D_offset_frac / jnp.maximum(1 - D_offset_frac, 1e-10)
+        )
     else:
         # Standard sampling
-        D0 = sample_scaled_parameter("D0", scalings["D0"], prior_scale=prior_scale)
-        D_offset = sample_scaled_parameter(
-            "D_offset", scalings["D_offset"], prior_scale=prior_scale
-        )
+        D0 = _sample_param("D0")
+        D_offset = _sample_param("D_offset")
 
     if analysis_mode == "laminar_flow":
-        if reparam_config.enable_log_gamma:
-            # Sample log(gamma_dot_t0) - prior tempering applied
-            log_gamma_dot_t0 = numpyro.sample(
-                "log_gamma_dot_t0",
-                dist.Normal(loc=-5.0, scale=2.0 * prior_scale),
+        # Beta is sampled directly (nearly orthogonal to gamma_ref)
+        beta = _sample_param("beta")
+
+        if reparam_config.enable_gamma_ref:
+            # --- Reference-time shear reparameterization ---
+            # Sample log_gamma_ref where gamma_ref = gamma_dot_t0 * t_ref^beta
+            log_gamma_ref_loc = reparam_vals.get("log_gamma_ref", -5.0)
+            log_gamma_ref_scale = reparam_uncs.get("log_gamma_ref", 1.0)
+            log_gamma_ref = numpyro.sample(
+                "log_gamma_ref",
+                dist.Normal(loc=log_gamma_ref_loc, scale=log_gamma_ref_scale * prior_scale),
             )
+            # Recover gamma_dot_t0 = exp(log_gamma_ref) * t_ref^(-beta)
             gamma_dot_t0 = numpyro.deterministic(
-                "gamma_dot_t0", jnp.exp(log_gamma_dot_t0)
+                "gamma_dot_t0", jnp.exp(log_gamma_ref) * effective_t_ref ** (-beta)
             )
         else:
-            gamma_dot_t0 = sample_scaled_parameter(
-                "gamma_dot_t0", scalings["gamma_dot_t0"], prior_scale=prior_scale
-            )
+            gamma_dot_t0 = _sample_param("gamma_dot_t0")
 
-        beta = sample_scaled_parameter("beta", scalings["beta"], prior_scale=prior_scale)
-        gamma_dot_t_offset = sample_scaled_parameter(
-            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"], prior_scale=prior_scale
-        )
-        phi0 = sample_scaled_parameter("phi0", scalings["phi0"], prior_scale=prior_scale)
+        gamma_dot_t_offset = _sample_param("gamma_dot_t_offset")
+        phi0 = _sample_param("phi0")
 
         params = jnp.array(
             [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
@@ -1078,7 +1131,7 @@ def get_xpcs_model(per_angle_mode: str = "individual", use_reparameterization: b
         if use_reparameterization:
             logger.info(
                 "CMC: Using reparameterized auto mode model "
-                "(D_total + log_gamma_dot_t0 sampling)"
+                "(log_D_ref + log_gamma_ref sampling)"
             )
             return xpcs_model_reparameterized
         else:

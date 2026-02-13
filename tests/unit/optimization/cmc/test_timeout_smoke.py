@@ -48,23 +48,23 @@ class _MockParameterSpace:
 
 @pytest.mark.unit
 def test_resolve_max_points_per_shard_laminar_large_pool():
-    # v2.23.0: Increased base shard sizes from 20K/25K to 30K/35K for better pts/param ratio
-    # With n_phi=1, angle_factor=0.6, base=30K (for 3M) → scaled=20K (MIN_SHARD_SIZE_LAMINAR)
-    # With n_phi=10+, angle_factor=0.85, base=30K → scaled=25.5K
-    assert _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto") == 20_000
+    # v2.24.0: Reduced shard sizes after reparameterization fixes bimodal posteriors
+    # With n_phi=1, angle_factor=0.6, base=5K (for 3M) → scaled=3K (MIN_SHARD_SIZE_LAMINAR)
+    # With n_phi=10+, angle_factor=0.85, base=5K → scaled=4,250
+    assert _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto") == 3_000
     # Multi-angle dataset should scale differently (n_phi=10 gets angle_factor=0.85)
-    assert _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto", n_phi=10) == 25_500
-    # 1B dataset should get 30K+ shard size (base=50K * 0.6 = 30K)
-    assert _resolve_max_points_per_shard("laminar_flow", 1_000_000_000, "auto", n_phi=3) == 30_000
+    assert _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto", n_phi=10) == 4_250
+    # 1B dataset: base=10K * 0.6 = 6K, but max_shards=100K cap → 1B/100K = 10K
+    assert _resolve_max_points_per_shard("laminar_flow", 1_000_000_000, "auto", n_phi=3) == 10_000
 
 
 @pytest.mark.unit
 def test_suggested_timeout_clamps_and_scales():
-    # cost: chains=2, warmup+samples=2000, max_per_shard=20k → cost=80M
-    cost = 2 * (500 + 1500) * 20_000
-    # raw = 5 * 2e-5 * 80,000,000 = 80,000s -> clamped to max_timeout (7200)
+    # cost: chains=2, warmup+samples=2000, max_per_shard=3k → cost=12M
+    cost = 2 * (500 + 1500) * 3_000
+    # raw = 5 * 5e-5 * 12,000,000 = 3,000s → within [600, 7200]
     suggested = core._compute_suggested_timeout(cost_per_shard=cost, max_timeout=7200)
-    assert suggested == 7200
+    assert suggested == 3_000
 
     # Smaller cost should respect min clamp 600s
     small_cost = 2 * (5 + 10) * 100

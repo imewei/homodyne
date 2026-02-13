@@ -1042,25 +1042,25 @@ sizes based on **analysis mode** and **dataset size**:
      - Est. Shards
      - Per-Shard Runtime
    * - < 2M points
-     - 20,000
-     - ~100
-     - ~15-25 min
-   * - 2M - 20M points
-     - 10,000
-     - 200-2,000
-     - ~5-8 min
-   * - 20M - 50M points
-     - 8,000
-     - 2.5K-6K
-     - ~5 min
+     - 4,800
+     - ~400
+     - ~1-2 min
+   * - 2M - 50M points
+     - 3,000
+     - 600-16K
+     - ~1 min
    * - 50M - 100M points
-     - 6,000
-     - 8K-17K
-     - ~4 min
-   * - 100M+ points
-     - 5,000
-     - 20K+
-     - ~3 min
+     - 4,800
+     - 10K-20K
+     - ~1 min
+   * - 100M - 1B points
+     - 4,800
+     - 20K-50K
+     - <1 min
+   * - 1B+ points
+     - 6,000-10,000
+     - 100K+
+     - <1 min
 
 **Static Mode** (3 parameters, simpler gradients):
 
@@ -1085,9 +1085,9 @@ sizes based on **analysis mode** and **dataset size**:
      - ~2K+
      - ~3-5 min
 
-**Key insight**: Laminar flow requires ~10x smaller shards than static mode due to
-the computational complexity of trigonometric functions and cumulative integrals in
-the shear contribution to G1.
+**Key insight**: Laminar flow uses ~20x smaller shards than static mode. The
+reparameterization to (D_ref, gamma_ref) produces unimodal posteriors, enabling
+3-5K shards with adaptive sampling and prior tempering.
 
 Sharding Strategies
 ^^^^^^^^^^^^^^^^^^^
@@ -1108,7 +1108,7 @@ Partitions data by phi angle. Each shard contains data for one angle:
    shards = shard_data_stratified(
        prepared,
        num_shards=None,  # Auto-calculate
-       max_points_per_shard=10000,  # For laminar_flow
+       max_points_per_shard=5000,  # For laminar_flow
        max_shards_per_angle=100,
    )
 

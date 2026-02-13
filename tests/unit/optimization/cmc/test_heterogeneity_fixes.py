@@ -62,20 +62,20 @@ class TestStage2RobustConsensus:
 class TestStage3ShardSize:
     """Fix 3: Increased shard sizes for laminar_flow."""
 
-    def test_min_shard_size_laminar_increased(self):
-        """MIN_SHARD_SIZE_LAMINAR must be >= 20K after fix."""
+    def test_min_shard_size_laminar_reduced(self):
+        """MIN_SHARD_SIZE_LAMINAR is 3K after reparameterization fix."""
         result = _resolve_max_points_per_shard(
             "laminar_flow", 3_000_000, "auto", None, n_phi=3
         )
-        assert result >= 18_000  # 30K base * 0.6 angle_factor = 18K
+        assert result >= 3_000  # 5K base * 0.6 angle_factor = 3K
 
     def test_shard_size_laminar_3m_3angles(self):
-        """3M points, 3 angles should produce shard size >= 18K."""
+        """3M points, 3 angles should produce shard size >= 3K."""
         result = _resolve_max_points_per_shard(
             "laminar_flow", 3_000_000, "auto", None, n_phi=3
         )
-        # 30K * 0.6 = 18K
-        assert result >= 18_000
+        # 5K * 0.6 = 3K
+        assert result >= 3_000
 
     def test_shard_size_static_unchanged_order(self):
         """Static mode shard sizes should still be much larger than laminar."""
@@ -174,9 +174,9 @@ class TestStage7NLSQPriorsConfig:
         assert config.use_nlsq_informed_priors is True
 
     def test_default_width_factor(self):
-        """Default width factor should be 3.0."""
+        """Default width factor should be 2.0 (tightened from 3.0)."""
         config = CMCConfig.from_dict({})
-        assert config.nlsq_prior_width_factor == 3.0
+        assert config.nlsq_prior_width_factor == 2.0
 
     def test_from_dict_nlsq_priors(self):
         """Should parse NLSQ prior config from dict."""

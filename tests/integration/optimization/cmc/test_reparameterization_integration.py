@@ -42,7 +42,7 @@ class TestReparameterizationIntegration:
         phi_unique = jnp.array([0.0, 0.5, 1.0])
         phi_indices = jnp.zeros(n_points, dtype=jnp.int32)
 
-        reparam_config = ReparamConfig(enable_d_total=True, enable_log_gamma=True)
+        reparam_config = ReparamConfig(enable_d_ref=True, enable_gamma_ref=True)
 
         # Run short MCMC
         kernel = NUTS(xpcs_model_reparameterized)
@@ -66,10 +66,10 @@ class TestReparameterizationIntegration:
 
         samples = mcmc.get_samples()
 
-        # Verify sampled parameters
-        assert "D_total_z" in samples
+        # Verify sampled parameters (reference-time reparameterization)
+        assert "log_D_ref" in samples
         assert "D_offset_frac" in samples
-        assert "log_gamma_dot_t0" in samples
+        assert "log_gamma_ref" in samples
 
         # Verify deterministic physics params computed
         assert "D0" in samples
@@ -88,7 +88,7 @@ class TestReparameterizationIntegration:
             transform_to_sampling_space,
         )
 
-        config = ReparamConfig(enable_d_total=True, enable_log_gamma=True)
+        config = ReparamConfig(enable_d_ref=True, enable_gamma_ref=True)
 
         # Original physics parameters
         original = {
@@ -152,7 +152,7 @@ class TestReparameterizationIntegration:
         model_fn = get_xpcs_model(per_angle_mode="auto", use_reparameterization=True)
 
         reparam_config = ReparamConfig(
-            enable_d_total=True, enable_log_gamma=True
+            enable_d_ref=True, enable_gamma_ref=True
         )
 
         # Trace to see sampled params
@@ -175,8 +175,8 @@ class TestReparameterizationIntegration:
 
         sampled_params = [k for k, v in trace.items() if v.get("type") == "sample"]
 
-        # Should sample D_total_z and log_gamma_dot_t0, not D0_z and gamma_dot_t0_z
-        assert "D_total_z" in sampled_params
-        assert "log_gamma_dot_t0" in sampled_params
+        # Should sample log_D_ref and log_gamma_ref, not D0_z and gamma_dot_t0_z
+        assert "log_D_ref" in sampled_params
+        assert "log_gamma_ref" in sampled_params
         assert "D0_z" not in sampled_params
         assert "gamma_dot_t0_z" not in sampled_params

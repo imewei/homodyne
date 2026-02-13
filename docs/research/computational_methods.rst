@@ -317,7 +317,7 @@ For datasets with multiple phi angles, stratified sharding processes each angle 
 .. code-block:: text
 
    Input: Dataset with 3 angles × 1M points/angle = 3M total
-   Config: max_points_per_shard = 25,000
+   Config: max_points_per_shard = 5,000
            max_shards_per_angle = 100
 
    ┌─────────────────────────────────────────────────────────────────┐
@@ -330,26 +330,26 @@ For datasets with multiple phi angles, stratified sharding processes each angle 
    │ Step 1: Calculate required shards                            │
    │                                                               │
    │   required_shards = ⌈n_points / max_points_per_shard⌉        │
-   │                   = ⌈1,000,000 / 25,000⌉ = 40 shards         │
+   │                   = ⌈1,000,000 / 5,000⌉ = 200 shards         │
    └───────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
    ┌───────────────────────────────────────────────────────────────┐
    │ Step 2: Check against max_shards_per_angle (100)             │
    │                                                               │
-   │   40 ≤ 100? ✓ Yes → Use 40 shards as planned                 │
+   │   200 > 100? ✓ Yes → Cap at 100 shards                        │
    └───────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
    ┌───────────────────────────────────────────────────────────────┐
-   │ Step 3: Split data                                           │
+   │ Step 3: INCREASE shard size (never subsample!)               │
    │                                                               │
-   │   points_per_shard = 1,000,000 / 40 = 25,000                 │
-   │   (Last shard gets any remainder)                            │
+   │   points_per_shard = ⌈1,000,000 / 100⌉ = 10,000             │
+   │   → Each shard holds 10K points instead of 5K                │
    └───────────────────────────────────────────────────────────────┘
 
-   Result: 3 angles × 40 shards = 120 total shards
-           Each shard: ~25,000 points
+   Result: 3 angles × 100 shards = 300 total shards
+           Each shard: ~10,000 points
            Data used: 100%
 
 **Handling Very Large Angles (Cap Behavior)**
@@ -360,20 +360,20 @@ the shard size increases to fit all data:
 .. code-block:: text
 
    Input: 100M points per angle
-   Config: max_points_per_shard = 25,000
+   Config: max_points_per_shard = 5,000
            max_shards_per_angle = 100
 
    ┌───────────────────────────────────────────────────────────────┐
    │ Step 1: Calculate required shards                            │
    │                                                               │
-   │   required = ⌈100,000,000 / 25,000⌉ = 4,000 shards          │
+   │   required = ⌈100,000,000 / 5,000⌉ = 20,000 shards           │
    └───────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
    ┌───────────────────────────────────────────────────────────────┐
    │ Step 2: Check cap                                            │
    │                                                               │
-   │   4,000 > 100? ✓ Yes → Cap at 100 shards                     │
+   │   20,000 > 100? ✓ Yes → Cap at 100 shards                     │
    └───────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
@@ -381,7 +381,7 @@ the shard size increases to fit all data:
    │ Step 3: INCREASE shard size (never subsample!)               │
    │                                                               │
    │   effective_points = ⌈100,000,000 / 100⌉ = 1,000,000        │
-   │   → Each shard holds 1M points instead of 25K                │
+   │   → Each shard holds 1M points instead of 5K                 │
    └───────────────────────────────────────────────────────────────┘
 
    Result: 100 shards × 1M points = 100% data used
@@ -435,7 +435,7 @@ For single-phi-angle datasets, random sharding distributes data evenly:
      - Default
      - Description
    * - ``max_points_per_shard``
-     - 25,000 (laminar_flow) |br| 100,000 (static)
+     - 5,000 (laminar_flow) |br| 100,000 (static)
      - Target points per shard for NUTS tractability
    * - ``max_shards_per_angle``
      - 100
@@ -469,8 +469,8 @@ The ``max_points_per_shard`` values are tuned for NUTS sampling efficiency:
      - ~20-40 min
    * - Laminar Flow
      - 7 physical + 2×n_angles scaling
-     - 25,000
-     - ~20-40 min
+     - 5,000
+     - ~1-2 min
 
 **Example Scenarios**
 
@@ -484,12 +484,12 @@ The ``max_points_per_shard`` values are tuned for NUTS sampling efficiency:
      - Points/Shard
      - Data Used
    * - 3 angles × 1M pts
-     - 25K/shard
-     - 3 × 40 = 120
-     - ~25K
+     - 5K/shard
+     - 3 × 200 = 600
+     - ~5K
      - 100%
    * - 2 angles × 100M pts
-     - 25K/shard, 100 cap
+     - 5K/shard, 100 cap
      - 2 × 100 = 200
      - ~1M
      - 100%
@@ -513,7 +513,7 @@ The sharding algorithm is implemented in ``homodyne.optimization.cmc.data_prep``
    # Stratified sharding (automatic for multi-angle)
    shards = shard_data_stratified(
        prepared_data,
-       max_points_per_shard=25000,
+       max_points_per_shard=5000,
        max_shards_per_angle=100,
        seed=42,
    )
