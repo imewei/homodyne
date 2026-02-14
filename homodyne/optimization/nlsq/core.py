@@ -60,7 +60,7 @@ except ImportError:
     JAX_AVAILABLE = False
     jnp: types.ModuleType = np  # type: ignore[no-redef]
 
-    def jit(f: F) -> F:  # type: ignore[no-redef]
+    def jit(f: F) -> F:  # type: ignore[no-redef]  # noqa: UP047
         return f
 
     def vmap(f: Any, **kwargs: Any) -> Any:  # type: ignore[misc]
@@ -340,7 +340,9 @@ def fit_nlsq_jax(
     # ==========================================================================
     if not _skip_global_selection:
         # Handle both ConfigManager objects and plain dicts
-        config_dict: dict[str, Any] = config.config if hasattr(config, "config") else config  # type: ignore[assignment]
+        config_dict: dict[str, Any] = (
+            config.config if hasattr(config, "config") else config
+        )  # type: ignore[assignment]
         nlsq_dict = config_dict.get("optimization", {}).get("nlsq", {})
 
         # CMA-ES has highest priority (for multi-scale problems)
@@ -388,7 +390,7 @@ def fit_nlsq_jax(
             logger.debug(
                 f"CPU threading configured: {cpu_config.get('threads_configured', 'auto')} threads"
             )
-        except Exception as e:
+        except (OSError, RuntimeError, AttributeError) as e:
             logger.debug(f"CPU threading configuration skipped: {e}")
 
     # Determine analysis mode
@@ -452,143 +454,8 @@ def fit_nlsq_jax(
     lower_bounds, upper_bounds = _bounds_to_arrays(bounds_dict, analysis_mode)
     bounds = (lower_bounds, upper_bounds)
 
-    def _ensure_positive_sigma(obj: Any) -> None:
-        if not hasattr(obj, "sigma"):
-            return
-        sigma_array = np.asarray(obj.sigma, dtype=np.float64)
-        if not np.all(np.isfinite(sigma_array)):
-            raise ValueError("sigma values must be finite")
-        if np.any(sigma_array <= 0):
-            raise ValueError("sigma values must be strictly positive")
-        obj.sigma = sigma_array
-
     # Convert data dict to object if needed (NLSQWrapper expects object attributes)
-    if isinstance(data, dict):
-
-        class DataObject:
-            pass
-
-        data_obj = DataObject()
-
-        # Map CLI data structure keys to NLSQWrapper expected names
-        # CLI provides: phi_angles_list, c2_exp, wavevector_q_list
-        # NLSQWrapper needs: phi, g2, t1, t2, sigma, q, L, dt (optional)
-        key_mapping = {
-            "phi_angles_list": "phi",
-            "c2_exp": "g2",
-        }
-
-        # Apply key mapping and copy all data
-        for key, value in data.items():
-            # Use mapped name if available, otherwise keep original
-            mapped_key = key_mapping.get(key, key)
-            setattr(data_obj, mapped_key, value)
-
-        # Extract scalar q from wavevector_q_list if present
-        if hasattr(data_obj, "wavevector_q_list"):
-            q_list = np.asarray(data_obj.wavevector_q_list)
-            if q_list.size > 0:
-                data_obj.q = float(q_list[0])  # Take first q-vector
-                logger.debug(f"Extracted q = {data_obj.q:.6f} from wavevector_q_list")
-
-        # Generate default sigma (uncertainty) if missing
-        if not hasattr(data_obj, "sigma") and hasattr(data_obj, "g2"):
-            g2_array = np.asarray(data_obj.g2)  # type: ignore[attr-defined]
-            # Use 1% relative uncertainty as default
-            data_obj.sigma = 0.01 * np.ones_like(g2_array)  # type: ignore[attr-defined]
-            logger.debug(f"Generated default sigma: shape {data_obj.sigma.shape}")  # type: ignore[attr-defined]
-        _ensure_positive_sigma(data_obj)
-
-        # Extract 1D time vectors from 2D meshgrids if needed
-        # Data loader returns t1_2d, t2_2d as (N, N) meshgrids, but NLSQWrapper expects 1D vectors
-        if hasattr(data_obj, "t1"):
-            t1 = np.asarray(data_obj.t1)
-            if t1.ndim == 2:
-                # t1_2d[i, j] = time[i] (constant along j), so extract first column
-                data_obj.t1 = t1[:, 0]
-                logger.debug(
-                    f"Extracted 1D t1 vector from 2D meshgrid: {t1.shape} → {data_obj.t1.shape}",
-                )
-            elif t1.ndim != 1:
-                raise ValueError(f"t1 must be 1D or 2D array, got shape {t1.shape}")
-
-        if hasattr(data_obj, "t2"):
-            t2 = np.asarray(data_obj.t2)
-            if t2.ndim == 2:
-                # t2_2d[i, j] = time[j] (constant along i), so extract first row
-                data_obj.t2 = t2[0, :]
-                logger.debug(
-                    f"Extracted 1D t2 vector from 2D meshgrid: {t2.shape} → {data_obj.t2.shape}",
-                )
-            elif t2.ndim != 1:
-                raise ValueError(f"t2 must be 1D or 2D array, got shape {t2.shape}")
-
-        # Get characteristic length L from config (stator_rotor_gap or sample_detector_distance)
-        if not hasattr(data_obj, "L"):
-            # Try to get from config - check multiple possible locations
-            # Priority 1: analyzer_parameters.geometry.stator_rotor_gap (for rheology-XPCS)
-            # Priority 2: experimental_data.geometry.stator_rotor_gap (alternative location)
-            # Priority 3: experimental_data.sample_detector_distance (for standard XPCS)
-            # Priority 4: Default 100.0 (fallback)
-            try:
-                # Try analyzer_parameters.geometry.stator_rotor_gap first
-                analyzer_params = config.config.get("analyzer_parameters", {})  # type: ignore[union-attr]
-                geometry = analyzer_params.get("geometry", {})
-
-                if "stator_rotor_gap" in geometry:
-                    data_obj.L = float(geometry["stator_rotor_gap"])  # type: ignore[attr-defined]
-                    logger.debug(
-                        f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.analyzer_parameters.geometry)",  # type: ignore[attr-defined]
-                    )
-                else:
-                    # Try experimental_data.geometry.stator_rotor_gap as alternative
-                    exp_config = config.config.get("experimental_data", {})  # type: ignore[union-attr]
-                    exp_geometry = exp_config.get("geometry", {})
-
-                    if "stator_rotor_gap" in exp_geometry:
-                        data_obj.L = float(exp_geometry["stator_rotor_gap"])  # type: ignore[attr-defined]
-                        logger.debug(
-                            f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.experimental_data.geometry)",  # type: ignore[attr-defined]
-                        )
-                    # Fallback to sample_detector_distance
-                    elif "sample_detector_distance" in exp_config:
-                        data_obj.L = float(exp_config["sample_detector_distance"])  # type: ignore[attr-defined]
-                        logger.debug(
-                            f"Using sample_detector_distance L = {data_obj.L:.1f} Å (from config.experimental_data)",  # type: ignore[attr-defined]
-                        )
-                    else:
-                        data_obj.L = 2000000.0  # type: ignore[attr-defined]  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
-                        logger.warning(
-                            f"No L parameter found in config, using default L = {data_obj.L:.1f} Å (200 µm, typical rheology-XPCS gap)",  # type: ignore[attr-defined]
-                        )
-            except (AttributeError, TypeError, ValueError) as e:
-                data_obj.L = 2000000.0  # type: ignore[attr-defined]  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
-                logger.warning(
-                    f"Error reading L from config: {e}, using default L = {data_obj.L:.1f} Å (200 µm)",  # type: ignore[attr-defined]
-                )
-
-        # Get time step dt from config if available
-        if not hasattr(data_obj, "dt"):
-            try:
-                # Try analyzer_parameters first (preferred location)
-                analyzer_params = config.config.get("analyzer_parameters", {})  # type: ignore[union-attr]
-                dt_value = analyzer_params.get("dt")
-
-                # Fallback to experimental_data section
-                if dt_value is None:
-                    exp_config = config.config.get("experimental_data", {})  # type: ignore[union-attr]
-                    dt_value = exp_config.get("dt")
-
-                if dt_value is not None:
-                    data_obj.dt = float(dt_value)  # type: ignore[attr-defined]
-                    logger.debug(f"Using time step dt = {data_obj.dt:.6f} s")  # type: ignore[attr-defined]
-            except (AttributeError, TypeError, ValueError) as e:
-                logger.warning(f"Error reading dt from config: {e}")
-                # dt is optional, no problem if missing
-
-        data = data_obj  # type: ignore[assignment]
-    else:
-        _ensure_positive_sigma(data)
+    data = _normalize_data_to_object(data, config, logger)
 
     diagnostics_enabled = _is_nlsq_diagnostics_enabled(config)
     shear_transform_cfg = _extract_shear_transform_config(config)
@@ -631,7 +498,14 @@ def fit_nlsq_jax(
             result.device_info["fallback_reason"] = None
             logger.info("NLSQAdapter optimization succeeded")
 
-        except Exception as e:
+        except (
+            ValueError,
+            RuntimeError,
+            TypeError,
+            AttributeError,
+            OSError,
+            MemoryError,
+        ) as e:
             # T022: Log WARNING when fallback occurs
             adapter_error = e
             logger.warning("NLSQAdapter failed, falling back to NLSQWrapper: %s", e)
@@ -669,7 +543,14 @@ def fit_nlsq_jax(
             else:
                 logger.info("NLSQWrapper optimization succeeded")
 
-        except Exception as wrapper_error:
+        except (
+            ValueError,
+            RuntimeError,
+            TypeError,
+            AttributeError,
+            OSError,
+            MemoryError,
+        ) as wrapper_error:
             # T024: Both adapter and wrapper failed - return failed result
             logger.error(
                 "Both NLSQAdapter and NLSQWrapper failed: adapter=%s, wrapper=%s",
@@ -697,7 +578,21 @@ def fit_nlsq_jax(
                 quality_flag="poor",
             )
 
-    # Log optimization results
+    _log_optimization_results(result, analysis_mode, per_angle_scaling, logger)
+
+    return result
+
+
+def _log_optimization_results(
+    result: Any,
+    analysis_mode: str,
+    per_angle_scaling: bool,
+    logger: Any,
+) -> None:
+    """Log optimization results including parameters and uncertainties.
+
+    Pure logging function — reads from result but does not modify state.
+    """
     logger.info("=" * 60)
     logger.info("NLSQ OPTIMIZATION COMPLETE")
     logger.info("=" * 60)
@@ -707,24 +602,18 @@ def fit_nlsq_jax(
     logger.info(f"χ² = {result.chi_squared:.6e}")
     logger.info(f"Reduced χ² = {result.reduced_chi_squared:.6f}")
 
-    # Log fitted parameters with proper labels for per-angle scaling
     if hasattr(result, "parameters") and result.parameters is not None:
         physical_param_names = _get_physical_param_names(analysis_mode)
         n_physical = len(physical_param_names)
         n_params = len(result.parameters)
 
-        # Detect per-angle scaling from parameter count
-        # Per-angle: n_params = 2 * n_angles + n_physical
-        # Legacy: n_params = 2 + n_physical
         if per_angle_scaling and n_params > (2 + n_physical):
             n_angles = (n_params - n_physical) // 2
 
-            # Log summary with physical parameters first (most important)
             logger.info(f"Fitted parameters (per-angle scaling: {n_angles} angles):")
             logger.info("  Physical parameters:")
             physical_start_idx = 2 * n_angles
 
-            # Check uncertainty array size matches parameter array size
             unc_array = (
                 result.uncertainties if hasattr(result, "uncertainties") else None
             )
@@ -734,8 +623,7 @@ def fit_nlsq_jax(
                     f"Uncertainty array size mismatch: expected {n_params}, got {unc_size}. "
                     "This may occur when Fourier covariance transformation failed."
                 )
-                # Use available uncertainties where possible, NaN for missing
-                unc_array = None  # Force fallback to 0.0
+                unc_array = None
 
             for i, name in enumerate(physical_param_names):
                 idx = physical_start_idx + i
@@ -747,7 +635,6 @@ def fit_nlsq_jax(
                 )
                 logger.info(f"    {name}: {param_val:.6g} ± {unc_val:.6g}")
 
-            # Log mean contrast/offset for summary
             contrast_vals = result.parameters[:n_angles]
             offset_vals = result.parameters[n_angles : 2 * n_angles]
             logger.info(
@@ -755,7 +642,6 @@ def fit_nlsq_jax(
                 f"offset={np.mean(offset_vals):.4f}"
             )
         else:
-            # Legacy mode or single angle
             param_names = _get_param_names(analysis_mode)
             n_display = min(len(param_names), n_params)
             logger.info("Fitted parameters:")
@@ -765,13 +651,140 @@ def fit_nlsq_jax(
                     result.uncertainties[i]
                     if hasattr(result, "uncertainties")
                     and result.uncertainties is not None
+                    and i < len(result.uncertainties)
                     else 0.0
                 )
                 logger.info(f"  {param_names[i]}: {param_val:.6g} ± {unc_val:.6g}")
 
     logger.info("=" * 60)
 
-    return result
+
+def _normalize_data_to_object(data: Any, config: Any, logger: Any) -> Any:
+    """Normalize data dict to object with expected attributes for NLSQWrapper.
+
+    Handles: key mapping (CLI→internal names), q extraction from wavevector_q_list,
+    sigma generation, 2D→1D time vector extraction, L loading, dt loading.
+    If data is already an object (not a dict), only validates sigma.
+    """
+
+    def _ensure_positive_sigma(obj: Any) -> None:
+        if not hasattr(obj, "sigma"):
+            return
+        sigma_array = np.asarray(obj.sigma, dtype=np.float64)
+        if not np.all(np.isfinite(sigma_array)):
+            raise ValueError("sigma values must be finite")
+        if np.any(sigma_array <= 0):
+            raise ValueError("sigma values must be strictly positive")
+        obj.sigma = sigma_array
+
+    if isinstance(data, dict):
+
+        class DataObject:
+            pass
+
+        data_obj = DataObject()
+
+        # Map CLI data structure keys to NLSQWrapper expected names
+        key_mapping = {
+            "phi_angles_list": "phi",
+            "c2_exp": "g2",
+        }
+
+        for key, value in data.items():
+            mapped_key = key_mapping.get(key, key)
+            setattr(data_obj, mapped_key, value)
+
+        # Extract scalar q from wavevector_q_list if present
+        if hasattr(data_obj, "wavevector_q_list"):
+            q_list = np.asarray(data_obj.wavevector_q_list)
+            if q_list.size > 0:
+                data_obj.q = float(q_list[0])
+                logger.debug(f"Extracted q = {data_obj.q:.6f} from wavevector_q_list")
+
+        # Generate default sigma (uncertainty) if missing
+        if not hasattr(data_obj, "sigma") and hasattr(data_obj, "g2"):
+            g2_array = np.asarray(data_obj.g2)  # type: ignore[attr-defined]
+            data_obj.sigma = 0.01 * np.ones_like(g2_array)  # type: ignore[attr-defined]
+            logger.debug(f"Generated default sigma: shape {data_obj.sigma.shape}")  # type: ignore[attr-defined]
+        _ensure_positive_sigma(data_obj)
+
+        # Extract 1D time vectors from 2D meshgrids if needed
+        if hasattr(data_obj, "t1"):
+            t1 = np.asarray(data_obj.t1)
+            if t1.ndim == 2:
+                data_obj.t1 = t1[:, 0]
+                logger.debug(
+                    f"Extracted 1D t1 vector from 2D meshgrid: {t1.shape} → {data_obj.t1.shape}",
+                )
+            elif t1.ndim != 1:
+                raise ValueError(f"t1 must be 1D or 2D array, got shape {t1.shape}")
+
+        if hasattr(data_obj, "t2"):
+            t2 = np.asarray(data_obj.t2)
+            if t2.ndim == 2:
+                data_obj.t2 = t2[0, :]
+                logger.debug(
+                    f"Extracted 1D t2 vector from 2D meshgrid: {t2.shape} → {data_obj.t2.shape}",
+                )
+            elif t2.ndim != 1:
+                raise ValueError(f"t2 must be 1D or 2D array, got shape {t2.shape}")
+
+        # Get characteristic length L from config
+        if not hasattr(data_obj, "L"):
+            try:
+                analyzer_params = config.config.get("analyzer_parameters", {})  # type: ignore[union-attr]
+                geometry = analyzer_params.get("geometry", {})
+
+                if "stator_rotor_gap" in geometry:
+                    data_obj.L = float(geometry["stator_rotor_gap"])  # type: ignore[attr-defined]
+                    logger.debug(
+                        f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.analyzer_parameters.geometry)",  # type: ignore[attr-defined]
+                    )
+                else:
+                    exp_config = config.config.get("experimental_data", {})  # type: ignore[union-attr]
+                    exp_geometry = exp_config.get("geometry", {})
+
+                    if "stator_rotor_gap" in exp_geometry:
+                        data_obj.L = float(exp_geometry["stator_rotor_gap"])  # type: ignore[attr-defined]
+                        logger.debug(
+                            f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.experimental_data.geometry)",  # type: ignore[attr-defined]
+                        )
+                    elif "sample_detector_distance" in exp_config:
+                        data_obj.L = float(exp_config["sample_detector_distance"])  # type: ignore[attr-defined]
+                        logger.debug(
+                            f"Using sample_detector_distance L = {data_obj.L:.1f} Å (from config.experimental_data)",  # type: ignore[attr-defined]
+                        )
+                    else:
+                        data_obj.L = 2000000.0  # type: ignore[attr-defined]
+                        logger.warning(
+                            f"No L parameter found in config, using default L = {data_obj.L:.1f} Å (200 µm, typical rheology-XPCS gap)",  # type: ignore[attr-defined]
+                        )
+            except (AttributeError, TypeError, ValueError) as e:
+                data_obj.L = 2000000.0  # type: ignore[attr-defined]
+                logger.warning(
+                    f"Error reading L from config: {e}, using default L = {data_obj.L:.1f} Å (200 µm)",  # type: ignore[attr-defined]
+                )
+
+        # Get time step dt from config if available
+        if not hasattr(data_obj, "dt"):
+            try:
+                analyzer_params = config.config.get("analyzer_parameters", {})  # type: ignore[union-attr]
+                dt_value = analyzer_params.get("dt")
+
+                if dt_value is None:
+                    exp_config = config.config.get("experimental_data", {})  # type: ignore[union-attr]
+                    dt_value = exp_config.get("dt")
+
+                if dt_value is not None:
+                    data_obj.dt = float(dt_value)  # type: ignore[attr-defined]
+                    logger.debug(f"Using time step dt = {data_obj.dt:.6f} s")  # type: ignore[attr-defined]
+            except (AttributeError, TypeError, ValueError) as e:
+                logger.warning(f"Error reading dt from config: {e}")
+
+        return data_obj
+    else:
+        _ensure_positive_sigma(data)
+        return data
 
 
 def _validate_data(data: dict[str, Any]) -> None:
@@ -1054,73 +1067,6 @@ def _get_default_initial_params(analysis_mode: str) -> dict[str, float]:
             "gamma_dot_t_offset": 0.0,
             "phi0": 0.0,
         }
-
-
-def _create_residual_function(
-    data: dict[str, Any],
-    theory_engine: Any,
-    analysis_mode: str,
-) -> Callable[..., Any]:
-    """Create residual function for NLSQ least squares optimization."""
-
-    # Extract q and L as concrete scalars OUTSIDE the residual function
-    # This prevents JAX tracing issues
-    q_list = data.get("wavevector_q_list", [0.0054])
-    q_scalar = float(q_list[0]) if len(q_list) > 0 else 0.0054
-    L_scalar = 2000000.0  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
-
-    def residual_fn(params_array: Any) -> Any:
-        """Residual function: returns residuals vector."""
-        params_dict = _array_to_params(params_array, analysis_mode)
-
-        # Extract scaling parameters
-        contrast = params_dict["contrast"]
-        offset = params_dict["offset"]
-
-        # Create physical params dict (without contrast and offset)
-        physical_params = {
-            k: v for k, v in params_dict.items() if k not in ["contrast", "offset"]
-        }
-
-        # Convert physical params to array format expected by theory engine
-        if "static" in analysis_mode.lower():
-            params_array_physical = jnp.array(
-                [
-                    physical_params["D0"],
-                    physical_params["alpha"],
-                    physical_params["D_offset"],
-                ],
-            )
-        else:
-            params_array_physical = jnp.array(
-                [
-                    physical_params["D0"],
-                    physical_params["alpha"],
-                    physical_params["D_offset"],
-                    physical_params["gamma_dot_t0"],
-                    physical_params["beta"],
-                    physical_params["gamma_dot_t_offset"],
-                    physical_params["phi0"],
-                ],
-            )
-
-        # Use pre-extracted concrete scalars (extracted outside to avoid JAX tracing)
-        c2_theory = theory_engine.compute_g2(
-            params_array_physical,
-            data["t1"],
-            data["t2"],
-            data["phi_angles_list"],
-            q_scalar,  # Use pre-extracted scalar
-            L_scalar,  # Use pre-extracted scalar
-            contrast,
-            offset,
-        )
-
-        # Return residuals (not squared)
-        residuals = data["c2_exp"] - c2_theory
-        return residuals.flatten()
-
-    return residual_fn
 
 
 def _get_parameter_bounds(
@@ -1429,7 +1375,7 @@ class _SingleFitWorker:
                 wall_time=time.perf_counter() - start_time,
                 covariance=result.covariance if hasattr(result, "covariance") else None,
             )
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError, OSError) as e:
             return SingleStartResult(
                 start_idx=0,
                 initial_params=start_params,
@@ -1582,7 +1528,7 @@ def fit_nlsq_multistart(
             scale = upper_bounds - lower_bounds
             normalized_dist = np.sum(((params - center) / scale) ** 2)
             return normalized_dist
-        except Exception:
+        except (ValueError, IndexError, TypeError, FloatingPointError):
             return 1e20
 
     # Prepare custom_starts with user's initial parameters (if provided)
@@ -1897,32 +1843,20 @@ def fit_nlsq_cmaes(
         if per_angle_scaling and not use_constant_mode:
             # Standard behavior: expand to per-angle parameters (13 params for n_phi=3)
             if len(x0) == 2 + n_physical:
-                contrast_val = x0[0]
-                offset_val = x0[1]
-                physical_params = x0[2:]
-                x0 = np.concatenate(
-                    [
-                        np.full(n_phi, contrast_val),
-                        np.full(n_phi, offset_val),
-                        physical_params,
-                    ]
+                from homodyne.optimization.nlsq.data_prep import (
+                    expand_per_angle_parameters,
                 )
-                # Expand bounds too
-                lower_bounds = np.concatenate(
-                    [
-                        np.full(n_phi, lower_bounds[0]),
-                        np.full(n_phi, lower_bounds[1]),
-                        lower_bounds[2:],
-                    ]
+
+                expanded = expand_per_angle_parameters(
+                    x0,
+                    bounds,
+                    n_phi,
+                    n_physical,
+                    logger=logger,
                 )
-                upper_bounds = np.concatenate(
-                    [
-                        np.full(n_phi, upper_bounds[0]),
-                        np.full(n_phi, upper_bounds[1]),
-                        upper_bounds[2:],
-                    ]
-                )
-                bounds = (lower_bounds, upper_bounds)
+                x0 = expanded.params
+                bounds = expanded.bounds
+                lower_bounds, upper_bounds = bounds
             effective_per_angle_scaling = True
         elif use_constant_mode:
             # CONSTANT MODE (v2.18.0+): Compute per-angle scaling from quantiles
@@ -1957,7 +1891,9 @@ def fit_nlsq_cmaes(
 
             # Create simple data container for quantile estimation
             class SimpleStratifiedData:
-                def __init__(self, g2_flat: Any, phi_flat: Any, t1_flat: Any, t2_flat: Any) -> None:
+                def __init__(
+                    self, g2_flat: Any, phi_flat: Any, t1_flat: Any, t2_flat: Any
+                ) -> None:
                     self.g2_flat = g2_flat
                     self.phi_flat = phi_flat
                     self.t1_flat = t1_flat
@@ -2086,10 +2022,31 @@ def fit_nlsq_cmaes(
         # Use JAX operations throughout to avoid TracerArrayConversionError
         t1_mesh, t2_mesh = np.meshgrid(t1, t2, indexing="ij")
 
-        # Pre-compute data arrays as JAX arrays for efficiency
-        n_time_points = t1_mesh.size
-        t1_flat = jnp.array(t1_mesh.flatten())
-        t2_flat = jnp.array(t2_mesh.flatten())
+        # Filter diagonal points (t1==t2) from CMA-ES optimization data.
+        # Experimental data has diagonal correction applied at load time, but CMA-ES
+        # theory values are NOT corrected — creating systematic residual mismatch.
+        # Other paths handle this (stratified LS corrects theory, hybrid streaming
+        # filters diagonal out). Compute mask in numpy before JAX conversion.
+        idx1, idx2 = np.meshgrid(np.arange(len(t1)), np.arange(len(t2)), indexing="ij")
+        non_diag_single = (idx1 != idx2).flatten()
+        non_diag_all = np.tile(non_diag_single, n_phi)
+
+        n_before_diag = len(ydata)
+        ydata = ydata[non_diag_all]
+        sigma_flat = sigma_flat[non_diag_all]
+        n_data = len(ydata)
+        n_diag_removed = n_before_diag - n_data
+        logger.info(
+            f"Diagonal filtering: removed {n_diag_removed:,} points "
+            f"({100 * n_diag_removed / n_before_diag:.1f}%)"
+        )
+
+        # Pre-compute data arrays as JAX arrays for efficiency (post diagonal filter)
+        t1_flat_np = t1_mesh.flatten()[non_diag_single]
+        t2_flat_np = t2_mesh.flatten()[non_diag_single]
+        n_time_points = len(t1_flat_np)
+        t1_flat = jnp.array(t1_flat_np)
+        t2_flat = jnp.array(t2_flat_np)
 
         # Build phi indices: each time grid repeats for all phi angles
         # phi_indices[k] gives which phi angle point k belongs to
@@ -2218,23 +2175,22 @@ def fit_nlsq_cmaes(
 
         if use_constant_mode and per_angle_scaling:
             # Expand constant mode (9 params) to per-angle format
-            # Structure: [contrast, offset, *physical] -> [c0,...,c_n, o0,...,o_n, *physical]
-            # Broadcast the single contrast/offset to all angles
-            contrast_val = final_params[0]
-            offset_val = final_params[1]
-            physical_params = final_params[2:]
-
-            final_params = np.concatenate(
-                [
-                    np.full(n_phi, contrast_val),  # Broadcast contrast to all angles
-                    np.full(n_phi, offset_val),  # Broadcast offset to all angles
-                    physical_params,  # 7 physical params as optimized
-                ]
+            from homodyne.optimization.nlsq.data_prep import (
+                expand_per_angle_parameters,
             )
 
+            n_before = len(final_params)
+            expanded = expand_per_angle_parameters(
+                final_params,
+                None,
+                n_phi,
+                n_physical,
+            )
+            final_params = expanded.params
+
             logger.info(
-                f"Expanding constant mode results: {len(cmaes_result.parameters)} -> "
-                f"{len(final_params)} parameters (broadcast contrast={contrast_val:.4f}, offset={offset_val:.4f})"
+                f"Expanding constant mode results: {n_before} -> "
+                f"{len(final_params)} parameters (broadcast contrast={final_params[0]:.4f}, offset={final_params[n_phi]:.4f})"
             )
 
             # Expand covariance matrix if available
@@ -2247,54 +2203,37 @@ def fit_nlsq_cmaes(
                 # Original layout: [contrast, offset, physical(7)]
                 # Expanded layout: [contrast(n_phi), offset(n_phi), physical(7)]
 
-                # Variance of single contrast -> all contrast angles share same variance
+                # Contrast block: all entries = contrast_var (perfectly correlated
+                # since all angles share a single source parameter)
                 contrast_var = final_covariance[0, 0]
-                for i in range(n_phi):
-                    expanded_cov[i, i] = contrast_var
-                    # Covariance between contrast angles (same source parameter)
-                    for j in range(n_phi):
-                        if i != j:
-                            expanded_cov[i, j] = contrast_var  # Perfectly correlated
+                expanded_cov[:n_phi, :n_phi] = contrast_var
 
-                # Variance of single offset -> all offset angles share same variance
+                # Offset block: all entries = offset_var (perfectly correlated)
                 offset_var = final_covariance[1, 1]
-                for i in range(n_phi):
-                    idx = n_phi + i
-                    expanded_cov[idx, idx] = offset_var
-                    for j in range(n_phi):
-                        if i != j:
-                            expanded_cov[idx, n_phi + j] = (
-                                offset_var  # Perfectly correlated
-                            )
+                expanded_cov[n_phi : 2 * n_phi, n_phi : 2 * n_phi] = offset_var
 
-                # Covariance between contrast and offset
+                # Cross contrast-offset block
                 contrast_offset_cov = final_covariance[0, 1]
-                for i in range(n_phi):
-                    for j in range(n_phi):
-                        expanded_cov[i, n_phi + j] = contrast_offset_cov
-                        expanded_cov[n_phi + j, i] = contrast_offset_cov
+                expanded_cov[:n_phi, n_phi : 2 * n_phi] = contrast_offset_cov
+                expanded_cov[n_phi : 2 * n_phi, :n_phi] = contrast_offset_cov
 
-                # Physical params covariance: copy from optimization result
-                # Original indices [2:9] -> expanded indices [2*n_phi:]
+                # Physical params block: direct slice copy
+                # Original indices [2:2+n_physical] -> expanded indices [2*n_phi:]
+                expanded_cov[2 * n_phi :, 2 * n_phi :] = final_covariance[
+                    2 : 2 + n_physical, 2 : 2 + n_physical
+                ]
+
+                # Cross contrast-physical and offset-physical covariance
+                # Each physical param has one covariance value broadcast to all angles
                 for i in range(n_physical):
-                    for j in range(n_physical):
-                        expanded_cov[2 * n_phi + i, 2 * n_phi + j] = final_covariance[
-                            2 + i, 2 + j
-                        ]
-
-                # Cross-covariance: contrast/offset with physical params
-                for i in range(n_physical):
-                    # Contrast-physical covariance
-                    contrast_phys_cov = final_covariance[0, 2 + i]
-                    for k in range(n_phi):
-                        expanded_cov[k, 2 * n_phi + i] = contrast_phys_cov
-                        expanded_cov[2 * n_phi + i, k] = contrast_phys_cov
-
-                    # Offset-physical covariance
-                    offset_phys_cov = final_covariance[1, 2 + i]
-                    for k in range(n_phi):
-                        expanded_cov[n_phi + k, 2 * n_phi + i] = offset_phys_cov
-                        expanded_cov[2 * n_phi + i, n_phi + k] = offset_phys_cov
+                    expanded_cov[:n_phi, 2 * n_phi + i] = final_covariance[0, 2 + i]
+                    expanded_cov[2 * n_phi + i, :n_phi] = final_covariance[0, 2 + i]
+                    expanded_cov[n_phi : 2 * n_phi, 2 * n_phi + i] = final_covariance[
+                        1, 2 + i
+                    ]
+                    expanded_cov[2 * n_phi + i, n_phi : 2 * n_phi] = final_covariance[
+                        1, 2 + i
+                    ]
 
                 final_covariance = expanded_cov
 
@@ -2351,7 +2290,7 @@ def fit_nlsq_cmaes(
 
         return result
 
-    except Exception as e:
+    except (ValueError, RuntimeError, TypeError, OSError, MemoryError) as e:
         execution_time = time.time() - start_time
         logger.error(f"CMA-ES optimization failed: {e}")
 

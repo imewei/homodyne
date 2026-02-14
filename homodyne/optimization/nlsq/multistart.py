@@ -653,7 +653,7 @@ def screen_starts(
             # Use threads since cost_func likely releases GIL (JAX/NumPy)
             with ThreadPoolExecutor(max_workers=n_workers) as executor:
                 costs = np.array(list(executor.map(cost_func, starts)))
-        except Exception as e:
+        except (RuntimeError, OSError, ValueError) as e:
             logger.warning(
                 f"Parallel screening failed, falling back to sequential: {e}"
             )
@@ -799,7 +799,7 @@ def _run_sequential(
         try:
             result = optimize_func(idx, start)
             results.append(result)
-        except Exception as e:
+        except (ValueError, RuntimeError, OSError) as e:
             logger.warning(f"Start {idx} failed: {e}")
             results.append(
                 SingleStartResult(
@@ -874,7 +874,13 @@ def run_parallel_optimizations(
                 try:
                     result = future.result()
                     results.append(result)
-                except Exception as e:
+                except (
+                    ValueError,
+                    RuntimeError,
+                    TypeError,
+                    OSError,
+                    AttributeError,
+                ) as e:
                     error_msg = str(e)
                     if _is_pickle_error(error_msg):
                         pickle_error_detected = True
@@ -899,7 +905,7 @@ def run_parallel_optimizations(
                             )
                         )
 
-    except Exception as e:
+    except (ValueError, RuntimeError, TypeError, OSError, AttributeError) as e:
         error_msg = str(e)
         if _is_pickle_error(error_msg):
             pickle_error_detected = True
@@ -1258,7 +1264,7 @@ def _run_full_strategy(
                         message=result.message,
                         wall_time=result.wall_time,
                     )
-                except Exception as e:
+                except (ValueError, RuntimeError, OSError) as e:
                     logger.debug(f"Optimization {idx + 1} raised exception: {e}")
                     failed_result = SingleStartResult(
                         start_idx=idx,
@@ -1377,7 +1383,13 @@ def _run_parallel_with_progress(
                     for f in futures:
                         f.cancel()
                     break
-                except Exception as e:
+                except (
+                    ValueError,
+                    RuntimeError,
+                    TypeError,
+                    OSError,
+                    AttributeError,
+                ) as e:
                     error_msg = str(e)
                     if _is_pickle_error(error_msg):
                         fallback_to_sequential = True
@@ -1420,7 +1432,7 @@ def _run_parallel_with_progress(
         fallback_to_sequential = True
         fallback_reason = f"Overall timeout ({_WORKER_TIMEOUT}s)"
 
-    except Exception as e:
+    except (ValueError, RuntimeError, TypeError, OSError, AttributeError) as e:
         error_msg = str(e)
         if _is_pickle_error(error_msg):
             fallback_to_sequential = True
@@ -1450,7 +1462,7 @@ def _run_parallel_with_progress(
                     message=result.message,
                     wall_time=result.wall_time,
                 )
-            except Exception as e:
+            except (ValueError, RuntimeError, OSError) as e:
                 logger.debug(f"Sequential optimization {idx + 1} failed: {e}")
                 failed_result = SingleStartResult(
                     start_idx=idx,

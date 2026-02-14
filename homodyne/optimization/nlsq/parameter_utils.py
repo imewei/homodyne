@@ -148,7 +148,7 @@ def compute_jacobian_stats(
         jtj = jac_np.T @ jac_np * scaling_factor
         col_norms = np.linalg.norm(jac_np, axis=0) * np.sqrt(scaling_factor)
         return jtj, col_norms
-    except Exception:
+    except (ValueError, RuntimeError, np.linalg.LinAlgError):
         return None, None
 
 
@@ -286,7 +286,11 @@ def compute_consistent_per_angle_init(
                 t1_data = stratified_data.t1_flat[mask]
                 t2_data = stratified_data.t2_flat[mask]
 
-            # Compute g1_model for each data point at this angle
+            # Compute g1_model for each data point at this angle.
+            # NOTE: Both t1 and t2 index into t1_unique because XPCS correlation
+            # matrices C2(t1, t2) use a shared time grid (t1_unique == t2_unique).
+            # The physics model computes D(t) on this single grid, and differences
+            # D_cumsum[t1_idx] - D_cumsum[t2_idx] give the integral over |t1-t2|.
             t1_idx = np.clip(np.searchsorted(t1_unique, t1_data), 0, len(t1_unique) - 1)
             t2_idx = np.clip(np.searchsorted(t1_unique, t2_data), 0, len(t1_unique) - 1)
 
@@ -324,7 +328,7 @@ def compute_consistent_per_angle_init(
                     contrast_per_angle[i] = fit_contrast
                     offset_per_angle[i] = fit_offset
 
-        except Exception as e:
+        except (ValueError, RuntimeError, np.linalg.LinAlgError) as e:
             if logger:
                 logger.debug(f"Failed to compute consistent init for angle {phi}: {e}")
             # Keep default values

@@ -182,7 +182,7 @@ class StandardExecutor(OptimizationExecutor):
                 convergence_status="converged",
             )
 
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError, OSError, MemoryError) as e:
             logger.error(f"Standard optimization failed: {e}")
             raise
 
@@ -271,7 +271,7 @@ class LargeDatasetExecutor(OptimizationExecutor):
                 convergence_status="converged",
             )
 
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError, OSError, MemoryError) as e:
             logger.error(f"Large dataset optimization failed: {e}")
             raise
 
@@ -368,7 +368,7 @@ class StreamingExecutor(OptimizationExecutor):
                 convergence_status="converged" if info["success"] else "partial",
             )
 
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError, OSError, MemoryError) as e:
             logger.error(f"Hybrid streaming optimization failed: {e}")
             raise
 

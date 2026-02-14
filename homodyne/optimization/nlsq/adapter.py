@@ -296,6 +296,11 @@ def get_or_create_model(
     # Pre-convert phi_unique to JAX array for use in closure
     phi_unique_jax = jnp.array(phi_unique)
 
+    # Cache for xdata JAX conversion — avoids redundant jnp.array() on every call.
+    # NLSQ passes the same xdata repeatedly during optimization; only params change.
+    # Keyed by id(xdata); size-limited to 4 entries for streaming mode safety.
+    _xdata_cache: dict[int, tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]] = {}
+
     def model_func(xdata: np.ndarray, *params: float) -> np.ndarray:
         """Model function compatible with NLSQ curve_fit.
 
@@ -340,14 +345,19 @@ def get_or_create_model(
         # Performance Optimization (Spec 001 - FR-006, T042): Use batched vmap
         # computation instead of Python loop for better performance.
 
-        # Extract time arrays from xdata (xdata is always concrete numpy)
-        t1_batch = jnp.array(xdata[:, 0])
-        t2_batch = jnp.array(xdata[:, 1])
-
-        # phi_idx is precomputed in _flatten_xpcs_data (v2.17.0+)
-        # This avoids expensive argmin/gather inside JIT that causes XLA
-        # slow_operation_alarm for large datasets
-        phi_indices = jnp.array(xdata[:, 2]).astype(jnp.int32)
+        # Extract time arrays from xdata with caching (xdata is always concrete numpy)
+        # jnp.array() copies data, so caching by id(xdata) is safe — the same
+        # numpy array object yields the same JAX arrays across optimizer iterations.
+        xdata_id = id(xdata)
+        if xdata_id in _xdata_cache:
+            t1_batch, t2_batch, phi_indices = _xdata_cache[xdata_id]
+        else:
+            t1_batch = jnp.array(xdata[:, 0])
+            t2_batch = jnp.array(xdata[:, 1])
+            # phi_idx is precomputed in _flatten_xpcs_data (v2.17.0+)
+            phi_indices = jnp.array(xdata[:, 2]).astype(jnp.int32)
+            if len(_xdata_cache) < 4:  # Limit cache for streaming mode
+                _xdata_cache[xdata_id] = (t1_batch, t2_batch, phi_indices)
 
         # Look up phi values from precomputed indices (simple indexing, no gather)
         phi_batch = phi_unique_jax[phi_indices]
@@ -1045,7 +1055,7 @@ class NLSQAdapter(NLSQAdapterBase):
             else:
                 raise TypeError(f"Unexpected result type: {type(result)}")
 
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError, OSError, MemoryError) as e:
             logger.error("NLSQ optimization failed: %s", e)
             # Return failed result (T012, T017: include cache metadata)
             execution_time = time.time() - start_time

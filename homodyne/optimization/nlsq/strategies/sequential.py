@@ -46,8 +46,8 @@ def _jax_jacobian(
 ) -> np.ndarray:
     """Compute Jacobian using JAX autodiff.
 
-    Uses forward-mode autodiff (jacfwd) which is efficient for
-    functions with more outputs than inputs (typical in least squares).
+    Uses forward-mode autodiff (jacfwd) which is O(n_params × cost_f),
+    efficient when n_params << n_residuals (typical in least squares).
 
     Parameters
     ----------
@@ -350,7 +350,12 @@ def _estimate_initial_jacobian_norms(
         jac = _jax_jacobian(sample_residual_vector, params)
         norms = np.linalg.norm(jac, axis=0) * sample.get("scale", 1.0)
         return norms
-    except Exception as exc:  # pragma: no cover - purely diagnostic
+    except (
+        ValueError,
+        RuntimeError,
+        TypeError,
+        np.linalg.LinAlgError,
+    ) as exc:  # pragma: no cover - diagnostic
         logger.debug(f"Initial Jacobian estimation failed: {exc}")
         return None
 
@@ -376,7 +381,13 @@ def _compute_final_jacobian_norms(
 
         norms = np.linalg.norm(jac_subset, axis=0) * scale
         return norms
-    except Exception as exc:  # pragma: no cover - diagnostic path only
+    except (
+        ValueError,
+        RuntimeError,
+        TypeError,
+        IndexError,
+        np.linalg.LinAlgError,
+    ) as exc:  # pragma: no cover
         logger.debug(f"Final Jacobian norm computation failed: {exc}")
         return None
 
@@ -621,7 +632,7 @@ def optimize_single_angle(
             "jac_final_norms": final_jacobian_norms,
         }
 
-    except Exception as e:
+    except (ValueError, RuntimeError, OSError) as e:
         logger.error(f"Optimization failed for angle {subset.phi_angle:.2f}°: {e}")
         return {
             "parameters": initial_params,

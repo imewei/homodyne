@@ -415,7 +415,7 @@ class ResultBuilder:
             try:
                 residuals = residual_fn(xdata, *self.parameters)
                 quality = compute_quality_metrics(residuals, self.n_data, n_params)
-            except Exception:
+            except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError):
                 # Fallback if residual computation fails
                 quality = QualityMetrics(
                     chi_squared=float(self.info.get("fun", 0.0)),

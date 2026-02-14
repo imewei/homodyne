@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 # Performance Optimization (Spec 001 - FR-004, T021-T022): Static shape annotations
 # This JIT-compiled function with static shape arguments reduces recompilation overhead
 # by treating n_t1 and n_t2 as compile-time constants.
-@partial(jax.jit, static_argnums=(9, 10))
+@partial(jax.jit, static_argnums=(4, 5, 6, 9, 10))
 def _compute_single_angle_shaped(
     physical_params: jnp.ndarray,
     t1: jnp.ndarray,
@@ -41,8 +41,9 @@ def _compute_single_angle_shaped(
     """JIT-compiled g2 computation with static shape arguments.
 
     Performance Optimization (Spec 001 - FR-004): Using static_argnums for
-    n_t1 and n_t2 tells JAX these are compile-time constants, reducing
-    recompilation when only data values change.
+    q, L, dt (dataset-invariant constants) and n_t1, n_t2 (shape constants)
+    tells JAX these are compile-time constants, enabling XLA constant folding
+    and reducing recompilation when only data values change.
 
     Expected: 50-80% reduction in recompilation overhead for varying data sizes.
     """

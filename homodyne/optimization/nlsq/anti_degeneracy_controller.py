@@ -417,7 +417,9 @@ class AntiDegeneracyController:
         # This fixes the dimension mismatch when Fourier reparameterization is active
         reg_config = AdaptiveRegularizationConfig(
             enable=True,
-            mode=cast(Literal["absolute", "relative", "auto"], config.regularization_mode),
+            mode=cast(
+                Literal["absolute", "relative", "auto"], config.regularization_mode
+            ),
             lambda_base=config.regularization_lambda,
             target_cv=config.regularization_target_cv,
             target_contribution=config.regularization_target_contribution,
@@ -737,9 +739,9 @@ class AntiDegeneracyController:
         # Add fixed per-angle scaling info if available
         if self.has_fixed_per_angle_scaling():
             # Ensure arrays are not None before computing statistics
-            assert (
-                self._fixed_contrast_per_angle is not None
-            ), "Fixed contrast must be set"
+            assert self._fixed_contrast_per_angle is not None, (
+                "Fixed contrast must be set"
+            )
             assert self._fixed_offset_per_angle is not None, "Fixed offset must be set"
             diag["fixed_per_angle_scaling"] = {
                 "contrast_mean": float(np.mean(self._fixed_contrast_per_angle)),
@@ -945,7 +947,9 @@ class AntiDegeneracyController:
                 mse = float(np.mean(residuals**2))
                 n_points = len(residuals)
                 assert self.regularizer is not None
-                return float(self.regularizer.compute_regularization(params, mse, n_points))
+                return float(
+                    self.regularizer.compute_regularization(params, mse, n_points)
+                )
 
             callbacks["loss_augmentation"] = loss_augmentation
 

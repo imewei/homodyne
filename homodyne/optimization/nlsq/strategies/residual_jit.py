@@ -136,9 +136,7 @@ class StratifiedResidualFunctionJIT:
             "jit_residual_compilation", logger=self.logger, track_memory=True
         ) as phase:
             self._residual_fn_jit = jax.jit(self._compute_all_residuals)
-        self.logger.info(
-            f"JIT compilation setup complete in {phase.duration:.3f}s"
-        )
+        self.logger.info(f"JIT compilation setup complete in {phase.duration:.3f}s")
 
     def _extract_global_metadata(self) -> tuple[float, float, float | None]:
         """Extract q, L, dt from chunks (should be same for all chunks)."""
@@ -454,7 +452,9 @@ class StratifiedResidualFunctionJIT:
         """
         params_jax = jnp.asarray(params, dtype=jnp.float64)
         residuals_jax = self._residual_fn_jit(params_jax)
-        return cast(jnp.ndarray, residuals_jax)  # Keep as JAX array for JIT compatibility
+        return cast(
+            jnp.ndarray, residuals_jax
+        )  # Keep as JAX array for JIT compatibility
 
     def validate_chunk_structure(self) -> bool:
         """

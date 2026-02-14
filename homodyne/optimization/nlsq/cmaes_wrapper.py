@@ -646,7 +646,7 @@ class CMAESWrapper:
                 "duration_s": phase.duration,
             }
 
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError, OSError, MemoryError) as e:
             log_exception(
                 logger,
                 e,
@@ -728,7 +728,7 @@ class CMAESWrapper:
 
             return pop_batch, data_chunk
 
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError, OSError, MemoryError) as e:
             log_exception(
                 logger,
                 e,

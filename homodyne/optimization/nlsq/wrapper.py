@@ -446,7 +446,7 @@ def create_multistart_warmup_func(
                 message="L-BFGS warmup completed",
             )
 
-        except Exception as e:
+        except (ValueError, RuntimeError, OSError) as e:
             wall_time = time.perf_counter() - start_time
             return SingleStartResult(
                 start_idx=0,
@@ -1100,91 +1100,22 @@ class NLSQWrapper(NLSQAdapterBase):
                         f"For {n_angles} angles, will expand to {n_physical + 2 * n_angles} parameters."
                     )
 
-                # CRITICAL: Parameter ordering must match StratifiedResidualFunction!
-                # StratifiedResidualFunction expects: [contrast_per_angle, offset_per_angle, physical_params]
-                #
-                # validated_params comes from _params_to_array() which ALREADY reordered to:
-                # [contrast, offset, physical_params...] (scaling first!)
-                #
-                # So extract base scaling parameters from BEGINNING of validated_params
-                base_contrast = validated_params[0]  # First element
-                base_offset = validated_params[1]  # Second element
-                physical_params = validated_params[2:]  # Rest are physical params
-
-                logger.info(
-                    f"  Base scaling: contrast={base_contrast:.4f}, offset={base_offset:.4f}"
+                # Expand compact [contrast, offset, physical...] to per-angle format
+                # matching StratifiedResidualFunction order:
+                #   [contrast_per_angle, offset_per_angle, physical_params]
+                from homodyne.optimization.nlsq.data_prep import (
+                    expand_per_angle_parameters,
                 )
 
-                # Expand scaling parameters per angle
-                contrast_per_angle = np.full(n_angles, base_contrast)
-                offset_per_angle = np.full(n_angles, base_offset)
-
-                # Concatenate in StratifiedResidualFunction order: [scaling_params, physical_params]
-                # StratifiedResidualFunction._compute_chunk_residuals_raw line 207-211:
-                #   contrast = params_all[:self.n_phi]
-                #   offset = params_all[self.n_phi:2*self.n_phi]
-                #   physical_params = params_all[2*self.n_phi:]
-                expanded_params = np.concatenate(
-                    [
-                        contrast_per_angle,  # Indices 0 to n_angles-1
-                        offset_per_angle,  # Indices n_angles to 2*n_angles-1
-                        physical_params,  # Indices 2*n_angles onward
-                    ]
+                expanded = expand_per_angle_parameters(
+                    validated_params,
+                    nlsq_bounds,
+                    n_angles,
+                    n_physical,
+                    logger=logger,
                 )
-
-                logger.info(f"  Expanded to {len(expanded_params)} parameters:")
-                logger.info(
-                    f"    - Contrast per angle: {n_angles} (indices 0 to {n_angles - 1})"
-                )
-                logger.info(
-                    f"    - Offset per angle: {n_angles} (indices {n_angles} to {2 * n_angles - 1})"
-                )
-                logger.info(
-                    f"    - Physical: {n_physical} (indices {2 * n_angles} to {2 * n_angles + n_physical - 1})"
-                )
-
-                # Update validated_params with expanded version
-                validated_params = expanded_params
-
-                # Expand bounds similarly (match parameter order!)
-                if nlsq_bounds is not None:
-                    lower, upper = nlsq_bounds
-
-                    # Bounds come from _convert_bounds() which follows _params_to_array() ordering:
-                    # [contrast, offset, physical_params...] (scaling first!)
-                    lower_contrast = lower[0]  # First element
-                    upper_contrast = upper[0]
-                    lower_offset = lower[1]  # Second element
-                    upper_offset = upper[1]
-                    lower_physical = lower[2:]  # Rest are physical bounds
-                    upper_physical = upper[2:]
-
-                    # Expand scaling bounds per angle
-                    lower_contrast_per_angle = np.full(n_angles, lower_contrast)
-                    upper_contrast_per_angle = np.full(n_angles, upper_contrast)
-                    lower_offset_per_angle = np.full(n_angles, lower_offset)
-                    upper_offset_per_angle = np.full(n_angles, upper_offset)
-
-                    # Concatenate bounds in StratifiedResidualFunction order
-                    expanded_lower = np.concatenate(
-                        [
-                            lower_contrast_per_angle,  # Scaling first
-                            lower_offset_per_angle,
-                            lower_physical,  # Physical last
-                        ]
-                    )
-                    expanded_upper = np.concatenate(
-                        [
-                            upper_contrast_per_angle,
-                            upper_offset_per_angle,
-                            upper_physical,
-                        ]
-                    )
-
-                    nlsq_bounds = (expanded_lower, expanded_upper)
-                    logger.info(
-                        f"  Bounds expanded to {len(expanded_lower)} parameters"
-                    )
+                validated_params = expanded.params
+                nlsq_bounds = expanded.bounds
 
             # Parameter count validation (CRITICAL)
             # Per-angle scaling is always enabled (legacy mode removed Nov 2025)
@@ -1454,7 +1385,7 @@ class NLSQWrapper(NLSQAdapterBase):
 
                         return result
 
-                    except Exception as e:
+                    except (ValueError, RuntimeError, MemoryError, OSError) as e:
                         logger.warning(
                             f"Hybrid streaming optimization failed: {e}\n"
                             f"Falling back to stratified least-squares..."
@@ -1539,7 +1470,7 @@ class NLSQWrapper(NLSQAdapterBase):
 
                 return result
 
-            except Exception as e:
+            except (ValueError, RuntimeError, MemoryError, OSError) as e:
                 logger.error(
                     f"Stratified least_squares failed: {e}\n"
                     f"Falling back to standard curve_fit_large path..."
@@ -1671,7 +1602,13 @@ class NLSQWrapper(NLSQAdapterBase):
                             logger=logger,
                         )
                     )
-                except Exception as e:
+                except (
+                    ValueError,
+                    RuntimeError,
+                    TypeError,
+                    AttributeError,
+                    np.linalg.LinAlgError,
+                ) as e:
                     logger.warning(
                         f"Failed to compute consistent per-angle init: {e}\n"
                         "Falling back to uniform replication."
@@ -1893,7 +1830,69 @@ class NLSQWrapper(NLSQAdapterBase):
         )
 
         # Step 8: Execute optimization with strategy fallback
-        # Try selected strategy first, then fallback to simpler strategies if needed
+        popt, pcov, info, recovery_actions, convergence_status = (
+            self._execute_optimization_with_fallback(
+                strategy=strategy,
+                wrapped_residual_fn=wrapped_residual_fn,
+                xdata=xdata,
+                ydata=ydata,
+                validated_params=validated_params,
+                nlsq_bounds=nlsq_bounds,
+                loss_name=loss_name,
+                x_scale_value=x_scale_value,
+                config=config,
+                start_time=start_time,
+                logger=logger,
+            )
+        )
+
+        return self._post_process_results(
+            popt=popt,
+            pcov=pcov,
+            info=info,
+            transform_state=transform_state,
+            validated_params=validated_params,
+            residual_counter=residual_counter,
+            base_residual_fn=base_residual_fn,
+            xdata=xdata,
+            n_data=n_data,
+            start_time=start_time,
+            nlsq_bounds=nlsq_bounds,
+            convergence_status=convergence_status,
+            recovery_actions=recovery_actions,
+            stratification_diagnostics=stratification_diagnostics,
+            diagnostics_state={
+                "enabled": diagnostics_enabled,
+                "payload": diagnostics_payload,
+                "sample_x": diagnostics_sample_x,
+                "solver_residual_fn": solver_residual_fn,
+                "sample_scaling": sample_scaling,
+                "param_labels": param_labels,
+            },
+            logger=logger,
+        )
+
+    def _execute_optimization_with_fallback(
+        self,
+        strategy: OptimizationStrategy,
+        wrapped_residual_fn: Callable[..., np.ndarray],
+        xdata: np.ndarray,
+        ydata: np.ndarray,
+        validated_params: np.ndarray,
+        nlsq_bounds: tuple[np.ndarray, np.ndarray] | None,
+        loss_name: str,
+        x_scale_value: float | str,
+        config: Any,
+        start_time: float,
+        logger: logging.Logger | logging.LoggerAdapter[logging.Logger],
+    ) -> tuple[np.ndarray, np.ndarray | None, dict[str, Any], list[str], str]:
+        """Execute optimization with strategy fallback.
+
+        Tries selected strategy first, then falls back to simpler strategies
+        if needed. Returns (popt, pcov, info, recovery_actions, convergence_status).
+        """
+        import time
+
         current_strategy = strategy
         strategy_attempts: list[OptimizationStrategy] = []
 
@@ -1904,9 +1903,6 @@ class NLSQWrapper(NLSQAdapterBase):
                     f"Attempting optimization with {current_strategy.value} strategy..."
                 )
 
-                # Special handling for STREAMING strategy
-                # Note: Old StreamingOptimizer removed in NLSQ 0.4.0
-                # Use AdaptiveHybridStreamingOptimizer instead
                 if (
                     current_strategy == OptimizationStrategy.STREAMING
                     and STREAMING_AVAILABLE
@@ -1924,14 +1920,12 @@ class NLSQWrapper(NLSQAdapterBase):
                         logger=logger,
                         nlsq_config=config,
                     )
-                    # Hybrid streaming handles recovery internally
                     recovery_actions = info.get("recovery_actions", [])
                     convergence_status = (
                         "converged" if info.get("success", True) else "partial"
                     )
 
                 elif self.enable_recovery:
-                    # Execute with automatic error recovery (T022-T024)
                     popt, pcov, info, recovery_actions, convergence_status = (
                         self._execute_with_recovery(
                             residual_fn=wrapped_residual_fn,
@@ -1946,17 +1940,17 @@ class NLSQWrapper(NLSQAdapterBase):
                         )
                     )
                 else:
-                    # Execute without recovery (original behavior)
                     use_large = current_strategy != OptimizationStrategy.STANDARD
 
                     if use_large:
-                        # Use curve_fit_large for LARGE, CHUNKED, STREAMING strategies
                         result_tuple = curve_fit_large(
                             wrapped_residual_fn,
                             xdata,
                             ydata,
                             p0=validated_params.tolist(),
-                            bounds=nlsq_bounds if nlsq_bounds is not None else (-np.inf, np.inf),
+                            bounds=nlsq_bounds
+                            if nlsq_bounds is not None
+                            else (-np.inf, np.inf),
                             loss=loss_name,
                             x_scale=x_scale_value,
                             gtol=1e-6,
@@ -1965,11 +1959,10 @@ class NLSQWrapper(NLSQAdapterBase):
                             verbose=2,
                             full_output=True,
                             show_progress=strategy_info["supports_progress"],
-                            stability="auto",  # Enable memory management and stability
+                            stability="auto",
                         )
                         popt, pcov, info = result_tuple  # type: ignore[misc]
                     else:
-                        # Use standard curve_fit for small datasets
                         popt, pcov = curve_fit(
                             wrapped_residual_fn,
                             xdata,
@@ -1982,11 +1975,10 @@ class NLSQWrapper(NLSQAdapterBase):
                             ftol=1e-6,
                             max_nfev=5000,
                             verbose=2,
-                            stability="auto",  # Enable memory management and stability
+                            stability="auto",
                         )
                         info = {}
 
-                    # DEBUG: Check for optimization failures (frozen parameters, degenerate covariance)
                     logger.info("🔍 NLSQ Result Analysis:")
                     logger.info(f"  p0 (initial):  {validated_params}")
                     logger.info(f"  popt (fitted): {popt}")
@@ -1998,7 +1990,6 @@ class NLSQWrapper(NLSQAdapterBase):
                     )
                     logger.info(f"  pcov diagonal: {np.diag(pcov)}")
 
-                    # Check for frozen parameters (unchanged + zero uncertainty)
                     params_unchanged = np.allclose(
                         popt, validated_params, rtol=1e-10, atol=1e-14
                     )
@@ -2023,7 +2014,6 @@ class NLSQWrapper(NLSQAdapterBase):
                     recovery_actions = []
                     convergence_status = "converged"
 
-                # Success! Record which strategy worked
                 if strategy_attempts:
                     recovery_actions.append(
                         f"strategy_fallback_to_{current_strategy.value}"
@@ -2032,12 +2022,18 @@ class NLSQWrapper(NLSQAdapterBase):
                         f"Successfully optimized with fallback strategy: {current_strategy.value}\n"
                         f"  Previous attempts: {[s.value for s in strategy_attempts]}"
                     )
-                break  # Exit fallback loop on success
+                break
 
-            except Exception as e:
+            except (
+                ValueError,
+                RuntimeError,
+                TypeError,
+                AttributeError,
+                OSError,
+                MemoryError,
+            ) as e:
                 strategy_attempts.append(current_strategy)
 
-                # Try fallback strategy
                 fallback_strategy = self._get_fallback_strategy(current_strategy)
 
                 if fallback_strategy is not None:
@@ -2047,8 +2043,6 @@ class NLSQWrapper(NLSQAdapterBase):
                     )
                     current_strategy = fallback_strategy
                 else:
-                    # No more fallbacks available
-                    # Preserve detailed diagnostic error message if available
                     execution_time = time.time() - start_time
                     logger.error(
                         f"All strategies failed after {execution_time:.2f}s\n"
@@ -2056,19 +2050,52 @@ class NLSQWrapper(NLSQAdapterBase):
                         f"  Final error: {e}"
                     )
 
-                    # If the last error was a RuntimeError with detailed diagnostics, preserve it
-                    # Otherwise create a generic error message
                     if isinstance(e, RuntimeError) and (
                         "Recovery actions" in str(e) or "Suggestions" in str(e)
                     ):
-                        # Detailed diagnostics are already in the error message - re-raise as-is
                         raise
                     else:
-                        # Create generic fallback error
                         raise RuntimeError(
                             f"Optimization failed with all strategies: {[s.value for s in strategy_attempts]}"
                         ) from e
 
+        return popt, pcov, info, recovery_actions, convergence_status
+
+    def _post_process_results(
+        self,
+        popt: np.ndarray,
+        pcov: np.ndarray | None,
+        info: dict[str, Any],
+        transform_state: Any,
+        validated_params: np.ndarray,
+        residual_counter: Any,
+        base_residual_fn: Callable[..., np.ndarray],
+        xdata: np.ndarray,
+        n_data: int,
+        start_time: float,
+        nlsq_bounds: tuple[np.ndarray, np.ndarray] | None,
+        convergence_status: str,
+        recovery_actions: list[str],
+        stratification_diagnostics: Any,
+        diagnostics_state: dict[str, Any],
+        logger: logging.Logger | logging.LoggerAdapter[logging.Logger],
+    ) -> OptimizationResult:
+        """Post-process optimization outputs into final result.
+
+        Applies inverse transforms, computes final residuals and costs,
+        runs optional diagnostics, determines success, and creates result.
+        """
+        import time
+
+        # Unpack diagnostics state
+        diagnostics_enabled = diagnostics_state.get("enabled", False)
+        diagnostics_payload = diagnostics_state.get("payload")
+        diagnostics_sample_x = diagnostics_state.get("sample_x")
+        solver_residual_fn = diagnostics_state.get("solver_residual_fn")
+        sample_scaling = diagnostics_state.get("sample_scaling")
+        param_labels = diagnostics_state.get("param_labels")
+
+        # Apply inverse shear transforms
         solver_params = np.asarray(popt, dtype=float)
         if transform_state:
             physical_params = apply_inverse_shear_transforms_to_vector(
@@ -2086,6 +2113,7 @@ class NLSQWrapper(NLSQAdapterBase):
         else:
             popt = np.asarray(popt, dtype=float)
 
+        # Count function evaluations
         reported_nfev: int = cast(int, info.get("nfev", -1))
         corrected_nfev = (
             residual_counter.count if residual_counter is not None else reported_nfev
@@ -2113,11 +2141,11 @@ class NLSQWrapper(NLSQAdapterBase):
                 "Iteration count not available from NLSQ (curve_fit_large does not return this info)"
             )
 
-        # Step 8: Measure execution time
         execution_time = time.time() - start_time
 
+        # Optional diagnostics: Jacobian stats, parameter status, covariance refinement
         if diagnostics_enabled and diagnostics_sample_x is not None:
-            assert diagnostics_payload is not None  # Ensured by line 2095
+            assert diagnostics_payload is not None
             final_jtj, final_norms = _compute_jacobian_stats(
                 solver_residual_fn,
                 diagnostics_sample_x,
@@ -2162,23 +2190,18 @@ class NLSQWrapper(NLSQAdapterBase):
                     float(np.linalg.cond(final_jtj)) if final_jtj.size > 0 else None
                 )
 
-        # Compute costs for success determination
+        # Determine optimization success
         initial_cost = info.get("initial_cost", 0) if isinstance(info, dict) else 0
         final_cost = np.sum(final_residuals**2)
 
-        # Determine optimization success based on actual behavior (not misleading iteration count)
-        # NLSQ trust-region methods often return iterations=0, so we check actual optimization activity:
-        # 1. Function evaluations > 10 suggests optimization actually ran
-        # 2. Cost reduction > 5% suggests parameters were actually optimized
-        # 3. Parameters changed suggests optimization didn't immediately declare convergence
-        function_evals = iterations  # corrected function evaluations
+        function_evals = iterations
         cost_reduction = (
             (initial_cost - final_cost) / initial_cost if initial_cost > 0 else 0
         )
         params_changed = not np.allclose(popt, validated_params, rtol=1e-8)
 
         optimization_ran = function_evals > 10 or params_changed
-        optimization_improved = cost_reduction > 0.05  # 5% improvement threshold
+        optimization_improved = cost_reduction > 0.05
 
         if optimization_ran and optimization_improved:
             status_indicator = "✅ SUCCESS"
@@ -2199,14 +2222,14 @@ class NLSQWrapper(NLSQAdapterBase):
         if recovery_actions:
             logger.info(f"Recovery actions applied: {len(recovery_actions)}")
 
-        # Task 5.3 & 5.4: Extract streaming diagnostics from info if available
+        # Extract streaming diagnostics
         streaming_diagnostics = None
         if "batch_statistics" in info:
             streaming_diagnostics = info["batch_statistics"]
         elif "streaming_diagnostics" in info:
             streaming_diagnostics = info["streaming_diagnostics"]
 
-        # Step 9: Create result with streaming and stratification diagnostics
+        # Create result
         result = self._create_fit_result(
             popt=popt,
             pcov=pcov,
@@ -2216,8 +2239,8 @@ class NLSQWrapper(NLSQAdapterBase):
             execution_time=execution_time,
             convergence_status=convergence_status,
             recovery_actions=recovery_actions,
-            streaming_diagnostics=streaming_diagnostics,  # Task 5.4
-            stratification_diagnostics=stratification_diagnostics,  # v2.2.1
+            streaming_diagnostics=streaming_diagnostics,
+            stratification_diagnostics=stratification_diagnostics,
             diagnostics_payload=diagnostics_payload if diagnostics_enabled else None,
         )
 
@@ -2458,7 +2481,14 @@ class NLSQWrapper(NLSQAdapterBase):
                 logger.info(f"Optimization converged on attempt {attempt + 1}")
                 return popt, pcov, info, recovery_actions, convergence_status
 
-            except Exception as e:
+            except (
+                ValueError,
+                RuntimeError,
+                TypeError,
+                AttributeError,
+                OSError,
+                MemoryError,
+            ) as e:
                 # T026: Log exception with parameter context for debugging
                 log_exception(
                     logger,
@@ -3027,7 +3057,14 @@ class NLSQWrapper(NLSQAdapterBase):
         # Create a simple namespace object to hold stratified data
         class StratifiedData:
             def __init__(
-                self, phi: np.ndarray, t1: np.ndarray, t2: np.ndarray, g2: np.ndarray, original_data: Any, diagnostics: Any = None, chunk_sizes: Any = None
+                self,
+                phi: np.ndarray,
+                t1: np.ndarray,
+                t2: np.ndarray,
+                g2: np.ndarray,
+                original_data: Any,
+                diagnostics: Any = None,
+                chunk_sizes: Any = None,
             ) -> None:
                 # Store flattened stratified arrays
                 self.phi_flat = phi
@@ -3191,7 +3228,11 @@ class NLSQWrapper(NLSQAdapterBase):
                     np.array2string(bounds[0], precision=3),
                     np.array2string(bounds[1], precision=3),
                 )
-            except Exception as exc:  # pragma: no cover - logging safeguard
+            except (
+                ValueError,
+                TypeError,
+                AttributeError,
+            ) as exc:  # pragma: no cover - logging safeguard
                 logger.debug(f"Sequential bounds dtype logging failed: {exc}")
 
         # Create residual function using physics kernels (local shim)
@@ -4203,7 +4244,14 @@ class NLSQWrapper(NLSQAdapterBase):
 
             return popt, pcov, info
 
-        except Exception as e:
+        except (
+            ValueError,
+            RuntimeError,
+            TypeError,
+            AttributeError,
+            OSError,
+            MemoryError,
+        ) as e:
             # T031: Log detailed warning explaining failure and lost capabilities
             logger.error(f"AdaptiveHybridStreamingOptimizer failed: {e}")
             logger.warning(
@@ -4444,7 +4492,9 @@ class NLSQWrapper(NLSQAdapterBase):
                 logger.info(f"  per_angle_mode: {ad_controller.per_angle_mode_actual}")
                 logger.info(f"  use_constant: {ad_controller.use_constant}")
                 logger.info(f"  use_fixed_scaling: {ad_controller.use_fixed_scaling}")
-                logger.info(f"  use_averaged_scaling: {ad_controller.use_averaged_scaling}")
+                logger.info(
+                    f"  use_averaged_scaling: {ad_controller.use_averaged_scaling}"
+                )
                 logger.info(f"  use_fourier: {ad_controller.use_fourier}")
                 logger.info(
                     f"  use_shear_weighting: {ad_controller.use_shear_weighting}"
@@ -4605,9 +4655,7 @@ class NLSQWrapper(NLSQAdapterBase):
             # quantiles, AVERAGE to single values, then OPTIMIZE them.
             # Result: 9 params (7 physical + 1 contrast_avg + 1 offset_avg).
             logger.info("=" * 60)
-            logger.info(
-                "AUTO_AVERAGED MODE: Computing averaged scaling initial values"
-            )
+            logger.info("AUTO_AVERAGED MODE: Computing averaged scaling initial values")
             logger.info("=" * 60)
 
             # Get contrast/offset bounds from initial bounds
@@ -4785,7 +4833,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 f"✓ Gradient sanity check passed (gradient magnitude: {gradient_estimate:.6e})"
             )
 
-        except Exception as e:
+        except (ValueError, RuntimeError, np.linalg.LinAlgError) as e:
             if "Gradient sanity check FAILED" in str(e):
                 raise  # Re-raise our custom error
             logger.warning(f"Gradient sanity check encountered error: {e}")
@@ -5054,12 +5102,8 @@ class NLSQWrapper(NLSQAdapterBase):
                 # Physical params covariance
                 pcov_expanded[2 * n_phi :, 2 * n_phi :] = pcov[2:, 2:]
                 # Cross-terms (physical with averaged scaling)
-                pcov_expanded[2 * n_phi :, :n_phi] = np.tile(
-                    pcov[2:, 0:1], (1, n_phi)
-                )
-                pcov_expanded[:n_phi, 2 * n_phi :] = np.tile(
-                    pcov[0:1, 2:], (n_phi, 1)
-                )
+                pcov_expanded[2 * n_phi :, :n_phi] = np.tile(pcov[2:, 0:1], (1, n_phi))
+                pcov_expanded[:n_phi, 2 * n_phi :] = np.tile(pcov[0:1, 2:], (n_phi, 1))
                 pcov_expanded[2 * n_phi :, n_phi : 2 * n_phi] = np.tile(
                     pcov[2:, 1:2], (1, n_phi)
                 )
@@ -5613,7 +5657,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     step, _, _, _ = jnp.linalg.lstsq(
                         solver_matrix, -total_Jtr, rcond=1e-5
                     )
-                except Exception:
+                except (ValueError, RuntimeError, FloatingPointError):
                     step = jnp.nan  # Signal fail
 
                 # Check step validity
@@ -5637,7 +5681,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 # This is expensive but necessary
                 try:
                     chi2_new = evaluate_total_chi2(params_new)
-                except Exception as e:
+                except (ValueError, RuntimeError, FloatingPointError) as e:
                     logger.warning(f"Eval failed: {e}")
                     chi2_new = jnp.inf
 
@@ -6105,7 +6149,7 @@ class NLSQWrapper(NLSQAdapterBase):
                         "Failed to compute quantile-based scaling, "
                         "falling back to standard constant mode (optimizing 2 params)"
                     )
-            except Exception as e:
+            except (ValueError, RuntimeError, np.linalg.LinAlgError) as e:
                 logger.warning(
                     f"Error computing quantile-based scaling: {e}, "
                     f"falling back to standard constant mode"
@@ -6711,7 +6755,9 @@ class NLSQWrapper(NLSQAdapterBase):
             all_t2_data = stratified_data.t2_flat
             y_data = stratified_data.g2_flat
 
-        # Convert to indices (vectorized)
+        # Convert to indices (vectorized).
+        # NOTE: Both t1 and t2 index into t1_unique because XPCS correlation
+        # matrices use a shared time grid (t1_unique == t2_unique).
         phi_idx_arr = np.clip(
             np.searchsorted(phi_unique, all_phi_data), 0, len(phi_unique) - 1
         )
@@ -7253,7 +7299,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     logger.info(
                         "  Covariance transformed from Fourier to per-angle space"
                     )
-                except Exception as e:
+                except (ValueError, RuntimeError, np.linalg.LinAlgError) as e:
                     logger.warning(
                         f"  Covariance transformation failed: {e}. Using identity fallback."
                     )
@@ -7326,7 +7372,12 @@ class NLSQWrapper(NLSQAdapterBase):
                     logger.info(
                         "  Covariance expanded: per-angle=0 (fixed), physical=preserved"
                     )
-                except Exception as e:
+                except (
+                    ValueError,
+                    RuntimeError,
+                    MemoryError,
+                    np.linalg.LinAlgError,
+                ) as e:
                     logger.warning(
                         f"  Covariance expansion failed: {e}. Using identity fallback."
                     )
@@ -7348,20 +7399,22 @@ class NLSQWrapper(NLSQAdapterBase):
             logger.info("=" * 60)
             logger.info("ANTI-DEGENERACY EXECUTION: Inverse Auto Averaged Transform")
             # Layout: [contrast_const, offset_const, physical_params]
-            contrast_const = popt[0]
-            offset_const = popt[1]
-            physical_params_opt = popt[2:]
-
-            # Expand to per-angle format by broadcasting
-            contrast_per_angle_opt = np.full(n_phi, contrast_const)
-            offset_per_angle_opt = np.full(n_phi, offset_const)
-
-            # Reconstruct full parameter vector in original layout
-            popt = np.concatenate(
-                [contrast_per_angle_opt, offset_per_angle_opt, physical_params_opt]
+            from homodyne.optimization.nlsq.data_prep import (
+                expand_per_angle_parameters,
             )
 
-            logger.info(f"  Constant params: 2 + {len(physical_params_opt)} physical")
+            contrast_const = popt[0]
+            offset_const = popt[1]
+            n_physical_opt = len(popt) - 2
+            expanded = expand_per_angle_parameters(
+                popt,
+                None,
+                n_phi,
+                n_physical_opt,
+            )
+            popt = expanded.params
+
+            logger.info(f"  Constant params: 2 + {n_physical_opt} physical")
             logger.info(f"  Restored per-angle params: {len(popt)}")
             logger.info(f"  Contrast (uniform): {contrast_const:.6f}")
             logger.info(f"  Offset (uniform): {offset_const:.6f}")
@@ -7372,7 +7425,7 @@ class NLSQWrapper(NLSQAdapterBase):
             # J[n_phi+i, 1] = 1 for i in 0..n_phi-1 (offset params)
             # J[2*n_phi+i, 2+i] = 1 for physical params (identity)
             pcov_constant = result.get("pcov", None)
-            n_constant_total = 2 + len(physical_params_opt)
+            n_constant_total = 2 + n_physical_opt
 
             if (
                 pcov_constant is not None
@@ -7380,7 +7433,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 and pcov_constant.shape[1] == n_constant_total
             ):
                 n_per_angle_total = 2 * n_phi  # contrast + offset per-angle
-                n_physical = len(physical_params_opt)
+                n_physical = n_physical_opt
                 n_total_restored = n_per_angle_total + n_physical
 
                 # Build Jacobian for constant → per-angle transformation
@@ -7399,7 +7452,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     logger.info(
                         "  Covariance transformed from constant to per-angle space"
                     )
-                except Exception as e:
+                except (ValueError, RuntimeError, np.linalg.LinAlgError) as e:
                     logger.warning(
                         f"  Covariance transformation failed: {e}. Using identity fallback."
                     )

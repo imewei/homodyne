@@ -308,7 +308,9 @@ class StratifiedResidualFunction:
         self.t2_indices_all = jnp.concatenate(self._precomputed_t2_indices, axis=0)
 
         # Compute chunk boundaries for index lookup
-        chunk_sizes = [len(cast(jnp.ndarray, chunk_jax["g2"])) for chunk_jax in self.chunks_jax]
+        chunk_sizes = [
+            len(cast(jnp.ndarray, chunk_jax["g2"])) for chunk_jax in self.chunks_jax
+        ]
         boundaries = [0]
         for size in chunk_sizes:
             boundaries.append(boundaries[-1] + size)
@@ -513,6 +515,7 @@ class StratifiedResidualFunction:
         # (Previously computed redundantly per-chunk)
         dt_value = self._chunk_dt if self._chunk_dt is not None else 0.001
         if self.per_angle_scaling:
+
             def compute_for_angle(
                 phi_val: float, contrast_val: float, offset_val: float
             ) -> jnp.ndarray:
@@ -534,6 +537,7 @@ class StratifiedResidualFunction:
             compute_g2_vmap = jax.vmap(compute_for_angle, in_axes=(0, 0, 0))
             g2_theory_grid = compute_g2_vmap(self._phi_unique, contrast, offset)
         else:
+
             def compute_for_angle_scalar(phi_val: float) -> jnp.ndarray:
                 return jnp.squeeze(
                     compute_g2_scaled(

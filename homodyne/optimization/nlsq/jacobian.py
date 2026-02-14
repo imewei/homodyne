@@ -56,8 +56,9 @@ def compute_jacobian_stats(
             def residual_vector(p):
                 return jnp.asarray(residual_fn(x_subset, *tuple(p))).reshape(-1)
 
-        # Use jacrev (VJP-based) instead of jacfwd for m >> n efficiency
-        jac = jax.jacrev(residual_vector)(params_jnp)
+        # Use jacfwd (JVP-based): O(n × cost_f) vs jacrev's O(m × cost_f).
+        # For XPCS m >> n (e.g., 20K residuals, 9 params), jacfwd is ~260x faster.
+        jac = jax.jacfwd(residual_vector)(params_jnp)
         jac_np = np.asarray(jac)
 
         # Performance Optimization (Spec 001 - FR-010, T048): Check condition number
@@ -80,7 +81,7 @@ def compute_jacobian_stats(
 
         col_norms = np.linalg.norm(jac_np, axis=0) * np.sqrt(scaling_factor)
         return jtj, col_norms
-    except Exception:
+    except (ValueError, RuntimeError, np.linalg.LinAlgError):
         return None, None
 
 
@@ -121,11 +122,12 @@ def compute_jacobian_condition_number(
             def residual_vector(p):
                 return jnp.asarray(residual_fn(x_subset, *tuple(p))).reshape(-1)
 
-        # Use jacrev (VJP-based) instead of jacfwd for m >> n efficiency
-        jac = jax.jacrev(residual_vector)(params_jnp)
+        # Use jacfwd (JVP-based): O(n × cost_f) vs jacrev's O(m × cost_f).
+        # For XPCS m >> n (e.g., 20K residuals, 9 params), jacfwd is ~260x faster.
+        jac = jax.jacfwd(residual_vector)(params_jnp)
         jac_np = np.asarray(jac)
         return float(np.linalg.cond(jac_np))
-    except Exception:
+    except (ValueError, RuntimeError, np.linalg.LinAlgError):
         return None
 
 
@@ -226,8 +228,8 @@ def estimate_gradient_noise(
                 def residual_vector(p):
                     return jnp.asarray(residual_fn(x_subset, *tuple(p))).reshape(-1)
 
-            # Use jacrev (VJP-based) instead of jacfwd for m >> n efficiency
-            jac = jax.jacrev(residual_vector)(params_jnp)
+            # Use jacfwd (JVP-based): O(n × cost_f), faster for m >> n
+            jac = jax.jacfwd(residual_vector)(params_jnp)
             jacobians.append(np.asarray(jac))
 
         # Compute coefficient of variation across samples
@@ -240,5 +242,5 @@ def estimate_gradient_noise(
             cv = np.where(np.abs(jac_mean) > 1e-10, jac_std / np.abs(jac_mean), 0.0)
 
         return float(np.median(cv))
-    except Exception:
+    except (ValueError, RuntimeError, np.linalg.LinAlgError):
         return None

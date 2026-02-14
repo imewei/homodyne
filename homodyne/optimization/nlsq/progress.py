@@ -313,7 +313,7 @@ class MultiStartProgressTracker:
                     "tqdm not available for progress bar display. "
                     "Install with: pip install tqdm"
                 )
-            except Exception as e:
+            except (AttributeError, RuntimeError, ValueError) as e:
                 logger.warning(f"Failed to initialize progress bar: {e}")
 
         if verbose >= 1:
