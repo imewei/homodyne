@@ -983,33 +983,47 @@ def log_calls(
 
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            func_name = f"{func.__module__}.{func.__qualname__}"
             assert resolved_logger is not None  # For type narrowing
 
+            # Guard: skip all formatting if log level is not enabled
+            log_enabled = resolved_logger.isEnabledFor(level)
+
             # Log function entry
-            if include_args:
-                args_str = ", ".join([repr(arg) for arg in args])
-                kwargs_str = ", ".join([f"{k}={repr(v)}" for k, v in kwargs.items()])
-                all_args = ", ".join(filter(None, [args_str, kwargs_str]))
-                resolved_logger.log(level, f"Calling {func_name}({all_args})")
-            else:
-                resolved_logger.log(level, f"Calling {func_name}")
+            if log_enabled:
+                func_name = f"{func.__module__}.{func.__qualname__}"
+                if include_args:
+                    args_str = ", ".join([repr(arg) for arg in args])
+                    kwargs_str = ", ".join(
+                        [f"{k}={repr(v)}" for k, v in kwargs.items()]
+                    )
+                    all_args = ", ".join(filter(None, [args_str, kwargs_str]))
+                    resolved_logger.log(level, "Calling %s(%s)", func_name, all_args)
+                else:
+                    resolved_logger.log(level, "Calling %s", func_name)
 
             try:
                 result = func(*args, **kwargs)
 
                 # Log function exit
-                if include_result:
-                    resolved_logger.log(
-                        level, f"Completed {func_name} -> {repr(result)}"
-                    )
-                else:
-                    resolved_logger.log(level, f"Completed {func_name}")
+                if log_enabled:
+                    if include_result:
+                        resolved_logger.log(
+                            level, "Completed %s -> %r", func_name, result
+                        )
+                    else:
+                        resolved_logger.log(level, "Completed %s", func_name)
 
                 return result
 
             except Exception as e:
-                resolved_logger.log(logging.ERROR, f"Exception in {func_name}: {e}")
+                exc_func_name = (
+                    func_name
+                    if log_enabled
+                    else f"{func.__module__}.{func.__qualname__}"
+                )
+                resolved_logger.log(
+                    logging.ERROR, "Exception in %s: %s", exc_func_name, e
+                )
                 raise
 
         return wrapper  # type: ignore[return-value]
