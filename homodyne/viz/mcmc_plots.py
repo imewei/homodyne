@@ -47,11 +47,13 @@ logger = get_logger(__name__)
 MCMCResult: Any
 try:
     from homodyne.optimization.cmc.results import CMCResult as _CMCResult
+
     MCMCResult = _CMCResult
 except ImportError:
     # Fallback: try legacy path
     try:
         from homodyne.optimization import MCMCResult as _LegacyMCMCResult
+
         MCMCResult = _LegacyMCMCResult
     except ImportError:
         MCMCResult = None  # Will be caught at runtime
@@ -541,7 +543,9 @@ def plot_convergence_diagnostics(
     return fig
 
 
-def _plot_rhat(ax: Any, result: Any, param_names: list[str], threshold: float, is_cmc: bool) -> None:
+def _plot_rhat(
+    ax: Any, result: Any, param_names: list[str], threshold: float, is_cmc: bool
+) -> None:
     """Helper function to plot R-hat diagnostics."""
     if is_cmc and result.per_shard_diagnostics is not None:
         # CMC: Plot per-shard R-hat values
@@ -641,7 +645,9 @@ def _plot_rhat(ax: Any, result: Any, param_names: list[str], threshold: float, i
         ax.grid(True, alpha=0.3, axis="y")
 
 
-def _plot_ess(ax: Any, result: Any, param_names: list[str], threshold: float, is_cmc: bool) -> None:
+def _plot_ess(
+    ax: Any, result: Any, param_names: list[str], threshold: float, is_cmc: bool
+) -> None:
     """Helper function to plot ESS diagnostics."""
     if is_cmc and result.per_shard_diagnostics is not None:
         # CMC: Plot per-shard ESS values
@@ -1021,7 +1027,7 @@ def plot_cmc_summary_dashboard(
                 va="center",
                 transform=ax_kl.transAxes,
             )
-    except Exception as e:
+    except (ValueError, TypeError, KeyError, IndexError) as e:
         ax_kl.text(
             0.5,
             0.5,
@@ -1093,7 +1099,7 @@ def plot_cmc_summary_dashboard(
                 va="center",
                 transform=ax_conv.transAxes,
             )
-    except Exception as e:
+    except (ValueError, TypeError, KeyError, IndexError) as e:
         ax_conv.text(
             0.5,
             0.5,
@@ -1138,7 +1144,7 @@ def plot_cmc_summary_dashboard(
                     f"{param_names[i]} Trace", fontsize=10, fontweight="bold"
                 )
                 ax_trace.grid(True, alpha=0.3)
-        except Exception as e:
+        except (ValueError, TypeError, KeyError, IndexError) as e:
             ax_trace.text(
                 0.5,
                 0.5,
@@ -1187,7 +1193,7 @@ def plot_cmc_summary_dashboard(
                     f"{param_names[i]} Posterior", fontsize=10, fontweight="bold"
                 )
                 ax_hist.legend(fontsize=8)
-        except Exception as e:
+        except (ValueError, TypeError, KeyError, IndexError) as e:
             ax_hist.text(
                 0.5,
                 0.5,
@@ -1566,7 +1572,7 @@ def generate_mcmc_diagnostic_report(
         plot_arviz_trace(result, save_path=trace_path, dpi=dpi)
         paths["trace"] = trace_path
         logger.info(f"Generated trace plot: {trace_path}")
-    except Exception as e:
+    except (ValueError, TypeError, OSError) as e:
         logger.warning(f"Failed to generate trace plot: {e}")
 
     # 2. ArviZ posterior distributions
@@ -1575,7 +1581,7 @@ def generate_mcmc_diagnostic_report(
         plot_arviz_posterior(result, save_path=posterior_path, dpi=dpi)
         paths["posterior"] = posterior_path
         logger.info(f"Generated posterior plot: {posterior_path}")
-    except Exception as e:
+    except (ValueError, TypeError, OSError) as e:
         logger.warning(f"Failed to generate posterior plot: {e}")
 
     # 3. ArviZ pair plots
@@ -1584,7 +1590,7 @@ def generate_mcmc_diagnostic_report(
         plot_arviz_pair(result, save_path=pair_path, dpi=dpi)
         paths["pair"] = pair_path
         logger.info(f"Generated pair plot: {pair_path}")
-    except Exception as e:
+    except (ValueError, TypeError, OSError) as e:
         logger.warning(f"Failed to generate pair plot: {e}")
 
     # 4. Convergence diagnostics
@@ -1593,7 +1599,7 @@ def generate_mcmc_diagnostic_report(
         plot_convergence_diagnostics(result, save_path=conv_path, dpi=dpi)
         paths["convergence"] = conv_path
         logger.info(f"Generated convergence plot: {conv_path}")
-    except Exception as e:
+    except (ValueError, TypeError, OSError) as e:
         logger.warning(f"Failed to generate convergence plot: {e}")
 
     # 5. CMC-specific plots
@@ -1604,7 +1610,7 @@ def generate_mcmc_diagnostic_report(
             plot_kl_divergence_matrix(result, save_path=kl_path, dpi=dpi)
             paths["kl_matrix"] = kl_path
             logger.info(f"Generated KL matrix plot: {kl_path}")
-        except Exception as e:
+        except (ValueError, TypeError, OSError) as e:
             logger.warning(f"Failed to generate KL matrix plot: {e}")
 
         # CMC summary dashboard
@@ -1613,7 +1619,7 @@ def generate_mcmc_diagnostic_report(
             plot_cmc_summary_dashboard(result, save_path=dashboard_path, dpi=dpi)
             paths["cmc_dashboard"] = dashboard_path
             logger.info(f"Generated CMC dashboard: {dashboard_path}")
-        except Exception as e:
+        except (ValueError, TypeError, OSError) as e:
             logger.warning(f"Failed to generate CMC dashboard: {e}")
 
     # 6. Summary statistics (save as CSV)
@@ -1623,7 +1629,7 @@ def generate_mcmc_diagnostic_report(
         summary_df.to_csv(summary_path)
         paths["summary_csv"] = summary_path
         logger.info(f"Generated summary CSV: {summary_path}")
-    except Exception as e:
+    except (ValueError, TypeError, OSError) as e:
         logger.warning(f"Failed to generate summary CSV: {e}")
 
     logger.info(f"MCMC diagnostic report generated: {len(paths)} files in {output_dir}")
@@ -1648,25 +1654,25 @@ def print_mcmc_summary(result: Any) -> None:  # MCMCResult type
     --------
     >>> print_mcmc_summary(result)
     """
-    print("\n" + "=" * 60)
-    print("MCMC Results Summary")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("MCMC Results Summary")
+    logger.info("=" * 60)
 
     # Basic info
-    print(f"\nAnalysis Mode: {result.analysis_mode}")
-    print(f"Sampler: {result.sampler}")
-    print(f"Converged: {result.converged}")
-    print(f"Computation Time: {result.computation_time:.2f}s")
+    logger.info("Analysis Mode: %s", result.analysis_mode)
+    logger.info("Sampler: %s", result.sampler)
+    logger.info("Converged: %s", result.converged)
+    logger.info("Computation Time: %.2fs", result.computation_time)
 
     if result.is_cmc_result():
-        print("\nCMC Information:")
-        print(f"  - Number of Shards: {result.num_shards}")
-        print(f"  - Combination Method: {result.combination_method}")
+        logger.info("CMC Information:")
+        logger.info("  - Number of Shards: %s", result.num_shards)
+        logger.info("  - Combination Method: %s", result.combination_method)
 
     # Parameter estimates
-    print("\n" + "-" * 60)
-    print("Parameter Estimates (95% CI)")
-    print("-" * 60)
+    logger.info("-" * 60)
+    logger.info("Parameter Estimates (95%% CI)")
+    logger.info("-" * 60)
 
     param_names = result.get_param_names()
 
@@ -1684,28 +1690,29 @@ def print_mcmc_summary(result: Any) -> None:  # MCMCResult type
         std = result.std_params[i] if result.std_params is not None else 0.0
 
         if ci_lower is not None and ci_upper is not None:
-            print(
-                f"  {name:20s}: {mean:12.4f} ± {std:8.4f}  [{ci_lower[i]:.4f}, {ci_upper[i]:.4f}]"
+            logger.info(
+                "  %20s: %12.4f +/- %8.4f  [%.4f, %.4f]",
+                name, mean, std, ci_lower[i], ci_upper[i],
             )
         else:
-            print(f"  {name:20s}: {mean:12.4f} ± {std:8.4f}")
+            logger.info("  %20s: %12.4f +/- %8.4f", name, mean, std)
 
     # Convergence diagnostics
     if result.r_hat is not None or result.effective_sample_size is not None:
-        print("\n" + "-" * 60)
-        print("Convergence Diagnostics")
-        print("-" * 60)
+        logger.info("-" * 60)
+        logger.info("Convergence Diagnostics")
+        logger.info("-" * 60)
 
         if result.r_hat is not None:
-            print("\n  R-hat (target < 1.1):")
+            logger.info("  R-hat (target < 1.1):")
             for name, value in result.r_hat.items():
-                status = "✓" if value < 1.1 else "✗"
-                print(f"    {name:20s}: {value:.4f} {status}")
+                status = "pass" if value < 1.1 else "FAIL"
+                logger.info("    %20s: %.4f %s", name, value, status)
 
         if result.effective_sample_size is not None:
-            print("\n  ESS (target > 100):")
+            logger.info("  ESS (target > 100):")
             for name, value in result.effective_sample_size.items():
-                status = "✓" if value > 100 else "✗"
-                print(f"    {name:20s}: {value:.1f} {status}")
+                status = "pass" if value > 100 else "FAIL"
+                logger.info("    %20s: %.1f %s", name, value, status)
 
-    print("\n" + "=" * 60)
+    logger.info("=" * 60)

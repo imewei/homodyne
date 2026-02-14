@@ -57,10 +57,8 @@ def plot_simulated_data(
     """
     from homodyne.core.models import CombinedModel
 
-    # BUGFIX: Force contrast to 0.5 to match working version
-    if contrast < 0.4:
-        logger.debug(f"Overriding contrast={contrast} → 0.5 (matching working version)")
-        contrast = 0.5
+    if contrast < 0.1:
+        logger.warning(f"Very low contrast={contrast:.3f}; plot may appear flat")
 
     logger.info(
         f"Generating simulated data plots (contrast={contrast:.3f}, offset={offset:.3f})",
