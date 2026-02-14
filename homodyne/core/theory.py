@@ -152,7 +152,9 @@ class TheoryEngine:
             phi_jax = phi
 
         dt_arg: Any = dt
-        return self.model.compute_g2(params_jax, t1_jax, t2_jax, phi_jax, q, L, contrast, offset, dt_arg)
+        return self.model.compute_g2(
+            params_jax, t1_jax, t2_jax, phi_jax, q, L, contrast, offset, dt_arg
+        )
 
     @log_performance(threshold=0.05)
     def compute_chi_squared(
@@ -356,7 +358,9 @@ class TheoryEngine:
         else:
             return "heavy"
 
-    def _validate_computation_inputs(self, params: np.ndarray, q: float, L: float) -> None:
+    def _validate_computation_inputs(
+        self, params: np.ndarray, q: float, L: float
+    ) -> None:
         """Validate core computation inputs."""
         # Skip validation inside JIT compilation to avoid JAX tracer errors
         # These checks would fail with JAX traced values

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, TypeVar
 
 import numpy as np
@@ -48,10 +49,10 @@ except ImportError:
 
     jnp: types.ModuleType = np  # type: ignore[no-redef]
 
-    def jit(f: F) -> F:  # type: ignore[misc]
+    def jit(f: F) -> F:  # type: ignore[misc]  # noqa: UP047
         return f  # No-op decorator
 
-    def vmap(f: F, **kwargs: Any) -> F:  # type: ignore[misc]
+    def vmap(f: F, **kwargs: Any) -> F:  # type: ignore[misc]  # noqa: UP047
         return f
 
     def grad(f: Callable[..., Any]) -> Callable[..., Any]:  # type: ignore[misc]
@@ -647,7 +648,7 @@ ScaledFittingEngine = UnifiedHomodyneEngine
 # Enhanced general N-parameter least squares solvers
 if JAX_AVAILABLE:
 
-    @jit
+    @partial(jit, static_argnums=(2,))
     def solve_least_squares_general_jax(
         design_matrix: jnp.ndarray,
         target_vector: jnp.ndarray,

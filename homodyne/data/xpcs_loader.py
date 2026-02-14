@@ -804,8 +804,13 @@ class XPCSDataLoader:
                 return "aps_old"
 
             else:
-                # Return "unknown" for graceful handling by caller
-                # Caller can decide how to handle unknown formats
+                # Log the top-level keys for debugging unrecognized formats
+                top_keys = list(f.keys())
+                logger.warning(
+                    f"Unrecognized HDF5 format: top-level keys={top_keys}. "
+                    "Expected APS-U (xpcs/twotime/correlation_map) or "
+                    "APS old (xpcs/dqlist + exchange/C2T_all)."
+                )
                 return "unknown"
 
     @log_performance(threshold=0.8)
@@ -840,8 +845,9 @@ class XPCSDataLoader:
             selected_q_idx = self._select_optimal_wavevector(dqlist)
             selected_q = dqlist[selected_q_idx]
 
-            # Calculate q-vector tolerance as percentage of selected q-vector
-            q_tolerance = selected_q * 0.1  # 10% tolerance to capture nearby q-vectors
+            # Calculate q-vector tolerance as fraction of selected q-vector
+            q_tolerance_fraction = self.config.get("q_tolerance_fraction", 0.1)
+            q_tolerance = selected_q * q_tolerance_fraction
             q_matching_indices = np.where(np.abs(dqlist - selected_q) <= q_tolerance)[0]
 
             # If we still get too few phi angles, expand the search
@@ -863,37 +869,57 @@ class XPCSDataLoader:
             )
 
             if quality_filtering_enabled:
-                # Quality filtering needs all matrices - load everything
+                # Two-pass optimization: metadata filter first, then load + quality filter
+                # Pass 1: phi/q filtering without loading matrices (metadata only)
                 logger.debug(
-                    f"Quality filtering enabled - loading all {len(c2_keys)} matrices"
+                    "Quality filtering enabled - running metadata-only pre-filter"
                 )
-                c2_matrices_for_filtering = []
-                for key in c2_keys:
-                    c2_half = c2t_group[key][()]
-                    c2_full = self._reconstruct_full_matrix(c2_half)
-                    c2_matrices_for_filtering.append(c2_full)
-
-                # Apply comprehensive data filtering
-                logger.debug("Applying comprehensive data filtering")
-                selected_indices = self._get_selected_indices(
+                metadata_indices = self._get_selected_indices(
                     dqlist,
                     dphilist,
-                    c2_matrices_for_filtering,
+                    None,  # No matrices needed for phi-only filtering
                 )
 
-                # Apply additional phi filtering if enabled
-                if selected_indices is not None:
-                    final_indices = np.intersect1d(q_matching_indices, selected_indices)
-                    logger.debug(
-                        f"After phi filtering: {len(q_matching_indices)} -> {len(final_indices)} matrices",
+                # Narrow to candidates via q + phi intersection
+                if metadata_indices is not None:
+                    candidate_indices = np.intersect1d(
+                        q_matching_indices, metadata_indices
                     )
                 else:
-                    final_indices = q_matching_indices
+                    candidate_indices = q_matching_indices
 
-                # Extract matrices for final indices
-                selected_c2_matrices = [
-                    c2_matrices_for_filtering[i] for i in final_indices
-                ]
+                logger.debug(
+                    f"Pre-filter: {len(c2_keys)} total -> {len(candidate_indices)} candidates "
+                    f"({len(candidate_indices) / len(c2_keys) * 100:.1f}% I/O reduction)"
+                )
+
+                # Pass 2: load only candidate matrices from HDF5
+                candidate_matrices = []
+                for idx in candidate_indices:
+                    key = c2_keys[int(idx)]
+                    c2_half = c2t_group[key][()]
+                    c2_full = self._reconstruct_full_matrix(c2_half)
+                    candidate_matrices.append(c2_full)
+
+                # Apply quality filtering on the loaded subset
+                quality_indices = self._get_selected_indices(
+                    dqlist[candidate_indices],
+                    dphilist[candidate_indices],
+                    candidate_matrices,
+                )
+
+                # Map quality filter results back to original indices
+                if quality_indices is not None:
+                    final_indices = candidate_indices[quality_indices]
+                    selected_c2_matrices = [
+                        candidate_matrices[i] for i in quality_indices
+                    ]
+                    logger.debug(
+                        f"After quality filtering: {len(candidate_indices)} -> {len(final_indices)} matrices",
+                    )
+                else:
+                    final_indices = candidate_indices
+                    selected_c2_matrices = candidate_matrices
             else:
                 # OPTIMIZATION: No quality filtering - selective HDF5 reads
                 # Only load the matrices we actually need (up to 98% I/O reduction)
@@ -1368,7 +1394,10 @@ class XPCSDataLoader:
 
                 return selected_indices
             else:
-                logger.info("No data filtering applied - returning all indices")
+                logger.warning(
+                    "No data filtering criteria matched - returning all angles. "
+                    "Check filter configuration if this is unexpected."
+                )
                 return None
 
         except ImportError as e:
@@ -1481,16 +1510,18 @@ class XPCSDataLoader:
         Returns:
             Frame-sliced correlation matrices, shape (n_phi, sliced_frames, sliced_frames)
         """
-        start_frame = (
-            self.analyzer_config.get("start_frame", 1) - 1
-        )  # Convert to 0-based indexing
+        raw_start_frame = self.analyzer_config.get("start_frame", 1)
+        if raw_start_frame < 1:
+            logger.warning(f"start_frame={raw_start_frame} < 1, clamping to 1")
+            raw_start_frame = 1
+        start_frame = raw_start_frame - 1  # Convert to 0-based indexing
         end_frame = self.analyzer_config.get("end_frame", c2_matrices.shape[-1])
 
         # Validate frame parameters
         max_frames = c2_matrices.shape[-1]
         if start_frame < 0:
-            start_frame = 0
             logger.warning(f"start_frame adjusted to 0 (was {start_frame + 1})")
+            start_frame = 0
         if end_frame > max_frames:
             end_frame = max_frames
             logger.warning(f"end_frame adjusted to {max_frames} (was {end_frame})")

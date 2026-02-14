@@ -24,6 +24,8 @@ Usage:
   from homodyne.core.jax_backend import compute_g2_scaled, apply_diagonal_correction
 """
 
+from functools import partial
+
 import jax.numpy as jnp
 from jax import jit
 
@@ -464,7 +466,7 @@ def compute_g2_scaled(
     return result
 
 
-@jit
+@partial(jit, static_argnums=(4, 5, 8))
 def compute_g2_scaled_with_factors(
     params: jnp.ndarray,
     t1: jnp.ndarray,
@@ -486,11 +488,11 @@ def compute_g2_scaled_with_factors(
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
         t1, t2: Time grids for correlation calculation (FRAME INDICES)
         phi: Scattering angles [degrees]
-        wavevector_q_squared_half_dt: Pre-computed factor (0.5 * q² * dt)
-        sinc_prefactor: Pre-computed factor (q * L * dt / 2π)
+        wavevector_q_squared_half_dt: Pre-computed factor (0.5 * q² * dt) [STATIC - dataset-invariant]
+        sinc_prefactor: Pre-computed factor (q * L * dt / 2π) [STATIC - dataset-invariant]
         contrast: Contrast parameter (β in literature)
         offset: Baseline offset
-        dt: Time step per frame [seconds] - for frame→time conversion
+        dt: Time step per frame [seconds] - for frame→time conversion [STATIC - dataset-invariant]
 
     Returns:
         g2 correlation function with scaled fitting
@@ -499,6 +501,9 @@ def compute_g2_scaled_with_factors(
         This function is JIT-compiled for maximum performance.
         Use with HomodyneModel for best results.
         For NLSQ backend, simply calls _compute_g2_scaled_meshgrid.
+        Static args (4, 5, 8): wavevector_q_squared_half_dt, sinc_prefactor, dt
+        are dataset-invariant and constant across optimization iterations.
+        contrast (6) and offset (7) are NOT static - they are optimized parameters.
     """
     result: jnp.ndarray = _compute_g2_scaled_meshgrid(
         params,

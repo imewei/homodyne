@@ -56,7 +56,7 @@ except ImportError:
 
     _F = TypeVar("_F", bound=Callable[..., object])
 
-    def jit(f: _F) -> _F:  # type: ignore[no-redef]  # noqa: E731
+    def jit(f: _F) -> _F:  # type: ignore[no-redef]  # noqa: E731, UP047
         """No-op decorator when JAX is unavailable."""
         return f
 

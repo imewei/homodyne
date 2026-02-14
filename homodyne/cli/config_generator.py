@@ -29,6 +29,11 @@ except ImportError:
 from homodyne.config.manager import ConfigManager
 
 
+def _yaml_escape_string(s: str) -> str:
+    """Escape a string for safe insertion into YAML double-quoted values."""
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser for homodyne-config.
 
@@ -318,19 +323,26 @@ def interactive_builder() -> dict[str, Any]:
             content = f.read()
 
         # Replace key values using simple text substitution
+        # Escape user inputs to prevent YAML injection (e.g., colons, quotes, hashes)
+        safe_data_file = _yaml_escape_string(data_file)
+        safe_output_dir = _yaml_escape_string(output_dir)
+        safe_sample_name = _yaml_escape_string(sample_name)
+        safe_experiment_id = _yaml_escape_string(experiment_id)
+
         content = content.replace(
-            'file_path: "./data/sample/experiment.hdf"', f'file_path: "{data_file}"'
+            'file_path: "./data/sample/experiment.hdf"',
+            f'file_path: "{safe_data_file}"',
         )
         content = content.replace(
-            'directory: "./results"', f'directory: "{output_dir}"'
+            'directory: "./results"', f'directory: "{safe_output_dir}"'
         )
 
         # Add sample name and experiment_id if not present
         if "sample_name:" not in content:
             # Insert after directory line in output section
             content = content.replace(
-                f'directory: "{output_dir}"',
-                f'directory: "{output_dir}"\n  sample_name: "{sample_name}"\n  experiment_id: "{experiment_id}"',
+                f'directory: "{safe_output_dir}"',
+                f'directory: "{safe_output_dir}"\n  sample_name: "{safe_sample_name}"\n  experiment_id: "{safe_experiment_id}"',
             )
 
         with open(output_path, "w") as f:

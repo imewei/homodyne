@@ -231,6 +231,12 @@ class CheckpointManager:
 
         Loads checkpoint from HDF5 file and validates checksum integrity.
 
+        Security: Uses pickle.loads() for optimizer state deserialization.
+        This is safe because checkpoint files are created exclusively by
+        save_checkpoint() with checksum validation, stored in
+        application-controlled output directories, and the serialized bytes
+        are embedded within HDF5 containers created by this class.
+
         Parameters
         ----------
         checkpoint_path : Path

@@ -100,9 +100,7 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
             r_hat = np.asarray(result.r_hat)
             convergence_dict = param_dict["convergence"]
             assert isinstance(convergence_dict, dict)
-            convergence_dict["all_chains_converged"] = bool(
-                np.all(r_hat < 1.1)
-            )
+            convergence_dict["all_chains_converged"] = bool(np.all(r_hat < 1.1))
             convergence_dict["min_r_hat"] = float(np.min(r_hat))
             convergence_dict["max_r_hat"] = float(np.max(r_hat))
 

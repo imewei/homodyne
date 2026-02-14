@@ -667,7 +667,9 @@ def save_yaml_config(config: dict[str, Any], output_path: str | Path) -> None:
 
     try:
         with open(output_path, "w") as f:
-            yaml_module.dump(config, f, default_flow_style=False, indent=2, sort_keys=False)
+            yaml_module.dump(
+                config, f, default_flow_style=False, indent=2, sort_keys=False
+            )
 
         logger.info(f"Saved YAML configuration to: {output_path}")
 

@@ -297,6 +297,8 @@ def _configure_jax_cpu(
             xla_flags.extend(
                 [
                     "--xla_cpu_enable_fast_math=true",
+                    "--xla_cpu_fast_math_honor_nans=true",
+                    "--xla_cpu_fast_math_honor_infs=true",
                     "--xla_cpu_enable_xla_runtime=false",
                 ]
             )

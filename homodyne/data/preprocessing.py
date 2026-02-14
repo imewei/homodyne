@@ -652,7 +652,9 @@ class PreprocessingPipeline:
                 elif estimator == "trimmed_mean":
                     trim_fraction = config.get("trim_fraction", 0.2)
                     if HAS_SCIPY:
-                        c2_corrected[i, i] = stats.trim_mean(neighbors_arr, trim_fraction)
+                        c2_corrected[i, i] = stats.trim_mean(
+                            neighbors_arr, trim_fraction
+                        )
                     else:
                         # Fallback to median
                         c2_corrected[i, i] = np.median(neighbors_arr)

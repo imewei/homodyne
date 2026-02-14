@@ -56,7 +56,9 @@ except ImportError:
     def vmap(func: Callable, *args: object, **kwargs: object) -> Callable:  # type: ignore[no-redef,misc,unused-ignore]
         """Simple vectorization fallback using Python loops."""
 
-        def vectorized_func(inputs: object, *vargs: object, **vkwargs: object) -> object:
+        def vectorized_func(
+            inputs: object, *vargs: object, **vkwargs: object
+        ) -> object:
             if hasattr(inputs, "__iter__") and not isinstance(inputs, str):
                 return [func(inp, *vargs, **vkwargs) for inp in inputs]
             return func(inputs, *vargs, **vkwargs)
@@ -84,7 +86,7 @@ except ImportError:
 
 from collections import OrderedDict
 from collections.abc import Callable
-from functools import wraps
+from functools import partial, wraps
 from typing import Any, cast
 
 from homodyne.core.physics_utils import (
@@ -406,7 +408,7 @@ def _create_no_hessian_fallback(func_name: str) -> Callable:
 
 
 # safe_divide is kept here as it's only used in jax_backend.py
-@jit
+@partial(jit, static_argnums=(2,))
 def safe_divide(a: jnp.ndarray, b: jnp.ndarray, default: float = 0.0) -> jnp.ndarray:
     """Safe division with numerical stability."""
     return jnp.where(jnp.abs(b) > EPS, a / b, default)
@@ -920,7 +922,9 @@ def compute_g1_diffusion(
             time_array = t1[:, 0]
         else:
             time_array = t1
-        dt_value = float(time_array[1] - time_array[0]) if safe_len(time_array) > 1 else 1.0
+        dt_value = (
+            float(time_array[1] - time_array[0]) if safe_len(time_array) > 1 else 1.0
+        )
     else:
         dt_value = dt
 
@@ -928,7 +932,9 @@ def compute_g1_diffusion(
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
 
     return jnp.asarray(
-        _compute_g1_diffusion_core(params, t1, t2, wavevector_q_squared_half_dt, dt_value)
+        _compute_g1_diffusion_core(
+            params, t1, t2, wavevector_q_squared_half_dt, dt_value
+        )
     )
 
 
@@ -1092,7 +1098,7 @@ def compute_g2_scaled(
     )
 
 
-@jit
+@partial(jit, static_argnums=(4, 5, 8))
 def compute_g2_scaled_with_factors(
     params: jnp.ndarray,
     t1: jnp.ndarray,
@@ -1160,7 +1166,7 @@ def compute_g2_scaled_with_factors(
     )
 
 
-@jit
+@partial(jit, static_argnums=(6, 7, 10))
 def compute_chi_squared(
     params: jnp.ndarray,
     data: jnp.ndarray,
@@ -1242,7 +1248,9 @@ def vectorized_g2_computation(
         # Simple loop fallback
         results = []
         for params in params_batch:
-            result = compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset, dt_value)
+            result = compute_g2_scaled(
+                params, t1, t2, phi, q, L, contrast, offset, dt_value
+            )
             results.append(result)
         return jnp.stack(results)
 
@@ -1379,16 +1387,24 @@ def validate_backend() -> dict[str, Any]:
             grad_func = grad(compute_g1_diffusion, argnums=0)
             grad_func(test_params, test_t1, test_t2, test_q)
             results["gradient_support"] = True
-            cast(dict[str, str], results["test_results"])["gradient_computation"] = "success"
+            cast(dict[str, str], results["test_results"])["gradient_computation"] = (
+                "success"
+            )
 
             if not JAX_AVAILABLE:
-                cast(dict[str, str], results["test_results"])["gradient_method"] = "numpy_fallback"
+                cast(dict[str, str], results["test_results"])["gradient_method"] = (
+                    "numpy_fallback"
+                )
 
         except ImportError as e:
-            cast(dict[str, str], results["test_results"])["gradient_computation"] = f"failed: {str(e)}"
+            cast(dict[str, str], results["test_results"])["gradient_computation"] = (
+                f"failed: {str(e)}"
+            )
             logger.warning(f"Gradient computation not available: {e}")
         except Exception as e:
-            cast(dict[str, str], results["test_results"])["gradient_computation"] = f"error: {str(e)}"
+            cast(dict[str, str], results["test_results"])["gradient_computation"] = (
+                f"error: {str(e)}"
+            )
             logger.error(f"Gradient computation failed: {e}")
 
         # Test hessian computation
@@ -1396,23 +1412,33 @@ def validate_backend() -> dict[str, Any]:
             hess_func = hessian(compute_g1_diffusion, argnums=0)
             hess_func(test_params, test_t1, test_t2, test_q)
             results["hessian_support"] = True
-            cast(dict[str, str], results["test_results"])["hessian_computation"] = "success"
+            cast(dict[str, str], results["test_results"])["hessian_computation"] = (
+                "success"
+            )
 
             if not JAX_AVAILABLE:
-                cast(dict[str, str], results["test_results"])["hessian_method"] = "numpy_fallback"
+                cast(dict[str, str], results["test_results"])["hessian_method"] = (
+                    "numpy_fallback"
+                )
 
         except ImportError as e:
-            cast(dict[str, str], results["test_results"])["hessian_computation"] = f"failed: {str(e)}"
+            cast(dict[str, str], results["test_results"])["hessian_computation"] = (
+                f"failed: {str(e)}"
+            )
             logger.warning(f"Hessian computation not available: {e}")
         except Exception as e:
-            cast(dict[str, str], results["test_results"])["hessian_computation"] = f"error: {str(e)}"
+            cast(dict[str, str], results["test_results"])["hessian_computation"] = (
+                f"error: {str(e)}"
+            )
             logger.error(f"Hessian computation failed: {e}")
 
         logger.info(f"Backend validation completed: {results['backend_type']} mode")
 
     except Exception as e:
         logger.error(f"Basic computation test failed: {e}")
-        cast(dict[str, str], results["test_results"])["forward_computation"] = f"failed: {str(e)}"
+        cast(dict[str, str], results["test_results"])["forward_computation"] = (
+            f"failed: {str(e)}"
+        )
 
     return results
 

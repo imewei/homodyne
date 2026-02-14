@@ -221,7 +221,9 @@ class PhiAngleFilter:
         for min_angle, max_angle in self.target_ranges:
             mask = (phi_angles_array >= min_angle) & (phi_angles_array <= max_angle)
             count = np.sum(mask)
-            angles_in_range: np.ndarray | list[float] = phi_angles_array[mask] if count > 0 else []
+            angles_in_range: np.ndarray | list[float] = (
+                phi_angles_array[mask] if count > 0 else []
+            )
 
             range_stats = {
                 "range": (min_angle, max_angle),

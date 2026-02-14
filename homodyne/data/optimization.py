@@ -37,10 +37,10 @@ except ImportError:
     JAX_AVAILABLE = False
     jnp = np  # type: ignore[misc]
 
-    def jit(f: _F) -> _F:  # type: ignore[no-redef]
+    def jit(f: _F) -> _F:  # type: ignore[no-redef]  # noqa: UP047
         return f
 
-    def vmap(f: _F, **kwargs: Any) -> _F:  # type: ignore[misc]
+    def vmap(f: _F, **kwargs: Any) -> _F:  # type: ignore[misc]  # noqa: UP047
         return f
 
 

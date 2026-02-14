@@ -81,10 +81,10 @@ except ImportError:
     jax_available = False
     jnp: types.ModuleType = np  # type: ignore[no-redef]
 
-    def jit(f: F) -> F:  # type: ignore[no-redef]
+    def jit(f: F) -> F:  # type: ignore[no-redef]  # noqa: UP047
         return f
 
-    def vmap(f: F, **kwargs: Any) -> F:  # type: ignore[misc]
+    def vmap(f: F, **kwargs: Any) -> F:  # type: ignore[misc]  # noqa: UP047
         return f
 
     def device_put(x: Any) -> Any:  # type: ignore[misc]
@@ -232,9 +232,7 @@ class MemoryMapManager:
         )
 
     @contextmanager
-    def open_memory_mapped_hdf5(
-        self, file_path: str, mode: str = "r"
-    ) -> Iterator[Any]:
+    def open_memory_mapped_hdf5(self, file_path: str, mode: str = "r") -> Iterator[Any]:
         """Context manager for memory-mapped HDF5 file access.
 
         Args:
@@ -767,7 +765,14 @@ class MultiLevelCache:
             raise
 
     def _load_from_disk(self, file_path: Path) -> Any:
-        """Load and decompress item from disk."""
+        """Load and decompress item from disk.
+
+        Security: Uses pickle.loads() for deserialization. This is safe because
+        the cache files are created exclusively by this class's _save_to_disk()
+        method, stored in application-controlled directories, and never accept
+        user-supplied pickle data. External input enters only as HDF5/NumPy arrays
+        at I/O boundaries, not as serialized objects.
+        """
         try:
             with open(file_path, "rb") as f:
                 data = f.read()
@@ -1251,7 +1256,9 @@ class PerformanceEngine:
 
         return np.array(all_matrices)
 
-    def _load_matrices_direct(self, hdf_file: Any, data_keys: list[str]) -> Any:  # Returns np.ndarray
+    def _load_matrices_direct(
+        self, hdf_file: Any, data_keys: list[str]
+    ) -> Any:  # Returns np.ndarray
         """Load correlation matrices directly without chunking."""
         matrices = []
 
@@ -1303,7 +1310,9 @@ class PerformanceEngine:
 
         return matrices
 
-    def _reconstruct_full_matrix(self, c2_half: Any) -> Any:  # Takes and returns np.ndarray
+    def _reconstruct_full_matrix(
+        self, c2_half: Any
+    ) -> Any:  # Takes and returns np.ndarray
         """Reconstruct full correlation matrix from half matrix."""
         c2_full = c2_half + c2_half.T
         diag_indices = np.diag_indices(c2_half.shape[0])

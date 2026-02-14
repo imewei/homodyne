@@ -16,6 +16,7 @@ from typing import Any, cast
 
 import jax.numpy as jnp
 import numpy as np
+import yaml
 from numpy.typing import NDArray
 
 from homodyne.cli.args_parser import validate_args
@@ -26,7 +27,6 @@ from homodyne.config.types import (  # noqa: E402
     SCALING_PARAM_NAMES,
     STATIC_PARAM_NAMES,
 )
-from homodyne.core.jax_backend import compute_g2_scaled  # noqa: E402
 from homodyne.data.angle_filtering import (  # noqa: E402
     angle_in_range as _data_angle_in_range,
 )
@@ -91,7 +91,9 @@ logger = get_logger(__name__)
 COMMON_XPCS_ANGLES = [0, 30, 45, 60, 90, 120, 135, 150, 180]
 
 
-def normalize_angle_to_symmetric_range(angle: float | NDArray[np.floating[Any]]) -> float | NDArray[np.floating[Any]]:
+def normalize_angle_to_symmetric_range(
+    angle: float | NDArray[np.floating[Any]],
+) -> float | NDArray[np.floating[Any]]:
     """Normalize angle(s) to [-180°, 180°] range.
 
     This is a wrapper that delegates to homodyne.data.angle_filtering.
@@ -223,7 +225,9 @@ def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
             # Skip data loading for pure simulated data mode
             # Extract config dictionary from ConfigManager
             config_dict_plot: dict[str, Any] = (
-                config.get_config() if hasattr(config, "get_config") else cast(dict[str, Any], config)
+                config.get_config()
+                if hasattr(config, "get_config")
+                else cast(dict[str, Any], config)
             )
             _handle_plotting(args, None, {}, config_dict_plot)
             summary.set_convergence_status("skipped_simulated_only")
@@ -285,7 +289,11 @@ def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
 
         # Handle plotting options
         # Extract config dictionary from ConfigManager
-        config_dict2: dict[str, Any] = config.get_config() if hasattr(config, "get_config") else cast(dict[str, Any], config)
+        config_dict2: dict[str, Any] = (
+            config.get_config()
+            if hasattr(config, "get_config")
+            else cast(dict[str, Any], config)
+        )
         _handle_plotting(args, result, data, config_dict2)
 
         logger.info("[CLI] Analysis completed successfully")
@@ -354,7 +362,7 @@ def _load_configuration(args: argparse.Namespace) -> ConfigManager:
 
         return config
 
-    except Exception as e:
+    except (ValueError, KeyError, OSError, yaml.YAMLError) as e:
         logger.warning(f"Configuration loading failed: {e}, using defaults")
         return ConfigManager(config_override=_get_default_config(args))
 
@@ -577,7 +585,9 @@ def _apply_cli_overrides(config: ConfigManager, args: argparse.Namespace) -> Non
     # No hardware overrides needed
 
 
-def _build_mcmc_runtime_kwargs(args: argparse.Namespace, config: ConfigManager) -> dict[str, Any]:
+def _build_mcmc_runtime_kwargs(
+    args: argparse.Namespace, config: ConfigManager
+) -> dict[str, Any]:
     """Collect runtime kwargs for fit_mcmc_jax from CLI args and YAML config."""
 
     cfg_dict = config.config if hasattr(config, "config") else {}
@@ -869,7 +879,11 @@ def _apply_angle_filtering_for_optimization(
     logger.debug(f"Normalized angles: {phi_angles}")
 
     # Get config dict (handle both ConfigManager and dict types)
-    config_dict: dict[str, Any] = config.get_config() if hasattr(config, "get_config") else cast(dict[str, Any], config)
+    config_dict: dict[str, Any] = (
+        config.get_config()
+        if hasattr(config, "get_config")
+        else cast(dict[str, Any], config)
+    )
 
     # Check if filtering is enabled
     phi_filtering_config = config_dict.get("phi_filtering", {})
@@ -990,7 +1004,9 @@ def _apply_angle_filtering_for_optimization(
     return filtered_data
 
 
-def _prepare_cmc_config(args: argparse.Namespace, config: ConfigManager) -> dict[str, Any]:
+def _prepare_cmc_config(
+    args: argparse.Namespace, config: ConfigManager
+) -> dict[str, Any]:
     """Prepare CMC configuration with CLI overrides applied.
 
     Extracts CMC config from ConfigManager and applies CLI argument overrides
@@ -1224,7 +1240,7 @@ def load_nlsq_result_from_file(nlsq_result_path: Path) -> dict[str, Any] | None:
 
         return result
 
-    except Exception as e:
+    except (OSError, json.JSONDecodeError, ValueError, KeyError) as e:
         logger.warning(f"Failed to load NLSQ results from {params_file}: {e}")
         return None
 
@@ -1244,7 +1260,9 @@ def _log_warmstart_physical_params(params: Any) -> None:
     if isinstance(params, dict):
         # Dict from load_nlsq_result_from_file
         all_physical = list(LAMINAR_FLOW_PARAM_NAMES)
-        physical_vals = [f"{name}={params[name]:.4g}" for name in all_physical if name in params]
+        physical_vals = [
+            f"{name}={params[name]:.4g}" for name in all_physical if name in params
+        ]
         if physical_vals:
             logger.info(f"  Physical params: {', '.join(physical_vals)}")
     elif hasattr(params, "__len__"):
@@ -1262,7 +1280,8 @@ def _log_warmstart_physical_params(params: Any) -> None:
 
         physical_vals = params[physical_start:]
         param_str = ", ".join(
-            f"{name}={val:.4g}" for name, val in zip(physical_names, physical_vals, strict=False)
+            f"{name}={val:.4g}"
+            for name, val in zip(physical_names, physical_vals, strict=False)
         )
         logger.info(f"  Physical params: {param_str}")
 
@@ -1349,7 +1368,10 @@ def _resolve_nlsq_warmstart(
         )
         if _validate_warmstart_quality(nlsq_result, "inline"):
             # Log physical parameters from inline result
-            if hasattr(nlsq_result, "parameters") and nlsq_result.parameters is not None:
+            if (
+                hasattr(nlsq_result, "parameters")
+                and nlsq_result.parameters is not None
+            ):
                 _log_warmstart_physical_params(nlsq_result.parameters)
             return nlsq_result
         return None
@@ -1394,7 +1416,9 @@ def _run_nlsq_optimization(
     return result
 
 
-def _run_optimization(args: argparse.Namespace, config: ConfigManager, data: dict[str, Any]) -> Any:
+def _run_optimization(
+    args: argparse.Namespace, config: ConfigManager, data: dict[str, Any]
+) -> Any:
     """Run the specified optimization method."""
     method = args.method
 
@@ -1433,11 +1457,23 @@ def _run_optimization(args: argparse.Namespace, config: ConfigManager, data: dic
             nlsq_result = _resolve_nlsq_warmstart(args, filtered_data, config)
 
             # Check if laminar_flow strictly requires warm-start (validation setting)
-            config_config_early = config.config if hasattr(config, "config") and config.config is not None else {}
-            analysis_mode_early = cast(str, config_config_early.get("analysis_mode", "static_isotropic"))
-            require_warmstart = cmc_config.get("validation", {}).get("require_nlsq_warmstart", False)
+            config_config_early = (
+                config.config
+                if hasattr(config, "config") and config.config is not None
+                else {}
+            )
+            analysis_mode_early = cast(
+                str, config_config_early.get("analysis_mode", "static_isotropic")
+            )
+            require_warmstart = cmc_config.get("validation", {}).get(
+                "require_nlsq_warmstart", False
+            )
 
-            if require_warmstart and nlsq_result is None and "laminar" in analysis_mode_early.lower():
+            if (
+                require_warmstart
+                and nlsq_result is None
+                and "laminar" in analysis_mode_early.lower()
+            ):
                 raise ValueError(
                     "CMC WARM-START REQUIRED: laminar_flow mode requires NLSQ warm-start "
                     "when require_nlsq_warmstart=True. Remove --no-nlsq-warmstart flag or set "
@@ -1498,8 +1534,14 @@ def _run_optimization(args: argparse.Namespace, config: ConfigManager, data: dic
                 )
 
             # Determine analysis mode (needed for ParameterSpace creation)
-            config_config = config.config if hasattr(config, "config") and config.config is not None else {}
-            analysis_mode_str = cast(str, config_config.get("analysis_mode", "static_isotropic"))
+            config_config = (
+                config.config
+                if hasattr(config, "config") and config.config is not None
+                else {}
+            )
+            analysis_mode_str = cast(
+                str, config_config.get("analysis_mode", "static_isotropic")
+            )
 
             # Create ParameterSpace from config to ensure NumPyro uses config bounds
             # This is CRITICAL: ParameterSpace loads bounds/priors from configuration
@@ -1525,12 +1567,16 @@ def _run_optimization(args: argparse.Namespace, config: ConfigManager, data: dic
                 phi=phi_pooled,
                 q=(
                     filtered_data.get("wavevector_q_list", [1.0])[0]
-                    if (filtered_data.get("wavevector_q_list") is not None
-                        and len(filtered_data.get("wavevector_q_list", [])) > 0)
+                    if (
+                        filtered_data.get("wavevector_q_list") is not None
+                        and len(filtered_data.get("wavevector_q_list", [])) > 0
+                    )
                     else 1.0
                 ),
                 L=2000000.0,  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
-                analysis_mode=cast(str, config_config.get("analysis_mode", "static_isotropic")),
+                analysis_mode=cast(
+                    str, config_config.get("analysis_mode", "static_isotropic")
+                ),
                 method=method,  # Pass "mcmc" for CMC-only path
                 cmc_config=cmc_config,  # Pass CMC configuration
                 initial_values=initial_values,  # ✅ FIXED: Load from config initial_parameters.values
@@ -1543,7 +1589,9 @@ def _run_optimization(args: argparse.Namespace, config: ConfigManager, data: dic
             # Always generate ArviZ diagnostic plots for MCMC/CMC methods
             # These are essential for validating MCMC convergence
             if hasattr(result, "inference_data") and result.inference_data is not None:
-                analysis_mode_for_plot = cast(str, config_config.get("analysis_mode", "static_isotropic"))
+                analysis_mode_for_plot = cast(
+                    str, config_config.get("analysis_mode", "static_isotropic")
+                )
                 _generate_cmc_diagnostic_plots(
                     result, args.output_dir, analysis_mode_for_plot
                 )
@@ -2959,7 +3007,11 @@ def _compute_theoretical_c2_from_mcmc(
     elif mean_params_obj is not None and hasattr(mean_params_obj, "as_array"):
         # Fallback to array (legacy)
         mean_params_array = mean_params_obj.as_array
-        mean_params = np.asarray(mean_params_array) if mean_params_array is not None else np.array([])
+        mean_params = (
+            np.asarray(mean_params_array)
+            if mean_params_array is not None
+            else np.array([])
+        )
     elif mean_params_obj is not None:
         mean_params = np.asarray(mean_params_obj)
     else:
@@ -3014,7 +3066,11 @@ def _compute_theoretical_c2_from_mcmc(
         t2 = t2[0, :]
 
     # Get analysis mode
-    config_dict_mcmc: dict[str, Any] = config.get_config() if hasattr(config, "get_config") else cast(dict[str, Any], config)
+    config_dict_mcmc: dict[str, Any] = (
+        config.get_config()
+        if hasattr(config, "get_config")
+        else cast(dict[str, Any], config)
+    )
     _analysis_mode = config_dict_mcmc.get("analysis_mode", "static_isotropic")  # noqa: F841
 
     # Get L parameter (stator-rotor gap) from correct config path
@@ -3104,8 +3160,12 @@ def _compute_theoretical_c2_from_mcmc(
                     )
 
                 # Enforce physical bounds
-                contrast_i = float(np.clip(np.asarray(contrast_raw), 0.01, 1.0))  # Physical: (0, 1]
-                offset_i = float(np.clip(np.asarray(offset_raw), 0.5, 1.5))  # Physical: around 1.0
+                contrast_i = float(
+                    np.clip(np.asarray(contrast_raw), 0.01, 1.0)
+                )  # Physical: (0, 1]
+                offset_i = float(
+                    np.clip(np.asarray(offset_raw), 0.5, 1.5)
+                )  # Physical: around 1.0
 
                 if i == 0:  # Log first angle details
                     logger.debug(

@@ -341,15 +341,25 @@ class CombinedModel(
 
         if self.analysis_mode.startswith("static"):
             # Static mode: only diffusion, no shear
-            logger.debug(
-                f"CombinedModel.compute_g1: calling compute_g1_diffusion with params.shape={params.shape}",
-            )
+            if logger.isEnabledFor(10):  # DEBUG
+                logger.debug(
+                    "CombinedModel.compute_g1: calling compute_g1_diffusion with params.shape=%s",
+                    params.shape,
+                )
             return compute_g1_diffusion(params, t1, t2, q, dt)
         else:
             # Laminar flow mode: full model
-            logger.debug(
-                f"CombinedModel.compute_g1: calling compute_g1_total with params.shape={params.shape}, t1.shape={t1.shape}, t2.shape={t2.shape}, phi.shape={phi.shape}, q={q}, L={L}, dt={dt}",
-            )
+            if logger.isEnabledFor(10):  # DEBUG
+                logger.debug(
+                    "CombinedModel.compute_g1: calling compute_g1_total with params.shape=%s, t1.shape=%s, t2.shape=%s, phi.shape=%s, q=%s, L=%s, dt=%s",
+                    params.shape,
+                    t1.shape,
+                    t2.shape,
+                    phi.shape,
+                    q,
+                    L,
+                    dt,
+                )
             try:
                 result = compute_g1_total(params, t1, t2, phi, q, L, dt)  # type: ignore[arg-type]
                 # Note: Skip debug logging of result values when traced by JAX
@@ -415,7 +425,9 @@ class CombinedModel(
         import jax
 
         # Define single-point g1 computation
-        def compute_g1_single(t1_val: jnp.ndarray, t2_val: jnp.ndarray, phi_val: jnp.ndarray) -> jnp.ndarray:
+        def compute_g1_single(
+            t1_val: jnp.ndarray, t2_val: jnp.ndarray, phi_val: jnp.ndarray
+        ) -> jnp.ndarray:
             g1 = self.compute_g1(
                 params,
                 jnp.array([t1_val]),

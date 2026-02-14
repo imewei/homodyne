@@ -52,9 +52,26 @@ def set_mode(mode: str) -> bool:
         cores = os.cpu_count() or 4
         print(f"  → Auto-detect: {devices} devices (detected {cores} CPU cores)")
 
-    print("\nReload your shell or run:")
-    print("  source $VIRTUAL_ENV/bin/homodyne-activate  # bash/zsh")
-    print("  source $VIRTUAL_ENV/bin/homodyne-activate.fish  # fish")
+    # Check if activation scripts exist before suggesting them
+    venv = os.environ.get("VIRTUAL_ENV")
+    if venv:
+        activation_dir = Path(venv) / "etc" / "homodyne" / "activation"
+        bash_script = activation_dir / "xla_config.bash"
+        fish_script = activation_dir / "xla_config.fish"
+        if bash_script.exists() or fish_script.exists():
+            print("\nReload your shell or run:")
+            if bash_script.exists():
+                print(f"  source {bash_script}  # bash/zsh")
+            if fish_script.exists():
+                print(f"  source {fish_script}  # fish")
+        else:
+            print(
+                "\nActivation scripts not found. Run 'homodyne-post-install -i' first."
+            )
+    else:
+        print(
+            "\nNo active virtualenv detected. Activate your venv, then run 'homodyne-post-install -i'."
+        )
     return True
 
 

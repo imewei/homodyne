@@ -24,6 +24,8 @@ Usage:
   from homodyne.core.physics_cmc import compute_g1_diffusion, compute_g1_total
 """
 
+from functools import partial
+
 import jax.numpy as jnp
 from jax import jit
 
@@ -46,7 +48,7 @@ from homodyne.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-@jit
+@partial(jit, static_argnums=(4,))
 def _compute_g1_diffusion_elementwise(
     params: jnp.ndarray,
     t1: jnp.ndarray,
@@ -174,7 +176,7 @@ def _compute_g1_shear_elementwise(
     return g1_shear  # Shape: (n_unique_phi, n_points)
 
 
-@jit
+@partial(jit, static_argnums=(5, 6))
 def _compute_g1_total_elementwise(
     params: jnp.ndarray,
     t1: jnp.ndarray,
@@ -271,7 +273,9 @@ def compute_g1_diffusion(
     if dt is None:
         # FALLBACK: Estimate from time array (NOT RECOMMENDED)
         time_array = t1
-        dt_value = float(time_array[1] - time_array[0]) if safe_len(time_array) > 1 else 1.0
+        dt_value = (
+            float(time_array[1] - time_array[0]) if safe_len(time_array) > 1 else 1.0
+        )
     else:
         dt_value = dt
 

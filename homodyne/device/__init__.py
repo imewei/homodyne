@@ -85,7 +85,9 @@ def configure_optimal_device(
     return _configure_cpu_optimal(config_result, cpu_threads)
 
 
-def _configure_cpu_optimal(config_result: dict[str, Any], cpu_threads: int | None) -> dict[str, Any]:
+def _configure_cpu_optimal(
+    config_result: dict[str, Any], cpu_threads: int | None
+) -> dict[str, Any]:
     """Configure optimal CPU settings."""
     logger.info("Configuring CPU optimization...")
 
@@ -265,10 +267,12 @@ _all_exports = [
 
 # Add CPU-specific exports if available
 if HAS_CPU_MODULE:
-    _all_exports.extend([
-        "configure_cpu_hpc",
-        "detect_cpu_info",
-        "get_optimal_batch_size",
-    ])
+    _all_exports.extend(
+        [
+            "configure_cpu_hpc",
+            "detect_cpu_info",
+            "get_optimal_batch_size",
+        ]
+    )
 
 __all__ = _all_exports
