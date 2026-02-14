@@ -9,7 +9,7 @@ HOMODYNE_COMPLETION_CACHE_FILE="$HOMODYNE_COMPLETION_CACHE_DIR/completion_cache"
 
 # Initialize cache directory
 _homodyne_init_cache() {
-    [[ ! -d "$HOMODYNE_COMPLETION_CACHE_DIR" ]] && mkdir -p "$HOMODYNE_COMPLETION_CACHE_DIR"
+    [[ ! -d "$HOMODYNE_COMPLETION_CACHE_DIR" ]] && mkdir -p -m 700 "$HOMODYNE_COMPLETION_CACHE_DIR"
 }
 
 # Get recent config files (cached for 5 minutes)
@@ -37,36 +37,14 @@ _homodyne_get_recent_configs() {
         echo "config.yaml"
         echo "analysis_config.yaml"
     } | sort -u > "$HOMODYNE_COMPLETION_CACHE_FILE"
+    chmod 600 "$HOMODYNE_COMPLETION_CACHE_FILE" 2>/dev/null
 
     cat "$HOMODYNE_COMPLETION_CACHE_FILE"
 }
 
-# Smart method completion based on config mode
+# Method completion - both methods available for all modes
 _homodyne_smart_method_completion() {
-    local config_file="$1"
-    local methods="nlsq cmc"
-
-    # If config file exists, try to detect mode and suggest appropriate methods
-    if [[ -f "$config_file" ]] && command -v python3 >/dev/null 2>&1; then
-        local mode=$(python3 -c "
-import yaml
-try:
-    with open('$config_file') as f:
-        config = yaml.safe_load(f)
-        mode = config.get('analysis_mode', '')
-        if 'static' in mode:
-            print('nlsq cmc')
-        elif 'laminar' in mode:
-            print('nlsq cmc')
-        else:
-            print('$methods')
-except:
-    print('$methods')
-" 2>/dev/null)
-        echo "${mode:-$methods}"
-    else
-        echo "$methods"
-    fi
+    echo "nlsq cmc"
 }
 
 # Advanced bash completion for homodyne
@@ -86,7 +64,7 @@ _homodyne_advanced_completion() {
     local nlsq_opts="--max-iterations --tolerance"
 
     # CMC-specific options
-    local cmc_opts="--n-samples --n-warmup --n-chains --cmc-num-shards --cmc-backend --cmc-plot-diagnostics --no-nlsq-warmstart --nlsq-result --dense-mass-matrix"
+    local cmc_opts="--n-samples --n-warmup --n-chains --cmc-num-shards --cmc-backend --no-nlsq-warmstart --nlsq-result --dense-mass-matrix"
 
     # Parameter override options
     local override_opts="--initial-d0 --initial-alpha --initial-d-offset --initial-gamma-dot-t0 --initial-beta --initial-gamma-dot-offset --initial-phi0"
@@ -426,7 +404,6 @@ if [[ -n "$ZSH_VERSION" ]]; then
             '--n-chains[Number of CMC chains]:chains:'
             '--cmc-num-shards[Data shards for CMC]:shards:(4 8 10 16 20 32)'
             '--cmc-backend[CMC parallel backend]:backend:(auto pjit multiprocessing pbs)'
-            '--cmc-plot-diagnostics[DEPRECATED - ArviZ plots always generated]'
             '--no-nlsq-warmstart[Disable automatic NLSQ warm-start for CMC]'
             '--nlsq-result[Path to pre-computed NLSQ results directory]:dir:_directories'
             '--dense-mass-matrix[Use dense mass matrix for NUTS/CMC]'
@@ -565,6 +542,9 @@ if [[ -n "$BASH_VERSION" ]]; then
     complete -F _homodyne_cleanup_completion hclean 2>/dev/null || true      # homodyne-cleanup
 fi
 
+# Mark as loaded to prevent the minimal zsh fallback from redefining aliases
+export _HOMODYNE_ZSH_COMPLETION_LOADED=1
+
 # Define aliases for convenience
 # These aliases provide quick access to different analysis methods and configurations
 if [[ -n "$BASH_VERSION" ]] || [[ -n "$ZSH_VERSION" ]]; then
@@ -593,8 +573,7 @@ fi
 # Quick command builder function
 homodyne_build() {
     local cmd="homodyne"
-    local method=""
-    local config=""
+    declare -a run_args
 
     echo "Homodyne Command Builder"
     echo "========================"
@@ -604,8 +583,8 @@ homodyne_build() {
     PS3="Select analysis method: "
     select m in "nlsq (primary)" "cmc (uncertainty)" "skip"; do
         case $REPLY in
-            1) method="--method nlsq"; break;;
-            2) method="--method cmc"; break;;
+            1) run_args+=(--method nlsq); break;;
+            2) run_args+=(--method cmc); break;;
             3) break;;
             *) echo "Invalid selection";;
         esac
@@ -614,38 +593,46 @@ homodyne_build() {
     # Select config
     echo ""
     echo "Available config files:"
-    local configs=($(_homodyne_get_recent_configs))
+    local configs
+    mapfile -t configs < <(_homodyne_get_recent_configs)
     if [[ ${#configs[@]} -gt 0 ]]; then
         PS3="Select config file: "
         select c in "${configs[@]}" "manual" "skip"; do
             if [[ "$c" == "manual" ]]; then
-                read -p "Enter config path: " config
-                config="--config $config"
+                local user_config
+                read -rp "Enter config path: " user_config
+                run_args+=(--config "$user_config")
             elif [[ "$c" != "skip" ]] && [[ -n "$c" ]]; then
-                config="--config $c"
+                run_args+=(--config "$c")
             fi
             break
         done
     else
-        read -p "Enter config file path (or press Enter to skip): " c
-        [[ -n "$c" ]] && config="--config $c"
+        local user_config
+        read -rp "Enter config file path (or press Enter to skip): " user_config
+        [[ -n "$user_config" ]] && run_args+=(--config "$user_config")
     fi
 
     # Build and show command
+    local display_cmd="$cmd"
+    if [[ ${#run_args[@]} -gt 0 ]]; then
+        display_cmd+=" ${run_args[*]}"
+    fi
+
     echo ""
     echo "Generated command:"
-    echo "  $cmd $method $config"
+    echo "  $display_cmd"
     echo ""
-    read -p "Run this command? (y/N): " run_it
+    read -rp "Run this command? (y/N): " run_it
 
     if [[ "$run_it" =~ ^[Yy] ]]; then
         echo "Running..."
-        eval "$cmd $method $config"
+        "$cmd" "${run_args[@]}"
     else
         echo "Command copied to clipboard (if available)"
-        echo "$cmd $method $config" | xclip -selection clipboard 2>/dev/null || \
-        echo "$cmd $method $config" | pbcopy 2>/dev/null || \
-        echo "Copy command: $cmd $method $config"
+        echo "$display_cmd" | xclip -selection clipboard 2>/dev/null || \
+        echo "$display_cmd" | pbcopy 2>/dev/null || \
+        echo "Copy command: $display_cmd"
     fi
 }
 

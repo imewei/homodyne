@@ -61,9 +61,15 @@ def cleanup_completion_files() -> list[tuple[str, str]]:
     # Fish completion
     fish_files = [
         venv_path / "share" / "fish" / "vendor_completions.d" / "homodyne.fish",
+        venv_path / "etc" / "homodyne" / "shell" / "completion.fish",
     ]
 
-    all_completion_files = bash_files + zsh_files + fish_files
+    # Full completion script (copied by post-install)
+    full_completion_files = [
+        venv_path / "etc" / "homodyne" / "shell" / "completion.sh",
+    ]
+
+    all_completion_files = bash_files + zsh_files + fish_files + full_completion_files
 
     for file_path in all_completion_files:
         if file_path.exists():
@@ -74,6 +80,118 @@ def cleanup_completion_files() -> list[tuple[str, str]]:
                 print(f"   ⚠️  Failed to remove {file_path.name}: {e}")
 
     return removed_files
+
+
+def _remove_homodyne_blocks(content: str, end_marker: str) -> str:
+    """Remove homodyne-injected blocks from activate script content.
+
+    Uses a line-by-line state machine instead of regex to correctly handle
+    nested if/fi or if/end structures within injected blocks.
+
+    Parameters
+    ----------
+    content : str
+        Full text of the activate script.
+    end_marker : str
+        Block terminator: ``"fi"`` for bash/zsh, ``"end"`` for fish.
+
+    Returns
+    -------
+    str
+        Content with all homodyne blocks removed.
+    """
+    _HOMODYNE_HEADERS = (
+        "# Homodyne shell completion (auto-added by homodyne-post-install)",
+        "# Homodyne XLA configuration (auto-added by homodyne-post-install)",
+    )
+
+    lines = content.split("\n")
+    result: list[str] = []
+    skipping = False
+    # Track nesting depth so nested if/fi blocks don't prematurely end skip
+    depth = 0
+
+    for line in lines:
+        stripped = line.strip()
+
+        if not skipping:
+            if stripped in _HOMODYNE_HEADERS:
+                skipping = True
+                depth = 0
+                continue
+            result.append(line)
+        else:
+            # Track nesting depth: the block starts with the header comment,
+            # then has its own if/fi (or if/end) structure. Each opener
+            # increments depth; each closer decrements. When the closer
+            # brings depth back to 0, the block is finished.
+            if end_marker == "fi":
+                if stripped.startswith("if ") or stripped.startswith("if\t"):
+                    depth += 1
+                elif (
+                    stripped == end_marker
+                    or stripped.startswith("fi ")
+                    or stripped.startswith("fi;")
+                ):
+                    depth -= 1
+                    if depth <= 0:
+                        skipping = False
+                        continue
+            else:
+                # fish: end marker
+                if stripped in ("if", "for", "while") or any(
+                    stripped.startswith(kw) for kw in ("if ", "for ", "while ")
+                ):
+                    depth += 1
+                elif stripped == end_marker:
+                    depth -= 1
+                    if depth <= 0:
+                        skipping = False
+                        continue
+
+    return "\n".join(result)
+
+
+def cleanup_activate_script_hooks() -> list[tuple[str, str]]:
+    """Remove homodyne-injected sourcing blocks from venv activate scripts.
+
+    The post-install script appends blocks delimited by:
+        # Homodyne shell completion (auto-added by homodyne-post-install)
+        # Homodyne XLA configuration (auto-added by homodyne-post-install)
+    This function strips those blocks to keep activate scripts clean.
+
+    Creates a ``.bak`` backup of each modified script before writing changes.
+    """
+    venv_path = Path(sys.prefix)
+    bin_dir = venv_path / "bin"
+    cleaned = []
+
+    # (script_name, end_marker) pairs
+    scripts = [
+        ("activate", "fi"),
+        ("activate.fish", "end"),
+    ]
+
+    for script_name, end_marker in scripts:
+        script_path = bin_dir / script_name
+        if not script_path.exists():
+            continue
+
+        try:
+            original = script_path.read_text()
+            modified = _remove_homodyne_blocks(original, end_marker)
+
+            if modified != original:
+                # Create .bak backup before modifying
+                backup_path = script_path.with_suffix(script_path.suffix + ".bak")
+                backup_path.write_text(original)
+                script_path.write_text(modified)
+                cleaned.append(("Activate hook", script_name))
+
+        except OSError as e:
+            print(f"   ⚠️  Failed to clean {script_name}: {e}")
+
+    return cleaned
 
 
 def cleanup_gpu_files() -> list[tuple[str, str]]:
@@ -250,6 +368,7 @@ def interactive_cleanup() -> list[tuple[str, str]]:
 
         if remove_completion:
             all_removed.extend(cleanup_completion_files())
+            all_removed.extend(cleanup_activate_script_hooks())
 
         if remove_gpu:
             all_removed.extend(cleanup_gpu_files())
@@ -294,6 +413,7 @@ def cleanup_all_files() -> bool:
         # Clean up all types of files
         all_removed = []
         all_removed.extend(cleanup_completion_files())
+        all_removed.extend(cleanup_activate_script_hooks())
         all_removed.extend(cleanup_gpu_files())
         all_removed.extend(cleanup_advanced_features())
         all_removed.extend(cleanup_old_system_files())
@@ -304,6 +424,7 @@ def cleanup_all_files() -> bool:
         venv_path = Path(sys.prefix)
         directories_to_clean = [
             venv_path / "etc" / "homodyne" / "gpu",
+            venv_path / "etc" / "homodyne" / "shell",
             venv_path / "etc" / "homodyne" / "activation",
             venv_path / "etc" / "homodyne",
             venv_path / "etc" / "zsh",
@@ -391,6 +512,16 @@ def show_dry_run() -> bool:
             venv_path / "share" / "fish" / "vendor_completions.d" / "homodyne.fish",
             "Shell completion",
             "homodyne.fish",
+        ),
+        (
+            venv_path / "etc" / "homodyne" / "shell" / "completion.sh",
+            "Shell completion",
+            "completion.sh (full)",
+        ),
+        (
+            venv_path / "etc" / "homodyne" / "shell" / "completion.fish",
+            "Shell completion",
+            "completion.fish",
         ),
     ]
 
