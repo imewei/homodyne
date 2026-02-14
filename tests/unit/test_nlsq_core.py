@@ -47,6 +47,7 @@ try:
 except ImportError:
     NLSQ_AVAILABLE = False
 
+from homodyne.optimization.exceptions import NLSQConvergenceError
 from homodyne.optimization.nlsq import fit_nlsq_jax
 from homodyne.optimization.nlsq.wrapper import (
     NLSQWrapper,
@@ -567,7 +568,7 @@ class TestNLSQWrapperErrorRecovery:
             "homodyne.optimization.nlsq.wrapper.curve_fit",
             side_effect=mock_curve_fit_always_fail,
         ):
-            with pytest.raises(Exception) as exc_info:
+            with pytest.raises((RuntimeError, NLSQConvergenceError)) as exc_info:
                 wrapper.fit(
                     data=synthetic_data,
                     config=mock_config,
@@ -1272,6 +1273,8 @@ class TestNLSQOptimization:
             result = fit_nlsq_jax(invalid_data, test_config)
             # If it succeeds, that's also acceptable (robust handling)
             assert result is not None
+            # Verify it has the expected attributes
+            assert hasattr(result, 'convergence_status') or hasattr(result, 'chi_squared')
         except (ValueError, RuntimeError):
             # Expected error case
             pass

@@ -9,12 +9,10 @@ import math
 from dataclasses import dataclass
 
 import jax.numpy as jnp
-import numpy as np
 import pytest
 
 pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
 
-import numpyro  # noqa: E402
 import numpyro.distributions as dist  # noqa: E402
 from numpyro.handlers import seed, trace  # noqa: E402
 

@@ -63,7 +63,9 @@ class TestConstantScalingAutoSelection:
 
         # Should auto-select auto_averaged mode (v2.18.0 naming)
         assert controller.per_angle_mode_actual == "auto_averaged"
-        assert controller.use_constant is True  # Both auto_averaged and fixed_constant use constant mapping
+        assert (
+            controller.use_constant is True
+        )  # Both auto_averaged and fixed_constant use constant mapping
         assert controller.use_averaged_scaling is True  # Averaged scaling is OPTIMIZED
         assert controller.use_fourier is False
 

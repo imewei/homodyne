@@ -61,19 +61,61 @@ class TestComputeTRef:
         t_ref = compute_t_ref(5.0, 5.0)
         assert t_ref == pytest.approx(5.0)
 
-    def test_invalid_dt_returns_default(self):
-        """Invalid dt falls back to 1.0."""
+    def test_invalid_dt_raises(self):
+        """Invalid dt raises ValueError."""
         from homodyne.optimization.cmc.reparameterization import compute_t_ref
 
-        assert compute_t_ref(0.0, 100.0) == 1.0
-        assert compute_t_ref(-1.0, 100.0) == 1.0
+        with pytest.raises(ValueError, match="Invalid inputs"):
+            compute_t_ref(0.0, 100.0)
+        with pytest.raises(ValueError, match="Invalid inputs"):
+            compute_t_ref(-1.0, 100.0)
 
-    def test_invalid_t_max_returns_default(self):
-        """Invalid t_max falls back to 1.0."""
+    def test_invalid_t_max_raises(self):
+        """Invalid t_max raises ValueError."""
         from homodyne.optimization.cmc.reparameterization import compute_t_ref
 
-        assert compute_t_ref(0.1, 0.0) == 1.0
-        assert compute_t_ref(0.1, -50.0) == 1.0
+        with pytest.raises(ValueError, match="Invalid inputs"):
+            compute_t_ref(0.1, 0.0)
+        with pytest.raises(ValueError, match="Invalid inputs"):
+            compute_t_ref(0.1, -50.0)
+
+    def test_fallback_on_invalid_dt(self):
+        """With fallback_value, invalid dt returns fallback instead of raising."""
+        from homodyne.optimization.cmc.reparameterization import compute_t_ref
+
+        result = compute_t_ref(0.0, 100.0, fallback_value=1.0)
+        assert result == 1.0
+        result = compute_t_ref(-1.0, 100.0, fallback_value=2.5)
+        assert result == 2.5
+
+    def test_fallback_on_invalid_t_max(self):
+        """With fallback_value, invalid t_max returns fallback instead of raising."""
+        from homodyne.optimization.cmc.reparameterization import compute_t_ref
+
+        result = compute_t_ref(0.1, -50.0, fallback_value=1.0)
+        assert result == 1.0
+
+    def test_none_fallback_still_raises(self):
+        """With fallback_value=None (default), invalid inputs still raise."""
+        from homodyne.optimization.cmc.reparameterization import compute_t_ref
+
+        with pytest.raises(ValueError, match="Invalid inputs"):
+            compute_t_ref(0.0, 100.0, fallback_value=None)
+
+    def test_valid_inputs_ignore_fallback(self):
+        """With valid inputs, fallback_value is ignored."""
+        from homodyne.optimization.cmc.reparameterization import compute_t_ref
+
+        result = compute_t_ref(0.1, 100.0, fallback_value=999.0)
+        assert result == pytest.approx(math.sqrt(0.1 * 100.0))
+        assert result != 999.0
+
+    def test_nan_fallback(self):
+        """NaN inputs with fallback return the fallback value."""
+        from homodyne.optimization.cmc.reparameterization import compute_t_ref
+
+        result = compute_t_ref(float("nan"), 100.0, fallback_value=1.0)
+        assert result == 1.0
 
 
 class TestTransformToSamplingSpace:
@@ -96,13 +138,15 @@ class TestTransformToSamplingSpace:
         result = transform_to_sampling_space(params, config)
 
         # D_ref = D0 * t_ref^alpha
-        D_ref_expected = D0 * (t_ref ** alpha)
+        D_ref_expected = D0 * (t_ref**alpha)
         assert "log_D_ref" in result
         assert "D_offset_frac" in result
         assert "D0" not in result
         assert "D_offset" not in result
         assert result["log_D_ref"] == pytest.approx(np.log(D_ref_expected))
-        assert result["D_offset_frac"] == pytest.approx(D_offset / (D_ref_expected + D_offset))
+        assert result["D_offset_frac"] == pytest.approx(
+            D_offset / (D_ref_expected + D_offset)
+        )
         assert result["alpha"] == -1.0  # Unchanged
 
     def test_gamma_ref_transform(self):
@@ -120,7 +164,7 @@ class TestTransformToSamplingSpace:
 
         result = transform_to_sampling_space(params, config)
 
-        gamma_ref_expected = gamma_dot_t0 * (t_ref ** beta)
+        gamma_ref_expected = gamma_dot_t0 * (t_ref**beta)
         assert "log_gamma_ref" in result
         assert "gamma_dot_t0" not in result
         assert result["log_gamma_ref"] == pytest.approx(np.log(gamma_ref_expected))
@@ -165,7 +209,7 @@ class TestTransformToPhysicsSpace:
         D0_true = 20000.0
         alpha_true = -1.0
         D_offset_true = 1000.0
-        D_ref = D0_true * (t_ref ** alpha_true)
+        D_ref = D0_true * (t_ref**alpha_true)
 
         log_D_ref = np.log(D_ref)
         D_offset_frac = D_offset_true / (D_ref + D_offset_true)
@@ -196,7 +240,7 @@ class TestTransformToPhysicsSpace:
 
         gamma_dot_t0_true = 0.002
         beta_true = -0.3
-        gamma_ref = gamma_dot_t0_true * (t_ref ** beta_true)
+        gamma_ref = gamma_dot_t0_true * (t_ref**beta_true)
 
         samples = {
             "log_gamma_ref": np.array([np.log(gamma_ref)]),
@@ -207,7 +251,9 @@ class TestTransformToPhysicsSpace:
 
         assert "gamma_dot_t0" in result
         assert "log_gamma_ref" not in result
-        np.testing.assert_allclose(result["gamma_dot_t0"], [gamma_dot_t0_true], rtol=1e-10)
+        np.testing.assert_allclose(
+            result["gamma_dot_t0"], [gamma_dot_t0_true], rtol=1e-10
+        )
 
     def test_roundtrip_d_ref(self):
         """Transform to sampling and back preserves D0/D_offset."""
@@ -316,7 +362,9 @@ class TestTransformNlsqToReparamSpace:
 
     def test_basic_transform(self):
         """Transforms NLSQ values to reparameterized space."""
-        from homodyne.optimization.cmc.reparameterization import transform_nlsq_to_reparam_space
+        from homodyne.optimization.cmc.reparameterization import (
+            transform_nlsq_to_reparam_space,
+        )
 
         t_ref = 3.16
         nlsq_values = {
@@ -340,7 +388,9 @@ class TestTransformNlsqToReparamSpace:
 
     def test_uncertainty_propagation(self):
         """Delta-method uncertainty propagation works."""
-        from homodyne.optimization.cmc.reparameterization import transform_nlsq_to_reparam_space
+        from homodyne.optimization.cmc.reparameterization import (
+            transform_nlsq_to_reparam_space,
+        )
 
         t_ref = 3.16
         nlsq_values = {
@@ -374,7 +424,9 @@ class TestTransformNlsqToReparamSpace:
 
     def test_static_mode_no_shear(self):
         """Static mode produces no shear reparam values."""
-        from homodyne.optimization.cmc.reparameterization import transform_nlsq_to_reparam_space
+        from homodyne.optimization.cmc.reparameterization import (
+            transform_nlsq_to_reparam_space,
+        )
 
         nlsq_values = {"D0": 10000.0, "alpha": -0.5, "D_offset": 500.0}
 
@@ -406,7 +458,9 @@ class TestConfigWidthFactor:
         """from_dict respects explicit width factor."""
         from homodyne.optimization.cmc.config import CMCConfig
 
-        config = CMCConfig.from_dict({
-            "validation": {"nlsq_prior_width_factor": 3.0},
-        })
+        config = CMCConfig.from_dict(
+            {
+                "validation": {"nlsq_prior_width_factor": 3.0},
+            }
+        )
         assert config.nlsq_prior_width_factor == 3.0

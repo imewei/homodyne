@@ -152,6 +152,12 @@ def cleanup_jax_state():
     This fixture automatically runs after each test to ensure clean state.
     Addresses test isolation issues identified in v2.1.0 testing.
     """
+    try:
+        import jax
+    except ImportError:
+        yield
+        return
+
     yield
 
     # Force garbage collection
@@ -549,6 +555,21 @@ def validate_numpyro_param_order(param_names, n_angles, mode):
     return True
 
 
+def make_per_angle_params(n_angles: int, mode: str = "static") -> np.ndarray:
+    """Create per-angle scaling parameters for testing.
+
+    Args:
+        n_angles: Number of angles
+        mode: Analysis mode ("static" or "laminar_flow")
+
+    Returns:
+        np.ndarray: Concatenated array of [contrast_values, offset_values]
+    """
+    contrast = np.full(n_angles, 0.3)
+    offset = np.full(n_angles, 1.0)
+    return np.concatenate([contrast, offset])
+
+
 @pytest.fixture(scope="module")
 def per_angle_params_static():
     """Per-angle scaling parameters for static isotropic mode.
@@ -769,7 +790,7 @@ def test_utils():
 # ============================================================================
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def mcmc_config_minimal():
     """Mock MCMC configuration with minimal settings.
 
@@ -800,7 +821,7 @@ def mcmc_config_minimal():
     return MCMCConfig()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def cmc_shard_config():
     """CMC sharding configuration.
 
@@ -842,7 +863,7 @@ def mock_mcmc_samples():
     """
 
     def generate_samples(n_samples=100, n_params=9, n_chains=2, seed=42):
-        """Generate reproducible mock MCMC samples.
+        """Generate reproducible mock MCMC samples with AR(1) autocorrelation.
 
         Args:
             n_samples: Number of samples per chain
@@ -855,9 +876,16 @@ def mock_mcmc_samples():
         """
         rng = np.random.default_rng(seed)
 
-        # Generate samples: (n_chains, n_samples, n_params)
-        # Samples around reasonable parameter values (0.5-2.0 range)
-        samples = rng.normal(1.0, 0.3, size=(n_chains, n_samples, n_params))
+        # Generate correlated samples using AR(1) process
+        rho = 0.8  # autocorrelation coefficient
+        noise = rng.standard_normal((n_chains, n_samples, n_params))
+        samples = np.zeros_like(noise)
+        samples[:, 0, :] = noise[:, 0, :]
+        for i in range(1, n_samples):
+            samples[:, i, :] = rho * samples[:, i - 1, :] + np.sqrt(1 - rho**2) * noise[:, i, :]
+
+        # Adjust mean and scale to reasonable parameter values (0.5-2.0 range)
+        samples = samples * 0.3 + 1.0
         samples = np.clip(samples, 0.1, 5.0)  # Physical bounds
 
         # Generate divergences: some chains diverge occasionally
@@ -1048,6 +1076,8 @@ def numerical_error_types():
 @pytest.fixture(scope="function")
 def mock_numerical_validator():
     """Create a mock NumericalValidator using exception-based API.
+
+    Test-only mock validator. Raises NLSQNumericalError for NaN/Inf/out-of-bounds values.
 
     Returns a mock validator object that uses the exception-based validation API
     (v2.4.0+). Provides .validate_values(), .validate_gradients(), and

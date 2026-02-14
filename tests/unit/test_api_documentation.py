@@ -15,19 +15,18 @@ def test_autodoc_imports_homodyne_successfully():
     """Test that autodoc can import homodyne package without errors."""
     # Import should succeed without mocking
     try:
-        import homodyne
+        # Verify core modules are accessible and importable
+        from homodyne import cli, config, core, data, device, optimization, utils, viz
 
-        # Verify core modules are accessible
-        assert hasattr(homodyne, "core"), "homodyne.core module not accessible"
-        assert hasattr(homodyne, "config"), "homodyne.config module not accessible"
-        assert hasattr(homodyne, "data"), "homodyne.data module not accessible"
-        assert hasattr(homodyne, "optimization"), (
-            "homodyne.optimization module not accessible"
-        )
-        assert hasattr(homodyne, "cli"), "homodyne.cli module not accessible"
-        assert hasattr(homodyne, "viz"), "homodyne.viz module not accessible"
-        assert hasattr(homodyne, "device"), "homodyne.device module not accessible"
-        assert hasattr(homodyne, "utils"), "homodyne.utils module not accessible"
+        # Verify modules are imported correctly
+        assert core is not None
+        assert config is not None
+        assert data is not None
+        assert optimization is not None
+        assert cli is not None
+        assert viz is not None
+        assert device is not None
+        assert utils is not None
 
     except ImportError as e:
         pytest.fail(f"Failed to import homodyne package: {e}")
@@ -36,13 +35,13 @@ def test_autodoc_imports_homodyne_successfully():
 def test_core_module_imports():
     """Test that core submodules can be imported."""
     try:
-        from homodyne import core
+        from homodyne.core import fitting, jax_backend, models, physics
 
-        # Check key components exist
-        assert hasattr(core, "jax_backend"), "jax_backend not found in core"
-        assert hasattr(core, "physics"), "physics not found in core"
-        assert hasattr(core, "models"), "models not found in core"
-        assert hasattr(core, "fitting"), "fitting not found in core"
+        # Check key components exist and are importable
+        assert jax_backend is not None
+        assert physics is not None
+        assert models is not None
+        assert fitting is not None
 
     except ImportError as e:
         pytest.fail(f"Failed to import homodyne.core: {e}")

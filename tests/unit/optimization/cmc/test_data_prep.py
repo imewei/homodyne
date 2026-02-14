@@ -506,7 +506,7 @@ class TestShardDataAngleBalanced:
         )
 
         # Same seed should produce same results
-        for s1, s2 in zip(shards1, shards2):
+        for s1, s2 in zip(shards1, shards2, strict=True):
             assert s1.n_total == s2.n_total
             np.testing.assert_array_equal(s1.data, s2.data)
 

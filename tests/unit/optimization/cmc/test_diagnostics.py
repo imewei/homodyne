@@ -1,5 +1,6 @@
 """Tests for CMC diagnostics module."""
 
+import numpy as np
 import pytest
 
 pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
@@ -374,8 +375,6 @@ class TestLogAnalysisSummary:
 # =============================================================================
 # Bimodal Detection Tests
 # =============================================================================
-
-import numpy as np
 
 
 class TestBimodalDetection:

@@ -13,76 +13,64 @@ class TestNLSQAdapterBase:
     """Tests for T057: NLSQAdapterBase interface."""
 
     def test_adapter_base_exists(self):
-        """Test that NLSQAdapterBase ABC exists."""
+        """Test that NLSQAdapterBase ABC exists and has required methods."""
         from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
 
+        # Verify methods exist and are callable
+        assert callable(NLSQAdapterBase._prepare_data)
+        assert callable(NLSQAdapterBase._validate_input)
+        assert callable(NLSQAdapterBase._build_result)
+        assert callable(NLSQAdapterBase._handle_error)
+        assert callable(NLSQAdapterBase._setup_bounds)
+        assert callable(NLSQAdapterBase._compute_covariance)
+
+    def test_prepare_data_exists(self):
+        """Test that _prepare_data method exists and is callable."""
+        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
+
+        # Verify method exists and is callable
         assert hasattr(NLSQAdapterBase, "_prepare_data")
+        assert callable(NLSQAdapterBase._prepare_data)
+
+    def test_validate_input_exists(self):
+        """Test that _validate_input method exists and is callable."""
+        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
+
+        # Verify method exists and is callable
         assert hasattr(NLSQAdapterBase, "_validate_input")
+        assert callable(NLSQAdapterBase._validate_input)
+
+    def test_build_result_exists(self):
+        """Test that _build_result method exists and is callable."""
+        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
+
+        # Verify method exists and is callable
         assert hasattr(NLSQAdapterBase, "_build_result")
+        assert callable(NLSQAdapterBase._build_result)
+
+    def test_handle_error_exists(self):
+        """Test that _handle_error method exists and is callable."""
+        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
+
+        # Verify method exists and is callable
         assert hasattr(NLSQAdapterBase, "_handle_error")
+        assert callable(NLSQAdapterBase._handle_error)
+
+    def test_setup_bounds_exists(self):
+        """Test that _setup_bounds method exists and is callable."""
+        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
+
+        # Verify method exists and is callable
         assert hasattr(NLSQAdapterBase, "_setup_bounds")
+        assert callable(NLSQAdapterBase._setup_bounds)
+
+    def test_compute_covariance_exists(self):
+        """Test that _compute_covariance method exists and is callable."""
+        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
+
+        # Verify method exists and is callable
         assert hasattr(NLSQAdapterBase, "_compute_covariance")
-
-    def test_prepare_data_signature(self):
-        """Test that _prepare_data has expected signature."""
-        import inspect
-
-        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
-
-        sig = inspect.signature(NLSQAdapterBase._prepare_data)
-        params = list(sig.parameters.keys())
-        assert "self" in params
-        # Should accept data-related parameters
-
-    def test_validate_input_signature(self):
-        """Test that _validate_input has expected signature."""
-        import inspect
-
-        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
-
-        sig = inspect.signature(NLSQAdapterBase._validate_input)
-        params = list(sig.parameters.keys())
-        assert "self" in params
-
-    def test_build_result_signature(self):
-        """Test that _build_result has expected signature."""
-        import inspect
-
-        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
-
-        sig = inspect.signature(NLSQAdapterBase._build_result)
-        params = list(sig.parameters.keys())
-        assert "self" in params
-
-    def test_handle_error_signature(self):
-        """Test that _handle_error has expected signature."""
-        import inspect
-
-        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
-
-        sig = inspect.signature(NLSQAdapterBase._handle_error)
-        params = list(sig.parameters.keys())
-        assert "self" in params
-
-    def test_setup_bounds_signature(self):
-        """Test that _setup_bounds has expected signature."""
-        import inspect
-
-        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
-
-        sig = inspect.signature(NLSQAdapterBase._setup_bounds)
-        params = list(sig.parameters.keys())
-        assert "self" in params
-
-    def test_compute_covariance_signature(self):
-        """Test that _compute_covariance has expected signature."""
-        import inspect
-
-        from homodyne.optimization.nlsq.adapter_base import NLSQAdapterBase
-
-        sig = inspect.signature(NLSQAdapterBase._compute_covariance)
-        params = list(sig.parameters.keys())
-        assert "self" in params
+        assert callable(NLSQAdapterBase._compute_covariance)
 
 
 class TestAdapterInheritance:

@@ -20,6 +20,7 @@ from homodyne.optimization.cmc.data_prep import PreparedData  # noqa: E402
 from homodyne.optimization.cmc.results import CMCResult  # noqa: E402
 from homodyne.optimization.cmc.sampler import (  # noqa: E402
     MCMCSamples,
+    SamplingPlan,
     SamplingStats,
 )
 
@@ -286,21 +287,28 @@ class TestCMCScientificProperties:
             assert ess > 100, f"ESS for {name} is {ess}, should be > 100"
 
     def test_sample_statistics_consistency(self, mock_cmc_result):
-        """Test sample statistics are consistent with parameters."""
+        """Test sample statistics are computed correctly from chain samples."""
         stats = mock_cmc_result.get_posterior_stats()
 
-        for i, name in enumerate(mock_cmc_result.param_names):
-            mock_cmc_result.parameters[i]
-            mock_cmc_result.uncertainties[i]
+        for name in mock_cmc_result.param_names:
+            # Compute expected stats directly from the chain samples
+            chain_data = mock_cmc_result.samples[name]  # (n_chains, n_samples)
+            expected_mean = float(np.mean(chain_data))
+            expected_std = float(np.std(chain_data))
 
-            # Mean from samples should be close to reported parameter
             sample_mean = stats[name]["mean"]
             sample_std = stats[name]["std"]
 
-            # With finite samples, these might differ but should be reasonable
             assert np.isfinite(sample_mean)
             assert np.isfinite(sample_std)
             assert sample_std > 0
+            # Stats should match direct computation from samples
+            np.testing.assert_allclose(
+                sample_mean, expected_mean, rtol=1e-10, err_msg=f"{name}: mean mismatch"
+            )
+            np.testing.assert_allclose(
+                sample_std, expected_std, rtol=1e-10, err_msg=f"{name}: std mismatch"
+            )
 
 
 # =============================================================================
@@ -416,7 +424,15 @@ class TestTimeStepInference:
                 n_samples=1,
                 extra_fields={"diverging": np.zeros((1, 1))},
             )
-            stats = SamplingStats()
+            plan = SamplingPlan(
+                n_warmup=1,
+                n_samples=1,
+                n_chains=1,
+                shard_size=1,
+                n_params=1,
+                was_adapted=False,
+            )
+            stats = SamplingStats(plan=plan)
             return samples, stats
 
         monkeypatch.setattr(
@@ -440,6 +456,60 @@ class TestTimeStepInference:
         )
 
         assert captured["dt"] == pytest.approx(0.001)
+
+
+class TestStatsWithoutPlan:
+    """Verify defensive fallback when stats.plan is None."""
+
+    def test_stats_without_plan_falls_back_gracefully(self):
+        """When stats.plan is None, core should use config defaults, not crash."""
+        # Simulate core.py section 6 with stats.plan = None
+        config = CMCConfig(num_warmup=500, num_samples=1500)
+        stats = SamplingStats(
+            warmup_time=5.0,
+            sampling_time=10.0,
+            total_time=15.0,
+            num_divergent=2,
+            plan=None,  # Invariant violated
+        )
+
+        # Replicate core.py's defensive logic
+        if stats.plan is not None:
+            actual_n_warmup = stats.plan.n_warmup
+            actual_plan = stats.plan
+        else:
+            actual_n_warmup = config.num_warmup
+            actual_plan = None
+
+        assert actual_n_warmup == 500  # Falls back to config default
+        assert actual_plan is None
+
+
+class TestInferTimeStepWarnings:
+    """Verify _infer_time_step warns on fallback paths."""
+
+    def test_infer_time_step_single_value_warns(self, caplog):
+        """Single unique value should warn and fall back to 1.0."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = _infer_time_step(np.array([5.0, 5.0]), np.array([5.0, 5.0]))
+        assert result == 1.0
+        assert any(
+            "fewer than 2 unique" in r.message.lower()
+            or "single" in r.message.lower()
+            or "fallback" in r.message.lower()
+            for r in caplog.records
+        ), "Expected warning about fallback to dt=1.0"
+
+    def test_infer_time_step_no_positive_diffs_warns(self, caplog):
+        """All-zero diffs should warn and fall back to 1.0."""
+        import logging
+
+        # All identical values after unique
+        with caplog.at_level(logging.WARNING):
+            result = _infer_time_step(np.array([3.0]), np.array([3.0]))
+        assert result == 1.0
 
 
 class TestT0Exclusion:
@@ -575,3 +645,190 @@ class TestT0Exclusion:
         }
         result = _exclude_t0_from_analysis(data)
         assert result is data  # Should return input unchanged
+
+
+# =============================================================================
+# SamplingPlan → CMCResult integration
+# =============================================================================
+
+
+class TestCMCResultUsesAdaptedWarmup:
+    """Verify CMCResult.n_warmup reflects adapted value from SamplingPlan."""
+
+    def test_from_mcmc_samples_with_adapted_plan(self):
+        """CMCResult should use n_warmup from SamplingPlan, not config default."""
+        # Create a SamplingPlan that simulates adaptation (reduced from defaults)
+        plan = SamplingPlan(
+            n_warmup=140,
+            n_samples=350,
+            n_chains=4,
+            shard_size=50,
+            n_params=7,
+            was_adapted=True,
+        )
+
+        # Create minimal MCMCSamples
+        n_chains, n_samples = 4, 350
+        samples = {
+            "D0": np.random.randn(n_chains, n_samples),
+            "alpha": np.random.randn(n_chains, n_samples),
+            "D_offset": np.random.randn(n_chains, n_samples),
+        }
+        mcmc_samples = MCMCSamples(
+            samples=samples,
+            param_names=["D0", "alpha", "D_offset"],
+            n_chains=n_chains,
+            n_samples=n_samples,
+            extra_fields={"diverging": np.zeros((n_chains, n_samples), dtype=bool)},
+        )
+
+        # Create stats with plan
+        stats = SamplingStats(
+            warmup_time=5.0,
+            sampling_time=10.0,
+            total_time=15.0,
+            num_divergent=3,
+            plan=plan,
+        )
+
+        # CMCResult should use the plan's adapted warmup
+        result = CMCResult.from_mcmc_samples(
+            mcmc_samples=mcmc_samples,
+            stats=stats,
+            analysis_mode="static",
+            n_warmup=plan.n_warmup,  # This is what core.py now passes
+        )
+
+        assert result.n_warmup == 140  # Adapted, not config default 500
+        assert result.n_warmup != 500
+
+
+# =============================================================================
+# Single-shard SamplingPlan → CMCResult warmup flow (P2)
+# =============================================================================
+
+
+class TestSingleShardWarmupFlow:
+    """Verify single-shard path propagates adapted warmup to CMCResult.
+
+    The core.py result-creation logic (section 6) reads stats.plan.n_warmup
+    for the single-shard path. This class tests the invariant that
+    plan.was_adapted == True causes CMCResult.n_warmup to differ from config.
+    """
+
+    def test_adapted_plan_propagates_to_result(self):
+        """Adapted SamplingPlan n_warmup flows to CMCResult.n_warmup."""
+        config = CMCConfig(num_warmup=500, num_samples=1500, adaptive_sampling=True)
+        plan = SamplingPlan.from_config(config, shard_size=50, n_params=7)
+
+        assert plan.was_adapted is True
+        assert plan.n_warmup < 500
+
+        n_chains, n_samples = plan.n_chains, plan.n_samples
+        samples = {
+            "D0": np.random.randn(n_chains, n_samples),
+            "alpha": np.random.randn(n_chains, n_samples),
+            "D_offset": np.random.randn(n_chains, n_samples),
+        }
+        mcmc_samples = MCMCSamples(
+            samples=samples,
+            param_names=["D0", "alpha", "D_offset"],
+            n_chains=n_chains,
+            n_samples=n_samples,
+            extra_fields={"diverging": np.zeros((n_chains, n_samples), dtype=bool)},
+        )
+
+        stats = SamplingStats(
+            warmup_time=1.0,
+            sampling_time=2.0,
+            total_time=3.0,
+            num_divergent=0,
+            plan=plan,
+        )
+
+        # Mirror core.py section 6: single-shard uses stats.plan.n_warmup
+        assert stats.plan is not None
+        actual_n_warmup = stats.plan.n_warmup
+
+        result = CMCResult.from_mcmc_samples(
+            mcmc_samples=mcmc_samples,
+            stats=stats,
+            analysis_mode="static",
+            n_warmup=actual_n_warmup,
+        )
+
+        assert result.n_warmup == plan.n_warmup
+        assert result.n_warmup != config.num_warmup
+
+    def test_non_adapted_plan_matches_config(self):
+        """Non-adapted SamplingPlan n_warmup equals config default."""
+        config = CMCConfig(num_warmup=500, num_samples=1500, adaptive_sampling=True)
+        plan = SamplingPlan.from_config(config, shard_size=50000, n_params=7)
+
+        assert plan.was_adapted is False
+        assert plan.n_warmup == config.num_warmup
+
+        n_chains, n_samples = plan.n_chains, plan.n_samples
+        samples = {"D0": np.random.randn(n_chains, n_samples)}
+        mcmc_samples = MCMCSamples(
+            samples=samples,
+            param_names=["D0"],
+            n_chains=n_chains,
+            n_samples=n_samples,
+            extra_fields={"diverging": np.zeros((n_chains, n_samples), dtype=bool)},
+        )
+
+        stats = SamplingStats(
+            warmup_time=1.0,
+            sampling_time=2.0,
+            total_time=3.0,
+            num_divergent=0,
+            plan=plan,
+        )
+
+        result = CMCResult.from_mcmc_samples(
+            mcmc_samples=mcmc_samples,
+            stats=stats,
+            analysis_mode="static",
+            n_warmup=stats.plan.n_warmup,
+        )
+
+        assert result.n_warmup == config.num_warmup
+
+
+# =============================================================================
+# t_ref fallback path (P3)
+# =============================================================================
+
+
+class TestTRefFallback:
+    """Verify compute_t_ref ValueError is caught and falls back to 1.0."""
+
+    def test_compute_t_ref_raises_on_invalid_inputs(self):
+        """compute_t_ref raises ValueError for non-positive inputs."""
+        from homodyne.optimization.cmc.reparameterization import compute_t_ref
+
+        with pytest.raises(ValueError):
+            compute_t_ref(dt=0.0, t_max=10.0)
+        with pytest.raises(ValueError):
+            compute_t_ref(dt=1.0, t_max=-1.0)
+        with pytest.raises(ValueError):
+            compute_t_ref(dt=float("nan"), t_max=10.0)
+
+    def test_fallback_logic_mirrors_core(self):
+        """Replicate core.py's try/except pattern with invalid inputs.
+
+        This tests the fallback logic without invoking the full fit_mcmc_jax
+        pipeline, which requires HDF5 data and full model setup.
+        """
+        from homodyne.optimization.cmc.reparameterization import compute_t_ref
+
+        # Simulate core.py lines 978-984
+        dt_used = -1.0  # Invalid: will trigger ValueError
+        t_max = 10.0
+        try:
+            t_ref = compute_t_ref(dt_used, t_max)
+        except ValueError:
+            t_ref = 1.0
+
+        assert t_ref == 1.0

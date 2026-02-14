@@ -18,6 +18,8 @@ Date: 2025-12-03
 import numpy as np
 import pytest
 
+from homodyne.optimization.exceptions import NLSQNumericalError
+
 # ============================================================================
 # Test Group 1: Using numerical_error_types fixture
 # ============================================================================
@@ -95,7 +97,7 @@ class TestMockNumericalValidator:
             np.array([1.0, 2.0, 10000.0]),
         )
 
-        with pytest.raises(Exception):  # noqa: B017  # NLSQNumericalError
+        with pytest.raises(NLSQNumericalError):
             validator.validate_parameters(invalid_params, bounds)
 
     def test_inf_in_parameters_raises_exception(self, mock_numerical_validator):
@@ -108,7 +110,7 @@ class TestMockNumericalValidator:
             np.array([1.0, 2.0, 10000.0]),
         )
 
-        with pytest.raises(Exception):  # noqa: B017  # NLSQNumericalError
+        with pytest.raises(NLSQNumericalError):
             validator.validate_parameters(invalid_params, bounds)
 
     def test_nan_in_gradients_raises_exception(self, mock_numerical_validator):
@@ -117,14 +119,14 @@ class TestMockNumericalValidator:
 
         gradients = np.array([1.0, 2.0, np.nan, 4.0])
 
-        with pytest.raises(Exception):  # noqa: B017  # NLSQNumericalError
+        with pytest.raises(NLSQNumericalError):
             validator.validate_gradients(gradients)
 
     def test_nan_in_loss_raises_exception(self, mock_numerical_validator):
         """NaN in loss should raise exception."""
         validator = mock_numerical_validator
 
-        with pytest.raises(Exception):  # noqa: B017  # NLSQNumericalError
+        with pytest.raises(NLSQNumericalError):
             validator.validate_loss(np.nan)
 
     def test_bounds_violations_raise_exception(self, mock_numerical_validator):
@@ -140,7 +142,7 @@ class TestMockNumericalValidator:
             np.array([1.0, 2.0, 10000.0]),
         )
 
-        with pytest.raises(Exception):  # noqa: B017  # NLSQNumericalError
+        with pytest.raises(NLSQNumericalError):
             validator.validate_parameters(invalid_params, bounds)
 
     def test_validation_can_be_disabled(self, mock_numerical_validator):
@@ -163,7 +165,7 @@ class TestMockNumericalValidator:
         validator.enable()
 
         # Now it should raise
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(NLSQNumericalError):
             validator.validate_parameters(invalid_params, bounds)
 
     def test_set_bounds_on_validator(self, mock_numerical_validator):
@@ -184,7 +186,7 @@ class TestMockNumericalValidator:
         # Out of bounds should raise
         invalid_params = np.array([0.3, 1.0, 50000.0])
 
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(NLSQNumericalError):
             validator.validate_parameters(invalid_params)
 
 
@@ -387,7 +389,7 @@ class TestEdgeCases:
 
         params = np.array([np.nan, 1.0, np.nan])
 
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(NLSQNumericalError):
             validator.validate_parameters(params)
 
     def test_mixed_nan_inf_values(self, mock_numerical_validator):
@@ -396,7 +398,7 @@ class TestEdgeCases:
 
         params = np.array([np.nan, np.inf, 1000.0])
 
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(NLSQNumericalError):
             validator.validate_parameters(params)
 
     def test_negative_infinity(self, mock_numerical_validator):
@@ -405,5 +407,5 @@ class TestEdgeCases:
 
         params = np.array([0.5, -np.inf, 1000.0])
 
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(NLSQNumericalError):
             validator.validate_parameters(params)

@@ -1,3 +1,5 @@
+# TODO: This file tests low-level function consistency, not integration.
+# Consider moving to tests/unit/optimization/nlsq/test_physics_consistency.py
 """Integration tests for NLSQ/CMC consistency after fix (003-fix-nlsq-integration).
 
 This module tests that NLSQ fit results remain stable after the cumulative trapezoid

@@ -134,7 +134,11 @@ class TestExtractNLSQMetadata:
 
         # Verify metadata extraction works with 2D arrays
         assert metadata["q"] is not None
+        assert np.isfinite(metadata["q"])
+        assert metadata["q"] > 0
         assert metadata["L"] is not None
+        assert np.isfinite(metadata["L"])
+        assert metadata["L"] > 0
 
         # Note: The actual 2D→1D conversion happens in _compute_nlsq_fits() and save_nlsq_results()
         # This test verifies that metadata extraction doesn't crash with 2D time arrays

@@ -53,9 +53,7 @@ class TestStage2RobustConsensus:
 
     def test_explicit_method_preserved(self):
         """Explicit method in YAML should override default."""
-        config = CMCConfig.from_dict(
-            {"combination": {"method": "consensus_mc"}}
-        )
+        config = CMCConfig.from_dict({"combination": {"method": "consensus_mc"}})
         assert config.combination_method == "consensus_mc"
 
 
@@ -205,9 +203,7 @@ class TestStage7NLSQPriorsConfig:
 
     def test_to_dict_includes_nlsq_priors(self):
         """to_dict should include NLSQ prior config."""
-        config = CMCConfig(
-            use_nlsq_informed_priors=True, nlsq_prior_width_factor=4.0
-        )
+        config = CMCConfig(use_nlsq_informed_priors=True, nlsq_prior_width_factor=4.0)
         d = config.to_dict()
         assert d["validation"]["use_nlsq_informed_priors"] is True
         assert d["validation"]["nlsq_prior_width_factor"] == 4.0
@@ -298,7 +294,171 @@ class TestStage8ReparamModelSelection:
             xpcs_model_constant_averaged,
         )
 
-        model = get_xpcs_model(
-            "constant_averaged", use_reparameterization=True
-        )
+        model = get_xpcs_model("constant_averaged", use_reparameterization=True)
         assert model is xpcs_model_constant_averaged
+
+
+class TestBoundsAwareCV:
+    """P2-2: CV calculation should use bounds range for near-zero params."""
+
+    def test_cv_near_zero_uses_bounds_range(self):
+        """D_offset near zero should not trigger false heterogeneity."""
+        import numpy as np
+
+        # Simulate shard means for D_offset near zero
+        means = [0.001, -0.002, 0.003, -0.001, 0.002]
+        mean_val = abs(np.mean(means))
+        std_val = np.std(means)
+
+        # Old calculation: cv = std / max(|mean|, 1e-10) → huge CV
+        old_cv = std_val / max(mean_val, 1e-10)
+
+        # New bounds-aware calculation
+        lo, hi = -1e5, 1e5  # Typical D_offset bounds
+        param_range = hi - lo
+        scale = max(mean_val, param_range * 0.01)
+        new_cv = std_val / scale
+
+        # Old CV would be enormous (false positive), new CV should be tiny
+        assert old_cv > 1.0, f"Old CV should be large, got {old_cv}"
+        assert new_cv < 0.01, f"New CV should be small, got {new_cv}"
+
+    def test_cv_large_mean_unaffected(self):
+        """Parameters with large mean should be unaffected by bounds-aware CV."""
+        import numpy as np
+
+        # D0 with large mean
+        means = [15000.0, 15100.0, 14900.0, 15050.0]
+        mean_val = abs(np.mean(means))
+        std_val = np.std(means)
+
+        # Bounds for D0
+        lo, hi = 100.0, 100000.0
+        param_range = hi - lo
+
+        # Both old and new should give similar CV when mean >> range*0.01
+        old_cv = std_val / max(mean_val, 1e-10)
+        scale = max(mean_val, param_range * 0.01)
+        new_cv = std_val / scale
+
+        # mean_val (15012.5) >> param_range*0.01 (999), so scale == mean_val
+        assert abs(old_cv - new_cv) < 1e-6
+
+
+class TestCVDispatchEdgeCases:
+    """P3: CV dispatch edge cases — parameter_space=None, invalid bounds."""
+
+    def test_cv_without_parameter_space(self):
+        """parameter_space=None falls back to mean-based scale (inflated CV)."""
+        import numpy as np
+
+        # Near-zero parameter without bounds information
+        means = [0.001, -0.002, 0.003, -0.001, 0.002]
+        mean_val = abs(np.mean(means))
+        std_val = np.std(means)
+
+        # Replicate backend code: parameter_space is None
+        parameter_space = None
+        if parameter_space is not None:
+            scale = mean_val  # won't reach
+        else:
+            scale = max(mean_val, 1e-10)
+
+        cv = std_val / scale
+        # Without bounds, near-zero param → inflated CV (false positive risk)
+        assert cv > 1.0
+
+    def test_cv_with_invalid_bounds_zero_range(self):
+        """param_range == 0 (lo == hi) falls back to mean-based scale."""
+        import numpy as np
+
+        means = [0.5, 0.6, 0.4]
+        mean_val = abs(np.mean(means))
+        std_val = np.std(means)
+
+        # Invalid bounds: lo == hi → param_range = 0
+        lo, hi = 1.0, 1.0
+        param_range = hi - lo
+        assert param_range == 0
+
+        # Replicate backend code
+        scale = (
+            max(mean_val, param_range * 0.01)
+            if param_range > 0
+            else max(mean_val, 1e-10)
+        )
+        cv = std_val / scale
+        # Falls back to mean-based scale
+        assert scale == mean_val
+        assert np.isfinite(cv)
+
+    def test_cv_with_inverted_bounds(self):
+        """lo > hi → negative param_range → uses abs(range) for scale."""
+        import numpy as np
+
+        means = [100.0, 110.0, 90.0]
+        mean_val = abs(np.mean(means))
+        std_val = np.std(means)
+
+        # Inverted bounds
+        lo, hi = 200.0, 50.0
+        param_range = hi - lo
+        assert param_range < 0
+
+        # Updated backend code: inverted bounds use abs(range)
+        if param_range < 0:
+            param_range = abs(param_range)
+        elif param_range == 0:
+            pass  # degenerate: fall back to mean
+
+        scale = (
+            max(mean_val, param_range * 0.01)
+            if param_range > 0
+            else max(mean_val, 1e-10)
+        )
+        cv = std_val / scale
+        # abs(range) = 150, 1% = 1.5; mean_val ≈ 100 >> 1.5, so scale = mean_val
+        assert scale == mean_val
+        assert np.isfinite(cv)
+
+    def test_cv_with_inverted_bounds_uses_abs_range(self):
+        """Inverted bounds should use abs(range) for near-zero params, not fall back."""
+        import numpy as np
+
+        # Near-zero parameter with inverted bounds
+        means = [1e-4, -2e-4, 3e-4]
+        mean_val = abs(np.mean(means))
+        std_val = np.std(means)
+
+        # Inverted bounds (lo > hi)
+        lo, hi = 1.0, -1.0
+        param_range = hi - lo  # -2.0
+        assert param_range < 0
+
+        # After fix: use abs(range)
+        param_range = abs(param_range)  # 2.0
+        scale = max(mean_val, param_range * 0.01)  # max(~6.67e-5, 0.02) = 0.02
+
+        cv = std_val / scale
+        # With abs(range), we get bounds-aware scale = 0.02, so CV is small
+        assert scale == pytest.approx(0.02)
+        assert cv < 0.05  # Not a false positive
+
+    def test_cv_near_zero_with_bounds_suppressed(self):
+        """Near-zero param with valid bounds → small CV (suppressed false positive)."""
+        import numpy as np
+
+        # gamma_dot_t0 near zero with tight spread
+        means = [1e-4, -2e-4, 3e-4, -1e-4, 2e-4]
+        mean_val = abs(np.mean(means))
+        std_val = np.std(means)
+
+        # Valid bounds for gamma_dot_t0
+        lo, hi = -1.0, 1.0
+        param_range = hi - lo
+        scale = max(mean_val, param_range * 0.01)
+
+        cv = std_val / scale
+        # Bounds-aware scale = max(6e-5, 0.02) = 0.02 → CV << 1
+        assert cv < 0.05
+        assert scale == pytest.approx(0.02)

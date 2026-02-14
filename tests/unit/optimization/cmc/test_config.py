@@ -196,7 +196,9 @@ class TestGetModelParamCount:
         from homodyne.optimization.cmc.model import get_model_param_count
 
         # Signature: get_model_param_count(n_phi, analysis_mode, per_angle_mode)
-        count = get_model_param_count(n_phi=3, analysis_mode="static", per_angle_mode="auto")
+        count = get_model_param_count(
+            n_phi=3, analysis_mode="static", per_angle_mode="auto"
+        )
         # 3 physical + 2 scaling + 1 sigma = 6
         assert count == 6
 
@@ -204,7 +206,9 @@ class TestGetModelParamCount:
         """Laminar flow with auto per-angle has 10 params."""
         from homodyne.optimization.cmc.model import get_model_param_count
 
-        count = get_model_param_count(n_phi=3, analysis_mode="laminar_flow", per_angle_mode="auto")
+        count = get_model_param_count(
+            n_phi=3, analysis_mode="laminar_flow", per_angle_mode="auto"
+        )
         # 7 physical + 2 scaling + 1 sigma = 10
         assert count == 10
 
@@ -212,7 +216,9 @@ class TestGetModelParamCount:
         """Laminar flow with individual per-angle scales with n_phi."""
         from homodyne.optimization.cmc.model import get_model_param_count
 
-        count = get_model_param_count(n_phi=23, analysis_mode="laminar_flow", per_angle_mode="individual")
+        count = get_model_param_count(
+            n_phi=23, analysis_mode="laminar_flow", per_angle_mode="individual"
+        )
         # 7 physical + 46 scaling (2*23) + 1 sigma = 54
         assert count == 54
 
@@ -220,7 +226,9 @@ class TestGetModelParamCount:
         """Constant mode has no sampled scaling params."""
         from homodyne.optimization.cmc.model import get_model_param_count
 
-        count = get_model_param_count(n_phi=23, analysis_mode="laminar_flow", per_angle_mode="constant")
+        count = get_model_param_count(
+            n_phi=23, analysis_mode="laminar_flow", per_angle_mode="constant"
+        )
         # 7 physical + 0 scaling + 1 sigma = 8
         assert count == 8
 

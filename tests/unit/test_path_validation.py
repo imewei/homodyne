@@ -44,6 +44,8 @@ class TestValidateSavePath:
             base_dir=tmp_path,
         )
         assert result is not None
+        from pathlib import Path
+        assert isinstance(result, Path)
         assert result.name == "test.txt"
 
     def test_valid_absolute_path(self, tmp_path):
@@ -54,6 +56,8 @@ class TestValidateSavePath:
             require_parent_exists=True,
         )
         assert result is not None
+        from pathlib import Path
+        assert isinstance(result, Path)
         assert result == abs_path
 
     def test_path_traversal_rejected(self):
@@ -93,6 +97,8 @@ class TestValidateSavePath:
             base_dir=tmp_path,
         )
         assert result is not None
+        from pathlib import Path
+        assert isinstance(result, Path)
         assert result.suffix == ".png"
 
         # Invalid extension
@@ -113,6 +119,9 @@ class TestValidateSavePath:
             base_dir=tmp_path,
         )
         assert result is not None
+        from pathlib import Path
+        assert isinstance(result, Path)
+        assert result.suffix.lower() == ".png"
 
     def test_parent_must_exist_when_required(self, tmp_path):
         """Test parent directory must exist when required."""
@@ -131,6 +140,8 @@ class TestValidateSavePath:
             base_dir=tmp_path,
         )
         assert result is not None
+        from pathlib import Path
+        assert isinstance(result, Path)
         assert result.name == "test.txt"
 
     def test_parent_must_be_directory(self, tmp_path):
@@ -198,6 +209,8 @@ class TestValidatePlotSavePath:
             require_parent_exists=True,
         )
         assert result is not None
+        from pathlib import Path
+        assert isinstance(result, Path)
         assert result.suffix == ".png"
 
     def test_valid_pdf_path(self, tmp_path):
@@ -207,6 +220,8 @@ class TestValidatePlotSavePath:
             require_parent_exists=True,
         )
         assert result is not None
+        from pathlib import Path
+        assert isinstance(result, Path)
         assert result.suffix == ".pdf"
 
     def test_valid_svg_path(self, tmp_path):
@@ -216,6 +231,8 @@ class TestValidatePlotSavePath:
             require_parent_exists=True,
         )
         assert result is not None
+        from pathlib import Path
+        assert isinstance(result, Path)
         assert result.suffix == ".svg"
 
     def test_valid_eps_path(self, tmp_path):
@@ -225,6 +242,8 @@ class TestValidatePlotSavePath:
             require_parent_exists=True,
         )
         assert result is not None
+        from pathlib import Path
+        assert isinstance(result, Path)
         assert result.suffix == ".eps"
 
     def test_valid_jpg_paths(self, tmp_path):
@@ -235,6 +254,9 @@ class TestValidatePlotSavePath:
                 require_parent_exists=True,
             )
             assert result is not None
+            from pathlib import Path
+            assert isinstance(result, Path)
+            assert result.suffix in [".jpg", ".jpeg"]
 
     def test_valid_tiff_paths(self, tmp_path):
         """Test valid TIFF paths are accepted."""
@@ -244,6 +266,9 @@ class TestValidatePlotSavePath:
                 require_parent_exists=True,
             )
             assert result is not None
+            from pathlib import Path
+            assert isinstance(result, Path)
+            assert result.suffix in [".tiff", ".tif"]
 
     def test_invalid_extension_rejected(self, tmp_path):
         """Test that non-image extensions are rejected."""
@@ -378,6 +403,8 @@ class TestPathValidationIntegration:
             require_parent_exists=True,
         )
         assert validated is not None
+        from pathlib import Path
+        assert isinstance(validated, Path)
 
         # Should be able to write to validated path
         validated.write_text("test content")
@@ -394,7 +421,10 @@ class TestPathValidationIntegration:
             require_parent_exists=True,
         )
         assert plot_path is not None
+        from pathlib import Path
+        assert isinstance(plot_path, Path)
         assert plot_path.parent.exists()
+        assert plot_path.suffix == ".png"
 
     def test_security_edge_cases(self, tmp_path):
         """Test various security edge cases."""

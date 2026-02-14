@@ -10,6 +10,15 @@ import numpy as np
 
 from homodyne.optimization.nlsq.wrapper import OptimizationResult
 
+# Typical parameter values for test data generation
+TYPICAL_CONTRAST = 0.45
+CONTRAST_NOISE_STD = 0.01
+TYPICAL_OFFSET = 1.02
+OFFSET_NOISE_STD = 0.005
+TYPICAL_CONTRAST_UNCERTAINTY = 0.012
+TYPICAL_OFFSET_UNCERTAINTY = 0.008
+TYPICAL_COVARIANCE_SCALE = 0.01
+
 
 def create_mock_optimization_result(
     analysis_mode: str = "static",
@@ -58,8 +67,8 @@ def create_mock_optimization_result(
     """
     # Per-angle scaling parameters (contrast, offset for each angle)
     # Realistic values with slight variation per angle
-    contrast_per_angle = 0.45 + 0.01 * np.random.randn(n_angles)
-    offset_per_angle = 1.02 + 0.005 * np.random.randn(n_angles)
+    contrast_per_angle = TYPICAL_CONTRAST + CONTRAST_NOISE_STD * np.random.randn(n_angles)
+    offset_per_angle = TYPICAL_OFFSET + OFFSET_NOISE_STD * np.random.randn(n_angles)
 
     if analysis_mode == "static":
         # 3 physical parameters: D0, alpha, D_offset
@@ -83,8 +92,8 @@ def create_mock_optimization_result(
     n_params = len(parameters)  # 2*n_angles + n_physical
 
     if include_uncertainties:
-        contrast_uncertainties = np.full(n_angles, 0.012)
-        offset_uncertainties = np.full(n_angles, 0.008)
+        contrast_uncertainties = np.full(n_angles, TYPICAL_CONTRAST_UNCERTAINTY)
+        offset_uncertainties = np.full(n_angles, TYPICAL_OFFSET_UNCERTAINTY)
         uncertainties = np.concatenate(
             [contrast_uncertainties, offset_uncertainties, physical_uncertainties]
         )
@@ -93,7 +102,7 @@ def create_mock_optimization_result(
 
     # Covariance matrix (identity scaled by variance for simplicity)
     if include_covariance:
-        covariance = np.eye(n_params) * 0.01
+        covariance = np.eye(n_params) * TYPICAL_COVARIANCE_SCALE
     else:
         covariance = None
 

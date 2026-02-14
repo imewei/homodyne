@@ -104,6 +104,7 @@ class TestMalformedConfigFiles:
         ConfigManager(config_override=config)
         param_space = ParameterSpace.from_config(config, analysis_mode="static")
         assert param_space is not None
+        assert isinstance(param_space, ParameterSpace)
 
     def test_config_empty_dict(self):
         """Test with completely empty config."""
@@ -171,6 +172,7 @@ class TestMissingRequiredFields:
         param_space = ParameterSpace.from_config(config, "static")
         # Should use defaults
         assert param_space is not None
+        assert isinstance(param_space, ParameterSpace)
 
 
 class TestInvalidParameterValues:
@@ -311,6 +313,8 @@ class TestPriorDistributionEdgeCases:
         )
         # Should warn or accept with clipping
         assert prior is not None
+        assert isinstance(prior, PriorDistribution)
+        assert prior.dist_type == "TruncatedNormal"
 
     def test_negative_sigma(self):
         """Test that negative sigma is still allowed (dataclass allows it)."""
@@ -323,6 +327,8 @@ class TestPriorDistributionEdgeCases:
             sigma=-10.0,  # Negative sigma unusual but not prohibited
         )
         assert prior is not None
+        assert isinstance(prior, PriorDistribution)
+        assert prior.sigma == -10.0
 
     def test_zero_sigma(self):
         """Test zero sigma (degenerate distribution)."""
@@ -336,6 +342,8 @@ class TestPriorDistributionEdgeCases:
         )
         # May be problematic for MCMC but should be allowed
         assert prior is not None
+        assert isinstance(prior, PriorDistribution)
+        assert prior.sigma == 0.0
 
     def test_unknown_distribution_type(self):
         """Test unknown distribution type."""
@@ -359,9 +367,12 @@ class TestParameterSpaceEdgeCases:
         param_space = ParameterSpace.from_config(config, "static")
         # Should use defaults
         assert param_space is not None
+        assert isinstance(param_space, ParameterSpace)
         # Check it has parameters by trying to access them
         bounds = param_space.get_bounds("D0")
         assert bounds is not None
+        assert isinstance(bounds, tuple)
+        assert len(bounds) == 2
 
     def test_parameter_space_null_bounds(self):
         """Test parameter with null bounds in config."""
@@ -376,9 +387,12 @@ class TestParameterSpaceEdgeCases:
         param_space = ParameterSpace.from_config(config, "static")
         # Should fallback to default bounds
         assert param_space is not None
+        assert isinstance(param_space, ParameterSpace)
         # Check D0 has default bounds
         bounds = param_space.get_bounds("D0")
         assert bounds is not None
+        assert isinstance(bounds, tuple)
+        assert len(bounds) == 2
 
     def test_parameter_space_single_parameter(self):
         """Test ParameterSpace with only one parameter."""
@@ -386,9 +400,13 @@ class TestParameterSpaceEdgeCases:
         param_space = ParameterSpace.from_config(config, "static")
         # Should still work
         assert param_space is not None
+        assert isinstance(param_space, ParameterSpace)
         # Can get D0 bounds
         bounds = param_space.get_bounds("D0")
         assert bounds is not None
+        assert isinstance(bounds, tuple)
+        assert len(bounds) == 2
+        assert bounds[0] < bounds[1]  # min < max
 
 
 class TestComplexIntegrationEdgeCases:

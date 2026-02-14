@@ -150,7 +150,10 @@ class XPCSDataFactory:
         params: dict[str, float],
         q: float,
     ) -> np.ndarray:
-        """Generate theoretical correlation function."""
+        """Generate theoretical correlation function.
+
+        WARNING: SIMPLIFIED PHYSICS MODEL — for schema/format tests only, NOT physics validation.
+        """
         # Time difference
         tau = np.abs(t1 - t2)
 

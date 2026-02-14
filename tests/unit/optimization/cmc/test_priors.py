@@ -170,12 +170,14 @@ class TestBuildPrior:
 
         # Should return a NumPyro distribution
         assert prior is not None
+        assert callable(prior) or hasattr(prior, 'sample')
 
     def test_build_d0_prior(self, mock_parameter_space):
         """Test building prior for D0 parameter."""
         prior = build_prior("D0", mock_parameter_space)
 
         assert prior is not None
+        assert callable(prior) or hasattr(prior, 'sample')
 
 
 class TestGetInitValue:

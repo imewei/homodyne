@@ -53,9 +53,15 @@ def test_resolve_max_points_per_shard_laminar_large_pool():
     # With n_phi=10+, angle_factor=0.85, base=5K → scaled=4,250
     assert _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto") == 3_000
     # Multi-angle dataset should scale differently (n_phi=10 gets angle_factor=0.85)
-    assert _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto", n_phi=10) == 4_250
+    assert (
+        _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto", n_phi=10)
+        == 4_250
+    )
     # 1B dataset: base=10K * 0.6 = 6K, but max_shards=100K cap → 1B/100K = 10K
-    assert _resolve_max_points_per_shard("laminar_flow", 1_000_000_000, "auto", n_phi=3) == 10_000
+    assert (
+        _resolve_max_points_per_shard("laminar_flow", 1_000_000_000, "auto", n_phi=3)
+        == 10_000
+    )
 
 
 @pytest.mark.unit

@@ -255,7 +255,7 @@ def test_optimize_single_angle_covariance_positive_definite(
     # Check if it's identity matrix (fallback case)
     if np.allclose(cov, np.eye(len(initial_params))):
         # Fallback identity matrix - acceptable
-        assert True
+        assert np.allclose(cov, np.eye(len(initial_params)))
     elif np.allclose(np.diag(cov), 0):
         # All zeros - happens when Jacobian computation fails but optimization succeeds
         # This is acceptable for our purposes (test is about successful optimization)

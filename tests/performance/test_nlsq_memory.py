@@ -136,9 +136,9 @@ class TestMemoryTracking:
         # Should have tracked the allocation
         # 1000 * 1000 * 8 = 8 MB
         expected_bytes = 1000 * 1000 * 8
-        assert (
-            current >= expected_bytes * 0.5
-        ), f"Expected >= {expected_bytes * 0.5} bytes, got {current}"
+        assert current >= expected_bytes * 0.5, (
+            f"Expected >= {expected_bytes * 0.5} bytes, got {current}"
+        )
 
         # Clean up (prevent unused variable warning)
         del data

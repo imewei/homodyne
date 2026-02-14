@@ -344,7 +344,10 @@ class TestBackendEdgeCases:
             )
 
         assert combined is not None
+        assert hasattr(combined, 'samples')
+        assert isinstance(combined.samples, dict)
         for name in sample_param_names:
+            assert name in combined.samples
             assert np.all(np.isfinite(combined.samples[name]))
 
     def test_combine_shards_different_seeds(
@@ -643,13 +646,20 @@ class TestErrorCategorization:
         shards = [mock_mcmc_samples(seed=i) for i in range(4)]
 
         # Combining should work with any number of successful shards
-        combined = combine_shard_samples(shards[:2], method="consensus_mc")  # Only 2 of 4
+        combined = combine_shard_samples(
+            shards[:2], method="consensus_mc"
+        )  # Only 2 of 4
         assert combined is not None
+        assert hasattr(combined, 'n_chains')
+        assert hasattr(combined, 'samples')
+        assert isinstance(combined.samples, dict)
         assert combined.n_chains == shards[0].n_chains
 
         # Single shard should also work
         combined_single = combine_shard_samples(shards[:1], method="consensus_mc")
         assert combined_single is not None
+        assert hasattr(combined_single, 'samples')
+        assert isinstance(combined_single.samples, dict)
 
 
 class TestBimodalDetectionIntegration:

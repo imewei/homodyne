@@ -61,6 +61,9 @@ See Also:
 - homodyne/cli/args_parser.py: Argument parsing with override support
 """
 
+# NOTE: These are unit tests that verify CLI argument forwarding via mocks.
+# Real CLI execution is tested in tests/integration/test_cli_pipeline.py.
+
 import argparse
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch

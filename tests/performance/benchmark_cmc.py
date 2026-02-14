@@ -30,7 +30,6 @@ from __future__ import annotations
 import cProfile
 import gc
 import io
-import json
 import logging
 import multiprocessing as mp
 import os
@@ -45,9 +44,9 @@ from typing import Any
 import numpy as np
 
 try:
-    import jax
+    import jax  # noqa: F401
     import jax.numpy as jnp
-    from jax import random
+    from jax import random  # noqa: F401
 
     JAX_AVAILABLE = True
 except ImportError:
@@ -240,7 +239,7 @@ class MemoryTracker:
         self.peak_memory = 0.0
         self.allocations: list[tuple[str, int]] = []
 
-    def __enter__(self) -> "MemoryTracker":
+    def __enter__(self) -> MemoryTracker:
         gc.collect()
         self.start_memory = get_memory_mb()
         if self.track_allocations:
@@ -275,7 +274,7 @@ class CPUProfiler:
         self.profiler = cProfile.Profile()
         self.stats: pstats.Stats | None = None
 
-    def __enter__(self) -> "CPUProfiler":
+    def __enter__(self) -> CPUProfiler:
         self.profiler.enable()
         return self
 
@@ -291,7 +290,7 @@ class CPUProfiler:
 
         self.stats.sort_stats("cumulative")
         results = []
-        for (filename, line, func), (cc, nc, tt, ct, callers) in list(
+        for (filename, line, func), (_cc, nc, _tt, ct, _callers) in list(
             self.stats.stats.items()
         )[:n]:
             func_name = f"{filename}:{line}:{func}"
@@ -304,7 +303,13 @@ class CPUProfiler:
             return {}
 
         module_times: dict[str, float] = {}
-        for (filename, _line, _func), (_cc, _nc, _tt, ct, _callers) in self.stats.stats.items():
+        for (filename, _line, _func), (
+            _cc,
+            _nc,
+            _tt,
+            ct,
+            _callers,
+        ) in self.stats.stats.items():
             # Extract module from filename
             if "/" in filename:
                 module = filename.split("/")[-2] if "/" in filename else filename
@@ -499,10 +504,10 @@ def benchmark_nuts_single_shard(
         (mean_time_s, std_time_s, metrics_dict)
     """
     try:
+        from homodyne.config.parameter_space import ParameterSpace
+        from homodyne.optimization.cmc.config import CMCConfig
         from homodyne.optimization.cmc.model import get_xpcs_model
         from homodyne.optimization.cmc.sampler import run_nuts_sampling
-        from homodyne.optimization.cmc.config import CMCConfig
-        from homodyne.config.parameter_space import ParameterSpace
     except ImportError as e:
         logger.warning(f"CMC imports failed: {e}")
         return 0.0, 0.0, {"error": str(e)}
@@ -593,7 +598,9 @@ def benchmark_nuts_single_shard(
     # Calculate throughput
     total_samples = cmc_config.num_samples * cmc_config.num_chains
     metrics["samples_per_second"] = total_samples / mean_time if mean_time > 0 else 0
-    metrics["time_per_sample_ms"] = (mean_time * 1000) / total_samples if total_samples > 0 else 0
+    metrics["time_per_sample_ms"] = (
+        (mean_time * 1000) / total_samples if total_samples > 0 else 0
+    )
 
     return mean_time, std_time, metrics
 
@@ -653,9 +660,9 @@ def benchmark_multiprocessing_overhead(
     for _ in range(5):
         q = mp.Queue()
         start = time.perf_counter()
-        for i in range(n_shards):
+        for _i in range(n_shards):
             q.put(test_data)
-        for i in range(n_shards):
+        for _i in range(n_shards):
             q.get()
         queue_times.append(time.perf_counter() - start)
 
@@ -666,7 +673,8 @@ def benchmark_multiprocessing_overhead(
         "queue_throughput_time_s": np.mean(queue_times),
         "total_ipc_per_shard_ms": (
             np.mean(serialize_times) + np.mean(deserialize_times)
-        ) * 1000,
+        )
+        * 1000,
         "data_size_bytes": len(serialized),
     }
 
@@ -685,9 +693,7 @@ def benchmark_consensus_aggregation(
     """
     # Simulate shard posteriors
     rng = np.random.default_rng(42)
-    shard_samples = [
-        rng.normal(0, 1, (n_samples, n_params)) for _ in range(n_shards)
-    ]
+    shard_samples = [rng.normal(0, 1, (n_samples, n_params)) for _ in range(n_shards)]
     shard_weights = np.ones(n_shards) / n_shards
 
     # Benchmark simple weighted average (current approach)
@@ -704,7 +710,7 @@ def benchmark_consensus_aggregation(
     for _ in range(5):
         start = time.perf_counter()
         # Compute per-shard covariance
-        covs = [np.cov(samples.T) for samples in shard_samples]
+        _covs = [np.cov(samples.T) for samples in shard_samples]
         # This would be the full consensus calculation
         elapsed = time.perf_counter() - start
         cov_times.append(elapsed)
@@ -764,7 +770,9 @@ def run_cmc_benchmark(
     logger.info("=" * 70)
 
     # Create data
-    logger.info(f"\nDataset: {n_phi} phi × {n_t1} t1 × {n_t2} t2 = {n_phi * n_t1 * n_t2:,} points")
+    logger.info(
+        f"\nDataset: {n_phi} phi × {n_t1} t1 × {n_t2} t2 = {n_phi * n_t1 * n_t2:,} points"
+    )
     logger.info(f"Mode: {mode}")
 
     data = create_cmc_benchmark_data(n_phi, n_t1, n_t2, mode)
@@ -787,7 +795,9 @@ def run_cmc_benchmark(
 
     if profile_cpu:
         with CPUProfiler() as cpu_prof:
-            mean_time, std_time, nuts_metrics = benchmark_nuts_single_shard(data, config)
+            mean_time, std_time, nuts_metrics = benchmark_nuts_single_shard(
+                data, config
+            )
         result.cpu_profile.hot_functions = cpu_prof.get_hot_functions(15)
         result.cpu_profile.time_by_module = cpu_prof.get_time_by_module()
     else:
@@ -797,8 +807,12 @@ def run_cmc_benchmark(
 
     if "error" not in nuts_metrics:
         logger.info(f"NUTS single-shard: {mean_time:.2f}s ± {std_time:.2f}s")
-        logger.info(f"Throughput: {nuts_metrics.get('samples_per_second', 0):.1f} samples/sec")
-        logger.info(f"Time per sample: {nuts_metrics.get('time_per_sample_ms', 0):.1f} ms")
+        logger.info(
+            f"Throughput: {nuts_metrics.get('samples_per_second', 0):.1f} samples/sec"
+        )
+        logger.info(
+            f"Time per sample: {nuts_metrics.get('time_per_sample_ms', 0):.1f} ms"
+        )
         result.timing.production_sampling_s = mean_time
         result.timing.samples_per_second = nuts_metrics.get("samples_per_second", 0)
         result.timing.time_per_sample_ms = nuts_metrics.get("time_per_sample_ms", 0)
@@ -827,7 +841,9 @@ def run_cmc_benchmark(
     logger.info("\n--- Phase 3: Consensus Aggregation ---")
     timer.start("consensus")
 
-    n_estimated_shards = max(2, data["n_total"] // config["sharding"]["max_points_per_shard"])
+    n_estimated_shards = max(
+        2, data["n_total"] // config["sharding"]["max_points_per_shard"]
+    )
     n_params = 7 if mode == "laminar_flow" else 3
     consensus_metrics = benchmark_consensus_aggregation(
         n_shards=n_estimated_shards,
@@ -837,9 +853,13 @@ def run_cmc_benchmark(
 
     timer.stop()
     logger.info(f"Simple weighted: {consensus_metrics['simple_weighted_ms']:.2f} ms")
-    logger.info(f"Covariance weighted: {consensus_metrics['covariance_weighted_ms']:.2f} ms")
+    logger.info(
+        f"Covariance weighted: {consensus_metrics['covariance_weighted_ms']:.2f} ms"
+    )
 
-    result.timing.consensus_aggregation_s = consensus_metrics["simple_weighted_ms"] / 1000
+    result.timing.consensus_aggregation_s = (
+        consensus_metrics["simple_weighted_ms"] / 1000
+    )
     result.n_shards = n_estimated_shards
 
     # Phase 4: Memory profiling
@@ -921,7 +941,7 @@ def generate_flamegraph(
         return False
 
     # Create a script to run
-    script = f"""
+    script = """
 import sys
 sys.path.insert(0, '.')
 from tests.performance.benchmark_cmc import run_cmc_benchmark
@@ -983,9 +1003,13 @@ def main() -> None:
     parser.add_argument("--n-t1", type=int, default=50, help="Time dimension 1")
     parser.add_argument("--n-t2", type=int, default=50, help="Time dimension 2")
     parser.add_argument("--n-warmup", type=int, default=100, help="MCMC warmup samples")
-    parser.add_argument("--n-samples", type=int, default=200, help="MCMC production samples")
+    parser.add_argument(
+        "--n-samples", type=int, default=200, help="MCMC production samples"
+    )
     parser.add_argument("--flamegraph", action="store_true", help="Generate flamegraph")
-    parser.add_argument("--output", type=str, default=None, help="Output path for results")
+    parser.add_argument(
+        "--output", type=str, default=None, help="Output path for results"
+    )
 
     args = parser.parse_args()
 
@@ -1013,7 +1037,11 @@ def main() -> None:
     )
 
     # Save results
-    output_path = Path(args.output) if args.output else Path(__file__).parent / "cmc_benchmark_results.npz"
+    output_path = (
+        Path(args.output)
+        if args.output
+        else Path(__file__).parent / "cmc_benchmark_results.npz"
+    )
     np.savez(output_path, **result.to_dict())
     logger.info(f"\nResults saved to: {output_path}")
 

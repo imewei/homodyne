@@ -153,8 +153,8 @@ class LargeDatasetFactory:
         # Allocate and generate data
         if true_params is None:
             true_params = {
-                "contrast": 0.3,
-                "offset": 1.0,
+                "contrast_0": 0.3,
+                "offset_0": 1.0,
                 "D0": 1000.0,
                 "alpha": 0.5,
                 "D_offset": 10.0,

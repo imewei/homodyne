@@ -54,10 +54,14 @@ class TestRecoveryStrategyApplicator:
         error = NLSQConvergenceError("Failed to converge")
         params = np.array([1.0, 2.0, 3.0])
 
-        strategy_name, modified_params = applicator.get_recovery_strategy(
+        result = applicator.get_recovery_strategy(
             error, params, attempt=0
         )
 
+        assert result is not None
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        strategy_name, modified_params = result
         assert strategy_name == "perturb_parameters"
         assert modified_params.shape == params.shape
         # Should have some perturbation
@@ -69,10 +73,14 @@ class TestRecoveryStrategyApplicator:
         error = NLSQConvergenceError("Failed to converge")
         params = np.array([1.0, 2.0, 3.0])
 
-        strategy_name, modified_params = applicator.get_recovery_strategy(
+        result = applicator.get_recovery_strategy(
             error, params, attempt=1
         )
 
+        assert result is not None
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        strategy_name, modified_params = result
         assert strategy_name == "increase_iterations"
         # Parameters unchanged for this strategy
         assert np.allclose(modified_params, params)
@@ -83,10 +91,14 @@ class TestRecoveryStrategyApplicator:
         error = NLSQConvergenceError("Failed to converge")
         params = np.array([1.0, 2.0, 3.0])
 
-        strategy_name, modified_params = applicator.get_recovery_strategy(
+        result = applicator.get_recovery_strategy(
             error, params, attempt=2
         )
 
+        assert result is not None
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        strategy_name, modified_params = result
         assert strategy_name == "relax_tolerance"
         # Parameters unchanged for this strategy
         assert np.allclose(modified_params, params)

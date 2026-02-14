@@ -33,7 +33,7 @@ except ImportError:
 
 try:
     import jax.numpy as jnp
-    from jax import random
+    from jax import random  # noqa: F401
 
     JAX_AVAILABLE = True
 except ImportError:
@@ -47,7 +47,6 @@ from tests.performance.benchmark_cmc import (
     create_cmc_benchmark_data,
     create_minimal_cmc_config,
 )
-
 
 # ============================================================================
 # Fixtures
@@ -143,7 +142,9 @@ class TestConsensusAggregation:
 
     def test_simple_weighted_speed(self):
         """Test simple weighted consensus is fast."""
-        metrics = benchmark_consensus_aggregation(n_shards=100, n_samples=500, n_params=7)
+        metrics = benchmark_consensus_aggregation(
+            n_shards=100, n_samples=500, n_params=7
+        )
 
         # Simple weighted average should be under 10ms for 100 shards
         assert metrics["simple_weighted_ms"] < 10.0, (
@@ -152,7 +153,9 @@ class TestConsensusAggregation:
 
     def test_consensus_scaling_with_shards(self):
         """Test consensus scales reasonably with shard count."""
-        metrics_10 = benchmark_consensus_aggregation(n_shards=10, n_samples=500, n_params=7)
+        metrics_10 = benchmark_consensus_aggregation(
+            n_shards=10, n_samples=500, n_params=7
+        )
         metrics_100 = benchmark_consensus_aggregation(
             n_shards=100, n_samples=500, n_params=7
         )
@@ -272,7 +275,9 @@ class TestThroughputBaselines:
         n_points = data["n_total"]
         points_per_sec = n_points / elapsed
 
-        assert elapsed < 1.0, f"Data generation slow: {elapsed:.2f}s for {n_points:,} points"
+        assert elapsed < 1.0, (
+            f"Data generation slow: {elapsed:.2f}s for {n_points:,} points"
+        )
         assert points_per_sec > 100_000, (
             f"Data generation throughput low: {points_per_sec:.0f} points/sec"
         )
@@ -285,7 +290,9 @@ class TestThroughputBaselines:
         elapsed = time.perf_counter() - start
 
         # 100 configs should take under 100ms
-        assert elapsed < 0.1, f"Config creation slow: {elapsed * 1000:.1f}ms for 100 configs"
+        assert elapsed < 0.1, (
+            f"Config creation slow: {elapsed * 1000:.1f}ms for 100 configs"
+        )
 
 
 # ============================================================================
@@ -303,7 +310,9 @@ class TestScalingBehavior:
         sizes = [1000, 5000, 10000]
 
         for size in sizes:
-            data = create_cmc_benchmark_data(n_phi=3, n_t1=int(size**0.5), n_t2=int(size**0.5))
+            data = create_cmc_benchmark_data(
+                n_phi=3, n_t1=int(size**0.5), n_t2=int(size**0.5)
+            )
 
             # Simulate shard creation (just slicing)
             start = time.perf_counter()
@@ -361,7 +370,9 @@ class TestRegressionBaselines:
 
     def test_consensus_regression(self):
         """Ensure consensus performance hasn't degraded."""
-        metrics = benchmark_consensus_aggregation(n_shards=100, n_samples=500, n_params=7)
+        metrics = benchmark_consensus_aggregation(
+            n_shards=100, n_samples=500, n_params=7
+        )
 
         assert metrics["simple_weighted_ms"] < self.BASELINE_CONSENSUS_MS * 1.5, (
             f"Consensus regression: {metrics['simple_weighted_ms']:.2f}ms "
@@ -399,9 +410,9 @@ class TestNUTSSamplingBaselines:
         # Skip actual test as it takes too long for CI
         # Just verify imports work
         try:
+            from homodyne.config.parameter_space import ParameterSpace
             from homodyne.optimization.cmc.config import CMCConfig
             from homodyne.optimization.cmc.model import get_xpcs_model
-            from homodyne.config.parameter_space import ParameterSpace
 
             # Verify basic object creation
             model = get_xpcs_model(per_angle_mode="auto")

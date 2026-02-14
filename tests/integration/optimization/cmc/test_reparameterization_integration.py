@@ -5,11 +5,11 @@ import pytest
 
 numpyro = pytest.importorskip("numpyro", reason="NumPyro required")
 
-import jax.numpy as jnp
+import jax.numpy as jnp  # noqa: E402
 
-from homodyne.optimization.cmc.config import CMCConfig
-from homodyne.optimization.cmc.model import xpcs_model_reparameterized
-from homodyne.optimization.cmc.reparameterization import (
+from homodyne.optimization.cmc.config import CMCConfig  # noqa: E402
+from homodyne.optimization.cmc.model import xpcs_model_reparameterized  # noqa: E402
+from homodyne.optimization.cmc.reparameterization import (  # noqa: E402
     ReparamConfig,
     transform_to_physics_space,
 )
@@ -27,9 +27,7 @@ class TestReparameterizationIntegration:
     """Integration tests for reparameterization in CMC."""
 
     @pytest.mark.slow
-    def test_reparameterized_model_produces_valid_samples(
-        self, mock_parameter_space
-    ):
+    def test_reparameterized_model_produces_valid_samples(self, mock_parameter_space):
         """Reparameterized model produces samples convertible to physics params."""
         import jax.random as random
         from numpyro.infer import MCMC, NUTS
@@ -133,7 +131,9 @@ class TestReparameterizationIntegration:
 
         # More params → larger shards → fewer shards
         assert n_shards_10 < n_shards_7, "10 params should produce fewer shards than 7"
-        assert n_shards_14 < n_shards_10, "14 params should produce fewer shards than 10"
+        assert n_shards_14 < n_shards_10, (
+            "14 params should produce fewer shards than 10"
+        )
 
     def test_config_reparam_options_used_in_model(self, mock_parameter_space):
         """Config reparameterization options control model behavior."""
@@ -151,9 +151,7 @@ class TestReparameterizationIntegration:
         # Get reparameterized model
         model_fn = get_xpcs_model(per_angle_mode="auto", use_reparameterization=True)
 
-        reparam_config = ReparamConfig(
-            enable_d_ref=True, enable_gamma_ref=True
-        )
+        reparam_config = ReparamConfig(enable_d_ref=True, enable_gamma_ref=True)
 
         # Trace to see sampled params
         with numpyro.handlers.seed(rng_seed=42):

@@ -539,7 +539,7 @@ class TestNLSQFullWorkflow:
                 include_all_metadata=True,
             )
             # Wrap in Mock to simulate ConfigManager with .config attribute
-            config = Mock()
+            config = Mock()  # Mocks ConfigManager
             config.config = config_dict
             config.get_config.return_value = config_dict
 
@@ -644,7 +644,7 @@ class TestNLSQFullWorkflow:
                 include_all_metadata=True,
             )
             # Wrap in Mock to simulate ConfigManager with .config attribute
-            config_lf = Mock()
+            config_lf = Mock()  # Mocks ConfigManager
             config_lf.config = config_dict_lf
             config_lf.get_config.return_value = config_dict_lf
 
@@ -684,7 +684,7 @@ class TestNLSQFullWorkflow:
                 analysis_mode="static",
                 include_all_metadata=True,
             )
-            config = Mock()
+            config = Mock()  # Mocks ConfigManager
             config.config = config_dict
             config.get_config.return_value = config_dict
 
@@ -744,7 +744,7 @@ class TestNLSQErrorRecovery:
                 "analyzer_parameters": {},  # No geometry or dt
                 "phi_filtering": {"enabled": False, "target_ranges": []},
             }
-            config = Mock()
+            config = Mock()  # Mocks ConfigManager
             config.config = config_dict
             config.get_config.return_value = config_dict
 
@@ -780,7 +780,7 @@ class TestNLSQErrorRecovery:
                 analysis_mode="static",
                 include_all_metadata=True,
             )
-            config = Mock()
+            config = Mock()  # Mocks ConfigManager
             config.config = config_dict
             config.get_config.return_value = config_dict
 
@@ -838,7 +838,7 @@ class TestNLSQPerformance:
                 analysis_mode="static",
                 include_all_metadata=True,
             )
-            config = Mock()
+            config = Mock()  # Mocks ConfigManager
             config.config = config_dict
             config.get_config.return_value = config_dict
 
@@ -891,7 +891,7 @@ class TestNLSQPerformance:
                 analysis_mode="static",
                 include_all_metadata=True,
             )
-            config = Mock()
+            config = Mock()  # Mocks ConfigManager
             config.config = config_dict
             config.get_config.return_value = config_dict
 
@@ -955,7 +955,7 @@ class TestNLSQCLIIntegration:
             output_dir = Path(tmpdir)
 
             # Create mock args with method="nlsq"
-            args = Mock()
+            args = Mock()  # Mocks command-line args
             args.method = "nlsq"
             args.output_dir = output_dir
             args.output_format = "json"
@@ -964,7 +964,7 @@ class TestNLSQCLIIntegration:
             result = create_mock_optimization_result(analysis_mode="static", n_angles=3)
             data = create_mock_data_dict(n_angles=3, n_t1=10, n_t2=10)
             config_dict = create_mock_config_manager(analysis_mode="static")
-            config = Mock()
+            config = Mock()  # Mocks ConfigManager
             config.config = config_dict
             config.get_config.return_value = config_dict
             device_config = {"device": "cpu"}
@@ -1000,13 +1000,13 @@ class TestNLSQCLIIntegration:
             output_dir = Path(tmpdir)
 
             # Create mock args with method="cmc"
-            args = Mock()
+            args = Mock()  # Mocks command-line args
             args.method = "cmc"
             args.output_dir = output_dir
             args.output_format = "json"
 
             # Create mock MCMC result
-            result = Mock()
+            result = Mock()  # Mocks CMCResult
             result.mean_contrast = 0.5
             result.mean_offset = 1.0
             result.mean_params = np.array([1000.0, 0.5, 10.0])
@@ -1014,7 +1014,7 @@ class TestNLSQCLIIntegration:
 
             data = create_mock_data_dict(n_angles=3, n_t1=10, n_t2=10)
             config_dict = create_mock_config_manager(analysis_mode="static")
-            config = Mock()
+            config = Mock()  # Mocks ConfigManager
             config.config = config_dict
             config.get_config.return_value = config_dict
             device_config = {"device": "cpu"}

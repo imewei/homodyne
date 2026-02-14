@@ -232,6 +232,7 @@ class TestComputeTheoreticalFitsIntegration:
         )
 
         assert fits["c2_solver_scaled"] is not None
+        assert isinstance(fits["c2_solver_scaled"], np.ndarray)
         assert fits["c2_solver_scaled"].shape == (2, 10, 10)
 
     def test_compute_fits_without_solver_surface(

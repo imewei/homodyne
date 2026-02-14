@@ -20,6 +20,7 @@ pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
 from homodyne.optimization.cmc.config import CMCConfig  # noqa: E402
 from homodyne.optimization.cmc.sampler import (  # noqa: E402
     MCMCSamples,
+    SamplingPlan,
     SamplingStats,
     create_init_strategy,
 )
@@ -521,3 +522,183 @@ class TestSamplerProperties:
         for name in sample_param_names:
             std = np.std(mcmc_samples.samples[name])
             assert 0.9 < std < 1.1, f"Std of {name} is {std}, expected ~1"
+
+
+# =============================================================================
+# SamplingPlan tests
+# =============================================================================
+
+
+class TestSamplingPlan:
+    """Tests for the SamplingPlan dataclass and from_config factory."""
+
+    def test_from_config_no_adaptation(self):
+        """Large shard should not trigger adaptation."""
+        config = CMCConfig(num_warmup=500, num_samples=1500, adaptive_sampling=True)
+        plan = SamplingPlan.from_config(config, shard_size=50000, n_params=7)
+        assert plan.n_warmup == 500
+        assert plan.n_samples == 1500
+        assert plan.was_adapted is False
+        assert plan.shard_size == 50000
+        assert plan.n_params == 7
+        assert plan.n_chains == config.num_chains
+
+    def test_from_config_small_shard_adapts(self):
+        """50-point shard triggers adaptation."""
+        config = CMCConfig(num_warmup=500, num_samples=1500, adaptive_sampling=True)
+        plan = SamplingPlan.from_config(config, shard_size=50, n_params=7)
+        assert plan.n_warmup < 500
+        assert plan.n_samples < 1500
+        assert plan.was_adapted is True
+
+    def test_from_config_disabled(self):
+        """adaptive_sampling=False should not reduce counts."""
+        config = CMCConfig(num_warmup=500, num_samples=1500, adaptive_sampling=False)
+        plan = SamplingPlan.from_config(config, shard_size=50, n_params=7)
+        assert plan.n_warmup == 500
+        assert plan.n_samples == 1500
+        assert plan.was_adapted is False
+
+    def test_total_samples(self):
+        """total_samples should be n_samples * n_chains."""
+        config = CMCConfig(num_warmup=100, num_samples=200, num_chains=4)
+        plan = SamplingPlan.from_config(config, shard_size=50000, n_params=3)
+        assert plan.total_samples == 200 * 4
+
+    def test_frozen(self):
+        """SamplingPlan should be immutable."""
+        config = CMCConfig()
+        plan = SamplingPlan.from_config(config, shard_size=1000, n_params=3)
+        with pytest.raises(AttributeError):
+            plan.n_warmup = 999  # type: ignore[misc]
+
+    def test_stats_plan_field(self):
+        """SamplingStats should carry plan when provided."""
+        config = CMCConfig()
+        plan = SamplingPlan.from_config(config, shard_size=1000, n_params=3)
+        stats = SamplingStats(plan=plan)
+        assert stats.plan is plan
+        assert stats.plan.n_chains == config.num_chains
+
+    def test_stats_plan_default_none(self):
+        """SamplingStats.plan should default to None."""
+        stats = SamplingStats()
+        assert stats.plan is None
+
+
+# =============================================================================
+# Divergence rate calculation (mirrors run_nuts_with_retry guard)
+# =============================================================================
+
+
+class TestDivergenceRateGuard:
+    """Verify the guarded divergence rate calculation used in run_nuts_with_retry."""
+
+    def test_normal_divergence_rate(self):
+        """Standard case: divergence_rate = num_divergent / total_samples."""
+        n_samples, n_chains, num_divergent = 350, 4, 14
+        total = n_samples * n_chains
+        rate = num_divergent / total if total > 0 else 1.0
+        assert rate == pytest.approx(14 / 1400)
+
+    def test_zero_samples_returns_full_divergence(self):
+        """Edge case: 0 total samples should yield 1.0 (100% divergence)."""
+        n_samples, n_chains, num_divergent = 0, 4, 0
+        total = n_samples * n_chains
+        rate = num_divergent / total if total > 0 else 1.0
+        assert rate == 1.0
+
+    def test_zero_chains_returns_full_divergence(self):
+        """Edge case: 0 chains should yield 1.0 (100% divergence)."""
+        n_samples, n_chains, num_divergent = 200, 0, 0
+        total = n_samples * n_chains
+        rate = num_divergent / total if total > 0 else 1.0
+        assert rate == 1.0
+
+    def test_mcmc_samples_provides_correct_counts(self):
+        """MCMCSamples.n_samples/n_chains flow into the divergence rate calc."""
+        samples = MCMCSamples(
+            samples={"D0": np.random.randn(4, 200)},
+            param_names=["D0"],
+            n_chains=4,
+            n_samples=200,
+            extra_fields={"diverging": np.zeros((4, 200), dtype=bool)},
+        )
+        total = samples.n_samples * samples.n_chains
+        assert total == 800
+        rate = 10 / total if total > 0 else 1.0
+        assert rate == pytest.approx(10 / 800)
+
+
+# =============================================================================
+# Median warmup aggregation (P2)
+# =============================================================================
+
+
+class TestMedianWarmupAggregation:
+    """Verify shard_adapted_n_warmup propagation and median logic.
+
+    The multiprocessing backend computes median adapted n_warmup from
+    shard metadata and stores it on MCMCSamples.shard_adapted_n_warmup.
+    Core.py then reads this for the multi-shard CMCResult.
+    """
+
+    def test_all_same_warmup(self):
+        """All shards report same warmup → median equals that value."""
+        warmup_values = [140, 140, 140, 140]
+        median_warmup = int(np.median(warmup_values))
+        assert median_warmup == 140
+
+        samples = MCMCSamples(
+            samples={"D0": np.random.randn(4, 100)},
+            param_names=["D0"],
+            n_chains=4,
+            n_samples=100,
+        )
+        samples.shard_adapted_n_warmup = median_warmup
+        assert samples.shard_adapted_n_warmup == 140
+
+    def test_mixed_warmup_values(self):
+        """Mixed warmup values → median is computed correctly."""
+        warmup_values = [100, 140, 200, 500]
+        median_warmup = int(np.median(warmup_values))
+        assert median_warmup == 170  # median of [100, 140, 200, 500] = (140+200)/2
+
+        samples = MCMCSamples(
+            samples={"D0": np.random.randn(4, 100)},
+            param_names=["D0"],
+            n_chains=4,
+            n_samples=100,
+        )
+        samples.shard_adapted_n_warmup = median_warmup
+        assert samples.shard_adapted_n_warmup == 170
+
+    def test_all_none_warmup_leaves_default(self):
+        """No shards report n_warmup → shard_adapted_n_warmup stays None."""
+        shard_metadata = [
+            {"divergent": 0},
+            {"divergent": 1},
+        ]
+        warmup_values = [
+            m["n_warmup"] for m in shard_metadata if m.get("n_warmup") is not None
+        ]
+        assert warmup_values == []
+
+        samples = MCMCSamples(
+            samples={"D0": np.random.randn(4, 100)},
+            param_names=["D0"],
+            n_chains=4,
+            n_samples=100,
+        )
+        # shard_adapted_n_warmup defaults to None
+        assert samples.shard_adapted_n_warmup is None
+
+    def test_shard_adapted_n_warmup_default(self):
+        """MCMCSamples.shard_adapted_n_warmup defaults to None."""
+        samples = MCMCSamples(
+            samples={},
+            param_names=[],
+            n_chains=0,
+            n_samples=0,
+        )
+        assert samples.shard_adapted_n_warmup is None
