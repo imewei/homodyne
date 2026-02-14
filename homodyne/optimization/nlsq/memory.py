@@ -70,7 +70,7 @@ def detect_total_system_memory() -> float | None:
             return float(total_bytes)
     except ImportError:
         logger.debug("psutil not available, trying os.sysconf fallback")
-    except Exception as e:
+    except (OSError, ValueError, AttributeError) as e:
         logger.debug(f"psutil memory detection failed: {e}")
 
     # Method 2: os.sysconf (Linux/Unix fallback)
