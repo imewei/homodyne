@@ -28,7 +28,9 @@ from homodyne.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def compute_t_ref(dt: float, t_max: float) -> float:
+def compute_t_ref(
+    dt: float, t_max: float, *, fallback_value: float | None = None
+) -> float:
     """Compute reference time as geometric mean of time range.
 
     Parameters
@@ -37,18 +39,31 @@ def compute_t_ref(dt: float, t_max: float) -> float:
         Time step (minimum time scale).
     t_max : float
         Maximum time in the dataset.
+    fallback_value : float | None
+        If provided and inputs are invalid, return this value with a warning
+        instead of raising ValueError. If None (default), raises on invalid inputs.
 
     Returns
     -------
     float
-        Reference time t_ref = sqrt(dt * t_max).
-        Falls back to 1.0 if inputs are invalid.
+        Reference time t_ref = sqrt(dt * t_max), or fallback_value if inputs invalid.
+
+    Raises
+    ------
+    ValueError
+        If dt or t_max are non-positive or non-finite and fallback_value is None.
     """
     if dt <= 0 or t_max <= 0 or not math.isfinite(dt) or not math.isfinite(t_max):
-        logger.warning(
-            f"Invalid inputs for t_ref computation: dt={dt}, t_max={t_max}. Using t_ref=1.0"
+        if fallback_value is not None:
+            logger.warning(
+                f"Invalid inputs for t_ref computation: dt={dt}, t_max={t_max}. "
+                f"Using fallback t_ref={fallback_value}."
+            )
+            return fallback_value
+        raise ValueError(
+            f"Invalid inputs for t_ref computation: dt={dt}, t_max={t_max}. "
+            "Both must be positive and finite."
         )
-        return 1.0
     return math.sqrt(dt * t_max)
 
 
@@ -87,7 +102,7 @@ def transform_nlsq_to_reparam_space(
 
     if D0 is not None and alpha is not None:
         # D_ref = D0 * t_ref^alpha
-        D_ref = D0 * (t_ref ** alpha)
+        D_ref = D0 * (t_ref**alpha)
         D_ref = max(D_ref, 1e-10)  # Prevent log(0)
         log_D_ref = math.log(D_ref)
         reparam_values["log_D_ref"] = log_D_ref
@@ -122,8 +137,10 @@ def transform_nlsq_to_reparam_space(
             # Uncertainty for D_offset_frac (simplified)
             if D_offset is not None and denom > 0 and D_offset_std > 0:
                 # d(frac)/d(D_offset) = D_ref / (D_ref + D_offset)^2
-                dfrac_doffset = D_ref / (denom ** 2)
-                reparam_uncertainties["D_offset_frac"] = abs(dfrac_doffset * D_offset_std)
+                dfrac_doffset = D_ref / (denom**2)
+                reparam_uncertainties["D_offset_frac"] = abs(
+                    dfrac_doffset * D_offset_std
+                )
 
     # --- Shear reparameterization ---
     gamma_dot_t0 = nlsq_values.get("gamma_dot_t0")
@@ -131,7 +148,7 @@ def transform_nlsq_to_reparam_space(
 
     if gamma_dot_t0 is not None and beta is not None:
         # gamma_ref = gamma_dot_t0 * t_ref^beta
-        gamma_ref = gamma_dot_t0 * (t_ref ** beta)
+        gamma_ref = gamma_dot_t0 * (t_ref**beta)
         gamma_ref = max(gamma_ref, 1e-20)  # Prevent log(0)
         log_gamma_ref = math.log(gamma_ref)
         reparam_values["log_gamma_ref"] = log_gamma_ref
@@ -147,7 +164,9 @@ def transform_nlsq_to_reparam_space(
                 var_log_gamma_ref += (gamma_std / gamma_dot_t0) ** 2
             if beta_std > 0:
                 var_log_gamma_ref += (log_t_ref * beta_std) ** 2
-            reparam_uncertainties["log_gamma_ref"] = math.sqrt(max(var_log_gamma_ref, 1e-20))
+            reparam_uncertainties["log_gamma_ref"] = math.sqrt(
+                max(var_log_gamma_ref, 1e-20)
+            )
 
     return reparam_values, reparam_uncertainties
 
@@ -209,7 +228,7 @@ def transform_to_sampling_space(
         D_offset = params["D_offset"]
 
         # D_ref = D0 * t_ref^alpha
-        D_ref = D0 * (t_ref ** alpha)
+        D_ref = D0 * (t_ref**alpha)
         D_ref = max(D_ref, 1e-10)
         log_D_ref = np.log(D_ref)
 
@@ -227,7 +246,7 @@ def transform_to_sampling_space(
         beta = params.get("beta", 0.0)
 
         # gamma_ref = gamma_dot_t0 * t_ref^beta
-        gamma_ref = gamma_dot_t0 * (t_ref ** beta)
+        gamma_ref = gamma_dot_t0 * (t_ref**beta)
         gamma_ref = max(gamma_ref, 1e-20)
         result["log_gamma_ref"] = float(np.log(gamma_ref))
         del result["gamma_dot_t0"]
@@ -265,7 +284,9 @@ def transform_to_physics_space(
         # D0 = D_ref * t_ref^(-alpha)
         result["D0"] = D_ref * (t_ref ** (-alpha))
         # D_offset = D_ref * frac / (1 - frac)
-        result["D_offset"] = D_ref * D_offset_frac / np.maximum(1 - D_offset_frac, 1e-10)
+        result["D_offset"] = (
+            D_ref * D_offset_frac / np.maximum(1 - D_offset_frac, 1e-10)
+        )
         del result["log_D_ref"]
         del result["D_offset_frac"]
     elif config.enable_d_ref and "D_total" in samples:

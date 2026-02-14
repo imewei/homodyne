@@ -29,8 +29,11 @@ from homodyne.optimization.cmc.diagnostics import (
     summarize_diagnostics,
 )
 from homodyne.optimization.cmc.model import get_xpcs_model
-from homodyne.optimization.cmc.reparameterization import compute_t_ref
 from homodyne.optimization.cmc.priors import get_param_names_in_order
+from homodyne.optimization.cmc.reparameterization import (
+    compute_t_ref,
+    transform_nlsq_to_reparam_space,
+)
 from homodyne.optimization.cmc.results import CMCResult
 from homodyne.optimization.cmc.sampler import run_nuts_sampling
 from homodyne.utils.logging import get_logger, with_context
@@ -101,8 +104,10 @@ def _resolve_max_points_per_shard(
         Default 1 (single angle - no scaling applied).
     """
     # Minimum shard sizes to prevent data starvation (Jan 2026 fix)
-    MIN_SHARD_SIZE_LAMINAR = 3_000  # Reduced: reparameterization fixes bimodal posteriors
-    MIN_SHARD_SIZE_STATIC = 5_000   # 5K minimum for static
+    MIN_SHARD_SIZE_LAMINAR = (
+        3_000  # Reduced: reparameterization fixes bimodal posteriors
+    )
+    MIN_SHARD_SIZE_STATIC = 5_000  # 5K minimum for static
 
     if max_points_per_shard is not None and max_points_per_shard != "auto":
         user_specified = int(max_points_per_shard)
@@ -394,14 +399,43 @@ def _infer_time_step(t1: np.ndarray, t2: np.ndarray) -> float:
     """
     time_values = np.unique(np.concatenate([np.asarray(t1), np.asarray(t2)]))
     if time_values.size < 2:
+        logger.warning(
+            f"Fewer than 2 unique time values ({time_values.size}); "
+            "falling back to dt=1.0"
+        )
         return 1.0
 
     diffs = np.diff(time_values)
     positive_diffs = diffs[diffs > 0]
     if positive_diffs.size == 0:
+        logger.warning("No positive time differences found; falling back to dt=1.0")
         return 1.0
 
     return float(np.median(positive_diffs))
+
+
+def _populate_reparam_priors(
+    nlsq_prior_config: dict[str, Any],
+    nlsq_values: dict[str, float],
+    nlsq_uncertainties: dict[str, float] | None,
+    t_ref: float,
+    log: Any,
+) -> None:
+    """Populate reparameterized prior values in nlsq_prior_config.
+
+    This is deferred from section 2e because t_ref is not available
+    until the time grid is constructed in section 4.
+    """
+    reparam_vals, reparam_uncs = transform_nlsq_to_reparam_space(
+        nlsq_values, nlsq_uncertainties, t_ref
+    )
+    nlsq_prior_config["reparam_values"] = reparam_vals
+    nlsq_prior_config["reparam_uncertainties"] = reparam_uncs
+    if reparam_vals:
+        log.info(
+            "NLSQ reparam values: "
+            + ", ".join(f"{k}={v:.4g}" for k, v in reparam_vals.items())
+        )
 
 
 def fit_mcmc_jax(
@@ -524,6 +558,12 @@ def fit_mcmc_jax(
         f"{config.num_warmup} warmup, {config.num_samples} samples"
     )
 
+    # NLSQ warm-start state (initialized here to avoid temporal coupling).
+    # Populated in section 2e if nlsq_result is provided and priors are enabled.
+    nlsq_prior_config: dict[str, Any] | None = None
+    nlsq_values: dict[str, float] = {}
+    nlsq_uncertainties: dict[str, float] | None = None
+
     # =========================================================================
     # 2. Prepare and validate data
     # =========================================================================
@@ -536,7 +576,9 @@ def fit_mcmc_jax(
     nlsq_per_angle_mode = None
     if nlsq_result is not None:
         # Try to extract per_angle_mode from NLSQ result metadata
-        metadata = nlsq_result.get("metadata", {}) if isinstance(nlsq_result, dict) else {}
+        metadata = (
+            nlsq_result.get("metadata", {}) if isinstance(nlsq_result, dict) else {}
+        )
         nlsq_per_angle_mode = metadata.get("per_angle_mode")
         if nlsq_per_angle_mode:
             run_logger.info(
@@ -730,28 +772,18 @@ def fit_mcmc_jax(
         # Distribution objects aren't picklable, so we pass the raw values
         # and let each model function build its own TruncatedNormal priors.
         if config.use_nlsq_informed_priors:
-            # Transform NLSQ values to reparameterized space for log_D_ref/log_gamma_ref priors
-            from homodyne.optimization.cmc.reparameterization import transform_nlsq_to_reparam_space
-
-            reparam_vals, reparam_uncs = transform_nlsq_to_reparam_space(
-                nlsq_values, nlsq_uncertainties, t_ref
-            )
-
             nlsq_prior_config = {
                 "values": nlsq_values,
                 "uncertainties": nlsq_uncertainties,
                 "width_factor": config.nlsq_prior_width_factor,
-                "reparam_values": reparam_vals,
-                "reparam_uncertainties": reparam_uncs,
+                "reparam_values": {},
+                "reparam_uncertainties": {},
             }
             run_logger.info(
                 f"NLSQ-informed priors: enabled (width_factor={config.nlsq_prior_width_factor})"
             )
-            if reparam_vals:
-                run_logger.info(
-                    f"NLSQ reparam values: "
-                    + ", ".join(f"{k}={v:.4g}" for k, v in reparam_vals.items())
-                )
+            # NOTE: reparam_values/uncertainties are populated later (after t_ref
+            # is computed from the time grid). See "Populate reparam priors" below.
 
     # =========================================================================
     # 3. Determine if CMC sharding is needed
@@ -949,11 +981,25 @@ def fit_mcmc_jax(
     time_grid_np = np.linspace(t_min, t_max, n_time_points)
     time_grid = jnp.array(time_grid_np)
 
-    # Compute reference time for reparameterization (geometric mean of time range)
-    t_ref = compute_t_ref(dt_used, t_max)
-    run_logger.info(
-        f"[CMC] Reference time: t_ref={t_ref:.6g}s (sqrt({dt_used:.6g} * {t_max:.6g}))"
-    )
+    # Compute reference time for reparameterization (geometric mean of time range).
+    # dt_used is validated positive above; t_max > 0 because prepared data is
+    # non-empty (checked in prepare_mcmc_data). Guard defensively for future refactors.
+    t_ref = compute_t_ref(dt_used, t_max, fallback_value=1.0)
+    if t_ref == 1.0 and (
+        dt_used <= 0 or t_max <= 0 or not np.isfinite(dt_used) or not np.isfinite(t_max)
+    ):
+        run_logger.info("[CMC] Reference time: t_ref=1.0 (fallback)")
+    else:
+        run_logger.info(
+            f"[CMC] Reference time: t_ref={t_ref:.6g}s "
+            f"(sqrt({dt_used:.6g} * {t_max:.6g}))"
+        )
+
+    # Populate reparam priors now that t_ref is available (deferred from section 2e)
+    if nlsq_prior_config is not None:
+        _populate_reparam_priors(
+            nlsq_prior_config, nlsq_values, nlsq_uncertainties, t_ref, run_logger
+        )
 
     # Log time_grid construction details
     run_logger.info(
@@ -991,7 +1037,10 @@ def fit_mcmc_jax(
     }
 
     # Add fixed scaling arrays for constant/constant_averaged mode (v2.18.0+)
-    if effective_per_angle_mode in ("constant", "constant_averaged") and fixed_contrast is not None:
+    if (
+        effective_per_angle_mode in ("constant", "constant_averaged")
+        and fixed_contrast is not None
+    ):
         model_kwargs["fixed_contrast"] = fixed_contrast
         model_kwargs["fixed_offset"] = fixed_offset
 
@@ -1006,9 +1055,8 @@ def fit_mcmc_jax(
     # Propagate per_angle_mode for sampler and workers to build correct init dicts
     model_kwargs["per_angle_mode"] = effective_per_angle_mode
 
-    # Add NLSQ-informed prior config if available (Feb 2026)
-    # nlsq_prior_config is built in section 2e above when both conditions hold
-    if nlsq_result is not None and config.use_nlsq_informed_priors:
+    # Add NLSQ-informed prior config if available (built in section 2e)
+    if nlsq_prior_config is not None:
         model_kwargs["nlsq_prior_config"] = nlsq_prior_config
 
     # Add reparameterization config and t_ref when active (Feb 2026)
@@ -1052,6 +1100,7 @@ def fit_mcmc_jax(
     # =========================================================================
     # 5. Select backend and run sampling
     # =========================================================================
+    stats = None  # Only set for single-shard path
     if shards is not None and len(shards) > 1:
         # Use parallel backend for CMC
         backend = select_backend(config)
@@ -1075,6 +1124,7 @@ def fit_mcmc_jax(
         run_logger.info(
             f"Starting CMC sampling: {len(shards)} shards, "
             f"{config.num_chains} chains, {config.num_warmup}+{config.num_samples} samples"
+            f"{' (adaptive per-shard)' if config.adaptive_sampling else ''}"
         )
         mcmc_samples = backend.run(
             model=xpcs_model,
@@ -1110,18 +1160,47 @@ def fit_mcmc_jax(
     # =========================================================================
     from homodyne.optimization.cmc.sampler import SamplingStats
 
+    # Single-shard: use adapted warmup from plan (may differ from config default)
+    # Multi-shard: use config default (workers adapt independently)
+    if stats is not None:
+        if stats.plan is not None:
+            actual_n_warmup = stats.plan.n_warmup
+            actual_plan = stats.plan
+        else:
+            run_logger.warning(
+                "SamplingPlan invariant violated: stats without plan. "
+                "Using config defaults."
+            )
+            actual_n_warmup = config.num_warmup
+            actual_plan = None
+        # Reuse stats.num_divergent (already computed accurately in run_nuts_sampling)
+        num_divergent = stats.num_divergent
+    else:
+        # Multi-shard: use median adapted warmup from workers if available,
+        # otherwise fall back to config default.
+        actual_n_warmup = (
+            mcmc_samples.shard_adapted_n_warmup
+            if mcmc_samples.shard_adapted_n_warmup is not None
+            else config.num_warmup
+        )
+        actual_plan = None
+        num_divergent = int(
+            mcmc_samples.extra_fields.get("diverging", np.array([0])).sum()
+        )
+
     final_stats = SamplingStats(
         warmup_time=stats_warmup,
         sampling_time=stats_total - stats_warmup,
         total_time=stats_total,
-        num_divergent=mcmc_samples.extra_fields.get("diverging", np.array([0])).sum(),
+        num_divergent=num_divergent,
+        plan=actual_plan,
     )
 
     result = CMCResult.from_mcmc_samples(
         mcmc_samples=mcmc_samples,
         stats=final_stats,
         analysis_mode=analysis_mode,
-        n_warmup=config.num_warmup,
+        n_warmup=actual_n_warmup,
     )
 
     # =========================================================================

@@ -130,6 +130,13 @@ class CMCConfig:
     # Values here are chosen to keep typical laminar_flow CMC shards
     # well under the 2 hour timeout on modest CPU nodes while still
     # providing usable posteriors and R-hat diagnostics.
+    #
+    # DEPRECATION NOTE: Do not use config.num_warmup or config.num_samples
+    # directly in sampling hot paths. Use SamplingPlan.from_config() instead,
+    # which applies adaptive scaling. Direct access is only appropriate for:
+    #   - Logging configured (pre-adaptation) values
+    #   - Timeout estimation (safe upper bound)
+    #   - Config serialization/validation
     num_warmup: int = 500
     num_samples: int = 1500
     num_chains: int = 4  # Increased from 2 for better R-hat convergence diagnostics
@@ -156,7 +163,9 @@ class CMCConfig:
     max_divergence_rate: float = 0.10  # Filter shards with >10% divergence rate
 
     # Combination
-    combination_method: str = "robust_consensus_mc"  # Robust CMC with MAD outlier filtering (v2.23.0+)
+    combination_method: str = (
+        "robust_consensus_mc"  # Robust CMC with MAD outlier filtering (v2.23.0+)
+    )
     min_success_rate: float = 0.90
     run_id: str | None = None
 
@@ -323,9 +332,13 @@ class CMCConfig:
             min_points_per_shard=sharding.get("min_points_per_shard", 10000),
             # Reparameterization (Jan 2026 v3)
             reparameterization_d_total=reparameterization.get("enable_d_total", True),
-            reparameterization_log_gamma=reparameterization.get("enable_log_gamma", True),
+            reparameterization_log_gamma=reparameterization.get(
+                "enable_log_gamma", True
+            ),
             bimodal_min_weight=reparameterization.get("bimodal_min_weight", 0.2),
-            bimodal_min_separation=reparameterization.get("bimodal_min_separation", 0.5),
+            bimodal_min_separation=reparameterization.get(
+                "bimodal_min_separation", 0.5
+            ),
         )
 
         # Validate and log any issues
@@ -428,18 +441,17 @@ class CMCConfig:
             )
 
         # Validate adaptive sampling settings (Feb 2026)
-        if not isinstance(self.max_tree_depth, int) or not 1 <= self.max_tree_depth <= 15:
+        if (
+            not isinstance(self.max_tree_depth, int)
+            or not 1 <= self.max_tree_depth <= 15
+        ):
             errors.append(
                 f"max_tree_depth must be int in [1, 15], got: {self.max_tree_depth}"
             )
         if not isinstance(self.min_warmup, int) or self.min_warmup < 10:
-            errors.append(
-                f"min_warmup must be int >= 10, got: {self.min_warmup}"
-            )
+            errors.append(f"min_warmup must be int >= 10, got: {self.min_warmup}")
         if not isinstance(self.min_samples, int) or self.min_samples < 50:
-            errors.append(
-                f"min_samples must be int >= 50, got: {self.min_samples}"
-            )
+            errors.append(f"min_samples must be int >= 50, got: {self.min_samples}")
 
         # Validate convergence thresholds
         if not isinstance(self.max_r_hat, (int, float)) or self.max_r_hat < 1.0:
@@ -452,7 +464,13 @@ class CMCConfig:
             )
 
         # Validate combination settings
-        valid_methods = ["consensus_mc", "robust_consensus_mc", "weighted_gaussian", "simple_average", "auto"]
+        valid_methods = [
+            "consensus_mc",
+            "robust_consensus_mc",
+            "weighted_gaussian",
+            "simple_average",
+            "auto",
+        ]
         if self.combination_method not in valid_methods:
             errors.append(
                 f"combination_method must be one of {valid_methods}, got: {self.combination_method}"
@@ -480,15 +498,23 @@ class CMCConfig:
             )
 
         # Validate heterogeneity detection settings (Jan 2026 v2)
-        if not isinstance(self.max_parameter_cv, (int, float)) or self.max_parameter_cv <= 0:
+        if (
+            not isinstance(self.max_parameter_cv, (int, float))
+            or self.max_parameter_cv <= 0
+        ):
             errors.append(
                 f"max_parameter_cv must be positive number, got: {self.max_parameter_cv}"
             )
-        if not isinstance(self.heterogeneity_abort, bool):  # runtime check for YAML input
+        if not isinstance(
+            self.heterogeneity_abort, bool
+        ):  # runtime check for YAML input
             errors.append(  # type: ignore[unreachable]
                 f"heterogeneity_abort must be bool, got: {self.heterogeneity_abort}"
             )
-        if not isinstance(self.min_points_per_shard, int) or self.min_points_per_shard < 1000:
+        if (
+            not isinstance(self.min_points_per_shard, int)
+            or self.min_points_per_shard < 1000
+        ):
             errors.append(
                 f"min_points_per_shard must be int >= 1000, got: {self.min_points_per_shard}"
             )
@@ -611,7 +637,6 @@ class CMCConfig:
             )
 
         return max(1, n_points // adjusted_max)
-
 
     def get_adaptive_sample_counts(
         self, shard_size: int, n_params: int = 7

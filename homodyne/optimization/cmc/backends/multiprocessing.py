@@ -12,6 +12,7 @@ Optimizations (v2.9.1):
 from __future__ import annotations
 
 import multiprocessing as mp
+import multiprocessing.shared_memory
 import os
 import queue
 import threading
@@ -33,6 +34,109 @@ if TYPE_CHECKING:
     from homodyne.optimization.cmc.sampler import MCMCSamples
 
 logger = get_logger(__name__)
+
+
+class SharedDataManager:
+    """Manages shared memory blocks for data common to all CMC shards.
+
+    Uses multiprocessing.shared_memory to share config, parameter space,
+    initial values, and time_grid across spawned worker processes, avoiding
+    redundant pickling per shard.
+
+    Note on serialization: Uses pickle internally for trusted config dicts
+    only (CMCConfig.to_dict(), ParameterSpace). This matches the existing
+    multiprocessing behavior which also pickles all process arguments.
+
+    Must be used as a context manager or call cleanup() in a finally block.
+    """
+
+    def __init__(self) -> None:
+        self._shared_blocks: list[mp.shared_memory.SharedMemory] = []
+        self._refs: dict[str, dict[str, Any]] = {}
+
+    def create_shared_bytes(self, name: str, data: bytes) -> dict[str, Any]:
+        """Store bytes in shared memory."""
+        shm = mp.shared_memory.SharedMemory(create=True, size=len(data))
+        shm.buf[: len(data)] = data
+        self._shared_blocks.append(shm)
+        ref = {"shm_name": shm.name, "size": len(data), "type": "bytes"}
+        self._refs[name] = ref
+        return ref
+
+    def create_shared_array(self, name: str, array: np.ndarray) -> dict[str, Any]:
+        """Store a numpy array in shared memory."""
+        shm = mp.shared_memory.SharedMemory(create=True, size=array.nbytes)
+        shared_arr = np.ndarray(array.shape, dtype=array.dtype, buffer=shm.buf)
+        shared_arr[:] = array
+        self._shared_blocks.append(shm)
+        ref = {
+            "shm_name": shm.name,
+            "shape": array.shape,
+            "dtype": str(array.dtype),
+            "type": "array",
+        }
+        self._refs[name] = ref
+        return ref
+
+    def create_shared_dict(self, name: str, d: dict) -> dict[str, Any]:
+        """Serialize a trusted internal dict to shared memory.
+
+        Only used for CMCConfig and ParameterSpace dicts — never for
+        external/untrusted data.
+        """
+        import pickle as _pkl  # noqa: S403 — trusted internal data
+
+        return self.create_shared_bytes(name, _pkl.dumps(d))
+
+    def cleanup(self) -> None:
+        """Release all shared memory blocks. Must be called in a finally block."""
+        for shm in self._shared_blocks:
+            try:
+                shm.close()
+                shm.unlink()
+            except (FileNotFoundError, OSError):
+                pass
+        self._shared_blocks.clear()
+        self._refs.clear()
+
+    def __enter__(self) -> SharedDataManager:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.cleanup()
+
+
+def _load_shared_bytes(ref: dict[str, Any]) -> bytes:
+    """Reconstruct bytes from a shared memory reference."""
+    shm = mp.shared_memory.SharedMemory(name=ref["shm_name"], create=False)
+    try:
+        data = bytes(shm.buf[: ref["size"]])
+    finally:
+        shm.close()
+    return data
+
+
+def _load_shared_dict(ref: dict[str, Any]) -> dict:
+    """Reconstruct a trusted internal dict from shared memory.
+
+    Only used for CMCConfig and ParameterSpace dicts — never for
+    external/untrusted data.
+    """
+    import pickle as _pkl  # noqa: S403 — trusted internal data
+
+    return _pkl.loads(_load_shared_bytes(ref))  # noqa: S301
+
+
+def _load_shared_array(ref: dict[str, Any]) -> np.ndarray:
+    """Reconstruct a numpy array from a shared memory reference."""
+    shm = mp.shared_memory.SharedMemory(name=ref["shm_name"], create=False)
+    try:
+        arr = np.ndarray(
+            ref["shape"], dtype=np.dtype(ref["dtype"]), buffer=shm.buf
+        ).copy()  # Copy so we don't hold a reference to the shared buffer
+    finally:
+        shm.close()
+    return arr
 
 
 def _generate_shard_keys(n_shards: int, seed: int = 42) -> list[tuple[int, int]]:
@@ -110,16 +214,39 @@ def _run_shard_worker_with_queue(
     shard_idx: int,
     shard_data: dict[str, Any],
     model_fn: Callable,
-    config_dict: dict[str, Any],
-    initial_values: dict[str, float] | None,
-    parameter_space_dict: dict[str, Any],
+    config_ref: dict[str, Any],
+    initial_values_ref: dict[str, Any] | None,
+    ps_ref: dict[str, Any],
+    shared_kwargs_ref: dict[str, Any],
+    time_grid_ref: dict[str, Any] | None,
     n_phi: int,
     analysis_mode: str,
     threads_per_worker: int,
     result_queue: mp.Queue,
     rng_key_tuple: tuple[int, int] | None = None,
 ) -> None:
-    """Worker function that puts result in a queue for proper timeout handling."""
+    """Worker function that puts result in a queue for proper timeout handling.
+
+    Accepts shared memory references instead of full dicts to avoid redundant
+    pickling. Reconstructs shared data from shared memory blocks.
+    """
+    # Reconstruct shared data from shared memory
+    config_dict = _load_shared_dict(config_ref)
+    parameter_space_dict = _load_shared_dict(ps_ref)
+    shared_kwargs = _load_shared_dict(shared_kwargs_ref)
+    initial_values = (
+        _load_shared_dict(initial_values_ref)
+        if initial_values_ref is not None
+        else None
+    )
+
+    # Reconstruct time_grid
+    time_grid = _load_shared_array(time_grid_ref) if time_grid_ref is not None else None
+
+    # Merge shared kwargs into shard_data for backward-compatible worker interface
+    shard_data["time_grid"] = time_grid
+    shard_data.update(shared_kwargs)
+
     result = _run_shard_worker(
         shard_idx=shard_idx,
         shard_data=shard_data,
@@ -280,7 +407,9 @@ def _run_shard_worker(
     if shard_data.get("reparam_config_dict") is not None:
         from homodyne.optimization.cmc.reparameterization import ReparamConfig
 
-        model_kwargs["reparam_config"] = ReparamConfig(**shard_data["reparam_config_dict"])
+        model_kwargs["reparam_config"] = ReparamConfig(
+            **shard_data["reparam_config_dict"]
+        )
 
     # Restore t_ref for reference-time reparameterization
     if shard_data.get("t_ref") is not None:
@@ -359,6 +488,8 @@ def _run_shard_worker(
                 "sampling_time": stats.sampling_time,
                 "total_time": stats.total_time,
                 "num_divergent": stats.num_divergent,
+                "n_warmup": stats.plan.n_warmup if stats.plan else None,
+                "n_samples": stats.plan.n_samples if stats.plan else None,
             },
         }
         # Result is returned to _run_shard_in_process, which puts it on the queue.
@@ -535,6 +666,30 @@ class MultiprocessingBackend(CMCBackend):
         )
 
         # Prepare shard data for workers
+        # Separate per-shard data from shared data to reduce pickling overhead.
+        # Shared data (config, parameter_space, time_grid, model kwargs) is placed
+        # in shared memory once; only per-shard arrays are pickled per process.
+        shared_kwargs = {
+            "q": model_kwargs["q"],
+            "L": model_kwargs["L"],
+            "dt": model_kwargs["dt"],
+            "fixed_contrast": model_kwargs.get("fixed_contrast"),
+            "fixed_offset": model_kwargs.get("fixed_offset"),
+            "per_angle_mode": model_kwargs.get("per_angle_mode", "individual"),
+            "nlsq_prior_config": model_kwargs.get("nlsq_prior_config"),
+            "num_shards": model_kwargs.get("num_shards", 1),
+            "t_ref": model_kwargs.get("t_ref"),
+            "reparam_config_dict": (
+                {
+                    "enable_d_ref": model_kwargs["reparam_config"].enable_d_ref,
+                    "enable_gamma_ref": model_kwargs["reparam_config"].enable_gamma_ref,
+                    "t_ref": model_kwargs["reparam_config"].t_ref,
+                }
+                if model_kwargs.get("reparam_config") is not None
+                else None
+            ),
+        }
+
         shard_data_list = []
         for shard in shards:
             shard_data_list.append(
@@ -544,36 +699,7 @@ class MultiprocessingBackend(CMCBackend):
                     "t2": np.array(shard.t2),
                     "phi_unique": np.array(shard.phi_unique),
                     "phi_indices": np.array(shard.phi_indices),
-                    "q": model_kwargs["q"],
-                    "L": model_kwargs["L"],
-                    "dt": model_kwargs["dt"],
-                    "time_grid": (
-                        np.array(model_kwargs["time_grid"])
-                        if model_kwargs.get("time_grid") is not None
-                        else None
-                    ),
                     "noise_scale": shard.noise_scale,
-                    # Propagate fixed parameters for constant mode (v2.18.0+)
-                    "fixed_contrast": model_kwargs.get("fixed_contrast"),
-                    "fixed_offset": model_kwargs.get("fixed_offset"),
-                    # Propagate per_angle_mode for correct init dict building
-                    "per_angle_mode": model_kwargs.get("per_angle_mode", "individual"),
-                    # Propagate NLSQ prior config for informed priors
-                    "nlsq_prior_config": model_kwargs.get("nlsq_prior_config"),
-                    # Propagate num_shards for prior tempering (Feb 2026 fix)
-                    "num_shards": model_kwargs.get("num_shards", 1),
-                    # Propagate t_ref for reference-time reparameterization
-                    "t_ref": model_kwargs.get("t_ref"),
-                    # Serialize reparam_config as dict for pickling
-                    "reparam_config_dict": (
-                        {
-                            "enable_d_ref": model_kwargs["reparam_config"].enable_d_ref,
-                            "enable_gamma_ref": model_kwargs["reparam_config"].enable_gamma_ref,
-                            "t_ref": model_kwargs["reparam_config"].t_ref,
-                        }
-                        if model_kwargs.get("reparam_config") is not None
-                        else None
-                    ),
                 }
             )
 
@@ -584,6 +710,37 @@ class MultiprocessingBackend(CMCBackend):
             ps_dict = parameter_space._config_dict
         else:
             ps_dict = model_kwargs.get("config_dict", {})
+
+        # Place shared data in shared memory to avoid per-shard pickling.
+        # Wrap in try-except so partially-created blocks are cleaned up on failure.
+        shared_mgr = SharedDataManager()
+        try:
+            shared_config_ref = shared_mgr.create_shared_dict("config", config_dict)
+            shared_ps_ref = shared_mgr.create_shared_dict("ps", ps_dict)
+            shared_kwargs_ref = shared_mgr.create_shared_dict("kwargs", shared_kwargs)
+
+            # Share time_grid as array if present (can be large)
+            time_grid_raw = model_kwargs.get("time_grid")
+            if time_grid_raw is not None:
+                shared_tg_ref: dict[str, Any] | None = shared_mgr.create_shared_array(
+                    "time_grid", np.array(time_grid_raw)
+                )
+            else:
+                shared_tg_ref = None
+
+            # Share initial_values as dict
+            shared_iv_ref: dict[str, Any] | None = None
+            if initial_values is not None:
+                shared_iv_ref = shared_mgr.create_shared_dict(
+                    "init_vals", initial_values
+                )
+        except Exception:
+            shared_mgr.cleanup()
+            raise
+
+        run_logger.debug(
+            f"Shared memory allocated: {len(shared_mgr._shared_blocks)} blocks"
+        )
 
         # Pre-generate all shard PRNG keys in single JAX call (batch optimization)
         # This amortizes JAX compilation overhead across all shards
@@ -760,9 +917,11 @@ class MultiprocessingBackend(CMCBackend):
                             shard_idx,
                             shard_data,
                             model,
-                            config_dict,
-                            initial_values,
-                            ps_dict,
+                            shared_config_ref,
+                            shared_iv_ref,
+                            shared_ps_ref,
+                            shared_kwargs_ref,
+                            shared_tg_ref,
                             shards[shard_idx].n_phi,
                             analysis_mode,
                             threads_per_worker,
@@ -961,6 +1120,9 @@ class MultiprocessingBackend(CMCBackend):
                 else:
                     os.environ[key] = val
 
+            # Release shared memory after all workers are done
+            shared_mgr.cleanup()
+
         # Process results - collect successful samples with metadata for filtering
         successful_samples = []
         shard_metadata: list[dict] = []  # Track shard idx, divergences, total samples
@@ -980,12 +1142,18 @@ class MultiprocessingBackend(CMCBackend):
                 # Track divergence stats for quality filtering
                 stats = result.get("stats", {})
                 total_samples = result["n_chains"] * result["n_samples"]
-                shard_metadata.append({
-                    "shard_idx": result.get("shard_idx"),
-                    "num_divergent": stats.get("num_divergent", 0),
-                    "total_samples": total_samples,
-                    "divergence_rate": stats.get("num_divergent", 0) / max(total_samples, 1),
-                })
+                shard_metadata.append(
+                    {
+                        "shard_idx": result.get("shard_idx"),
+                        "num_divergent": stats.get("num_divergent", 0),
+                        "total_samples": total_samples,
+                        # NUTS divergent count <= total_samples; max() prevents div-by-zero
+                        "divergence_rate": stats.get("num_divergent", 0)
+                        / max(total_samples, 1),
+                        "n_warmup": stats.get("n_warmup"),
+                        "n_samples": stats.get("n_samples"),
+                    }
+                )
             else:
                 error_cat = result.get("error_category", "unknown")
                 run_logger.warning(
@@ -1098,6 +1266,12 @@ class MultiprocessingBackend(CMCBackend):
             run_logger.info(
                 f"Per-shard posterior statistics ({len(successful_samples)} shards):"
             )
+            if parameter_space is None:
+                run_logger.warning(
+                    "parameter_space is None — bounds-aware CV disabled; "
+                    "heterogeneity detection may produce false positives for near-zero parameters"
+                )
+
             for param in key_params:
                 if param in successful_samples[0].samples:
                     means = [
@@ -1109,8 +1283,37 @@ class MultiprocessingBackend(CMCBackend):
                         f"mean_of_means={np.mean(means):.4g}, "
                         f"std_of_means={np.std(means):.4g}"
                     )
-                    # Check for high heterogeneity
-                    cv = np.std(means) / max(abs(np.mean(means)), 1e-10)
+                    # Check for high heterogeneity (bounds-aware CV)
+                    mean_val = abs(np.mean(means))
+                    if parameter_space is not None:
+                        try:
+                            lo, hi = parameter_space.get_bounds(param)
+                            param_range = hi - lo
+                            # Distinguish inverted bounds (lo > hi) from degenerate (lo == hi)
+                            if param_range < 0:
+                                # Inverted bounds: use absolute range
+                                run_logger.warning(
+                                    f"  {param}: inverted bounds [{lo}, {hi}], "
+                                    f"using abs(range)={abs(param_range):.4g}"
+                                )
+                                param_range = abs(param_range)
+                            elif param_range == 0:
+                                # Degenerate bounds: fall back to mean-based scale
+                                run_logger.warning(
+                                    f"  {param}: degenerate bounds [{lo}, {hi}] "
+                                    f"(range=0), falling back to mean-based scale"
+                                )
+                            # For near-zero params, use bounds range as scale reference
+                            scale = (
+                                max(mean_val, param_range * 0.01)
+                                if param_range > 0
+                                else max(mean_val, 1e-10)
+                            )
+                        except (KeyError, ValueError, TypeError):
+                            scale = max(mean_val, 1e-10)
+                    else:
+                        scale = max(mean_val, 1e-10)
+                    cv = np.std(means) / scale
                     if cv > max_parameter_cv:
                         high_cv_params.append((param, cv))
                         run_logger.warning(
@@ -1125,7 +1328,9 @@ class MultiprocessingBackend(CMCBackend):
 
             # HETEROGENEITY ABORT (Jan 2026 v2): Fail fast instead of silently bad results
             if heterogeneity_abort and high_cv_params:
-                param_summary = ", ".join(f"{p} (CV={cv:.2f})" for p, cv in high_cv_params)
+                param_summary = ", ".join(
+                    f"{p} (CV={cv:.2f})" for p, cv in high_cv_params
+                )
                 raise RuntimeError(
                     f"HETEROGENEITY ABORT: {len(high_cv_params)} parameter(s) exceed "
                     f"max_parameter_cv={max_parameter_cv:.2f}: {param_summary}\n\n"
@@ -1141,12 +1346,16 @@ class MultiprocessingBackend(CMCBackend):
 
         # Check for bimodal posteriors (per-shard) - Jan 2026
         # This helps detect local minima or model misspecification
-        bimodal_alerts: list[tuple[int, str, float, float]] = []  # (shard_idx, param, sep, weights)
+        bimodal_alerts: list[
+            tuple[int, str, float, float]
+        ] = []  # (shard_idx, param, sep, weights)
         for i, shard_result in enumerate(successful_samples):
             bimodal_results = check_shard_bimodality(shard_result.samples)
             for param, result in bimodal_results.items():
                 if result.is_bimodal:
-                    bimodal_alerts.append((i, param, result.separation, min(result.weights)))
+                    bimodal_alerts.append(
+                        (i, param, result.separation, min(result.weights))
+                    )
                     run_logger.warning(
                         f"BIMODAL POSTERIOR: Shard {i}, {param}: "
                         f"modes at {result.means[0]:.4g} and {result.means[1]:.4g} "
@@ -1170,9 +1379,30 @@ class MultiprocessingBackend(CMCBackend):
         # and the hierarchical combination may not accumulate correctly.
         combined.num_shards = len(successful_samples)
 
+        # Propagate median adapted n_warmup from shard metadata.
+        # Workers may adapt warmup independently (e.g., 500→140 for small shards).
+        # Use median to represent the typical adapted value for CMCResult reporting.
+        warmup_values = [
+            m["n_warmup"] for m in shard_metadata if m.get("n_warmup") is not None
+        ]
+        if warmup_values:
+            combined.shard_adapted_n_warmup = int(np.median(warmup_values))
+        else:
+            run_logger.info(
+                "No shards reported adapted n_warmup; CMCResult will use config default"
+            )
+
         # Log summary including divergence filtering
-        total_divergences = sum(m.get("num_divergent", 0) for m in shard_metadata) if shard_metadata else 0
-        total_transitions = sum(m.get("total_samples", 0) for m in shard_metadata) if shard_metadata else 0
+        total_divergences = (
+            sum(m.get("num_divergent", 0) for m in shard_metadata)
+            if shard_metadata
+            else 0
+        )
+        total_transitions = (
+            sum(m.get("total_samples", 0) for m in shard_metadata)
+            if shard_metadata
+            else 0
+        )
         overall_div_rate = total_divergences / max(total_transitions, 1)
         run_logger.info(
             f"Combined {len(successful_samples)}/{n_shards} shards "

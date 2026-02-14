@@ -7,10 +7,12 @@ including R-hat, effective sample size (ESS), and divergence checks.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import arviz as az
 import numpy as np
+from sklearn.mixture import GaussianMixture  # type: ignore[import-untyped]
 
 from homodyne.utils.logging import get_logger
 
@@ -759,7 +761,9 @@ def log_precision_analysis(
     if rel_diffs:
         max_diff = max(rel_diffs)
         mean_diff = np.mean(rel_diffs)
-        lines.append(f"  Percent differences: max={max_diff:.1f}%, mean={mean_diff:.1f}%")
+        lines.append(
+            f"  Percent differences: max={max_diff:.1f}%, mean={mean_diff:.1f}%"
+        )
         over_tolerance = sum(1 for d in rel_diffs if d > tolerance_pct)
         if over_tolerance > 0:
             lines.append(
@@ -846,11 +850,6 @@ def log_precision_analysis(
 # =============================================================================
 
 
-from dataclasses import dataclass
-
-from sklearn.mixture import GaussianMixture
-
-
 @dataclass
 class BimodalResult:
     """Result of bimodal detection for a single parameter.
@@ -909,7 +908,9 @@ def detect_bimodal(
     relative_separation = separation / scale
 
     # Bimodal if: both components significant AND well-separated
-    is_bimodal = min(weights) > min_weight and relative_separation > min_relative_separation
+    is_bimodal = (
+        min(weights) > min_weight and relative_separation > min_relative_separation
+    )
 
     return BimodalResult(
         is_bimodal=is_bimodal,

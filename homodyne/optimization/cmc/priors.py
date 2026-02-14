@@ -1043,7 +1043,9 @@ def extract_nlsq_values_for_cmc(
         uncertainties may be None if not available.
     """
     # Handle OptimizationResult dataclass (has 'parameters' attribute as ndarray)
-    if hasattr(nlsq_result, "parameters") and hasattr(nlsq_result.parameters, "__len__"):
+    if hasattr(nlsq_result, "parameters") and hasattr(
+        nlsq_result.parameters, "__len__"
+    ):
         import numpy as np
 
         params_array = np.asarray(nlsq_result.parameters)
@@ -1091,9 +1093,7 @@ def extract_nlsq_values_for_cmc(
         param_names = scaling_names + physical_names
 
         # Build values dict
-        values = {
-            name: float(params_array[i]) for i, name in enumerate(param_names)
-        }
+        values = {name: float(params_array[i]) for i, name in enumerate(param_names)}
 
         # Extract uncertainties if available
         uncertainties = None

@@ -450,6 +450,48 @@ class SamplingStats:
     step_size_max: float | None = None
     inverse_mass_matrix_summary: str | None = None
     tree_depth: float = 0.0
+    plan: SamplingPlan | None = None
+
+
+@dataclass(frozen=True)
+class SamplingPlan:
+    """Adapted MCMC sampling counts for a single shard.
+
+    Captures the actual warmup/sample counts after adaptive scaling,
+    which may differ from CMCConfig defaults for small shards.
+
+    Use SamplingPlan.from_config() instead of accessing
+    config.num_warmup / config.num_samples in hot paths.
+    """
+
+    n_warmup: int
+    n_samples: int
+    n_chains: int
+    shard_size: int
+    n_params: int
+    was_adapted: bool
+
+    @classmethod
+    def from_config(
+        cls, config: CMCConfig, shard_size: int, n_params: int
+    ) -> SamplingPlan:
+        n_warmup, n_samples = config.get_adaptive_sample_counts(
+            shard_size=shard_size, n_params=n_params
+        )
+        return cls(
+            n_warmup=n_warmup,
+            n_samples=n_samples,
+            n_chains=config.num_chains,
+            shard_size=shard_size,
+            n_params=n_params,
+            was_adapted=(
+                n_warmup != config.num_warmup or n_samples != config.num_samples
+            ),
+        )
+
+    @property
+    def total_samples(self) -> int:
+        return self.n_samples * self.n_chains
 
 
 @dataclass
@@ -479,6 +521,7 @@ class MCMCSamples:
     n_samples: int
     extra_fields: dict[str, Any] = field(default_factory=dict)
     num_shards: int = 1
+    shard_adapted_n_warmup: int | None = None
 
 
 def create_init_strategy(
@@ -671,16 +714,21 @@ def run_nuts_sampling(
         D_offset_init = full_init.get("D_offset", 1e3)
 
         if getattr(reparam_config, "enable_d_ref", False):
-            D_ref_init = D0_init * (t_ref_init ** alpha_init)
+            D_ref_init = D0_init * (t_ref_init**alpha_init)
             D_ref_init = max(D_ref_init, 1e-10)
             z_space_init["log_D_ref"] = float(np.log(D_ref_init))
             denom = D_ref_init + D_offset_init
-            z_space_init["D_offset_frac"] = float(D_offset_init / denom) if denom > 0 else 0.05
+            z_space_init["D_offset_frac"] = (
+                float(D_offset_init / denom) if denom > 0 else 0.05
+            )
 
-        if getattr(reparam_config, "enable_gamma_ref", False) and analysis_mode == "laminar_flow":
+        if (
+            getattr(reparam_config, "enable_gamma_ref", False)
+            and analysis_mode == "laminar_flow"
+        ):
             gamma_dot_t0_init = full_init.get("gamma_dot_t0", 1e-3)
             beta_init = full_init.get("beta", -0.3)
-            gamma_ref_init = gamma_dot_t0_init * (t_ref_init ** beta_init)
+            gamma_ref_init = gamma_dot_t0_init * (t_ref_init**beta_init)
             gamma_ref_init = max(gamma_ref_init, 1e-20)
             z_space_init["log_gamma_ref"] = float(np.log(gamma_ref_init))
 
@@ -744,13 +792,13 @@ def run_nuts_sampling(
     data = model_kwargs.get("data")
     shard_size = len(data) if data is not None else 10000
 
-    # Calculate adaptive sample counts based on shard size
+    # Build SamplingPlan: captures adapted warmup/samples for this shard.
     # Profiling showed 1310s for 50 points with 500/1500 defaults.
     # Adaptive scaling reduces overhead for small datasets.
-    num_warmup, num_samples = config.get_adaptive_sample_counts(
-        shard_size=shard_size,
-        n_params=len(param_names_with_sigma),
+    plan = SamplingPlan.from_config(
+        config, shard_size=shard_size, n_params=len(param_names_with_sigma)
     )
+    num_warmup, num_samples = plan.n_warmup, plan.n_samples
 
     # Create MCMC runner with adaptive sample counts
     mcmc = MCMC(
@@ -785,6 +833,7 @@ def run_nuts_sampling(
     profile_context = None
     if config.enable_jax_profiling:
         import os
+
         os.makedirs(config.jax_profile_dir, exist_ok=True)
         run_logger.info(f"JAX profiling enabled, output: {config.jax_profile_dir}")
         profile_context = jax.profiler.trace(config.jax_profile_dir)
@@ -856,7 +905,7 @@ def run_nuts_sampling(
     # CONVERGENCE CHECK (Jan 2026): Early divergence rate detection
     # High divergence rates indicate NUTS is struggling with the posterior geometry.
     # The 28.4% divergence rate in the 3-angle failure case signals unreliable posteriors.
-    total_samples = config.num_samples * config.num_chains
+    total_samples = num_samples * config.num_chains
     if total_samples > 0:
         divergence_rate = num_divergent / total_samples
         if divergence_rate > 0.30:
@@ -1026,7 +1075,7 @@ def run_nuts_sampling(
         try:
             n_issues_total = float(np.sum(samples_np["n_numerical_issues"]))
             if n_issues_total > 0:
-                total_evals = config.num_samples * config.num_chains
+                total_evals = num_samples * config.num_chains
                 issue_rate = n_issues_total / max(total_evals, 1)
                 run_logger.warning(
                     f"⚠️ Numerical issues detected: {n_issues_total:.0f} NaN/Inf occurrences "
@@ -1052,6 +1101,7 @@ def run_nuts_sampling(
         step_size_min=step_size_min,
         step_size_max=step_size_max,
         inverse_mass_matrix_summary=inv_mass_summary,
+        plan=plan,
     )
 
     run_logger.info(
@@ -1160,8 +1210,13 @@ def run_nuts_with_retry(
             )
 
             # Check for excessive divergences (adaptive threshold)
-            divergence_rate = stats.num_divergent / (
-                config.num_samples * config.num_chains
+            # Use samples.n_samples (actual adapted count) instead of
+            # config.num_samples which ignores adaptive sampling reduction.
+            total_retry_samples = samples.n_samples * samples.n_chains
+            divergence_rate = (
+                stats.num_divergent / total_retry_samples
+                if total_retry_samples > 0
+                else 1.0
             )
             duration = time.perf_counter() - attempt_start
             if divergence_rate > divergence_threshold:

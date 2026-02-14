@@ -353,17 +353,25 @@ def xpcs_model_scaled(
     # =========================================================================
     D0 = sample_scaled_parameter("D0", scalings["D0"], prior_scale=prior_scale)
     alpha = sample_scaled_parameter("alpha", scalings["alpha"], prior_scale=prior_scale)
-    D_offset = sample_scaled_parameter("D_offset", scalings["D_offset"], prior_scale=prior_scale)
+    D_offset = sample_scaled_parameter(
+        "D_offset", scalings["D_offset"], prior_scale=prior_scale
+    )
 
     if analysis_mode == "laminar_flow":
         gamma_dot_t0 = sample_scaled_parameter(
             "gamma_dot_t0", scalings["gamma_dot_t0"], prior_scale=prior_scale
         )
-        beta = sample_scaled_parameter("beta", scalings["beta"], prior_scale=prior_scale)
-        gamma_dot_t_offset = sample_scaled_parameter(
-            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"], prior_scale=prior_scale
+        beta = sample_scaled_parameter(
+            "beta", scalings["beta"], prior_scale=prior_scale
         )
-        phi0 = sample_scaled_parameter("phi0", scalings["phi0"], prior_scale=prior_scale)
+        gamma_dot_t_offset = sample_scaled_parameter(
+            "gamma_dot_t_offset",
+            scalings["gamma_dot_t_offset"],
+            prior_scale=prior_scale,
+        )
+        phi0 = sample_scaled_parameter(
+            "phi0", scalings["phi0"], prior_scale=prior_scale
+        )
 
         params = jnp.array(
             [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
@@ -496,17 +504,25 @@ def xpcs_model_constant(
     # =========================================================================
     D0 = sample_scaled_parameter("D0", scalings["D0"], prior_scale=prior_scale)
     alpha = sample_scaled_parameter("alpha", scalings["alpha"], prior_scale=prior_scale)
-    D_offset = sample_scaled_parameter("D_offset", scalings["D_offset"], prior_scale=prior_scale)
+    D_offset = sample_scaled_parameter(
+        "D_offset", scalings["D_offset"], prior_scale=prior_scale
+    )
 
     if analysis_mode == "laminar_flow":
         gamma_dot_t0 = sample_scaled_parameter(
             "gamma_dot_t0", scalings["gamma_dot_t0"], prior_scale=prior_scale
         )
-        beta = sample_scaled_parameter("beta", scalings["beta"], prior_scale=prior_scale)
-        gamma_dot_t_offset = sample_scaled_parameter(
-            "gamma_dot_t_offset", scalings["gamma_dot_t_offset"], prior_scale=prior_scale
+        beta = sample_scaled_parameter(
+            "beta", scalings["beta"], prior_scale=prior_scale
         )
-        phi0 = sample_scaled_parameter("phi0", scalings["phi0"], prior_scale=prior_scale)
+        gamma_dot_t_offset = sample_scaled_parameter(
+            "gamma_dot_t_offset",
+            scalings["gamma_dot_t_offset"],
+            prior_scale=prior_scale,
+        )
+        phi0 = sample_scaled_parameter(
+            "phi0", scalings["phi0"], prior_scale=prior_scale
+        )
 
         params = jnp.array(
             [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
@@ -645,9 +661,8 @@ def xpcs_model_averaged(
     # =========================================================================
     def _sample_param(name: str) -> jnp.ndarray:
         """Sample a parameter, using NLSQ-informed prior if available."""
-        if (
-            nlsq_prior_config is not None
-            and name in nlsq_prior_config.get("values", {})
+        if nlsq_prior_config is not None and name in nlsq_prior_config.get(
+            "values", {}
         ):
             from homodyne.optimization.cmc.priors import build_nlsq_informed_prior
 
@@ -819,9 +834,8 @@ def xpcs_model_constant_averaged(
     # =========================================================================
     def _sample_param(name: str) -> jnp.ndarray:
         """Sample a parameter, using NLSQ-informed prior if available."""
-        if (
-            nlsq_prior_config is not None
-            and name in nlsq_prior_config.get("values", {})
+        if nlsq_prior_config is not None and name in nlsq_prior_config.get(
+            "values", {}
         ):
             from homodyne.optimization.cmc.priors import build_nlsq_informed_prior
 
@@ -971,9 +985,8 @@ def xpcs_model_reparameterized(
     # =========================================================================
     def _sample_param(name: str) -> jnp.ndarray:
         """Sample a parameter, using NLSQ-informed prior if available."""
-        if (
-            nlsq_prior_config is not None
-            and name in nlsq_prior_config.get("values", {})
+        if nlsq_prior_config is not None and name in nlsq_prior_config.get(
+            "values", {}
         ):
             from homodyne.optimization.cmc.priors import build_nlsq_informed_prior
 
@@ -1001,8 +1014,14 @@ def xpcs_model_reparameterized(
     if reparam_config.enable_d_ref:
         # --- Reference-time diffusion reparameterization ---
         # Sample log_D_ref where D_ref = D0 * t_ref^alpha (well-constrained by data)
-        reparam_vals = nlsq_prior_config.get("reparam_values", {}) if nlsq_prior_config else {}
-        reparam_uncs = nlsq_prior_config.get("reparam_uncertainties", {}) if nlsq_prior_config else {}
+        reparam_vals = (
+            nlsq_prior_config.get("reparam_values", {}) if nlsq_prior_config else {}
+        )
+        reparam_uncs = (
+            nlsq_prior_config.get("reparam_uncertainties", {})
+            if nlsq_prior_config
+            else {}
+        )
 
         log_D_ref_loc = reparam_vals.get("log_D_ref", 10.0)  # ~exp(10) ≈ 22K
         log_D_ref_scale = reparam_uncs.get("log_D_ref", 1.0)
@@ -1044,7 +1063,9 @@ def xpcs_model_reparameterized(
             log_gamma_ref_scale = reparam_uncs.get("log_gamma_ref", 1.0)
             log_gamma_ref = numpyro.sample(
                 "log_gamma_ref",
-                dist.Normal(loc=log_gamma_ref_loc, scale=log_gamma_ref_scale * prior_scale),
+                dist.Normal(
+                    loc=log_gamma_ref_loc, scale=log_gamma_ref_scale * prior_scale
+                ),
             )
             # Recover gamma_dot_t0 = exp(log_gamma_ref) * t_ref^(-beta)
             gamma_dot_t0 = numpyro.deterministic(
@@ -1096,7 +1117,9 @@ def xpcs_model_reparameterized(
     numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
 
 
-def get_xpcs_model(per_angle_mode: str = "individual", use_reparameterization: bool = False):
+def get_xpcs_model(
+    per_angle_mode: str = "individual", use_reparameterization: bool = False
+):
     """Get the appropriate NumPyro model function for the given per-angle mode.
 
     Parameters
@@ -1135,7 +1158,9 @@ def get_xpcs_model(per_angle_mode: str = "individual", use_reparameterization: b
             )
             return xpcs_model_reparameterized
         else:
-            logger.info("CMC: Using auto mode model (sampled averaged scaling, 10 params)")
+            logger.info(
+                "CMC: Using auto mode model (sampled averaged scaling, 10 params)"
+            )
             return xpcs_model_averaged
     elif per_angle_mode == "constant":
         logger.info(
