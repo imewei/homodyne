@@ -21,7 +21,7 @@ import numpy as np
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from homodyne.core.physics_cmc import compute_g1_total as cmc_compute_g1
+from homodyne.core.physics_cmc import compute_g1_total as cmc_compute_g1  # noqa: E402
 
 
 def load_nlsq_results(results_dir: str) -> dict:

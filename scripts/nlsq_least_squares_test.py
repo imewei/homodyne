@@ -16,9 +16,10 @@ if NLSQ_PATH:
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
-import numpy as np
-import jax.numpy as jnp
-from nlsq import LeastSquares, __version__ as nlsq_version
+import jax.numpy as jnp  # noqa: E402
+import numpy as np  # noqa: E402
+from nlsq import LeastSquares  # noqa: E402
+from nlsq import __version__ as nlsq_version  # noqa: E402
 
 print(f"NLSQ Version: {nlsq_version}")
 

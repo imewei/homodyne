@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Dict
 
 import jax.numpy as jnp
 import numpy as np
@@ -69,28 +68,28 @@ def load_shard(cache_path: Path, angle_ranges) -> dict:
 
     noise_scale = 0.0662  # from run log estimation
 
-    return dict(
-        data=jnp.array(data),
-        t1=jnp.array(t1),
-        t2=jnp.array(t2),
-        phi_unique=jnp.array(phi_unique),
-        phi_indices=jnp.array(phi_indices),
-        q=float(f["wavevector_q_list"][0]),
-        L=2e6,
-        dt=0.1,
-        analysis_mode="laminar_flow",
-        n_phi=len(phi_unique),
-        time_grid=None,
-        noise_scale=noise_scale,
-    )
+    return {
+        "data": jnp.array(data),
+        "t1": jnp.array(t1),
+        "t2": jnp.array(t2),
+        "phi_unique": jnp.array(phi_unique),
+        "phi_indices": jnp.array(phi_indices),
+        "q": float(f["wavevector_q_list"][0]),
+        "L": 2e6,
+        "dt": 0.1,
+        "analysis_mode": "laminar_flow",
+        "n_phi": len(phi_unique),
+        "time_grid": None,
+        "noise_scale": noise_scale,
+    }
 
 
 def build_init_dict(
-    base_init: Dict[str, float],
+    base_init: dict[str, float],
     contrast: float,
     offset: float,
     param_space: ParameterSpace,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Fill missing init values with midpoint of bounds."""
 
     def mid(name: str) -> float:

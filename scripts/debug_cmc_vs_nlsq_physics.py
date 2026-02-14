@@ -28,8 +28,8 @@ import numpy as np
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from homodyne.core.jax_backend import compute_g2_scaled as nlsq_compute_g2
-from homodyne.core.physics_cmc import compute_g1_total as cmc_compute_g1
+from homodyne.core.jax_backend import compute_g2_scaled as nlsq_compute_g2  # noqa: E402
+from homodyne.core.physics_cmc import compute_g1_total as cmc_compute_g1  # noqa: E402
 
 
 def create_time_grid(n_times: int, dt: float) -> np.ndarray:
@@ -57,7 +57,7 @@ def compute_c2_nlsq(
 
     # Compute for each phi angle with its contrast/offset
     c2_all = []
-    for i, (phi_val, contrast, offset) in enumerate(zip(phi, contrasts, offsets)):
+    for _i, (phi_val, contrast, offset) in enumerate(zip(phi, contrasts, offsets, strict=True)):
         c2_phi = nlsq_compute_g2(
             jnp.array(params),
             jnp.array(t1_grid),

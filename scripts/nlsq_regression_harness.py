@@ -18,7 +18,6 @@ Usage:
 import os
 import sys
 import time
-import warnings
 from pathlib import Path
 
 import numpy as np
@@ -33,13 +32,13 @@ if NLSQ_PATH:
     print(f"Using NLSQ from: {NLSQ_PATH}")
 
 # Import after path adjustment
-import jax.numpy as jnp
-from nlsq import LeastSquares, __version__ as nlsq_version, curve_fit
+import jax.numpy as jnp  # noqa: E402
+from nlsq import __version__ as nlsq_version  # noqa: E402
+from nlsq import curve_fit  # noqa: E402
 
 # Add homodyne to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from homodyne.core.jax_backend import compute_g2_scaled
 
 
 def generate_deterministic_data(
