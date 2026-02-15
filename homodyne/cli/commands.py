@@ -262,7 +262,9 @@ def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
 
             # Record optimization metrics
             if result is not None:
-                if hasattr(result, "chi_squared"):
+                # CMCResult.chi_squared is a placeholder (always 0.0) — skip it
+                is_cmc = callable(getattr(result, "is_cmc_result", None)) and result.is_cmc_result()
+                if hasattr(result, "chi_squared") and not is_cmc:
                     summary.record_metric("chi_squared", float(result.chi_squared))
                 if hasattr(result, "n_iterations"):
                     summary.record_metric("n_iterations", float(result.n_iterations))
@@ -2762,6 +2764,22 @@ def save_mcmc_results(
             # Concatenate all samples
             save_dict["samples"] = np.concatenate(samples_list, axis=1)
 
+        elif (
+            hasattr(result, "samples")
+            and isinstance(result.samples, dict)
+            and result.samples
+        ):
+            # CMCResult stores samples as dict[str, np.ndarray] with shape (n_chains, n_samples)
+            param_names = getattr(result, "param_names", list(result.samples.keys()))
+            arrays = []
+            for name in param_names:
+                if name in result.samples:
+                    arr = result.samples[name].flatten()
+                    arrays.append(arr[:, np.newaxis])
+            if arrays:
+                save_dict["samples"] = np.concatenate(arrays, axis=1)
+                save_dict["param_names"] = np.array(param_names)
+
         # Add optional diagnostics if available
         if hasattr(result, "log_prob") and result.log_prob is not None:
             save_dict["log_prob"] = result.log_prob
@@ -2771,15 +2789,22 @@ def save_mcmc_results(
                 save_dict["r_hat"] = np.array(list(result.r_hat.values()))
             else:
                 save_dict["r_hat"] = result.r_hat
-        if (
+
+        # ESS: try ess_bulk (CMCResult) then effective_sample_size (legacy)
+        ess_source = None
+        if hasattr(result, "ess_bulk") and result.ess_bulk is not None:
+            ess_source = result.ess_bulk
+        elif (
             hasattr(result, "effective_sample_size")
             and result.effective_sample_size is not None
         ):
-            # Convert dict to array if needed
-            if isinstance(result.effective_sample_size, dict):
-                save_dict["ess"] = np.array(list(result.effective_sample_size.values()))
+            ess_source = result.effective_sample_size
+        if ess_source is not None:
+            if isinstance(ess_source, dict):
+                save_dict["ess"] = np.array(list(ess_source.values()))
             else:
-                save_dict["ess"] = result.effective_sample_size
+                save_dict["ess"] = ess_source
+
         if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
             save_dict["acceptance_rate"] = np.array([result.acceptance_rate])
 

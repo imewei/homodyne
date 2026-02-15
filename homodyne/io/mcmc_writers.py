@@ -251,17 +251,24 @@ def create_mcmc_analysis_dict(
                 )
                 recommendations.append("Consider increasing n_warmup or n_samples")
 
-    if (
+    # Resolve ESS source: ess_bulk (CMCResult) or effective_sample_size (legacy)
+    ess_source_analysis = None
+    if hasattr(result, "ess_bulk") and result.ess_bulk is not None:
+        ess_source_analysis = result.ess_bulk
+    elif (
         hasattr(result, "effective_sample_size")
         and result.effective_sample_size is not None
     ):
-        if isinstance(result.effective_sample_size, dict):
+        ess_source_analysis = result.effective_sample_size
+
+    if ess_source_analysis is not None:
+        if isinstance(ess_source_analysis, dict):
             ess_values = [
-                v for v in result.effective_sample_size.values() if v is not None
+                v for v in ess_source_analysis.values() if v is not None
             ]
             min_ess = min(ess_values) if ess_values else None
         else:
-            ess = np.asarray(result.effective_sample_size)
+            ess = np.asarray(ess_source_analysis)
             min_ess = np.min(ess)
 
         if min_ess is not None and min_ess < 400:
@@ -298,7 +305,10 @@ def create_mcmc_analysis_dict(
             "n_samples": getattr(result, "n_samples", 0),
             "n_warmup": getattr(result, "n_warmup", 0),
             "n_chains": getattr(result, "n_chains", 1),
-            "execution_time": float(getattr(result, "computation_time", 0.0)),
+            "execution_time": float(
+                getattr(result, "execution_time",
+                        getattr(result, "computation_time", 0.0))
+            ),
         },
     }
 
@@ -358,13 +368,18 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
                 diagnostics_dict["convergence"]["r_hat_threshold"] = 1.1
 
             # Add per-parameter diagnostics
+            # Resolve ESS source: ess_bulk (CMCResult) or effective_sample_size (legacy)
+            ess_dict: dict | None = None
+            if hasattr(result, "ess_bulk") and isinstance(result.ess_bulk, dict):
+                ess_dict = result.ess_bulk
+            elif hasattr(result, "effective_sample_size") and isinstance(
+                result.effective_sample_size, dict
+            ):
+                ess_dict = result.effective_sample_size
+
             per_param = []
             for param_name, r_hat_val in result.r_hat.items():
-                ess_val = None
-                if hasattr(result, "effective_sample_size") and isinstance(
-                    result.effective_sample_size, dict
-                ):
-                    ess_val = result.effective_sample_size.get(param_name, None)
+                ess_val = ess_dict.get(param_name) if ess_dict else None
 
                 per_param.append(
                     {
@@ -417,10 +432,11 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
 
             diagnostics_dict["convergence"]["per_parameter_diagnostics"] = per_param
 
-    if (
-        hasattr(result, "effective_sample_size")
-        and result.effective_sample_size is not None
-    ):
+    has_ess = (
+        (hasattr(result, "ess_bulk") and result.ess_bulk is not None)
+        or (hasattr(result, "effective_sample_size") and result.effective_sample_size is not None)
+    )
+    if has_ess:
         diagnostics_dict["convergence"]["ess_threshold"] = 400
 
     # Sampling efficiency
