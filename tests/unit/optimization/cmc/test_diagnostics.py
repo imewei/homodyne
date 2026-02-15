@@ -439,6 +439,22 @@ class TestBimodalDetection:
 
         assert result.is_bimodal == False  # noqa: E712 (numpy bool)
 
+    def test_bimodal_result_contains_stds(self):
+        """BimodalResult should include per-component standard deviations."""
+        from homodyne.optimization.cmc.diagnostics import detect_bimodal
+
+        rng = np.random.default_rng(42)
+        mode1 = rng.normal(loc=-50.0, scale=5.0, size=500)
+        mode2 = rng.normal(loc=50.0, scale=5.0, size=500)
+        samples = np.concatenate([mode1, mode2])
+
+        result = detect_bimodal(samples)
+
+        assert hasattr(result, "stds")
+        assert len(result.stds) == 2
+        # Each component std should be roughly 5.0 (the generating std)
+        assert all(1.0 < s < 20.0 for s in result.stds)
+
 
 class TestCheckShardBimodality:
     """Tests for check_shard_bimodality function."""

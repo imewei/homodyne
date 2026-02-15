@@ -862,6 +862,8 @@ class BimodalResult:
         Component weights from GMM.
     means : tuple[float, float]
         Component means from GMM.
+    stds : tuple[float, float]
+        Per-component standard deviations from GMM.
     separation : float
         Absolute distance between means.
     relative_separation : float
@@ -871,6 +873,7 @@ class BimodalResult:
     is_bimodal: bool
     weights: tuple[float, float]
     means: tuple[float, float]
+    stds: tuple[float, float]
     separation: float
     relative_separation: float
 
@@ -903,6 +906,7 @@ def detect_bimodal(
 
     weights = tuple(gmm.weights_.tolist())
     means = tuple(gmm.means_.flatten().tolist())
+    stds = tuple(np.sqrt(gmm.covariances_.flatten()).tolist())
     separation = abs(means[0] - means[1])
     scale = max(abs(np.mean(means)), 1e-10)
     relative_separation = separation / scale
@@ -916,6 +920,7 @@ def detect_bimodal(
         is_bimodal=is_bimodal,
         weights=weights,
         means=means,
+        stds=stds,
         separation=separation,
         relative_separation=relative_separation,
     )
@@ -948,3 +953,115 @@ def check_shard_bimodality(
             results[param] = detect_bimodal(samples[param].flatten())
 
     return results
+
+
+def summarize_cross_shard_bimodality(
+    bimodal_detections: list[dict[str, Any]],
+    n_shards: int,
+    consensus_means: dict[str, float] | None = None,
+    significance_threshold: float = 0.05,
+) -> dict[str, Any]:
+    """Aggregate per-shard bimodal detections into a cross-shard summary.
+
+    Groups detections by parameter, computes mode statistics, separation
+    significance, and D0-alpha co-occurrence to quantify consensus distortion.
+
+    Parameters
+    ----------
+    bimodal_detections : list[dict[str, Any]]
+        Per-detection records, each with keys: "shard", "param", "mode1",
+        "mode2", "weights", "separation".
+    n_shards : int
+        Total number of successful shards (denominator for bimodal fraction).
+    consensus_means : dict[str, float] | None
+        Mean-of-means for each parameter (pre-combine estimate). Used to
+        check if consensus falls in a density trough between modes.
+    significance_threshold : float
+        Minimum bimodal fraction (detections/n_shards) to include a
+        parameter in the summary. Default 5%.
+
+    Returns
+    -------
+    dict[str, Any]
+        Summary with keys:
+        - "per_param": dict mapping param name to per-parameter stats
+        - "co_occurrence": dict with D0-alpha co-occurrence info
+        - "n_detections": total detection count
+        - "n_shards": total shard count
+    """
+    if not bimodal_detections or n_shards == 0:
+        return {
+            "per_param": {},
+            "co_occurrence": {},
+            "n_detections": 0,
+            "n_shards": n_shards,
+        }
+
+    # Group detections by parameter
+    by_param: dict[str, list[dict[str, Any]]] = {}
+    for det in bimodal_detections:
+        param = det["param"]
+        by_param.setdefault(param, []).append(det)
+
+    per_param: dict[str, dict[str, Any]] = {}
+    for param, detections in by_param.items():
+        bimodal_fraction = len(detections) / n_shards
+        if bimodal_fraction < significance_threshold:
+            continue
+
+        # Sort each detection's modes into lower/upper
+        lower_modes = []
+        upper_modes = []
+        for det in detections:
+            lo, hi = sorted([det["mode1"], det["mode2"]])
+            lower_modes.append(lo)
+            upper_modes.append(hi)
+
+        lower_arr = np.array(lower_modes)
+        upper_arr = np.array(upper_modes)
+
+        lower_mean = float(np.mean(lower_arr))
+        lower_std = float(np.std(lower_arr))
+        upper_mean = float(np.mean(upper_arr))
+        upper_std = float(np.std(upper_arr))
+
+        # Separation significance: how many pooled-std apart are the mode clusters?
+        pooled_std = np.sqrt(lower_std**2 + upper_std**2)
+        sep_significance = (
+            abs(upper_mean - lower_mean) / pooled_std if pooled_std > 0 else float("inf")
+        )
+
+        # Check if consensus falls between modes (density trough)
+        consensus_in_trough = False
+        if consensus_means is not None and param in consensus_means:
+            c = consensus_means[param]
+            consensus_in_trough = lower_mean < c < upper_mean
+
+        per_param[param] = {
+            "n_detections": len(detections),
+            "bimodal_fraction": bimodal_fraction,
+            "lower_mean": lower_mean,
+            "lower_std": lower_std,
+            "upper_mean": upper_mean,
+            "upper_std": upper_std,
+            "sep_significance": sep_significance,
+            "consensus_in_trough": consensus_in_trough,
+        }
+
+    # D0-alpha co-occurrence: fraction of D0-bimodal shards also bimodal in alpha
+    co_occurrence: dict[str, Any] = {}
+    d0_shards = {det["shard"] for det in by_param.get("D0", [])}
+    alpha_shards = {det["shard"] for det in by_param.get("alpha", [])}
+    if d0_shards:
+        overlap = d0_shards & alpha_shards
+        co_occurrence["d0_alpha_overlap"] = len(overlap)
+        co_occurrence["d0_alpha_fraction"] = len(overlap) / len(d0_shards)
+        co_occurrence["d0_bimodal_shards"] = len(d0_shards)
+        co_occurrence["alpha_bimodal_shards"] = len(alpha_shards)
+
+    return {
+        "per_param": per_param,
+        "co_occurrence": co_occurrence,
+        "n_detections": len(bimodal_detections),
+        "n_shards": n_shards,
+    }
