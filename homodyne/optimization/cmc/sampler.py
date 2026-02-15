@@ -522,6 +522,7 @@ class MCMCSamples:
     extra_fields: dict[str, Any] = field(default_factory=dict)
     num_shards: int = 1
     shard_adapted_n_warmup: int | None = None
+    bimodal_consensus: Any = None  # BimodalConsensusResult when mode-aware consensus used
 
 
 def create_init_strategy(

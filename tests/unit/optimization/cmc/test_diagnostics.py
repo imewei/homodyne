@@ -634,3 +634,17 @@ class TestClusterShardModes:
         # All shards in cluster 0, none in cluster 1
         assert set(assignments[0]) == set(range(5))
         assert len(assignments[1]) == 0
+
+
+def test_mcmc_samples_has_bimodal_consensus_field():
+    """MCMCSamples should have an optional bimodal_consensus field."""
+    from homodyne.optimization.cmc.sampler import MCMCSamples
+
+    samples = MCMCSamples(
+        samples={"D0": np.ones((2, 100))},
+        param_names=["D0"],
+        n_chains=2,
+        n_samples=100,
+    )
+    # Default should be None
+    assert samples.bimodal_consensus is None
