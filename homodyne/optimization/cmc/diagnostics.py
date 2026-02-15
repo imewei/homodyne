@@ -1112,3 +1112,97 @@ def summarize_cross_shard_bimodality(
         "n_detections": len(bimodal_detections),
         "n_shards": n_shards,
     }
+
+
+def cluster_shard_modes(
+    bimodal_detections: list[dict[str, Any]],
+    successful_samples: list[Any],
+    bimodal_summary: dict[str, Any],
+    param_bounds: dict[str, tuple[float, float]],
+) -> tuple[list[int], list[int]]:
+    """Jointly cluster shards into two mode populations.
+
+    Uses range-normalized feature vectors from modal parameters to assign
+    each shard to the nearest mode centroid. Bimodal shards contribute
+    one component to each cluster.
+
+    Parameters
+    ----------
+    bimodal_detections : list[dict[str, Any]]
+        Per-detection records with keys: "shard", "param", "mode1", "mode2",
+        "std1", "std2", "weights", "separation".
+    successful_samples : list[Any]
+        List of MCMCSamples (or similar with .samples dict attribute).
+    bimodal_summary : dict[str, Any]
+        Output from summarize_cross_shard_bimodality().
+    param_bounds : dict[str, tuple[float, float]]
+        Parameter bounds for range-based normalization, {param: (lo, hi)}.
+
+    Returns
+    -------
+    tuple[list[int], list[int]]
+        (cluster_0_shards, cluster_1_shards) where cluster_0 is "lower" and
+        cluster_1 is "upper". Bimodal shards appear in both lists.
+    """
+    per_param = bimodal_summary.get("per_param", {})
+    modal_params = sorted(per_param.keys())
+    n_shards = len(successful_samples)
+
+    if not modal_params:
+        return list(range(n_shards)), []
+
+    # Build centroids from cross-shard summary (lower/upper means)
+    centroid_lower = []
+    centroid_upper = []
+    scales = []
+    for param in modal_params:
+        stats = per_param[param]
+        centroid_lower.append(stats["lower_mean"])
+        centroid_upper.append(stats["upper_mean"])
+        lo, hi = param_bounds.get(param, (0.0, 1.0))
+        param_range = abs(hi - lo)
+        scales.append(max(param_range, 1e-10))
+
+    scales_arr = np.array(scales)
+    centroid_lower_norm = np.array(centroid_lower) / scales_arr
+    centroid_upper_norm = np.array(centroid_upper) / scales_arr
+
+    # Index bimodal detections by shard for fast lookup
+    bimodal_by_shard: dict[int, dict[str, dict[str, Any]]] = {}
+    for det in bimodal_detections:
+        shard_idx = det["shard"]
+        param = det["param"]
+        if param in modal_params:
+            bimodal_by_shard.setdefault(shard_idx, {})[param] = det
+
+    cluster_lower: list[int] = []
+    cluster_upper: list[int] = []
+
+    for shard_idx in range(n_shards):
+        shard_bimodal = bimodal_by_shard.get(shard_idx, {})
+
+        if shard_bimodal:
+            cluster_lower.append(shard_idx)
+            cluster_upper.append(shard_idx)
+        else:
+            feature = []
+            for param in modal_params:
+                if param in successful_samples[shard_idx].samples:
+                    mean_val = float(
+                        np.mean(successful_samples[shard_idx].samples[param])
+                    )
+                else:
+                    idx = modal_params.index(param)
+                    mean_val = (centroid_lower[idx] + centroid_upper[idx]) / 2
+                feature.append(mean_val)
+
+            feature_norm = np.array(feature) / scales_arr
+            dist_lower = np.linalg.norm(feature_norm - centroid_lower_norm)
+            dist_upper = np.linalg.norm(feature_norm - centroid_upper_norm)
+
+            if dist_lower <= dist_upper:
+                cluster_lower.append(shard_idx)
+            else:
+                cluster_upper.append(shard_idx)
+
+    return cluster_lower, cluster_upper

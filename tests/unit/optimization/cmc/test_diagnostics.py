@@ -518,3 +518,119 @@ class TestModeClusterTypes:
         assert len(result.modes) == 2
         assert result.modal_params == ["D0"]
         assert abs(result.modes[0].weight + result.modes[1].weight - 1.0) < 0.01
+
+
+class TestClusterShardModes:
+    """Tests for joint mode clustering of shard posteriors."""
+
+    def _make_shard_samples(
+        self, n_shards: int, bimodal_shards: set[int],
+        mode1_center: float = 19000.0, mode2_center: float = 32000.0,
+    ) -> list:
+        """Create mock MCMCSamples-like objects for testing."""
+        from types import SimpleNamespace
+
+        rng = np.random.default_rng(42)
+        shards = []
+        for i in range(n_shards):
+            if i in bimodal_shards:
+                d0 = np.concatenate([
+                    rng.normal(mode1_center, 1200, size=500),
+                    rng.normal(mode2_center, 2100, size=500),
+                ])
+                alpha_lo, alpha_hi = -1.5, -0.4
+                alpha = np.concatenate([
+                    rng.normal(alpha_lo, 0.12, size=500),
+                    rng.normal(alpha_hi, 0.09, size=500),
+                ])
+            else:
+                center = mode1_center if i % 3 != 0 else mode2_center
+                d0 = rng.normal(center, 1200, size=1000)
+                alpha_center = -1.5 if center == mode1_center else -0.4
+                alpha = rng.normal(alpha_center, 0.12, size=1000)
+            shards.append(SimpleNamespace(
+                samples={"D0": d0.reshape(2, 500), "alpha": alpha.reshape(2, 500)},
+            ))
+        return shards
+
+    def test_cluster_assigns_all_shards(self):
+        """Every shard should be assigned to at least one cluster."""
+        from homodyne.optimization.cmc.diagnostics import cluster_shard_modes
+
+        shards = self._make_shard_samples(20, bimodal_shards={3, 7, 12})
+        detections = [
+            {"shard": 3, "param": "D0", "mode1": 19200, "mode2": 31800,
+             "std1": 1200, "std2": 2100, "weights": (0.5, 0.5), "separation": 12600},
+            {"shard": 7, "param": "D0", "mode1": 18800, "mode2": 32200,
+             "std1": 1100, "std2": 2000, "weights": (0.48, 0.52), "separation": 13400},
+            {"shard": 12, "param": "D0", "mode1": 19500, "mode2": 31500,
+             "std1": 1300, "std2": 2200, "weights": (0.51, 0.49), "separation": 12000},
+        ]
+        summary = {
+            "per_param": {
+                "D0": {"lower_mean": 19200, "upper_mean": 31800,
+                       "lower_std": 300, "upper_std": 400,
+                       "bimodal_fraction": 0.15, "n_detections": 3},
+            },
+            "co_occurrence": {},
+        }
+        bounds = {"D0": (5000.0, 50000.0), "alpha": (-3.0, 0.0)}
+
+        assignments = cluster_shard_modes(
+            bimodal_detections=detections,
+            successful_samples=shards,
+            bimodal_summary=summary,
+            param_bounds=bounds,
+        )
+
+        # Every shard should appear in the union of both clusters
+        all_assigned = set(assignments[0]) | set(assignments[1])
+        assert all_assigned == set(range(20))
+
+    def test_bimodal_shards_split_between_clusters(self):
+        """Bimodal shards should contribute components to both clusters."""
+        from homodyne.optimization.cmc.diagnostics import cluster_shard_modes
+
+        shards = self._make_shard_samples(10, bimodal_shards={2, 5})
+        detections = [
+            {"shard": 2, "param": "D0", "mode1": 19000, "mode2": 32000,
+             "std1": 1200, "std2": 2100, "weights": (0.5, 0.5), "separation": 13000},
+            {"shard": 5, "param": "D0", "mode1": 19100, "mode2": 31900,
+             "std1": 1100, "std2": 2000, "weights": (0.52, 0.48), "separation": 12800},
+        ]
+        summary = {
+            "per_param": {
+                "D0": {"lower_mean": 19050, "upper_mean": 31950,
+                       "lower_std": 70, "upper_std": 70,
+                       "bimodal_fraction": 0.2, "n_detections": 2},
+            },
+            "co_occurrence": {},
+        }
+        bounds = {"D0": (5000.0, 50000.0)}
+
+        assignments = cluster_shard_modes(
+            bimodal_detections=detections,
+            successful_samples=shards,
+            bimodal_summary=summary,
+            param_bounds=bounds,
+        )
+
+        # Bimodal shards 2 and 5 should appear in BOTH clusters
+        assert 2 in assignments[0] and 2 in assignments[1]
+        assert 5 in assignments[0] and 5 in assignments[1]
+
+    def test_empty_detections_returns_single_cluster(self):
+        """With no bimodal detections, all shards go in one cluster."""
+        from homodyne.optimization.cmc.diagnostics import cluster_shard_modes
+
+        shards = self._make_shard_samples(5, bimodal_shards=set())
+        assignments = cluster_shard_modes(
+            bimodal_detections=[],
+            successful_samples=shards,
+            bimodal_summary={"per_param": {}, "co_occurrence": {}},
+            param_bounds={"D0": (5000.0, 50000.0)},
+        )
+
+        # All shards in cluster 0, none in cluster 1
+        assert set(assignments[0]) == set(range(5))
+        assert len(assignments[1]) == 0
