@@ -878,6 +878,53 @@ class BimodalResult:
     relative_separation: float
 
 
+@dataclass
+class ModeCluster:
+    """A single mode from bimodal consensus combination.
+
+    Attributes
+    ----------
+    mean : dict[str, float]
+        Per-parameter consensus mean for this mode.
+    std : dict[str, float]
+        Per-parameter consensus std for this mode.
+    weight : float
+        Fraction of shards supporting this mode (0-1).
+    n_shards : int
+        Number of shards in this cluster.
+    samples : dict[str, np.ndarray]
+        Generated samples from N(mean, std^2), shape (n_chains, n_samples).
+    """
+
+    mean: dict[str, float]
+    std: dict[str, float]
+    weight: float
+    n_shards: int
+    samples: dict[str, np.ndarray]
+
+
+@dataclass
+class BimodalConsensusResult:
+    """Result of mode-aware consensus combination.
+
+    Attached to MCMCSamples when bimodal posteriors are detected and
+    per-mode consensus is used instead of standard combination.
+
+    Attributes
+    ----------
+    modes : list[ModeCluster]
+        Mode clusters (typically 2) with per-mode consensus statistics.
+    modal_params : list[str]
+        Parameter names that triggered bimodal detection.
+    co_occurrence : dict[str, Any]
+        Cross-parameter co-occurrence info (e.g., D0-alpha correlation).
+    """
+
+    modes: list[ModeCluster]
+    modal_params: list[str]
+    co_occurrence: dict[str, Any]
+
+
 def detect_bimodal(
     samples: np.ndarray,
     min_weight: float = 0.2,

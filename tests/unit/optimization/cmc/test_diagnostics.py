@@ -475,3 +475,46 @@ class TestCheckShardBimodality:
         assert "D0" in results
         assert "alpha" in results
         assert "D_offset" not in results  # Not in params_to_check
+
+
+class TestModeClusterTypes:
+    """Tests for ModeCluster and BimodalConsensusResult dataclasses."""
+
+    def test_mode_cluster_fields(self):
+        """ModeCluster has all required fields."""
+        from homodyne.optimization.cmc.diagnostics import ModeCluster
+
+        cluster = ModeCluster(
+            mean={"D0": 19000.0, "alpha": -1.5},
+            std={"D0": 1200.0, "alpha": 0.12},
+            weight=0.55,
+            n_shards=85,
+            samples={"D0": np.ones((2, 100)), "alpha": np.ones((2, 100))},
+        )
+        assert cluster.weight == 0.55
+        assert cluster.n_shards == 85
+        assert cluster.mean["D0"] == 19000.0
+
+    def test_bimodal_consensus_result_fields(self):
+        """BimodalConsensusResult has all required fields."""
+        from homodyne.optimization.cmc.diagnostics import (
+            BimodalConsensusResult,
+            ModeCluster,
+        )
+
+        mode_a = ModeCluster(
+            mean={"D0": 19000.0}, std={"D0": 1200.0},
+            weight=0.55, n_shards=85, samples={"D0": np.ones((2, 100))},
+        )
+        mode_b = ModeCluster(
+            mean={"D0": 32000.0}, std={"D0": 2100.0},
+            weight=0.45, n_shards=70, samples={"D0": np.ones((2, 100))},
+        )
+        result = BimodalConsensusResult(
+            modes=[mode_a, mode_b],
+            modal_params=["D0"],
+            co_occurrence={"d0_alpha_fraction": 0.67},
+        )
+        assert len(result.modes) == 2
+        assert result.modal_params == ["D0"]
+        assert abs(result.modes[0].weight + result.modes[1].weight - 1.0) < 0.01
