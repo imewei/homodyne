@@ -23,8 +23,16 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from tqdm import tqdm
 
-from homodyne.optimization.cmc.backends.base import CMCBackend, combine_shard_samples
-from homodyne.optimization.cmc.diagnostics import check_shard_bimodality
+from homodyne.optimization.cmc.backends.base import (
+    CMCBackend,
+    combine_shard_samples,
+    combine_shard_samples_bimodal,
+)
+from homodyne.optimization.cmc.diagnostics import (
+    check_shard_bimodality,
+    cluster_shard_modes,
+    summarize_cross_shard_bimodality,
+)
 from homodyne.utils.logging import get_logger, log_exception, with_context
 
 if TYPE_CHECKING:
@@ -533,6 +541,88 @@ def _run_shard_worker(
     finally:
         stop_hb.set()
         hb_thread.join(timeout=1)
+
+
+def _log_bimodality_summary(
+    run_logger: Any,
+    summary: dict[str, Any],
+) -> None:
+    """Log a structured cross-shard bimodality analysis.
+
+    Parameters
+    ----------
+    run_logger
+        Logger instance (supports .info()).
+    summary : dict[str, Any]
+        Output from summarize_cross_shard_bimodality().
+    """
+    per_param = summary.get("per_param", {})
+    co_occurrence = summary.get("co_occurrence", {})
+    n_detections = summary.get("n_detections", 0)
+    n_shards = summary.get("n_shards", 0)
+
+    if not per_param:
+        run_logger.warning(
+            f"Detected {n_detections} bimodal posteriors across shards, "
+            f"but none exceeded the significance threshold."
+        )
+        return
+
+    sep = "=" * 80
+    dash = "-" * 80
+    lines = [
+        sep,
+        f"BIMODALITY ANALYSIS ({n_detections} detections across {n_shards} shards)",
+        sep,
+        f"{'Parameter':<14} {'Bimodal%':>8}  {'Mode 1 (mean +/- std)':>24}  "
+        f"{'Mode 2 (mean +/- std)':>24}  {'Sep.':>5}",
+        dash,
+    ]
+
+    for param, stats in sorted(per_param.items()):
+        pct = f"{stats['bimodal_fraction']:.1%}"
+        m1 = f"{stats['lower_mean']:.3g} +/- {stats['lower_std']:.2g}"
+        m2 = f"{stats['upper_mean']:.3g} +/- {stats['upper_std']:.2g}"
+        sig = f"{stats['sep_significance']:.1f}x"
+        lines.append(f"{param:<14} {pct:>8}  {m1:>24}  {m2:>24}  {sig:>5}")
+
+    lines.append(dash)
+
+    # Consensus impact section
+    impact_lines: list[str] = []
+    for param, stats in per_param.items():
+        if stats["consensus_in_trough"]:
+            impact_lines.append(
+                f"  {param} consensus mean falls between modes (density trough)"
+            )
+
+    d0_alpha_frac = co_occurrence.get("d0_alpha_fraction")
+    if d0_alpha_frac is not None and "D0" in per_param:
+        impact_lines.append(
+            f"  D0-alpha co-occurrence: {d0_alpha_frac:.0%} of D0-bimodal "
+            f"shards also bimodal in alpha"
+        )
+        if d0_alpha_frac > 0.3:
+            impact_lines.append(
+                "  -> Likely parameter degeneracy: different (D0, alpha) "
+                "pairs produce similar D(t)"
+            )
+
+    if impact_lines:
+        lines.append("CONSENSUS IMPACT:")
+        lines.extend(impact_lines)
+
+    lines.append("GUIDANCE:")
+    lines.append(
+        "  - NLSQ result likely converged to one mode; CMC captures both"
+    )
+    lines.append(
+        "  - Consider increasing shard size or using tighter NLSQ-informed priors"
+    )
+    lines.append(sep)
+
+    for line in lines:
+        run_logger.info(line)
 
 
 class MultiprocessingBackend(CMCBackend):
@@ -1346,15 +1436,22 @@ class MultiprocessingBackend(CMCBackend):
 
         # Check for bimodal posteriors (per-shard) - Jan 2026
         # This helps detect local minima or model misspecification
-        bimodal_alerts: list[
-            tuple[int, str, float, float]
-        ] = []  # (shard_idx, param, sep, weights)
+        bimodal_detections: list[dict[str, Any]] = []
         for i, shard_result in enumerate(successful_samples):
             bimodal_results = check_shard_bimodality(shard_result.samples)
             for param, result in bimodal_results.items():
                 if result.is_bimodal:
-                    bimodal_alerts.append(
-                        (i, param, result.separation, min(result.weights))
+                    bimodal_detections.append(
+                        {
+                            "shard": i,
+                            "param": param,
+                            "mode1": result.means[0],
+                            "mode2": result.means[1],
+                            "std1": result.stds[0],
+                            "std2": result.stds[1],
+                            "weights": result.weights,
+                            "separation": result.separation,
+                        }
                     )
                     run_logger.warning(
                         f"BIMODAL POSTERIOR: Shard {i}, {param}: "
@@ -1362,17 +1459,80 @@ class MultiprocessingBackend(CMCBackend):
                         f"(weights: {result.weights[0]:.2f}/{result.weights[1]:.2f})"
                     )
 
-        if bimodal_alerts:
-            run_logger.warning(
-                f"Detected {len(bimodal_alerts)} bimodal posteriors across shards. "
-                f"This may indicate model misspecification or local minima."
-            )
+        if bimodal_detections:
+            # Compute pre-combine consensus means from per-shard posteriors
+            consensus_means: dict[str, float] = {}
+            key_params = ["D0", "alpha", "D_offset", "gamma_dot_t0", "beta"]
+            for param in key_params:
+                if param in successful_samples[0].samples:
+                    means = [
+                        float(np.mean(s.samples[param])) for s in successful_samples
+                    ]
+                    consensus_means[param] = float(np.mean(means))
 
-        # Combine samples
-        combined = combine_shard_samples(
-            successful_samples,
-            method=config.combination_method,
-        )
+            bimodal_summary = summarize_cross_shard_bimodality(
+                bimodal_detections,
+                n_shards=len(successful_samples),
+                consensus_means=consensus_means,
+            )
+            _log_bimodality_summary(run_logger, bimodal_summary)
+
+            # Mode-aware consensus if significant bimodality detected
+            if bimodal_summary["per_param"]:
+                modal_params = sorted(bimodal_summary["per_param"].keys())
+                # Get parameter bounds for range normalization
+                param_bounds: dict[str, tuple[float, float]] = {}
+                if parameter_space is not None:
+                    for param in modal_params:
+                        try:
+                            param_bounds[param] = parameter_space.get_bounds(param)
+                        except (KeyError, ValueError):
+                            pass
+
+                mode_assignments = cluster_shard_modes(
+                    bimodal_detections=bimodal_detections,
+                    successful_samples=successful_samples,
+                    bimodal_summary=bimodal_summary,
+                    param_bounds=param_bounds,
+                )
+
+                run_logger.info(
+                    f"Mode-aware consensus: cluster sizes = "
+                    f"{len(mode_assignments[0])}, {len(mode_assignments[1])}"
+                )
+
+                combined, bimodal_result = combine_shard_samples_bimodal(
+                    shard_samples=successful_samples,
+                    cluster_assignments=mode_assignments,
+                    bimodal_detections=bimodal_detections,
+                    modal_params=modal_params,
+                    co_occurrence=bimodal_summary.get("co_occurrence", {}),
+                    method=config.combination_method,
+                )
+                combined.bimodal_consensus = bimodal_result
+
+                # Log mode summary
+                for i, mode in enumerate(bimodal_result.modes):
+                    mode_means = ", ".join(
+                        f"{p}={mode.mean[p]:.4g}" for p in modal_params
+                        if p in mode.mean
+                    )
+                    run_logger.info(
+                        f"  Mode {i}: weight={mode.weight:.2f}, "
+                        f"n_shards={mode.n_shards}, {mode_means}"
+                    )
+            else:
+                # Bimodal detections exist but below significance threshold
+                combined = combine_shard_samples(
+                    successful_samples,
+                    method=config.combination_method,
+                )
+        else:
+            # No bimodality detected — standard path
+            combined = combine_shard_samples(
+                successful_samples,
+                method=config.combination_method,
+            )
 
         # Explicitly set num_shards to surviving shard count for diagnostics.
         # Without this, per-shard MCMCSamples reconstruction defaults num_shards=1,
