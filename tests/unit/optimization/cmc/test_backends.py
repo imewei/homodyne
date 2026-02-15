@@ -705,3 +705,126 @@ class TestBimodalDetectionIntegration:
         assert results["D0"].is_bimodal == True  # noqa: E712 (numpy bool)
         # alpha should not be bimodal
         assert results["alpha"].is_bimodal == False  # noqa: E712 (numpy bool)
+
+
+# =============================================================================
+# Tests for Bimodal Consensus Combination
+# =============================================================================
+
+
+class TestBimodalCombination:
+    """Tests for mode-aware bimodal consensus combination."""
+
+    def _make_samples(self, mean: float, std: float, n: int = 1000):
+        """Create MCMCSamples-like object."""
+        rng = np.random.default_rng(42)
+        return MCMCSamples(
+            samples={"D0": rng.normal(mean, std, size=(2, n // 2))},
+            param_names=["D0"],
+            n_chains=2,
+            n_samples=n // 2,
+        )
+
+    def test_bimodal_combine_produces_two_modes(self):
+        """Bimodal combination should produce a BimodalConsensusResult with 2 modes."""
+        from homodyne.optimization.cmc.backends.base import (
+            combine_shard_samples_bimodal,
+        )
+
+        # 10 shards: 6 near mode1 (19K), 4 near mode2 (32K)
+        shards = []
+        for i in range(10):
+            center = 19000.0 if i < 6 else 32000.0
+            shards.append(self._make_samples(center, 1200.0))
+
+        # Assignments: shards 0-5 in cluster 0 (lower), shards 6-9 in cluster 1 (upper)
+        cluster_lower = list(range(6))
+        cluster_upper = list(range(6, 10))
+
+        # No bimodal shards in this simple case
+        bimodal_detections = []
+
+        combined, bimodal_result = combine_shard_samples_bimodal(
+            shard_samples=shards,
+            cluster_assignments=(cluster_lower, cluster_upper),
+            bimodal_detections=bimodal_detections,
+            modal_params=["D0"],
+            co_occurrence={},
+        )
+
+        assert bimodal_result is not None
+        assert len(bimodal_result.modes) == 2
+        # Mode 0 should be near 19K, mode 1 near 32K (fixed seed, tight tolerance)
+        assert abs(bimodal_result.modes[0].mean["D0"] - 19000) < 1000
+        assert abs(bimodal_result.modes[1].mean["D0"] - 32000) < 1000
+        # Weights should reflect shard counts
+        assert abs(bimodal_result.modes[0].weight - 0.6) < 0.05
+        assert abs(bimodal_result.modes[1].weight - 0.4) < 0.05
+
+    def test_bimodal_combine_uses_component_stats_for_bimodal_shards(self):
+        """For bimodal shards, the combination should use component-level stats."""
+        from homodyne.optimization.cmc.backends.base import (
+            combine_shard_samples_bimodal,
+        )
+
+        rng = np.random.default_rng(42)
+        # 5 shards, shard 2 is bimodal (both modes)
+        shards = []
+        for i in range(5):
+            if i == 2:
+                # Bimodal shard: 50/50 mix
+                d0 = np.concatenate([
+                    rng.normal(19000, 1200, size=250),
+                    rng.normal(32000, 2100, size=250),
+                ])
+            else:
+                center = 19000 if i < 3 else 32000
+                d0 = rng.normal(center, 1200, size=500)
+            shards.append(MCMCSamples(
+                samples={"D0": d0.reshape(2, 250)},
+                param_names=["D0"], n_chains=2, n_samples=250,
+            ))
+
+        # Shard 2 appears in both clusters
+        cluster_lower = [0, 1, 2]
+        cluster_upper = [2, 3, 4]
+        detections = [
+            {"shard": 2, "param": "D0", "mode1": 19000, "mode2": 32000,
+             "std1": 1200, "std2": 2100, "weights": (0.5, 0.5), "separation": 13000},
+        ]
+
+        combined, bimodal_result = combine_shard_samples_bimodal(
+            shard_samples=shards,
+            cluster_assignments=(cluster_lower, cluster_upper),
+            bimodal_detections=detections,
+            modal_params=["D0"],
+            co_occurrence={},
+        )
+
+        # Lower mode consensus should be near 19K (not pulled toward 25.5K)
+        assert abs(bimodal_result.modes[0].mean["D0"] - 19000) < 1500
+        # Upper mode consensus should be near 32K
+        assert abs(bimodal_result.modes[1].mean["D0"] - 32000) < 1500
+
+    def test_bimodal_combine_empty_cluster_fallback(self):
+        """If one cluster has <3 shards, fall back to simple mean for it."""
+        from homodyne.optimization.cmc.backends.base import (
+            combine_shard_samples_bimodal,
+        )
+
+        shards = [self._make_samples(19000.0, 1200.0) for _ in range(8)]
+        # Only 1 shard in upper cluster
+        cluster_lower = list(range(7))
+        cluster_upper = [7]
+
+        combined, bimodal_result = combine_shard_samples_bimodal(
+            shard_samples=shards,
+            cluster_assignments=(cluster_lower, cluster_upper),
+            bimodal_detections=[],
+            modal_params=["D0"],
+            co_occurrence={},
+        )
+
+        # Should still produce 2 modes (upper with simple mean)
+        assert len(bimodal_result.modes) == 2
+        assert bimodal_result.modes[1].n_shards == 1

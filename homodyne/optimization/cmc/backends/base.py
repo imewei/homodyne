@@ -16,6 +16,7 @@ from homodyne.utils.logging import get_logger
 if TYPE_CHECKING:
     from homodyne.optimization.cmc.config import CMCConfig
     from homodyne.optimization.cmc.data_prep import PreparedData
+    from homodyne.optimization.cmc.diagnostics import BimodalConsensusResult
     from homodyne.optimization.cmc.sampler import MCMCSamples
 
 logger = get_logger(__name__)
@@ -439,3 +440,228 @@ def _combine_shard_chunk(
         extra_fields=combined_extra,
         num_shards=total_shards,
     )
+
+
+def combine_shard_samples_bimodal(
+    shard_samples: list[MCMCSamples],
+    cluster_assignments: tuple[list[int], list[int]],
+    bimodal_detections: list[dict[str, Any]],
+    modal_params: list[str],
+    co_occurrence: dict[str, Any],
+    method: str = "consensus_mc",
+) -> tuple[MCMCSamples, BimodalConsensusResult]:
+    """Combine shard samples using mode-aware consensus.
+
+    For bimodal shards, uses per-component GMM statistics instead of
+    full-posterior statistics to avoid density-trough corruption.
+
+    Parameters
+    ----------
+    shard_samples : list[MCMCSamples]
+        All successful shard samples.
+    cluster_assignments : tuple[list[int], list[int]]
+        (lower_cluster_shards, upper_cluster_shards) from cluster_shard_modes().
+        Bimodal shards may appear in both lists.
+    bimodal_detections : list[dict[str, Any]]
+        Per-detection records with "shard", "param", "mode1", "mode2",
+        "std1", "std2", "weights".
+    modal_params : list[str]
+        Parameters that triggered bimodal detection.
+    co_occurrence : dict[str, Any]
+        Cross-parameter co-occurrence info.
+    method : str
+        Base combination method for non-modal params.
+
+    Returns
+    -------
+    tuple[MCMCSamples, BimodalConsensusResult]
+        (combined_samples, bimodal_result) where combined_samples has
+        mixture-drawn primary samples and bimodal_result has per-mode details.
+    """
+    import numpy as np
+
+    from homodyne.optimization.cmc.diagnostics import (
+        BimodalConsensusResult,
+        ModeCluster,
+    )
+    from homodyne.optimization.cmc.sampler import MCMCSamples
+
+    cluster_lower, cluster_upper = cluster_assignments
+    n_total = len(shard_samples)
+    param_names = shard_samples[0].param_names
+    n_chains = shard_samples[0].n_chains
+    n_samples = shard_samples[0].n_samples
+    rng = np.random.default_rng(42)
+
+    # Index bimodal detections by (shard, param) for fast lookup
+    bimodal_index: dict[tuple[int, str], dict[str, Any]] = {}
+    for det in bimodal_detections:
+        bimodal_index[(det["shard"], det["param"])] = det
+
+    modal_set = set(modal_params)
+
+    def _consensus_for_cluster(
+        cluster_shards: list[int],
+        is_lower: bool,
+    ) -> dict[str, tuple[float, float]]:
+        """Compute consensus (mean, std) for each param in a cluster.
+
+        Returns dict of {param: (combined_mean, combined_std)}.
+        """
+        result: dict[str, tuple[float, float]] = {}
+
+        for name in param_names:
+            shard_means: list[float] = []
+            shard_variances: list[float] = []
+
+            for shard_idx in cluster_shards:
+                key = (shard_idx, name)
+                if name in modal_set and key in bimodal_index:
+                    # Bimodal shard + modal param: use component-level stats
+                    det = bimodal_index[key]
+                    m1, m2 = det["mode1"], det["mode2"]
+                    s1, s2 = det["std1"], det["std2"]
+                    lo, hi = sorted([(m1, s1), (m2, s2)], key=lambda x: x[0])
+                    if is_lower:
+                        shard_means.append(lo[0])
+                        shard_variances.append(lo[1] ** 2)
+                    else:
+                        shard_means.append(hi[0])
+                        shard_variances.append(hi[1] ** 2)
+                else:
+                    # Unimodal shard or non-modal param: use full posterior
+                    samples = shard_samples[shard_idx].samples[name].flatten()
+                    shard_means.append(float(np.mean(samples)))
+                    shard_variances.append(float(np.var(samples)))
+
+            if len(shard_means) < 3:
+                # Too few shards: use simple mean
+                combined_mean = float(np.mean(shard_means)) if shard_means else 0.0
+                combined_std = (
+                    float(np.std(shard_means)) if len(shard_means) > 1 else 1e-6
+                )
+            else:
+                # Precision-weighted consensus
+                precisions = [1.0 / max(v, 1e-10) for v in shard_variances]
+                combined_precision = sum(precisions)
+                combined_variance = 1.0 / combined_precision
+                weighted_mean_sum = sum(
+                    p * m for p, m in zip(precisions, shard_means, strict=False)
+                )
+                combined_mean = combined_variance * weighted_mean_sum
+                combined_std = float(np.sqrt(combined_variance))
+
+            result[name] = (float(combined_mean), float(combined_std))
+
+        return result
+
+    # Run per-mode consensus
+    lower_stats = _consensus_for_cluster(cluster_lower, is_lower=True)
+    upper_stats = _consensus_for_cluster(cluster_upper, is_lower=False)
+
+    # Build mode weights
+    # For bimodal shards that appear in both clusters, count them once total
+    unique_shards = set(cluster_lower) | set(cluster_upper)
+    w_lower = len(cluster_lower) / max(len(unique_shards), 1)
+    w_upper = len(cluster_upper) / max(len(unique_shards), 1)
+    # Normalize (bimodal shards counted in both lists inflate the sum)
+    total_w = w_lower + w_upper
+    w_lower /= total_w
+    w_upper /= total_w
+
+    # Generate per-mode samples
+    n_lower_samples = int(round(w_lower * n_samples))
+    n_upper_samples = n_samples - n_lower_samples
+
+    lower_samples: dict[str, np.ndarray] = {}
+    upper_samples: dict[str, np.ndarray] = {}
+    combined_samples: dict[str, np.ndarray] = {}
+
+    for name in param_names:
+        lo_mean, lo_std = lower_stats[name]
+        up_mean, up_std = upper_stats[name]
+
+        lower_samples[name] = rng.normal(
+            loc=lo_mean,
+            scale=max(lo_std, 1e-10),
+            size=(n_chains, n_lower_samples),
+        )
+        upper_samples[name] = rng.normal(
+            loc=up_mean,
+            scale=max(up_std, 1e-10),
+            size=(n_chains, n_upper_samples),
+        )
+        # Mixture-draw: concatenate and shuffle within each chain
+        mixed = np.concatenate(
+            [lower_samples[name], upper_samples[name]], axis=1
+        )
+        for c in range(n_chains):
+            rng.shuffle(mixed[c])
+        combined_samples[name] = mixed
+
+    # Build ModeCluster objects with independent draws from each mode's consensus
+    # Gaussian. These are separate from the mixture-drawn primary samples above;
+    # they provide full per-mode sample sets for downstream analysis.
+    mode_lower = ModeCluster(
+        mean={n: lower_stats[n][0] for n in param_names},
+        std={n: lower_stats[n][1] for n in param_names},
+        weight=w_lower,
+        n_shards=len(cluster_lower),
+        samples={
+            n: rng.normal(
+                loc=lower_stats[n][0],
+                scale=max(lower_stats[n][1], 1e-10),
+                size=(n_chains, n_samples),
+            )
+            for n in param_names
+        },
+    )
+    mode_upper = ModeCluster(
+        mean={n: upper_stats[n][0] for n in param_names},
+        std={n: upper_stats[n][1] for n in param_names},
+        weight=w_upper,
+        n_shards=len(cluster_upper),
+        samples={
+            n: rng.normal(
+                loc=upper_stats[n][0],
+                scale=max(upper_stats[n][1], 1e-10),
+                size=(n_chains, n_samples),
+            )
+            for n in param_names
+        },
+    )
+
+    bimodal_result = BimodalConsensusResult(
+        modes=[mode_lower, mode_upper],
+        modal_params=modal_params,
+        co_occurrence=co_occurrence,
+    )
+
+    # Combine extra fields from all shards
+    combined_extra: dict[str, Any] = {}
+    for key in shard_samples[0].extra_fields.keys():
+        all_extra = [
+            s.extra_fields.get(key)
+            for s in shard_samples
+            if key in s.extra_fields
+        ]
+        if all_extra:
+            try:
+                if all_extra[0].ndim == 0:
+                    combined_extra[key] = np.stack(all_extra, axis=0)
+                else:
+                    combined_extra[key] = np.concatenate(all_extra, axis=0)
+            except Exception as e:
+                logger.warning(f"Failed to combine extra field '{key}': {e}")
+                combined_extra[key] = all_extra[0]
+
+    combined = MCMCSamples(
+        samples=combined_samples,
+        param_names=param_names,
+        n_chains=n_chains,
+        n_samples=n_samples,
+        extra_fields=combined_extra,
+        num_shards=n_total,
+    )
+
+    return combined, bimodal_result
