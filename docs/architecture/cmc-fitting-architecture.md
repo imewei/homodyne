@@ -2,8 +2,8 @@
 
 Complete documentation of the CMC (Consensus Monte Carlo) fitting system in homodyne.
 
-**Version:** 2.20.0
-**Last Updated:** January 2026
+**Version:** 2.22.0
+**Last Updated:** February 2026
 
 ## Table of Contents
 
@@ -88,7 +88,7 @@ Complete documentation of the CMC (Consensus Monte Carlo) fitting system in homo
 │                     5. SAMPLE COMBINATION                                        │
 │                       (backends/base.py)                                         │
 │                                                                                  │
-│        Hierarchical Combination → Consensus MC → Combined Posterior              │
+│   Bimodal Detection → Mode-Aware or Standard Consensus MC → Combined Posterior  │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                     │
 ════════════════════════════════════╪══════════════════════════════════════════════
@@ -636,6 +636,7 @@ class MCMCSamples:
     n_samples: int
     extra_fields: dict[str, Any]      # diverging, accept_prob, etc.
     num_shards: int = 1               # For correct divergence rate in CMC
+    bimodal_consensus: Any = None     # BimodalConsensusResult (Feb 2026)
 ```
 
 ---
@@ -732,6 +733,36 @@ def select_backend(config: CMCConfig) -> CMCBackend:
 ║   Precision-weighted combination of posterior moments                      ║
 ║                                                                            ║
 ║   LIMITATION: Biases toward low-variance shards when heterogeneity exists ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║ MODE-AWARE CONSENSUS MC (v2.22.0+)                                         ║
+║ Handles bimodal per-shard posteriors correctly                             ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║                                                                            ║
+║   Problem: Standard consensus_mc assumes per-shard posteriors are          ║
+║   approximately Gaussian. When shards have bimodal posteriors              ║
+║   (e.g., D0 ~19K and ~32K), np.mean falls between modes in the            ║
+║   density trough, and np.var is inflated by w1*w2*(mu1-mu2)^2.            ║
+║                                                                            ║
+║   Algorithm (combine_shard_samples_bimodal):                               ║
+║     1. Detect bimodal shards via per-shard GMM (check_shard_bimodality)   ║
+║     2. Summarize cross-shard bimodality patterns                           ║
+║     3. Jointly cluster shards into two mode populations                    ║
+║        (range-normalized feature vectors, seeded from cross-shard means)  ║
+║     4. For each mode cluster, run precision-weighted consensus:            ║
+║        • Bimodal shards: use per-component GMM stats (mu, sigma^2)        ║
+║        • Unimodal shards: use full posterior stats                         ║
+║     5. Generate mixture-drawn output samples                               ║
+║     6. Attach BimodalConsensusResult to MCMCSamples.bimodal_consensus      ║
+║                                                                            ║
+║   Auto-triggered: When cross-shard bimodal fraction > 5% for any param   ║
+║   Fallback: <3 shards in a cluster → simple mean instead of consensus    ║
+║                                                                            ║
+║   Output: MCMCSamples with mixture samples + BimodalConsensusResult:       ║
+║     modes: list[ModeCluster]     # Per-mode consensus stats + samples     ║
+║     modal_params: list[str]      # Parameters that triggered detection    ║
+║     co_occurrence: dict          # D0-alpha correlation info              ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 
 ╔═══════════════════════════════════════════════════════════════════════════╗
@@ -873,6 +904,16 @@ fit_mcmc_jax() [core.py]
 │       │   │   └─ Queue result
 │       │   └─ Progress bar & timeout monitoring
 │       │
+│       ├─ Bimodal detection (check_shard_bimodality per shard)
+│       │   ├─ If significant bimodality detected (>5% fraction):
+│       │   │   ├─ summarize_cross_shard_bimodality()
+│       │   │   ├─ cluster_shard_modes() → (lower_cluster, upper_cluster)
+│       │   │   └─ combine_shard_samples_bimodal()
+│       │   │       ├─ Per-mode consensus using component GMM stats
+│       │   │       ├─ Mixture-drawn output samples
+│       │   │       └─ Attach BimodalConsensusResult to MCMCSamples
+│       │   └─ Else: standard combination
+│       │
 │       └─ Combine results:
 │           ├─ Hierarchical combination for K > 500 shards
 │           └─ combine_shard_samples(shards, method="consensus_mc")
@@ -977,8 +1018,8 @@ CMCResult.from_mcmc_samples()
 | **priors.py** | 791 | Prior distributions, data-driven initial value estimation |
 | **results.py** | 598 | CMCResult dataclass, convergence diagnostics |
 | **config.py** | 477 | CMCConfig parsing, validation, defaults |
-| **diagnostics.py** | 522 | R-hat, ESS computation, convergence checks |
-| **backends/base.py** | 200+ | Abstract backend, combine_shard_samples() |
+| **diagnostics.py** | 1000+ | R-hat, ESS, bimodal detection, cross-shard analysis, mode clustering |
+| **backends/base.py** | 400+ | Abstract backend, combine_shard_samples(), combine_shard_samples_bimodal() |
 | **backends/multiprocessing.py** | 400+ | Parallel execution, worker pool, thread management |
 | **io.py** | 403 | Result serialization (JSON/NPZ) |
 | **plotting.py** | 478 | Visualization utilities |
@@ -1168,6 +1209,15 @@ Root causes identified:
 | `heterogeneity_abort` | bool | True | **NEW**: Abort on high heterogeneity |
 | `min_points_per_param` | int | 1,500 | **NEW**: Param-aware shard sizing floor |
 
+### February 2026: Mode-Aware Consensus MC (v2.22.0)
+
+Standard consensus MC assumes per-shard posteriors are approximately Gaussian. When
+shards have bimodal posteriors (e.g., D₀ ~19K and ~32K with 50/50 weight splits),
+the naive mean falls in the density trough between modes and the variance is
+inflated by `w1·w2·(μ1−μ2)²`. Mode-aware consensus decomposes bimodal shards into
+per-component GMM statistics and runs precision-weighted consensus separately per
+mode cluster, producing a mixture-drawn output. See §9 for algorithm details.
+
 ### January 2026: Heterogeneity Prevention (v2.21.0)
 
 **Parameter Degeneracy in Laminar Flow Mode**
@@ -1206,11 +1256,11 @@ can produce similar effects to lower γ̇₀ with less negative β.
 CMC samples `log(γ̇₀)` instead of γ̇₀ directly, which improves conditioning
 and reduces posterior ridge exploration.
 
-**Bimodal Detection**
+**Bimodal Detection & Mode-Aware Consensus (v2.22.0)**
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
-│ Bimodal Posterior Detection (diagnostics.py, v2.21.0)                     │
+│ Per-Shard Bimodal Detection (diagnostics.py)                              │
 │                                                                           │
 │   After MCMC sampling, each shard is checked for bimodal posteriors:     │
 │                                                                           │
@@ -1218,12 +1268,49 @@ and reduces posterior ridge exploration.
 │   2. Flag as bimodal if:                                                 │
 │      • min(weights) > 0.2 (both modes significant)                       │
 │      • relative_separation > 0.5 (modes well-separated)                  │
+│   3. Store per-detection record:                                         │
+│      {shard, param, mode1, mode2, std1, std2, weights, separation}       │
+└───────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Cross-Shard Bimodality Analysis (diagnostics.py)                          │
 │                                                                           │
-│   3. Log warnings for bimodal posteriors:                                │
-│      "BIMODAL POSTERIOR: Shard 3, D_offset: modes at 500 and 1500        │
-│       (weights: 0.45/0.55)"                                              │
+│   summarize_cross_shard_bimodality():                                    │
+│     • Groups detections by parameter name                                │
+│     • For params with bimodal fraction > 5%:                             │
+│       - Computes mode means/stds across shards                           │
+│       - Checks if consensus mean falls in density trough                 │
+│     • Detects D₀-alpha co-occurrence (parameter degeneracy)              │
 │                                                                           │
-│   Purpose: Early warning of model misspecification or local minima       │
+│   cluster_shard_modes():                                                 │
+│     • Builds range-normalized feature vectors from per-shard modes       │
+│     • Seeds KMeans from cross-shard lower/upper means                    │
+│     • Assigns each bimodal shard to lower or upper mode cluster          │
+│     • Returns (lower_indices, upper_indices) for combine step            │
+│                                                                           │
+│   Structured logging via _log_bimodality_summary():                      │
+│     • Per-parameter table: bimodal%, mode means±std, separation          │
+│     • Consensus impact: density trough warnings, co-occurrence stats     │
+│     • Actionable guidance (shard size, prior tightening)                  │
+└───────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Mode-Aware Combination (backends/base.py)                                 │
+│                                                                           │
+│   combine_shard_samples_bimodal():                                       │
+│     • For each mode cluster, runs precision-weighted consensus:          │
+│       - Bimodal shards: uses per-component GMM stats (mu, sigma²)        │
+│       - Unimodal shards: uses full posterior stats                       │
+│     • Generates mixture-drawn output samples from both modes             │
+│     • Returns (MCMCSamples, BimodalConsensusResult)                      │
+│                                                                           │
+│   Key dataclasses:                                                       │
+│     BimodalResult: per-shard GMM fit (means, stds, weights, separation)  │
+│     ModeCluster: per-mode consensus (means, stds, n_shards, samples)     │
+│     BimodalConsensusResult: both modes + modal_params + co_occurrence    │
+│                                                                           │
+│   Auto-triggered in multiprocessing backend when bimodal fraction > 5%   │
+│   Falls back to standard consensus_mc if <3 shards in a cluster          │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
