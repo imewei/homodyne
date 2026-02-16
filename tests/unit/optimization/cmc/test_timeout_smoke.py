@@ -69,15 +69,27 @@ def test_suggested_timeout_clamps_and_scales():
     # cost: chains=2, warmup+samples=2000, max_per_shard=3k → cost=12M
     cost = 2 * (500 + 1500) * 3_000
     # raw = 5 * 5e-5 * 12,000,000 = 3,000s → within [600, 7200]
-    suggested = core._compute_suggested_timeout(cost_per_shard=cost, max_timeout=7200)
+    suggested, exceeded = core._compute_suggested_timeout(
+        cost_per_shard=cost, max_timeout=7200
+    )
     assert suggested == 3_000
+    assert not exceeded
 
     # Smaller cost should respect min clamp 600s
     small_cost = 2 * (5 + 10) * 100
-    suggested_small = core._compute_suggested_timeout(
+    suggested_small, exceeded_small = core._compute_suggested_timeout(
         cost_per_shard=small_cost, max_timeout=7200
     )
     assert suggested_small == 600
+    assert not exceeded_small
+
+    # Very large cost should clamp to max and report exceeded
+    huge_cost = 4 * 4000 * 60_000  # Production scenario that caused timeouts
+    suggested_huge, exceeded_huge = core._compute_suggested_timeout(
+        cost_per_shard=huge_cost, max_timeout=7200
+    )
+    assert suggested_huge == 7200
+    assert exceeded_huge
 
 
 @pytest.mark.unit

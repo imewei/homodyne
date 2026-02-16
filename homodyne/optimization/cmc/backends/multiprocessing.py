@@ -237,37 +237,57 @@ def _run_shard_worker_with_queue(
 
     Accepts shared memory references instead of full dicts to avoid redundant
     pickling. Reconstructs shared data from shared memory blocks.
+
+    Wraps all initialization and sampling in a top-level try/except to ensure
+    that crashes during setup (imports, config reconstruction, model_kwargs)
+    are captured and reported back to the parent via the result queue.
     """
-    # Reconstruct shared data from shared memory
-    config_dict = _load_shared_dict(config_ref)
-    parameter_space_dict = _load_shared_dict(ps_ref)
-    shared_kwargs = _load_shared_dict(shared_kwargs_ref)
-    initial_values = (
-        _load_shared_dict(initial_values_ref)
-        if initial_values_ref is not None
-        else None
-    )
+    try:
+        # Reconstruct shared data from shared memory
+        config_dict = _load_shared_dict(config_ref)
+        parameter_space_dict = _load_shared_dict(ps_ref)
+        shared_kwargs = _load_shared_dict(shared_kwargs_ref)
+        initial_values = (
+            _load_shared_dict(initial_values_ref)
+            if initial_values_ref is not None
+            else None
+        )
 
-    # Reconstruct time_grid
-    time_grid = _load_shared_array(time_grid_ref) if time_grid_ref is not None else None
+        # Reconstruct time_grid
+        time_grid = _load_shared_array(time_grid_ref) if time_grid_ref is not None else None
 
-    # Merge shared kwargs into shard_data for backward-compatible worker interface
-    shard_data["time_grid"] = time_grid
-    shard_data.update(shared_kwargs)
+        # Merge shared kwargs into shard_data for backward-compatible worker interface
+        shard_data["time_grid"] = time_grid
+        shard_data.update(shared_kwargs)
 
-    result = _run_shard_worker(
-        shard_idx=shard_idx,
-        shard_data=shard_data,
-        model_fn=model_fn,
-        config_dict=config_dict,
-        initial_values=initial_values,
-        parameter_space_dict=parameter_space_dict,
-        n_phi=n_phi,
-        analysis_mode=analysis_mode,
-        threads_per_worker=threads_per_worker,
-        result_queue=result_queue,
-        rng_key_tuple=rng_key_tuple,
-    )
+        result = _run_shard_worker(
+            shard_idx=shard_idx,
+            shard_data=shard_data,
+            model_fn=model_fn,
+            config_dict=config_dict,
+            initial_values=initial_values,
+            parameter_space_dict=parameter_space_dict,
+            n_phi=n_phi,
+            analysis_mode=analysis_mode,
+            threads_per_worker=threads_per_worker,
+            result_queue=result_queue,
+            rng_key_tuple=rng_key_tuple,
+        )
+    except Exception as e:
+        # Catch crashes during initialization (shared memory, imports, config
+        # reconstruction) that occur before _run_shard_worker's internal try/except.
+        import traceback
+
+        result = {
+            "type": "result",
+            "success": False,
+            "shard_idx": shard_idx,
+            "error": f"Worker initialization failed: {e}",
+            "error_category": "init_crash",
+            "traceback": traceback.format_exc(),
+            "duration": 0.0,
+        }
+
     try:
         result_queue.put_nowait(result)
     except Exception:  # noqa: S110 - Best-effort queue put, parent handles failures
@@ -1029,6 +1049,13 @@ class MultiprocessingBackend(CMCBackend):
                 for shard_idx, (process, proc_start_time) in list(
                     active_processes.items()
                 ):
+                    # Skip shards already recorded by queue drain (prevents
+                    # double-counting when queue result arrives in the same
+                    # loop iteration as the process exit detection).
+                    if shard_idx in recorded_shards:
+                        del active_processes[shard_idx]
+                        continue
+
                     now = time.time()
                     proc_elapsed = now - proc_start_time
                     last_active = last_heartbeat.get(shard_idx, proc_start_time)
@@ -1036,18 +1063,38 @@ class MultiprocessingBackend(CMCBackend):
 
                     if not process.is_alive():
                         process.join(timeout=1)
+                        exit_code = process.exitcode
                         del active_processes[shard_idx]
                         run_logger.debug(
-                            f"Shard {shard_idx} process exited after {proc_elapsed:.1f}s"
+                            f"Shard {shard_idx} process exited after {proc_elapsed:.1f}s "
+                            f"(exit_code={exit_code})"
                         )
 
                         if shard_idx not in recorded_shards:
+                            # Build descriptive error with exit code context
+                            if exit_code is not None and exit_code < 0:
+                                import signal as _signal
+
+                                sig_name = _signal.Signals(-exit_code).name
+                                error_msg = (
+                                    f"Process killed by signal {sig_name} "
+                                    f"(exit_code={exit_code})"
+                                )
+                            elif exit_code is not None and exit_code > 0:
+                                error_msg = (
+                                    f"Process exited with error "
+                                    f"(exit_code={exit_code})"
+                                )
+                            else:
+                                error_msg = (
+                                    "Process exited without returning a result"
+                                )
                             results.append(
                                 {
                                     "type": "result",
                                     "success": False,
                                     "shard_idx": shard_idx,
-                                    "error": "Process exited without returning a result",
+                                    "error": error_msg,
                                     "error_category": "crash",
                                     "duration": proc_elapsed,
                                 }
@@ -1250,6 +1297,11 @@ class MultiprocessingBackend(CMCBackend):
                     f"Shard {result.get('shard_idx', '?')} failed [{error_cat}]: "
                     f"{result.get('error', 'unknown')}"
                 )
+                if result.get("traceback"):
+                    run_logger.debug(
+                        f"Shard {result.get('shard_idx', '?')} traceback:\n"
+                        f"{result['traceback']}"
+                    )
 
         if not successful_samples:
             # Aggregate error categories for better diagnostics

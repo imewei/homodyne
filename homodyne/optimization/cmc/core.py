@@ -50,6 +50,7 @@ def _resolve_max_points_per_shard(
     max_points_per_shard: int | str | None,
     max_shards: int | None = None,
     n_phi: int = 1,
+    iteration_ratio: float = 1.0,
 ) -> int:
     """Determine optimal shard size based on mode, data volume, and angle count.
 
@@ -67,6 +68,11 @@ def _resolve_max_points_per_shard(
     - High per-shard heterogeneity (D_offset CV=1.80, gamma_dot_t0 CV=1.50)
     - CMC posteriors diverging 37% from NLSQ on D0
     - Artificially narrow uncertainties from corrupted precision-weighted combination
+
+    FIX (Feb 2026): Iteration-aware shard sizing.
+    Base shard sizes are calibrated for the default 2000 iterations (500+1500).
+    When users configure more iterations (e.g., 4000), the per-shard cost doubles,
+    causing timeouts.  Scale shard size inversely with iteration_ratio to compensate.
 
     Scaling guidelines (laminar_flow mode with 4 chains, 2000 iterations):
     - 10K points → ~8-12 min/shard (single angle)
@@ -102,6 +108,11 @@ def _resolve_max_points_per_shard(
     n_phi : int
         Number of phi angles in the dataset. Used for angle-aware scaling.
         Default 1 (single angle - no scaling applied).
+    iteration_ratio : float
+        Ratio of default iterations to actual iterations.  Default 1.0 means
+        no adjustment.  Values < 1.0 (user configured more iterations than
+        default) shrink shards; values > 1.0 (fewer iterations) grow them.
+        Clamped to [0.25, 2.0] to avoid extreme shard sizes.
     """
     # Minimum shard sizes to prevent data starvation (Jan 2026 fix)
     MIN_SHARD_SIZE_LAMINAR = (
@@ -193,6 +204,25 @@ def _resolve_max_points_per_shard(
             f"base={base:,} → scaled={scaled_base:,} (min={MIN_SHARD_SIZE_LAMINAR if analysis_mode == 'laminar_flow' else MIN_SHARD_SIZE_STATIC:,})"
         )
 
+    # Apply iteration-aware scaling (Feb 2026):
+    # Base sizes are calibrated for 2000 default iterations.
+    # When users configure more iterations, shrink shards proportionally.
+    clamped_ratio = max(0.25, min(2.0, iteration_ratio))
+    if clamped_ratio != 1.0:
+        pre_iter = scaled_base
+        scaled_base = int(scaled_base * clamped_ratio)
+        min_size = (
+            MIN_SHARD_SIZE_LAMINAR
+            if analysis_mode == "laminar_flow"
+            else MIN_SHARD_SIZE_STATIC
+        )
+        scaled_base = max(scaled_base, min_size)
+        if scaled_base != pre_iter:
+            logger.info(
+                f"Iteration-aware shard sizing: ratio={clamped_ratio:.2f} "
+                f"(default/actual iterations), shard_size {pre_iter:,} → {scaled_base:,}"
+            )
+
     # Cap shard count to prevent memory exhaustion during combination
     estimated_shards = n_total // scaled_base
     if estimated_shards > max_shards:
@@ -239,18 +269,24 @@ def _compute_suggested_timeout(
     secs_per_unit: float = 5.0e-5,
     safety_factor: float = 5.0,
     min_timeout: int = 600,
-) -> int:
+) -> tuple[int, bool]:
     """Derive a timeout (seconds) from shard cost with clamping.
 
     cost_per_shard = num_chains * (num_warmup + num_samples) * max_points_per_shard
 
     Note: secs_per_unit=5.0e-5 with safety_factor=5.0 provides ~2.5x headroom
     above observed real-world runtimes to handle variance across different machines.
+
+    Returns
+    -------
+    tuple[int, bool]
+        (clamped timeout in seconds, whether the raw estimate exceeded max_timeout).
     """
 
     raw = safety_factor * secs_per_unit * cost_per_shard
+    exceeded = raw > max_timeout
     clamped = min(max_timeout, max(min_timeout, raw))
-    return int(clamped)
+    return int(clamped), exceeded
 
 
 def _fmt_time(secs: float) -> str:
@@ -300,11 +336,12 @@ def _log_runtime_estimate(
     avg_points_per_shard: int,
     n_workers: int | None = None,
     analysis_mode: str = "static",
+    per_shard_timeout: int = 7200,
 ) -> float:
     """Log estimated CMC runtime for user awareness.
 
     Provides rough estimates based on empirical observations:
-    - JIT compilation: ~30-60s per worker process
+    - JIT compilation: scales with shard size (~45s for 5K, ~180s for 60K+)
     - MCMC step: ~0.1-0.5s per iteration (varies with point count)
 
     Returns
@@ -317,7 +354,8 @@ def _log_runtime_estimate(
         n_workers = _estimate_n_workers()
 
     # Estimate per-shard time
-    jit_overhead_per_shard = 45  # seconds, average JIT compilation
+    # JIT overhead scales with shard size: larger shards compile bigger XLA graphs
+    jit_overhead_per_shard = 45 + (avg_points_per_shard / 10_000) * 20
     iterations_per_shard = n_chains * (n_warmup + n_samples)
 
     # MCMC step time scales roughly with point count
@@ -341,6 +379,15 @@ def _log_runtime_estimate(
         f"({n_shards} shards / {n_workers} workers, "
         f"~{_fmt_time(total_per_shard)}/shard with {iterations_per_shard:,} iterations)"
     )
+
+    # Warn if per-shard estimate is close to timeout
+    if total_per_shard > 0.8 * per_shard_timeout:
+        margin_pct = (per_shard_timeout - total_per_shard) / per_shard_timeout * 100
+        logger.warning(
+            f"Per-shard estimate ({_fmt_time(total_per_shard)}) is within "
+            f"{margin_pct:.0f}% of timeout ({_fmt_time(per_shard_timeout)}). "
+            f"Timeouts are likely if JIT compilation or resource contention add overhead."
+        )
 
     return total_parallel
 
@@ -611,13 +658,14 @@ def fit_mcmc_jax(
     # =========================================================================
     # 2c. Estimate fixed per-angle scaling for constant mode (v2.18.0+)
     # =========================================================================
-    # Mode semantics:
-    # - "auto": xpcs_model_averaged SAMPLES single averaged contrast/offset (10 params)
+    # Mode semantics (param counts depend on analysis_mode: static=3, laminar_flow=7):
+    # - "auto": xpcs_model_averaged SAMPLES single averaged contrast/offset
     #           No fixed arrays needed - the model samples them
-    # - "constant": xpcs_model_constant uses FIXED per-angle arrays (8 params)
+    # - "constant": xpcs_model_constant uses FIXED per-angle arrays
     #           Requires fixed_contrast/fixed_offset arrays from quantile estimation
     # - "individual": xpcs_model_scaled SAMPLES per-angle contrast/offset
     #           No fixed arrays needed - the model samples them
+    n_physical = 7 if analysis_mode == "laminar_flow" else 3
     fixed_contrast: jnp.ndarray | None = None
     fixed_offset: jnp.ndarray | None = None
 
@@ -661,7 +709,7 @@ def fit_mcmc_jax(
                 f"avg={contrast_per_angle.mean():.4f} (will be used)\n"
                 f"  offset: per-angle range=[{offset_per_angle.min():.4f}, {offset_per_angle.max():.4f}], "
                 f"avg={offset_per_angle.mean():.4f} (will be used)\n"
-                f"  Parameters: 7 physical + 1 sigma = 8 total (scaling fixed, averaged)"
+                f"  Parameters: {n_physical} physical + 1 sigma = {n_physical + 1} total (scaling fixed, averaged)"
             )
         else:
             # CONSTANT mode: Different value per angle
@@ -671,21 +719,21 @@ def fit_mcmc_jax(
                 f"range=[{contrast_per_angle.min():.4f}, {contrast_per_angle.max():.4f}]\n"
                 f"  offset: mean={offset_per_angle.mean():.4f}, "
                 f"range=[{offset_per_angle.min():.4f}, {offset_per_angle.max():.4f}]\n"
-                f"  Parameters: 7 physical + 1 sigma = 8 total (scaling fixed)"
+                f"  Parameters: {n_physical} physical + 1 sigma = {n_physical + 1} total (scaling fixed)"
             )
     elif effective_per_angle_mode == "auto":
         # AUTO mode: xpcs_model_averaged will SAMPLE single averaged contrast/offset
         # No fixed arrays needed - log the expected behavior
         run_logger.info(
-            "AUTO mode: Will SAMPLE averaged contrast/offset (NLSQ parity):\n"
-            "  Parameters: 2 averaged scaling + 7 physical + 1 sigma = 10 total"
+            f"AUTO mode: Will SAMPLE averaged contrast/offset (NLSQ parity):\n"
+            f"  Parameters: 2 averaged scaling + {n_physical} physical + 1 sigma = {n_physical + 3} total"
         )
     else:
         # INDIVIDUAL mode: xpcs_model_scaled will SAMPLE per-angle contrast/offset
         run_logger.info(
             f"INDIVIDUAL mode: Will SAMPLE per-angle contrast/offset:\n"
-            f"  Parameters: {prepared.n_phi * 2} per-angle + 7 physical + 1 sigma = "
-            f"{prepared.n_phi * 2 + 8} total"
+            f"  Parameters: {prepared.n_phi * 2} per-angle + {n_physical} physical + 1 sigma = "
+            f"{prepared.n_phi * 2 + n_physical + 1} total"
         )
 
     # Log initial values if provided
@@ -798,9 +846,17 @@ def fit_mcmc_jax(
 
     # Resolve max_points_per_shard - critical for NUTS tractability
     # Scale inversely with parameter count: more params = fewer points per shard
+    # Also scale inversely with iteration count relative to default (Feb 2026)
     max_points_setting = config.max_points_per_shard
+    _DEFAULT_ITERATIONS = 2000  # CMCConfig defaults: 500 warmup + 1500 samples
+    actual_iterations = config.num_warmup + config.num_samples
+    iteration_ratio = _DEFAULT_ITERATIONS / max(1, actual_iterations)
     max_per_shard = _resolve_max_points_per_shard(
-        analysis_mode, prepared.n_total, max_points_setting, n_phi=prepared.n_phi
+        analysis_mode,
+        prepared.n_total,
+        max_points_setting,
+        n_phi=prepared.n_phi,
+        iteration_ratio=iteration_ratio,
     )
     if analysis_mode == "laminar_flow":
         max_per_shard = _cap_laminar_max_points(max_per_shard, run_logger)
@@ -814,7 +870,7 @@ def fit_mcmc_jax(
     cost_per_shard = (
         config.num_chains * (config.num_warmup + config.num_samples) * max_per_shard
     )
-    suggested_timeout = _compute_suggested_timeout(
+    suggested_timeout, cost_exceeded = _compute_suggested_timeout(
         cost_per_shard=cost_per_shard,
         max_timeout=config.per_shard_timeout,
     )
@@ -823,6 +879,12 @@ def fit_mcmc_jax(
         f"chains={config.num_chains}, warmup+samples={config.num_warmup + config.num_samples}, "
         f"max_points_per_shard={max_per_shard:,}, clamp=[600,{config.per_shard_timeout}])"
     )
+    if cost_exceeded:
+        run_logger.warning(
+            f"Per-shard cost ({cost_per_shard:,}) exceeds timeout budget. "
+            f"Shards may timeout at {config.per_shard_timeout}s. "
+            f"Consider reducing num_warmup/num_samples or max_points_per_shard."
+        )
 
     requested_shards = int(config.num_shards) if _int_like(config.num_shards) else None
 
@@ -863,6 +925,7 @@ def fit_mcmc_jax(
             n_samples=config.num_samples,
             avg_points_per_shard=total_shard_points // len(shards),
             analysis_mode=analysis_mode,
+            per_shard_timeout=suggested_timeout,
         )
     elif use_cmc:
         # Sharding strategy selection (Jan 2026 enhancement):
@@ -914,6 +977,7 @@ def fit_mcmc_jax(
             n_samples=config.num_samples,
             avg_points_per_shard=total_shard_points // len(shards),
             analysis_mode=analysis_mode,
+            per_shard_timeout=suggested_timeout,
         )
     else:
         shards = None
