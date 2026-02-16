@@ -24,22 +24,21 @@ Usage:
   from homodyne.core.physics_cmc import compute_g1_diffusion, compute_g1_total
 """
 
-from functools import partial
+import math
 
 import jax.numpy as jnp
 from jax import jit
 
 from homodyne.core.physics_utils import (
-    PI,
-    safe_exp,
-    safe_len,
-    safe_sinc,
-)
-from homodyne.core.physics_utils import (
     calculate_diffusion_coefficient as _calculate_diffusion_coefficient_impl_jax,
 )
 from homodyne.core.physics_utils import (
     calculate_shear_rate_cmc as _calculate_shear_rate_impl_jax,
+)
+from homodyne.core.physics_utils import (
+    safe_exp,
+    safe_len,
+    safe_sinc,
 )
 from homodyne.core.physics_utils import (
     trapezoid_cumsum as _trapezoid_cumsum,
@@ -49,13 +48,13 @@ from homodyne.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-@partial(jit, static_argnums=(4,))
+@jit
 def _compute_g1_diffusion_elementwise(
     params: jnp.ndarray,
     t1: jnp.ndarray,
     t2: jnp.ndarray,
     time_grid: jnp.ndarray,
-    wavevector_q_squared_half_dt: float,
+    wavevector_q_squared_half_dt: jnp.ndarray,
 ) -> jnp.ndarray:
     """Element-wise diffusion computation for CMC shards using trapezoidal cumulative sums.
 
@@ -177,15 +176,15 @@ def _compute_g1_shear_elementwise(
     return g1_shear  # Shape: (n_unique_phi, n_points)
 
 
-@partial(jit, static_argnums=(5, 6))
+@jit
 def _compute_g1_total_elementwise(
     params: jnp.ndarray,
     t1: jnp.ndarray,
     t2: jnp.ndarray,
     phi_unique: jnp.ndarray,
     time_grid: jnp.ndarray,
-    wavevector_q_squared_half_dt: float,
-    sinc_prefactor: float,
+    wavevector_q_squared_half_dt: jnp.ndarray,
+    sinc_prefactor: jnp.ndarray,
 ) -> jnp.ndarray:
     """Element-wise total g1 computation for CMC shards.
 
@@ -396,8 +395,13 @@ def compute_g1_total(
     else:
         time_grid = jnp.asarray(time_grid)
 
-    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
-    sinc_prefactor = 0.5 / PI * q * L * dt_value
+    # Use math.pi (a plain Python float) rather than jnp.pi (a JAX array)
+    # to keep these values as concrete scalars.  Do NOT wrap in float():
+    # under pmap tracing, closure variables that flow through JAX operations
+    # can be abstract tracers, and float() on a tracer raises
+    # ConcretizationTypeError.  jnp.asarray is safe under any transform.
+    wavevector_q_squared_half_dt = jnp.asarray(0.5 * (q**2) * dt_value)
+    sinc_prefactor = jnp.asarray(0.5 / math.pi * q * L * dt_value)
 
     # DEBUG logging for CMC physics diagnosis
     if _debug:

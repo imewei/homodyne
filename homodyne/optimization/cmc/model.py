@@ -704,7 +704,7 @@ def xpcs_model_averaged(
     from homodyne.core.jax_backend import _compute_g1_total_core
 
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
-    sinc_prefactor = 0.5 / jnp.pi * q * L * dt
+    sinc_prefactor = 0.5 / math.pi * q * L * dt
 
     g1 = _compute_g1_total_core(
         params=params,
@@ -886,7 +886,7 @@ def xpcs_model_constant_averaged(
     from homodyne.core.jax_backend import _compute_g1_total_core
 
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
-    sinc_prefactor = 0.5 / jnp.pi * q * L * dt
+    sinc_prefactor = 0.5 / math.pi * q * L * dt
 
     g1 = _compute_g1_total_core(
         params=params,
@@ -1109,7 +1109,7 @@ def xpcs_model_reparameterized(
     from homodyne.core.jax_backend import _compute_g1_total_core
 
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
-    sinc_prefactor = 0.5 / jnp.pi * q * L * dt
+    sinc_prefactor = 0.5 / math.pi * q * L * dt
 
     g1 = _compute_g1_total_core(
         params=params,
