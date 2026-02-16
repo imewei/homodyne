@@ -200,9 +200,8 @@ def get_cached_meshgrid(t1: "jnp.ndarray", t2: "jnp.ndarray") -> tuple:
             _cache_stats["skipped_large"] += 1  # T041: Track skipped large arrays
             return t1, t2
     except (TypeError, Exception):
-        # Inside JIT tracing - check using shape instead
+        # Inside JIT tracing - skip stats AND caching
         if t1.shape[0] > 2000:
-            _cache_stats["skipped_large"] += 1
             return t1, t2
 
     # Try to create cache key - may fail inside JIT context
@@ -211,7 +210,6 @@ def get_cached_meshgrid(t1: "jnp.ndarray", t2: "jnp.ndarray") -> tuple:
 
     # If inside JIT context, skip caching and create meshgrid directly
     if t1_key is None or t2_key is None:
-        _cache_stats["skipped_traced"] += 1  # T041: Track JIT-traced skips
         t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
         return t1_grid, t2_grid
 
@@ -663,7 +661,7 @@ def _compute_g1_shear_core(
 
     # Fix phi shape if it has extra dimensions
     # Handle case where phi might be (1, 1, 1, 23) instead of (23,) or other malformed shapes
-    phi = jnp.asarray(phi)  # Ensure it's a JAX array
+    phi = jnp.asarray(phi, dtype=jnp.float64)  # Ensure it's a JAX float64 array
 
     # Remove all leading singleton dimensions and flatten to 1D
     while phi.ndim > 1:

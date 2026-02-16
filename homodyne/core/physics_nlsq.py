@@ -218,7 +218,7 @@ def _compute_g1_shear_meshgrid(
 
     # Fix phi shape if it has extra dimensions
     # Handle case where phi might be (1, 1, 1, 23) instead of (23,) or other malformed shapes
-    phi = jnp.asarray(phi)  # Ensure it's a JAX array
+    phi = jnp.asarray(phi, dtype=jnp.float64)  # Ensure it's a JAX float64 array
 
     # Remove all leading singleton dimensions and flatten to 1D
     while phi.ndim > 1:

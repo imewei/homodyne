@@ -254,7 +254,7 @@ if HAS_JAX:
         # Extract side band: off-diagonal elements adjacent to main diagonal
         indices_i = jnp.arange(size - 1)
         indices_j = jnp.arange(1, size)
-        side_band = c2_mat[indices_i, indices_j]
+        side_band = 0.5 * (c2_mat[indices_i, indices_j] + c2_mat[indices_j, indices_i])
 
         # Compute diagonal values as average of adjacent off-diagonal elements
         diag_val = jnp.zeros(size, dtype=c2_mat.dtype)
@@ -345,8 +345,8 @@ def _diagonal_correction_batch_numpy(
 
         for i in range(n_phi):
             c2_mat = c2_np[i]
-            # Extract side band values
-            side_band = c2_mat[idx_upper, idx_lower]
+            # Extract side band values (average both diagonals for symmetry)
+            side_band = 0.5 * (c2_mat[idx_upper, idx_lower] + c2_mat[idx_lower, idx_upper])
 
             # Compute diagonal values
             diag_val = np.zeros(size)
@@ -379,7 +379,7 @@ def _basic_correction_numpy(c2_mat: np.ndarray) -> np.ndarray:
     # Extract side band: off-diagonal elements adjacent to main diagonal
     idx_upper = np.arange(size - 1)
     idx_lower = np.arange(1, size)
-    side_band = c2_mat[idx_upper, idx_lower]
+    side_band = 0.5 * (c2_mat[idx_upper, idx_lower] + c2_mat[idx_lower, idx_upper])
 
     # Compute diagonal values as average of adjacent off-diagonal elements
     diag_val = np.zeros(size)

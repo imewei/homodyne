@@ -31,6 +31,7 @@ from jax import jit
 
 from homodyne.core.physics_utils import (
     PI,
+    safe_exp,
     safe_len,
     safe_sinc,
 )
@@ -90,7 +91,7 @@ def _compute_g1_diffusion_elementwise(
     # - exp(-700) ≈ 10^-304 is near machine epsilon but still differentiable
     log_g1 = -wavevector_q_squared_half_dt * integral_steps
     log_g1_clipped = jnp.clip(log_g1, -700.0, 0.0)
-    g1_diffusion = jnp.exp(log_g1_clipped)
+    g1_diffusion = safe_exp(log_g1_clipped)
 
     g1_safe = jnp.minimum(g1_diffusion, 1.0)
 

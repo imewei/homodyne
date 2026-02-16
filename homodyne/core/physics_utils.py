@@ -127,11 +127,16 @@ def calculate_diffusion_coefficient(
     Returns:
         D(t) evaluated at each time point with physical bounds applied
     """
-    # CRITICAL FIX: Add epsilon to prevent t=0 with negative alpha causing Inf/NaN gradients
+    # CRITICAL FIX: Replace near-zero values to prevent t=0 with negative alpha causing Inf/NaN
     # When alpha < 0: t^alpha = 1/t^|alpha|, so t=0 → infinity
-    # Adding epsilon ensures numerical stability: (t+ε)^alpha is always finite
-    epsilon = 1e-10
-    time_safe = time_array + epsilon
+    # Using jnp.maximum (not addition) to only affect near-zero values
+    # Use dt/2 to preserve monotonicity: D(dt/2) < D(dt) for alpha > 0
+    if time_array.shape[0] > 1:
+        dt_inferred = jnp.abs(time_array[1] - time_array[0])
+        epsilon = jnp.maximum(dt_inferred * 0.5, 1e-8)
+    else:
+        epsilon = 1e-3
+    time_safe = jnp.maximum(time_array, epsilon)
 
     # Compute diffusion coefficient
     D_t = D0 * (time_safe**alpha) + D_offset
@@ -166,7 +171,7 @@ def calculate_shear_rate(
     # This ensures smooth continuity: γ̇(dt), γ̇(dt), γ̇(2dt), ...
 
     # Infer dt from time grid
-    if safe_len(time_array) > 1:
+    if time_array.shape[0] > 1:
         dt: jnp.ndarray | float = jnp.abs(time_array[1] - time_array[0])
     else:
         dt = 1e-3  # Fallback for single time point
@@ -202,12 +207,12 @@ def calculate_shear_rate_cmc(
         γ̇(t) evaluated at each time point
     """
     # Infer dt from time grid
-    if safe_len(time_array) > 1:
+    if time_array.shape[0] > 1:
         dt: jnp.ndarray | float = jnp.abs(time_array[1] - time_array[0])
         # CRITICAL FIX: Ensure dt > 0 to prevent 0^(negative beta) = infinity
         # CMC element-wise data can have consecutive zeros: t[0]=0, t[1]=0 → dt=0
         # This causes NaN when beta < 0 in gamma_t = gamma_dot_0 * (time_safe**beta)
-        dt = jnp.maximum(dt, 1e-10)  # Minimum 1e-10 for numerical stability
+        dt = jnp.maximum(dt, 1e-5)  # Minimum 1e-5 for numerical stability with negative beta
     else:
         dt = 1e-3  # Fallback for single time point
 
