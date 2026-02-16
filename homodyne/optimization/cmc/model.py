@@ -167,7 +167,7 @@ def xpcs_model(
     c2_theory = jnp.where(
         jnp.isfinite(c2_theory_raw),
         c2_theory_raw,
-        jnp.ones_like(c2_theory_raw),  # Replace NaN/Inf with 1.0 (neutral C2 value)
+        jnp.full_like(c2_theory_raw, 1e6),  # Large penalty to push NUTS away from NaN regions
     )
 
     # Expose numerical health as deterministic for diagnostics
@@ -400,7 +400,7 @@ def xpcs_model_scaled(
     c2_theory = jnp.where(
         jnp.isfinite(c2_theory_raw),
         c2_theory_raw,
-        jnp.ones_like(c2_theory_raw),
+        jnp.full_like(c2_theory_raw, 1e6),
     )
 
     n_nan = jnp.sum(~jnp.isfinite(c2_theory_raw))
@@ -551,7 +551,7 @@ def xpcs_model_constant(
     c2_theory = jnp.where(
         jnp.isfinite(c2_theory_raw),
         c2_theory_raw,
-        jnp.ones_like(c2_theory_raw),
+        jnp.full_like(c2_theory_raw, 1e6),
     )
 
     n_nan = jnp.sum(~jnp.isfinite(c2_theory_raw))
@@ -721,7 +721,17 @@ def xpcs_model_averaged(
     # =========================================================================
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
-    c2_theory = offset_per_point + contrast_per_point * g1**2
+    c2_theory_raw = offset_per_point + contrast_per_point * g1**2
+
+    # Numerical stability safeguard
+    c2_theory = jnp.where(
+        jnp.isfinite(c2_theory_raw),
+        c2_theory_raw,
+        jnp.full_like(c2_theory_raw, 1e6),
+    )
+
+    n_nan = jnp.sum(~jnp.isfinite(c2_theory_raw))
+    numpyro.deterministic("n_numerical_issues", n_nan)
 
     # =========================================================================
     # 5. Likelihood with noise model (tighter sigma prior for precision)
@@ -893,7 +903,17 @@ def xpcs_model_constant_averaged(
     # =========================================================================
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
-    c2_theory = offset_per_point + contrast_per_point * g1**2
+    c2_theory_raw = offset_per_point + contrast_per_point * g1**2
+
+    # Numerical stability safeguard
+    c2_theory = jnp.where(
+        jnp.isfinite(c2_theory_raw),
+        c2_theory_raw,
+        jnp.full_like(c2_theory_raw, 1e6),
+    )
+
+    n_nan = jnp.sum(~jnp.isfinite(c2_theory_raw))
+    numpyro.deterministic("n_numerical_issues", n_nan)
 
     # =========================================================================
     # 5. Likelihood with noise model (tighter sigma prior for precision)
@@ -1106,7 +1126,17 @@ def xpcs_model_reparameterized(
     # =========================================================================
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
-    c2_theory = offset_per_point + contrast_per_point * g1**2
+    c2_theory_raw = offset_per_point + contrast_per_point * g1**2
+
+    # Numerical stability safeguard
+    c2_theory = jnp.where(
+        jnp.isfinite(c2_theory_raw),
+        c2_theory_raw,
+        jnp.full_like(c2_theory_raw, 1e6),
+    )
+
+    n_nan = jnp.sum(~jnp.isfinite(c2_theory_raw))
+    numpyro.deterministic("n_numerical_issues", n_nan)
 
     # =========================================================================
     # 5. Likelihood with noise model (with prior tempering)

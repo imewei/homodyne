@@ -148,6 +148,7 @@ def extract_phi_info(phi: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     # Create index mapping
     # CRITICAL FIX: Clip indices to valid range to prevent out-of-bounds access
     phi_indices = np.clip(np.searchsorted(phi_unique, phi), 0, n_phi - 1)
+    phi_indices = phi_indices.astype(np.int32)
 
     logger.debug(f"Extracted {n_phi} unique phi angles: {phi_unique}")
 

@@ -707,39 +707,37 @@ class NLSQAdapter(NLSQAdapterBase):
                         params_array[2:] if len(params_array) > 2 else default_phys
                     )
 
-                # Compute g2 for each point
-                g2_pred = np.zeros(len(xdata))
+                # Vectorized g2 computation (single JAX dispatch)
+                import jax.numpy as jnp
 
-                for i in range(len(xdata)):
-                    t1_val = xdata[i, 0]
-                    t2_val = xdata[i, 1]
-                    phi_val = xdata[i, 2]
+                params_jax = jnp.asarray(physical_params, dtype=jnp.float64)
+                t1_all = xdata[:, 0]
+                t2_all = xdata[:, 1]
+                phi_all = xdata[:, 2]
 
-                    # Find phi index
-                    phi_idx = np.argmin(np.abs(phi_unique - phi_val))
+                # Map phi values to indices (vectorized)
+                phi_idx_all = np.searchsorted(phi_unique, phi_all)
+                phi_idx_all = np.clip(phi_idx_all, 0, len(phi_unique) - 1)
 
-                    # Import jax.numpy for JAX array conversion
-                    import jax.numpy as jnp
+                # Batch compute g1 using model
+                g1_all = model.compute_g1(
+                    params_jax,
+                    jnp.asarray(t1_all, dtype=jnp.float64),
+                    jnp.asarray(t2_all, dtype=jnp.float64),
+                    jnp.asarray(phi_unique, dtype=jnp.float64),
+                    q_val,
+                    1.0,
+                )
+                g1_arr = np.asarray(g1_all)
 
-                    # Compute g1 using the model (model expects JAX arrays)
-                    g1 = model.compute_g1(
-                        jnp.array(physical_params),
-                        jnp.array([t1_val]),
-                        jnp.array([t2_val]),
-                        jnp.array([phi_unique[phi_idx]]),
-                        q_val,
-                        1.0,  # Default L (stator-rotor gap)
-                    )
+                # Select per-point g1 and compute g2
+                if g1_arr.ndim == 2:
+                    point_idx = np.arange(len(xdata))
+                    g1_per_point = g1_arr[phi_idx_all, point_idx]
+                else:
+                    g1_per_point = g1_arr.ravel()
 
-                    # Convert JAX array element to scalar for numpy assignment
-                    g1_arr = np.asarray(g1)
-                    g1_val = float(g1_arr.flat[0])
-
-                    # Compute g2 = offset + contrast * g1^2
-                    g2_pred[i] = (
-                        offset_vals[phi_idx] + contrast_vals[phi_idx] * g1_val**2
-                    )
-
+                g2_pred = offset_vals[phi_idx_all] + contrast_vals[phi_idx_all] * g1_per_point**2
                 return g2_pred
 
             return model_func, False, False

@@ -545,14 +545,14 @@ class XPCSDataLoader:
         if output_format == "jax" and HAS_JAX and jax_available:
             logger.debug("Converting arrays to JAX format")
             return {
-                k: jnp.asarray(v) if isinstance(v, np.ndarray) else v
+                k: jnp.asarray(v, dtype=jnp.float64) if isinstance(v, np.ndarray) else v
                 for k, v in data.items()
             }
 
         elif output_format == "auto" and HAS_JAX and jax_available:
             logger.debug("Auto-selecting JAX format (available)")
             return {
-                k: jnp.asarray(v) if isinstance(v, np.ndarray) else v
+                k: jnp.asarray(v, dtype=jnp.float64) if isinstance(v, np.ndarray) else v
                 for k, v in data.items()
             }
 
