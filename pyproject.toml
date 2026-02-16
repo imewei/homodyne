@@ -272,7 +272,7 @@ ignore_errors = true
 
 [tool.pytest.ini_options]
 # Pytest configuration for Homodyne test suite (CPU-only)
-minversion = "9.0"
+minversion = "8.0"
 addopts = "-ra -q --strict-markers --strict-config --tb=short --maxfail=10 --durations=10"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]

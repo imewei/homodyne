@@ -11,7 +11,7 @@ restructuring.
 ```
 tests/
 ├── conftest.py                    # Shared fixtures and configuration
-├── test_runner.py                 # Comprehensive test runner
+
 ├── unit/                          # Unit tests (47 files)
 │   ├── test_jax_backend.py        # JAX computational backend
 │   ├── test_nlsq_core.py          # NLSQ core optimization
@@ -169,18 +169,7 @@ make test-nlsq         # NLSQ optimization tests
 make test-mcmc         # MCMC validation tests
 ```
 
-### Test Runner
 
-```bash
-python tests/test_runner.py quick        # Quick development tests
-python tests/test_runner.py full         # Complete test suite
-python tests/test_runner.py unit         # Unit tests only
-python tests/test_runner.py integration  # Integration tests
-python tests/test_runner.py performance  # Performance benchmarks
-python tests/test_runner.py mcmc         # MCMC statistical tests
-python tests/test_runner.py ci           # CI-friendly test suite
-python tests/test_runner.py env          # Check test environment
-```
 
 ### Direct Pytest Usage
 
