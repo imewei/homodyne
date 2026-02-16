@@ -2,8 +2,8 @@
 
 Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in homodyne.
 
-**Version:** 2.20.0
-**Last Updated:** January 2026
+**Version:** 2.22.0
+**Last Updated:** February 2026
 
 ## Table of Contents
 
@@ -1051,3 +1051,13 @@ cmc_result = fit_mcmc_jax(
 3. **Proper Uncertainties**: No artificial precision from biased combination
 4. **Faster Convergence**: NUTS adapts from near-mode instead of searching
 5. **Consistent Parameterization**: NLSQ's per_angle_mode propagates to CMC
+
+### NLSQ and Bimodal CMC Posteriors (v2.22.0)
+
+When per-shard CMC posteriors are bimodal (e.g., D₀ ~19K and ~32K), NLSQ typically
+converges to one mode. Standard consensus MC averages both modes into a density
+trough, producing a z-score > 100 disagreement with NLSQ. Mode-aware consensus
+(v2.22.0) decomposes bimodal shards into per-component GMM statistics and runs
+consensus separately per mode cluster, preserving both physical solutions. The NLSQ
+result then matches one of the two consensus modes rather than disagreeing with
+a corrupted average.
