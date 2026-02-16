@@ -93,10 +93,10 @@ class TheoryEngine:
 
         # Convert to JAX arrays if needed
         if jax_available:
-            params_jax: Any = jnp.asarray(params)
-            t1_jax: Any = jnp.asarray(t1)
-            t2_jax: Any = jnp.asarray(t2)
-            phi_jax: Any = jnp.asarray(phi)
+            params_jax: Any = jnp.asarray(params, dtype=jnp.float64)
+            t1_jax: Any = jnp.asarray(t1, dtype=jnp.float64)
+            t2_jax: Any = jnp.asarray(t2, dtype=jnp.float64)
+            phi_jax: Any = jnp.asarray(phi, dtype=jnp.float64)
         else:
             params_jax = params
             t1_jax = t1
@@ -141,10 +141,10 @@ class TheoryEngine:
 
         # Convert to JAX arrays if needed
         if jax_available:
-            params_jax: Any = jnp.asarray(params)
-            t1_jax: Any = jnp.asarray(t1)
-            t2_jax: Any = jnp.asarray(t2)
-            phi_jax: Any = jnp.asarray(phi)
+            params_jax: Any = jnp.asarray(params, dtype=jnp.float64)
+            t1_jax: Any = jnp.asarray(t1, dtype=jnp.float64)
+            t2_jax: Any = jnp.asarray(t2, dtype=jnp.float64)
+            phi_jax: Any = jnp.asarray(phi, dtype=jnp.float64)
         else:
             params_jax = params
             t1_jax = t1
@@ -192,12 +192,12 @@ class TheoryEngine:
 
         # Convert to JAX arrays if needed
         if jax_available:
-            params_jax: Any = jnp.asarray(params)
-            data_jax: Any = jnp.asarray(data)
-            sigma_jax: Any = jnp.asarray(sigma)
-            t1_jax: Any = jnp.asarray(t1)
-            t2_jax: Any = jnp.asarray(t2)
-            phi_jax: Any = jnp.asarray(phi)
+            params_jax: Any = jnp.asarray(params, dtype=jnp.float64)
+            data_jax: Any = jnp.asarray(data, dtype=jnp.float64)
+            sigma_jax: Any = jnp.asarray(sigma, dtype=jnp.float64)
+            t1_jax: Any = jnp.asarray(t1, dtype=jnp.float64)
+            t2_jax: Any = jnp.asarray(t2, dtype=jnp.float64)
+            phi_jax: Any = jnp.asarray(phi, dtype=jnp.float64)
         else:
             params_jax = params
             data_jax = data
@@ -264,12 +264,12 @@ class TheoryEngine:
 
         # Convert to JAX arrays if needed
         if jax_available:
-            params_batch_jax: Any = jnp.asarray(params_batch)
-            data_jax: Any = jnp.asarray(data)
-            sigma_jax: Any = jnp.asarray(sigma)
-            t1_jax: Any = jnp.asarray(t1)
-            t2_jax: Any = jnp.asarray(t2)
-            phi_jax: Any = jnp.asarray(phi)
+            params_batch_jax: Any = jnp.asarray(params_batch, dtype=jnp.float64)
+            data_jax: Any = jnp.asarray(data, dtype=jnp.float64)
+            sigma_jax: Any = jnp.asarray(sigma, dtype=jnp.float64)
+            t1_jax: Any = jnp.asarray(t1, dtype=jnp.float64)
+            t2_jax: Any = jnp.asarray(t2, dtype=jnp.float64)
+            phi_jax: Any = jnp.asarray(phi, dtype=jnp.float64)
 
             return batch_chi_squared(
                 params_batch_jax,

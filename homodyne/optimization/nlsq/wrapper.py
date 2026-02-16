@@ -536,6 +536,20 @@ class UseSequentialOptimization:
     reason: str
 
 
+def _safe_uncertainties_from_pcov(pcov: np.ndarray, n_params: int) -> np.ndarray:
+    """Extract uncertainties with diagonal regularization for singular pcov."""
+    if pcov.shape[0] != n_params:
+        return np.zeros(n_params)
+    diag = np.diag(pcov)
+    if np.any(diag < 1e-15):
+        _memory_logger.warning(
+            f"Singular covariance: {np.sum(diag < 1e-15)}/{n_params} near-zero entries. "
+            "Applying regularization."
+        )
+        diag = np.diag(pcov + np.eye(n_params) * 1e-10)
+    return np.sqrt(np.maximum(diag, 0.0))
+
+
 class NLSQWrapper(NLSQAdapterBase):
     """Adapter class for NLSQ package integration with homodyne optimization.
 
@@ -948,11 +962,7 @@ class NLSQWrapper(NLSQAdapterBase):
             )
 
             execution_time = time.time() - start_time
-            uncertainties = (
-                np.sqrt(np.diag(pcov))
-                if pcov.shape[0] == len(popt)
-                else np.zeros_like(popt)
-            )
+            uncertainties = _safe_uncertainties_from_pcov(pcov, len(popt))
             reduced_chi2 = info.get("chi_squared", 0.0) / max(
                 1, n_est_points - len(popt)
             )
@@ -1190,11 +1200,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 )
 
                 execution_time = time.time() - start_time
-                uncertainties = (
-                    np.sqrt(np.diag(pcov))
-                    if pcov.shape[0] == len(popt)
-                    else np.zeros_like(popt)
-                )
+                uncertainties = _safe_uncertainties_from_pcov(pcov, len(popt))
                 reduced_chi2 = info.get("chi_squared", 0.0) / max(
                     1, n_total_points - len(popt)
                 )
@@ -4210,7 +4216,7 @@ class NLSQWrapper(NLSQAdapterBase):
             # Extract results
             popt = np.asarray(result["x"])
             pcov = np.asarray(result.get("pcov", np.eye(len(popt))))
-            perr = np.asarray(result.get("perr", np.sqrt(np.diag(pcov))))
+            perr = np.asarray(result.get("perr", _safe_uncertainties_from_pcov(pcov, len(popt))))
 
             # Build info dict with phase diagnostics
             info = {
@@ -7504,7 +7510,7 @@ class NLSQWrapper(NLSQAdapterBase):
         # This indicates the optimizer could not move these parameters away from bounds
         bound_stuck_warning = None
         if bounds is not None and is_laminar_flow:
-            perr = np.sqrt(np.diag(pcov))
+            perr = _safe_uncertainties_from_pcov(pcov, len(popt))
             param_statuses = _classify_parameter_status(
                 popt, lower_bounds, upper_bounds, atol=1e-6
             )
@@ -7880,7 +7886,7 @@ class NLSQWrapper(NLSQAdapterBase):
         residuals = np.asarray(residuals)
 
         # Compute uncertainties from covariance diagonal
-        uncertainties = np.sqrt(np.abs(np.diag(pcov)))
+        uncertainties = _safe_uncertainties_from_pcov(pcov, len(popt))
 
         # Compute chi-squared
         chi_squared = float(np.sum(residuals**2))
