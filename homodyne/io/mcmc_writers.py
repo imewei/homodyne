@@ -263,9 +263,7 @@ def create_mcmc_analysis_dict(
 
     if ess_source_analysis is not None:
         if isinstance(ess_source_analysis, dict):
-            ess_values = [
-                v for v in ess_source_analysis.values() if v is not None
-            ]
+            ess_values = [v for v in ess_source_analysis.values() if v is not None]
             min_ess = min(ess_values) if ess_values else None
         else:
             ess = np.asarray(ess_source_analysis)
@@ -306,8 +304,9 @@ def create_mcmc_analysis_dict(
             "n_warmup": getattr(result, "n_warmup", 0),
             "n_chains": getattr(result, "n_chains", 1),
             "execution_time": float(
-                getattr(result, "execution_time",
-                        getattr(result, "computation_time", 0.0))
+                getattr(
+                    result, "execution_time", getattr(result, "computation_time", 0.0)
+                )
             ),
         },
     }
@@ -432,9 +431,9 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
 
             diagnostics_dict["convergence"]["per_parameter_diagnostics"] = per_param
 
-    has_ess = (
-        (hasattr(result, "ess_bulk") and result.ess_bulk is not None)
-        or (hasattr(result, "effective_sample_size") and result.effective_sample_size is not None)
+    has_ess = (hasattr(result, "ess_bulk") and result.ess_bulk is not None) or (
+        hasattr(result, "effective_sample_size")
+        and result.effective_sample_size is not None
     )
     if has_ess:
         diagnostics_dict["convergence"]["ess_threshold"] = 400

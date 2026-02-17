@@ -288,9 +288,7 @@ def transform_to_physics_space(
         # The sampling prior caps at 0.5 via TruncatedNormal, but posterior
         # samples may exceed this during post-processing back-transform.
         D_offset_frac_safe = np.clip(D_offset_frac, 0.0, 1.0 - 1e-6)
-        result["D_offset"] = (
-            D_ref * D_offset_frac_safe / (1 - D_offset_frac_safe)
-        )
+        result["D_offset"] = D_ref * D_offset_frac_safe / (1 - D_offset_frac_safe)
         del result["log_D_ref"]
         del result["D_offset_frac"]
     elif config.enable_d_ref and "D_total" in samples:

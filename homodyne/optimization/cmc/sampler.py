@@ -100,7 +100,7 @@ def _preflight_log_density(
 
             try:
                 log_prob = fn.log_prob(value)
-            except Exception:
+            except Exception:  # nosec B112
                 continue
 
             log_prob_np = np.asarray(log_prob)
@@ -528,7 +528,9 @@ class MCMCSamples:
     extra_fields: dict[str, Any] = field(default_factory=dict)
     num_shards: int = 1
     shard_adapted_n_warmup: int | None = None
-    bimodal_consensus: Any = None  # BimodalConsensusResult when mode-aware consensus used
+    bimodal_consensus: Any = (
+        None  # BimodalConsensusResult when mode-aware consensus used
+    )
 
 
 def create_init_strategy(
@@ -1200,7 +1202,9 @@ def run_nuts_with_retry(
         attempt_start = time.perf_counter()
 
         # Adaptive divergence threshold: stricter on first attempt
-        divergence_threshold = DIVERGENCE_RATE_TARGET if attempt == 0 else DIVERGENCE_RATE_HIGH
+        divergence_threshold = (
+            DIVERGENCE_RATE_TARGET if attempt == 0 else DIVERGENCE_RATE_HIGH
+        )
 
         attempt_logger.info(
             f"🔄 Attempt {attempt_num}/{max_retries}: starting NUTS "

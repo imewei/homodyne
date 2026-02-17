@@ -132,7 +132,7 @@ def _load_shared_dict(ref: dict[str, Any]) -> dict:
     """
     import pickle as _pkl  # noqa: S403 — trusted internal data
 
-    return _pkl.loads(_load_shared_bytes(ref))  # noqa: S301
+    return _pkl.loads(_load_shared_bytes(ref))  # noqa: S301  # nosec B301
 
 
 def _load_shared_array(ref: dict[str, Any]) -> np.ndarray:
@@ -254,7 +254,9 @@ def _run_shard_worker_with_queue(
         )
 
         # Reconstruct time_grid
-        time_grid = _load_shared_array(time_grid_ref) if time_grid_ref is not None else None
+        time_grid = (
+            _load_shared_array(time_grid_ref) if time_grid_ref is not None else None
+        )
 
         # Merge shared kwargs into shard_data for backward-compatible worker interface
         shard_data["time_grid"] = time_grid
@@ -364,8 +366,14 @@ def _run_shard_worker(
     # method (fork vs spawn). Parent sets this in homodyne/__init__.py but
     # spawn-mode workers may not inherit in-memory os.environ changes.
     os.environ["JAX_ENABLE_X64"] = "true"
-    if "XLA_FLAGS" not in os.environ or "xla_force_host_platform_device_count" not in os.environ.get("XLA_FLAGS", ""):
-        os.environ["XLA_FLAGS"] = os.environ.get("XLA_FLAGS", "") + " --xla_force_host_platform_device_count=4"
+    if (
+        "XLA_FLAGS" not in os.environ
+        or "xla_force_host_platform_device_count" not in os.environ.get("XLA_FLAGS", "")
+    ):
+        os.environ["XLA_FLAGS"] = (
+            os.environ.get("XLA_FLAGS", "")
+            + " --xla_force_host_platform_device_count=4"
+        )
 
     import jax
 
@@ -646,9 +654,7 @@ def _log_bimodality_summary(
         lines.extend(impact_lines)
 
     lines.append("GUIDANCE:")
-    lines.append(
-        "  - NLSQ result likely converged to one mode; CMC captures both"
-    )
+    lines.append("  - NLSQ result likely converged to one mode; CMC captures both")
     lines.append(
         "  - Consider increasing shard size or using tighter NLSQ-informed priors"
     )
@@ -1096,13 +1102,10 @@ class MultiprocessingBackend(CMCBackend):
                                 )
                             elif exit_code is not None and exit_code > 0:
                                 error_msg = (
-                                    f"Process exited with error "
-                                    f"(exit_code={exit_code})"
+                                    f"Process exited with error (exit_code={exit_code})"
                                 )
                             else:
-                                error_msg = (
-                                    "Process exited without returning a result"
-                                )
+                                error_msg = "Process exited without returning a result"
                             results.append(
                                 {
                                     "type": "result",
@@ -1580,7 +1583,8 @@ class MultiprocessingBackend(CMCBackend):
                 # Log mode summary
                 for i, mode in enumerate(bimodal_result.modes):
                     mode_means = ", ".join(
-                        f"{p}={mode.mean[p]:.4g}" for p in modal_params
+                        f"{p}={mode.mean[p]:.4g}"
+                        for p in modal_params
                         if p in mode.mean
                     )
                     run_logger.info(

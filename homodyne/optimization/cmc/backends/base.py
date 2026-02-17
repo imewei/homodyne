@@ -595,9 +595,7 @@ def combine_shard_samples_bimodal(
             size=(n_chains, n_upper_samples),
         )
         # Mixture-draw: concatenate and shuffle within each chain
-        mixed = np.concatenate(
-            [lower_samples[name], upper_samples[name]], axis=1
-        )
+        mixed = np.concatenate([lower_samples[name], upper_samples[name]], axis=1)
         for c in range(n_chains):
             rng.shuffle(mixed[c])
         combined_samples[name] = mixed
@@ -644,9 +642,7 @@ def combine_shard_samples_bimodal(
     combined_extra: dict[str, Any] = {}
     for key in shard_samples[0].extra_fields.keys():
         all_extra = [
-            s.extra_fields.get(key)
-            for s in shard_samples
-            if key in s.extra_fields
+            s.extra_fields.get(key) for s in shard_samples if key in s.extra_fields
         ]
         if all_extra:
             try:
