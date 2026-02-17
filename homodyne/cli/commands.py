@@ -2869,9 +2869,12 @@ def save_mcmc_results(
         )
 
         # Compute theoretical C2 using posterior mean parameters
-        c2_theoretical_scaled = _compute_theoretical_c2_from_mcmc(
+        c2_result = _compute_theoretical_c2_from_mcmc(
             result, filtered_data, config
         )
+        c2_theoretical_scaled = c2_result["c2_theoretical_scaled"]
+        c2_theoretical_raw = c2_result["c2_theoretical_raw"]
+        per_angle_scaling = c2_result["per_angle_scaling"]
 
         # Calculate residuals
         c2_exp = filtered_data["c2_exp"]
@@ -2884,6 +2887,27 @@ def save_mcmc_results(
             t1 = t1[:, 0]
         if t2.ndim == 2:
             t2 = t2[0, :]
+
+        # Save fitted_data.npz (before plotting so data is saved even if plots fail)
+        phi_angles = np.asarray(filtered_data["phi_angles_list"])
+        q_val = filtered_data.get("wavevector_q_list", [1.0])[0]
+        residuals_normalized = residuals / (0.05 * np.where(c2_exp != 0, c2_exp, 1.0))
+        npz_file = method_dir / "fitted_data.npz"
+        np.savez_compressed(
+            npz_file,
+            phi_angles=phi_angles,
+            c2_exp=np.asarray(c2_exp),
+            c2_theoretical_raw=c2_theoretical_raw,
+            c2_theoretical_scaled=c2_theoretical_scaled,
+            per_angle_scaling=per_angle_scaling,
+            residuals=residuals,
+            residuals_normalized=residuals_normalized,
+            t1=t1,
+            t2=t2,
+            q=np.array([q_val]),
+        )
+        fitted_size_mb = npz_file.stat().st_size / (1024 * 1024)
+        logger.info(f"Saved fitted_data.npz ({fitted_size_mb:.2f} MB)")
 
         # Generate plots using NLSQ plotting function
         generate_nlsq_plots(
@@ -3009,8 +3033,11 @@ def _compute_theoretical_c2_from_mcmc(
 
     Returns
     -------
-    np.ndarray
-        Theoretical C2 with shape (n_angles, n_t1, n_t2)
+    dict[str, np.ndarray]
+        Dictionary with keys:
+        - "c2_theoretical_scaled": shape (n_angles, n_t1, n_t2), contrast * g1² + offset
+        - "c2_theoretical_raw": shape (n_angles, n_t1, n_t2), unscaled g1²
+        - "per_angle_scaling": shape (n_angles, 2), [contrast, offset] per angle
     """
     import numpy as np
 
@@ -3110,6 +3137,8 @@ def _compute_theoretical_c2_from_mcmc(
 
     # Compute theoretical C2 for all angles with per-angle scaling estimation
     c2_theoretical_list: list[np.ndarray] = []
+    c2_raw_list: list[np.ndarray] = []
+    scaling_list: list[list[float]] = []
 
     # Get experimental data for per-angle lstsq fitting
     c2_exp = data.get("c2_exp", None)
@@ -3206,6 +3235,10 @@ def _compute_theoretical_c2_from_mcmc(
             contrast_i = contrast
             offset_i = offset
 
+        # Collect raw g2 and per-angle scaling for fitted_data.npz
+        c2_raw_list.append(g2_theory_np)
+        scaling_list.append([contrast_i, offset_i])
+
         # Apply fitted scaling: c2_fitted = contrast_i * g2_theory + offset_i
         c2_theoretical_np = contrast_i * g2_theory_np + offset_i
         c2_theoretical_list.append(c2_theoretical_np)
@@ -3247,7 +3280,11 @@ def _compute_theoretical_c2_from_mcmc(
             "  - Verify initial_parameters.values in config are reasonable"
         )
 
-    return c2_theoretical_scaled
+    return {
+        "c2_theoretical_scaled": c2_theoretical_scaled,
+        "c2_theoretical_raw": np.array(c2_raw_list),
+        "per_angle_scaling": np.array(scaling_list),
+    }
 
 
 def _json_serializer(obj: Any) -> Any:
