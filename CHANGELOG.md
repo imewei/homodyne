@@ -25,6 +25,7 @@ JAX profiler integration for XLA-level performance analysis.
 **Adaptive Sampling:**
 
 - **feat(cmc)**: Add adaptive sample count based on shard size
+
   - Automatically reduces warmup/samples for small datasets
   - Reference: 10K points → full samples; smaller → proportionally fewer
   - 50 points → 140 warmup, 350 samples (75% reduction)
@@ -32,11 +33,13 @@ JAX profiler integration for XLA-level performance analysis.
   - New `CMCConfig.get_adaptive_sample_counts(shard_size, n_params)` method
 
 - **feat(cmc)**: Add `adaptive_sampling` config option (default: `true`)
+
   - Enable/disable automatic sample count reduction
   - `min_warmup: int = 100` - minimum warmup even for tiny datasets
   - `min_samples: int = 200` - minimum samples for statistical validity
 
 - **feat(cmc)**: Add `max_tree_depth` config option (default: `10`)
+
   - Limits NUTS leapfrog steps to 2^depth per sample
   - Reduces overhead for posteriors requiring many integration steps
   - Passed directly to NumPyro NUTS kernel
@@ -58,23 +61,28 @@ JAX profiler integration for XLA-level performance analysis.
 
 **Performance Benchmarks:**
 
-- **test(perf)**: Add CMC profiling infrastructure (`tests/performance/benchmark_cmc.py`)
+- **test(perf)**: Add CMC profiling infrastructure
+  (`tests/performance/benchmark_cmc.py`)
+
   - `benchmark_nuts_single_shard()` - profiles NUTS sampling on single shard
   - `benchmark_multiprocessing_overhead()` - measures IPC serialization
   - `benchmark_consensus_aggregation()` - measures posterior aggregation
   - `generate_flamegraph()` - generates py-spy flamegraphs
 
 - **test(perf)**: Add regression test suite (`tests/performance/test_cmc_benchmarks.py`)
+
   - 18 benchmark tests for multiprocessing, memory, throughput, scaling
   - CI/CD integration tests for performance monitoring
 
 #### Changed
 
 - **refactor(cmc)**: Use adaptive sample counts in `run_nuts_sampling()`
+
   - Automatically adjusts warmup/samples based on shard size
   - Logs adaptive adjustment: `"(adaptive: 50 pts)"`
 
 - **refactor(cmc)**: Pass `max_tree_depth` to NUTS kernel
+
   - Limits maximum leapfrog steps per NUTS sample
 
 #### Performance
@@ -98,17 +106,21 @@ improve NUTS sampling efficiency in CMC.
 **Reparameterization Transforms:**
 
 - **feat(cmc)**: Add `xpcs_model_reparameterized` for transformed sampling space
+
   - Samples `D_total = D0 + D_offset` instead of D0 directly (breaks linear degeneracy)
-  - Samples `log(gamma_dot_t0)` instead of gamma_dot_t0 (improves NUTS for small shear rates)
+  - Samples `log(gamma_dot_t0)` instead of gamma_dot_t0 (improves NUTS for small shear
+    rates)
   - Transforms back to physical parameters after sampling
   - New `get_xpcs_model()` factory with `use_reparameterization` parameter
 
 - **feat(cmc)**: Add `ReparamConfig` dataclass for reparameterization settings
+
   - `enable_d_total`: Enable D_total reparameterization (default: True)
   - `enable_log_gamma`: Enable log-gamma reparameterization (default: True)
   - Transform functions: `to_reparameterized()`, `from_reparameterized()`
 
 - **feat(cmc)**: Add reparameterization config options to `CMCConfig`
+
   - `reparameterization_d_total: bool = True`
   - `reparameterization_log_gamma: bool = True`
   - `bimodal_min_weight: float = 0.2`
@@ -117,11 +129,13 @@ improve NUTS sampling efficiency in CMC.
 **Bimodal Detection:**
 
 - **feat(cmc)**: Add GMM-based bimodal detection for posterior diagnostics
+
   - Detects bimodal posteriors that may indicate model identifiability issues
   - Configurable via `bimodal_min_weight` and `bimodal_min_separation`
   - Alerts logged when bimodality detected
 
 - **feat(cmc)**: Integrate bimodal detection alerts in multiprocessing backend
+
   - Per-shard bimodal detection during CMC execution
   - Summary alerts in combined results
 
@@ -137,7 +151,7 @@ improve NUTS sampling efficiency in CMC.
 - **feat(cli)**: Enable automatic NLSQ warm-start for CMC
   - `homodyne --method cmc` now runs NLSQ first automatically
   - Pass `--no-nlsq-warmstart` to disable (not recommended)
-  - Reduces divergence rate from ~28% to <5%
+  - Reduces divergence rate from ~28% to \<5%
 
 **Configuration Templates:**
 
@@ -149,14 +163,17 @@ improve NUTS sampling efficiency in CMC.
 #### Changed
 
 - **refactor(cmc)**: Optimize sharding logic and enforce NLSQ parity
+
   - CMC per-angle mode now matches NLSQ behavior exactly
   - `constant_averaged` mode uses fixed averaged scaling
 
 - **refactor(core)**: Modernize type hints and imports
+
   - Use `collections.abc` for type hints
   - Cleanup imports and type annotations across modules
 
 - **docs(cmc)**: Document parameter degeneracy in laminar_flow mode
+
   - Comprehensive explanation of D0/D_offset degeneracy
   - Reparameterization rationale and usage
 
@@ -208,15 +225,17 @@ ______________________________________________________________________
 
 ### CMC Convergence and Precision Fixes
 
-Major release addressing catastrophic CMC failures on multi-angle datasets. Previously, 3-angle
-laminar_flow analysis showed 94% shard timeout, 28.4% divergence rate, and 33-43x uncertainty
-inflation compared to NLSQ. This release implements comprehensive fixes across the CMC pipeline.
+Major release addressing catastrophic CMC failures on multi-angle datasets. Previously,
+3-angle laminar_flow analysis showed 94% shard timeout, 28.4% divergence rate, and
+33-43x uncertainty inflation compared to NLSQ. This release implements comprehensive
+fixes across the CMC pipeline.
 
 #### Added
 
 **Angle-Aware Shard Sizing:**
 
-- **feat(cmc)**: Implement angle-aware shard size scaling in `_resolve_max_points_per_shard()`
+- **feat(cmc)**: Implement angle-aware shard size scaling in
+  `_resolve_max_points_per_shard()`
   - `n_phi <= 3`: 30% of base size (prevents timeout on few-angle datasets)
   - `n_phi <= 5`: 50% of base size
   - `n_phi <= 10`: 70% of base size
@@ -234,18 +253,21 @@ inflation compared to NLSQ. This release implements comprehensive fixes across t
 **NLSQ Warm-Start Priors:**
 
 - **feat(cmc)**: Add NLSQ-informed prior builders in `priors.py`
+
   - `build_nlsq_informed_prior()`: TruncatedNormal centered on NLSQ estimate
   - `build_nlsq_informed_priors()`: Build informative priors for all physical parameters
   - `extract_nlsq_values_for_cmc()`: Extract values from various NLSQ result formats
   - Priors use `width_factor=3.0` by default (3σ = NLSQ uncertainty)
 
 - **feat(cmc)**: Add `nlsq_result` parameter to `fit_mcmc_jax()`
+
   - Automatically builds informative priors from NLSQ results
   - Logs warm-start information when enabled
 
 **Per-Angle Mode Alignment:**
 
 - **feat(cmc)**: Add `xpcs_model_constant_averaged()` for NLSQ parity
+
   - Uses FIXED averaged contrast/offset (not sampled)
   - Exactly matches NLSQ "auto" behavior
   - 8 parameters (7 physical + sigma) instead of 10
@@ -271,18 +293,20 @@ inflation compared to NLSQ. This release implements comprehensive fixes across t
 
 - **feat(cmc)**: Elevate `target_accept_prob` to 0.9 for laminar_flow mode
 - **feat(cmc)**: Add divergence rate checking with severity levels
-  - >30%: CRITICAL (logged as error)
-  - >10%: WARNING
-  - >5%: ELEVATED (info)
+  - > 30%: CRITICAL (logged as error)
+  - > 10%: WARNING
+  - > 5%: ELEVATED (info)
 
 **Shard Quality Filtering:**
 
 - **feat(cmc)**: Add `max_divergence_rate` config option (default: 0.10)
+
   - Filters shards with >10% divergence rate before consensus combination
   - Prevents corrupted posteriors from biasing combined results
   - Logs filtered shard count and reasons
 
 - **feat(cmc)**: Add `require_nlsq_warmstart` config option (default: false)
+
   - When true, raises ValueError if laminar_flow mode lacks NLSQ warm-start
   - When false (default), logs warning for laminar_flow without warm-start
   - Helps prevent high divergence rates from poor initialization
@@ -329,12 +353,9 @@ cmc_result = fit_mcmc_jax(data, config, nlsq_result=nlsq_result)
 
 #### Performance Impact
 
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| Shard success rate | 6% | >90% | 15x |
-| Divergence rate | 28.4% | <5% | 5.7x |
-| D_offset CV | 1.58 | <0.5 | 3x |
-| Uncertainty ratio vs NLSQ | 33-43x | <5x | 7-9x |
+| Metric | Before | After | Improvement | |--------|--------|-------|-------------| |
+Shard success rate | 6% | >90% | 15x | | Divergence rate | 28.4% | \<5% | 5.7x | |
+D_offset CV | 1.58 | \<0.5 | 3x | | Uncertainty ratio vs NLSQ | 33-43x | \<5x | 7-9x |
 
 #### Files Modified
 
@@ -353,28 +374,34 @@ ______________________________________________________________________
 
 ### CMC Per-Angle Scaling Modes
 
-Minor release adding per-angle scaling mode support to CMC (Consensus Monte Carlo), ensuring
-parity with NLSQ's anti-degeneracy system for consistent dimensionality reduction.
+Minor release adding per-angle scaling mode support to CMC (Consensus Monte Carlo),
+ensuring parity with NLSQ's anti-degeneracy system for consistent dimensionality
+reduction.
 
 #### Added
 
 - **feat(cmc)**: Implement per-angle scaling modes for CMC anti-degeneracy
+
   - `auto` mode (default): Single averaged contrast/offset SAMPLED (10 params)
-  - `constant` mode: Per-angle contrast/offset from quantile estimation, FIXED (8 params)
+  - `constant` mode: Per-angle contrast/offset from quantile estimation, FIXED (8
+    params)
   - `individual` mode: Per-angle contrast/offset SAMPLED (54 params)
   - Configuration via `per_angle_mode` and `constant_scaling_threshold` fields
 
 - **feat(core)**: Add shared scaling utilities (`homodyne/core/scaling_utils.py`)
+
   - Quantile-based per-angle contrast/offset estimation
   - Shared between NLSQ and CMC backends
 
 - **feat(cmc)**: Add `xpcs_model_constant()` with fixed_contrast/fixed_offset arrays
+
   - Factory function `get_xpcs_model()` for mode-based model selection
   - Updated `get_param_names_in_order()` and `build_init_values_dict()` for mode support
 
 #### Changed
 
 - **refactor(nlsq)**: Distinguish auto_averaged from fixed_constant modes
+
   - Unified per-angle mode semantics across NLSQ and CMC backends
   - `auto` mode estimates per-angle values → AVERAGES → broadcasts, OPTIMIZED
   - `constant` mode uses estimated per-angle values DIRECTLY, NOT optimized
@@ -393,7 +420,8 @@ parity with NLSQ's anti-degeneracy system for consistent dimensionality reductio
 
 #### Testing
 
-- **test(cmc)**: Add per-angle mode unit tests (24 tests in `tests/unit/optimization/cmc/test_per_angle_modes.py`)
+- **test(cmc)**: Add per-angle mode unit tests (24 tests in
+  `tests/unit/optimization/cmc/test_per_angle_modes.py`)
 
 ______________________________________________________________________
 
@@ -401,40 +429,49 @@ ______________________________________________________________________
 
 ### Quantile-Based Per-Angle Scaling
 
-Minor release with improved per-angle parameter initialization for robust NLSQ optimization.
+Minor release with improved per-angle parameter initialization for robust NLSQ
+optimization.
 
 #### Added
 
 - **feat(nlsq)**: Implement quantile-based per-angle scaling
+
   - Per-angle contrast/offset computed using robust quantile statistics
   - Improves initialization for laminar_flow mode with many phi angles
   - Reduces sensitivity to outliers in experimental data
 
 - **feat(nlsq)**: Integrate anti-degeneracy constant mode into CMA-ES
+
   - Constant (global) scaling mode now works with CMA-ES global optimization
   - Automatic mode selection based on phi angle count
 
 #### Fixed
 
 - **fix(imports)**: Resolve broken internal module imports
+
   - Fixed circular import issues in optimization submodules
 
 - **fix(config)**: Handle per-angle parameter names in bounds lookup
+
   - Correctly resolves bounds for `contrast_0`, `offset_0`, etc.
   - Prevents KeyError when using per-angle scaling with custom bounds
 
 - **fix(nlsq)**: Resolve constant mode parameter mismatch and diagonal masking
+
   - Fixed parameter count mismatch when using constant scaling mode
   - Corrected diagonal masking for proper residual computation
 
 #### Removed
 
 - **refactor(nlsq)**: Remove unused anti-degeneracy layer interface
-  - Removed `homodyne/optimization/nlsq/anti_degeneracy_layer.py` (507 lines of dead code)
-  - Removed abstract classes: `AntiDegeneracyLayer`, `AntiDegeneracyChain`, `OptimizationState`
+  - Removed `homodyne/optimization/nlsq/anti_degeneracy_layer.py` (507 lines of dead
+    code)
+  - Removed abstract classes: `AntiDegeneracyLayer`, `AntiDegeneracyChain`,
+    `OptimizationState`
   - Removed layer implementations: `FourierReparamLayer`, `HierarchicalLayer`, etc.
   - Production code uses concrete implementations in `wrapper.py` and `core.py` directly
-  - Removed associated test files: `test_anti_degeneracy_layer.py`, `test_nlsq_anti_degeneracy_layer.py`
+  - Removed associated test files: `test_anti_degeneracy_layer.py`,
+    `test_nlsq_anti_degeneracy_layer.py`
 
 ______________________________________________________________________
 
@@ -454,11 +491,13 @@ Minor release with CMA-ES configuration improvements and visualization bug fixes
 #### Fixed
 
 - **fix(viz)**: Use combined data range for adaptive color scaling in C2 heatmaps
+
   - Block artifacts appeared when fit data had narrower range than experimental data
   - Now computes adaptive color scale from BOTH exp AND fit data
   - Changed `adaptive` default from `False` to `True` in `plot_c2_comparison_fast()`
 
 - **fix(cli)**: Correct analysis mode display in `AnalysisSummaryLogger`
+
   - Previously showed hardcoded mode instead of actual config value
 
 - **fix(tests)**: Resolve 6 failing unit tests related to CMA-ES JIT tracing
@@ -480,35 +519,40 @@ ______________________________________________________________________
 
 ### CMA-ES Global Optimization Integration
 
-Major feature release adding CMA-ES (Covariance Matrix Adaptation Evolution Strategy) for
-robust global optimization of multi-scale parameter spaces.
+Major feature release adding CMA-ES (Covariance Matrix Adaptation Evolution Strategy)
+for robust global optimization of multi-scale parameter spaces.
 
 #### Added
 
 **CMA-ES Global Optimization:**
 
 - **feat(nlsq)**: Add CMA-ES global optimization wrapper (`cmaes_wrapper.py`)
+
   - Population-based evolution with BIPOP restart strategy
   - Automatic scale detection via `MethodSelector`
   - Memory batching for large datasets (100M+ points)
   - Two-phase architecture: CMA-ES global search → NLSQ TRF refinement
 
 - **feat(nlsq)**: Integrate CMA-ES into config and core optimization flow
+
   - New config fields: `enable_cmaes`, `cmaes_preset`, `cmaes_max_generations`, etc.
   - Auto-selection when scale ratio > threshold (D₀/γ̇₀ > 1000)
   - Presets: "cmaes-fast" (50 gen), "cmaes" (100), "cmaes-global" (200)
 
 - **feat(nlsq)**: Add bounds-based parameter normalization for CMA-ES
+
   - Maps parameters to [0,1] space for equal-scale optimization
   - Proper covariance transformation via Jacobian
   - Improves convergence for laminar_flow mode (scale ratio > 1e6)
 
 - **feat(nlsq)**: Add post-optimization fit quality validation
+
   - Checks: reduced χ² threshold, CMA-ES convergence, parameters at bounds
   - Quality report saved in `convergence_metrics.json`
   - Configurable thresholds via `quality_*` config fields
 
 - **feat(nlsq)**: Integrate global optimization selection into `fit_nlsq_jax()`
+
   - Unified entry point delegates to CMA-ES or multi-start based on config
   - Availability checks before delegation
 
@@ -528,12 +572,14 @@ robust global optimization of multi-scale parameter spaces.
 #### Changed
 
 - **refactor(nlsq)**: Replace scipy.optimize with JAX-native stack
+
   - Uses jaxopt.LBFGSB for bounded L-BFGS in hierarchical optimization
   - JAX autodiff replaces scipy's approx_derivative
 
 - **refactor(nlsq)**: Enhance CMA-ES logging with phase timing and structured messages
 
 - **refactor(nlsq)**: Update integration for NLSQ 0.6.4 compatibility
+
   - Removed deprecated WorkflowSelector, WorkflowTier APIs
   - Uses homodyne's own `select_nlsq_strategy()` for memory-based selection
 
@@ -600,14 +646,17 @@ ______________________________________________________________________
 
 ### NLSQ Module Optimization - Architecture Refactoring and Config Consolidation
 
-Major refactoring release implementing the NLSQ Module Optimization specification (001-nlsq-optimization).
-Improves code organization, reduces duplication, and streamlines configuration.
+Major refactoring release implementing the NLSQ Module Optimization specification
+(001-nlsq-optimization). Improves code organization, reduces duplication, and
+streamlines configuration.
 
 #### Added
 
 **Architecture (Phase 5 - User Story 3)**:
 
-- `homodyne/optimization/nlsq/adapter_base.py` - Abstract base class `NLSQAdapterBase` providing shared functionality:
+- `homodyne/optimization/nlsq/adapter_base.py` - Abstract base class `NLSQAdapterBase`
+  providing shared functionality:
+
   - `_prepare_data()`: Data flattening and validation
   - `_validate_input()`: Input shape and type validation
   - `_build_result()`: Result object construction
@@ -615,7 +664,9 @@ Improves code organization, reduces duplication, and streamlines configuration.
   - `_setup_bounds()`: Bounds configuration
   - `_compute_covariance()`: Covariance from Jacobian
 
-- `homodyne/optimization/nlsq/anti_degeneracy_layer.py` - Layer interface for anti-degeneracy defense:
+- `homodyne/optimization/nlsq/anti_degeneracy_layer.py` - Layer interface for
+  anti-degeneracy defense:
+
   - `OptimizationState` dataclass for state passing between layers
   - `AntiDegeneracyLayer` ABC for layer implementations
   - `FourierReparamLayer`, `HierarchicalLayer`, `AdaptiveRegularizationLayer`
@@ -623,9 +674,11 @@ Improves code organization, reduces duplication, and streamlines configuration.
   - `AntiDegeneracyChain` executor for layer composition
 
 - `homodyne/optimization/nlsq/validation/` - Extracted validation utilities:
+
   - `InputValidator` class with `validate_all()` method
   - `ResultValidator` class with result validation
-  - Standalone functions: `validate_array_dimensions`, `validate_no_nan_inf`, `validate_bounds_consistency`
+  - Standalone functions: `validate_array_dimensions`, `validate_no_nan_inf`,
+    `validate_bounds_consistency`
 
 **Configuration (Phase 6 - User Story 4)**:
 
@@ -669,13 +722,15 @@ Improves code organization, reduces duplication, and streamlines configuration.
 - `homodyne/optimization/nlsq/__init__.py` - Added exports for new modules
 - `homodyne/core/jax_backend.py` - LRU cache eviction with `OrderedDict`
 - `homodyne/core/models.py` - Added `compute_g1_batch()` vectorized method
-- `homodyne/optimization/nlsq/shear_weighting.py` - JIT-compiled `_compute_weights_jax()`
+- `homodyne/optimization/nlsq/shear_weighting.py` - JIT-compiled
+  `_compute_weights_jax()`
 - `homodyne/optimization/nlsq/fit_computation.py` - Static shape annotations
 - `homodyne/device/cpu.py` - CPU threading configuration
 
 #### Deprecated
 
-- `homodyne.optimization.nlsq.config_utils` module - Use `homodyne.optimization.nlsq.config` instead
+- `homodyne.optimization.nlsq.config_utils` module - Use
+  `homodyne.optimization.nlsq.config` instead
   - `safe_float()`, `safe_int()`, `safe_bool()` moved to `config.py`
   - Module import now raises `DeprecationWarning`
 
@@ -720,20 +775,26 @@ print(decision.reason)          # Human-readable explanation
 ```
 
 **Strategy Decision Tree:**
+
 1. If index array (n_points × 8 bytes) > 75% RAM → `HYBRID_STREAMING`
-2. Elif peak memory (Jacobian + autodiff) > 75% RAM → `OUT_OF_CORE`
-3. Else → `STANDARD`
+1. Elif peak memory (Jacobian + autodiff) > 75% RAM → `OUT_OF_CORE`
+1. Else → `STANDARD`
 
 #### Changed
 
-- `homodyne/optimization/nlsq/memory.py` - Updated docstring, now primary strategy selection module
-- `homodyne/optimization/nlsq/wrapper.py` - Added local `OptimizationStrategy` enum and `_get_strategy_info()` helper
-- `homodyne/optimization/nlsq/__init__.py` - Added exports for `NLSQStrategy`, `StrategyDecision`, `select_nlsq_strategy`
-- `homodyne/runtime/utils/system_validator.py` - Updated to use new memory-based strategy selection
+- `homodyne/optimization/nlsq/memory.py` - Updated docstring, now primary strategy
+  selection module
+- `homodyne/optimization/nlsq/wrapper.py` - Added local `OptimizationStrategy` enum and
+  `_get_strategy_info()` helper
+- `homodyne/optimization/nlsq/__init__.py` - Added exports for `NLSQStrategy`,
+  `StrategyDecision`, `select_nlsq_strategy`
+- `homodyne/runtime/utils/system_validator.py` - Updated to use new memory-based
+  strategy selection
 
 #### Tests Updated
 
-- `tests/regression/test_nlsq_regression.py` - Replaced `DatasetSizeStrategy` with `select_nlsq_strategy`
+- `tests/regression/test_nlsq_regression.py` - Replaced `DatasetSizeStrategy` with
+  `select_nlsq_strategy`
 - `tests/unit/test_streaming_optimizer.py` - Updated strategy tests
 - `tests/integration/test_nlsq_integration.py` - Updated all strategy selection tests
 - Removed obsolete `filterwarnings` for `DatasetSizeStrategy` deprecation from:
@@ -762,9 +823,11 @@ default settings.
 
 #### Changed
 
-- **BREAKING**: CMC default combination method changed from `weighted_gaussian` to `consensus_mc`
+- **BREAKING**: CMC default combination method changed from `weighted_gaussian` to
+  `consensus_mc`
   - `weighted_gaussian` was mathematically incorrect for posterior combination
-  - Add `combination_method: weighted_gaussian` to config to preserve old behavior (deprecated)
+  - Add `combination_method: weighted_gaussian` to config to preserve old behavior
+    (deprecated)
 - Updated config defaults for anti-degeneracy system
 
 #### Deprecated
@@ -779,8 +842,8 @@ ______________________________________________________________________
 
 ### NLSQAdapter with Model Caching and CurveFit Integration
 
-Added `NLSQAdapter` as the recommended interface for NLSQ optimization, featuring
-model caching for significant performance improvements in multi-start optimization.
+Added `NLSQAdapter` as the recommended interface for NLSQ optimization, featuring model
+caching for significant performance improvements in multi-start optimization.
 
 #### Added
 
@@ -828,15 +891,17 @@ structural degeneracy in laminar_flow mode.
 #### Layer 5: Shear-Sensitivity Weighting
 
 **Problem**: The shear term gradient `∂L/∂γ̇₀ ∝ Σ cos(φ₀-φ)` suffers from 94.6%
-cancellation when summing across 23 angles spanning 360° (11 positive, 12 negative
-cos contributions).
+cancellation when summing across 23 angles spanning 360° (11 positive, 12 negative cos
+contributions).
 
 **Solution**: Weight residuals by `|cos(φ₀-φ)|` to prevent gradient cancellation:
+
 - Angles perpendicular to flow (cos≈0) contribute less to loss
 - Angles parallel to flow (|cos|≈1) contribute more
 - Preserves gradient signal for shear parameters
 
 **Configuration:**
+
 ```yaml
 optimization:
   nlsq:
@@ -853,13 +918,12 @@ optimization:
 
 #### Updated 5-Layer Defense System
 
-| Layer | Solution | Effect |
-|-------|----------|--------|
-| 1 | Fourier Reparameterization | Reduces 2×n_phi per-angle params to 10 Fourier coefficients |
-| 2 | Hierarchical Optimization | Alternates physical/per-angle stages |
-| 3 | Adaptive CV Regularization | Auto-tunes λ to contribute ~10% to loss |
-| 4 | Gradient Collapse Monitor | Runtime detection with automatic response |
-| **5** | **Shear-Sensitivity Weighting** | **Weights residuals by \|cos(φ₀-φ)\|** |
+| Layer | Solution | Effect | |-------|----------|--------| | 1 | Fourier
+Reparameterization | Reduces 2×n_phi per-angle params to 10 Fourier coefficients | | 2 |
+Hierarchical Optimization | Alternates physical/per-angle stages | | 3 | Adaptive CV
+Regularization | Auto-tunes λ to contribute ~10% to loss | | 4 | Gradient Collapse
+Monitor | Runtime detection with automatic response | | **5** | **Shear-Sensitivity
+Weighting** | **Weights residuals by |cos(φ₀-φ)|** |
 
 ### Constant Scaling Mode
 
@@ -867,6 +931,7 @@ Added constant (global) scaling mode as alternative to per-angle scaling for dat
 where per-angle parameters are not needed.
 
 **Features:**
+
 - Auto-selection in anti-degeneracy controller based on phi angle count
 - Parameter transformation in wrapper for seamless integration
 - Config option: `per_angle_mode: "constant"` or `"auto"`
@@ -890,7 +955,8 @@ where per-angle parameters are not needed.
 #### Streaming Optimizer Migration
 
 - Migrated from legacy `StreamingOptimizer` to `AdaptiveHybridStreamingOptimizer`
-- Replaced cyclic stratification with interleaved stratification for better angle coverage
+- Replaced cyclic stratification with interleaved stratification for better angle
+  coverage
 
 #### L-BFGS Terminology Transition
 
@@ -931,19 +997,18 @@ ______________________________________________________________________
 
 ### Anti-Degeneracy Defense System
 
-Major feature release addressing **structural degeneracy** in laminar_flow mode with many
-phi angles. When using hybrid streaming with n_phi > 6 angles, the optimizer could
-incorrectly collapse shear parameters (gamma_dot_t0) to zero because per-angle parameters
-absorbed the angle-dependent signal.
+Major feature release addressing **structural degeneracy** in laminar_flow mode with
+many phi angles. When using hybrid streaming with n_phi > 6 angles, the optimizer could
+incorrectly collapse shear parameters (gamma_dot_t0) to zero because per-angle
+parameters absorbed the angle-dependent signal.
 
 #### 4-Layer Defense System
 
-| Layer | Solution | Effect |
-|-------|----------|--------|
-| 1 | Fourier Reparameterization | Reduces 2×n_phi per-angle params to 10 Fourier coefficients |
-| 2 | Hierarchical Optimization | Alternates physical/per-angle stages to break gradient cancellation |
-| 3 | Adaptive CV Regularization | Auto-tunes λ to contribute ~10% to loss |
-| 4 | Gradient Collapse Monitor | Runtime detection with automatic response |
+| Layer | Solution | Effect | |-------|----------|--------| | 1 | Fourier
+Reparameterization | Reduces 2×n_phi per-angle params to 10 Fourier coefficients | | 2 |
+Hierarchical Optimization | Alternates physical/per-angle stages to break gradient
+cancellation | | 3 | Adaptive CV Regularization | Auto-tunes λ to contribute ~10% to
+loss | | 4 | Gradient Collapse Monitor | Runtime detection with automatic response |
 
 #### New Files
 
@@ -1002,15 +1067,17 @@ ______________________________________________________________________
 
 Added regularization to prevent per-angle parameter absorption in laminar_flow mode.
 
-**Problem**: With 23 angles, 46 per-angle params (contrast + offset) vs 7 physical params.
-Per-angle params have larger gradients and can "absorb" shear signal.
+**Problem**: With 23 angles, 46 per-angle params (contrast + offset) vs 7 physical
+params. Per-angle params have larger gradients and can "absorb" shear signal.
 
 **Solution**: Add penalty term constraining per-angle parameter variance:
+
 ```
 L = MSE + λ × [Var(contrast_per_angle) + Var(offset_per_angle)]
 ```
 
 **Configuration**:
+
 ```yaml
 optimization:
   nlsq:
@@ -1066,10 +1133,10 @@ parameter degeneracy detection.
 #### Dataset Size-Based Strategy Selection
 
 | Dataset Size | Strategy | Approach | Overhead |
-|--------------|----------|----------|----------|
-| < 1M points | **full** | Run N complete fits in parallel | N× |
-| 1M - 100M | **subsample** | Multi-start on 500K subsample, full fit from best | ~1.1× |
-| > 100M | **phase1** | Parallel L-BFGS warmup, streaming from best | ~1.2× |
+|--------------|----------|----------|----------| | < 1M points | **full** | Run N
+complete fits in parallel | N× | | 1M - 100M | **subsample** | Multi-start on 500K
+subsample, full fit from best | ~1.1× | | > 100M | **phase1** | Parallel L-BFGS warmup,
+streaming from best | ~1.2× |
 
 #### Configuration
 
@@ -1102,8 +1169,8 @@ homodyne --config config.yaml --method nlsq --multi-start
 
 ### Progress Bar and Logging
 
-Added progress bar for NLSQ optimization with real-time parameter updates and convergence
-monitoring.
+Added progress bar for NLSQ optimization with real-time parameter updates and
+convergence monitoring.
 
 ______________________________________________________________________
 
@@ -1111,14 +1178,15 @@ ______________________________________________________________________
 
 ### Adaptive Hybrid Streaming Optimizer
 
-For large datasets (>10M points), NLSQ can use streaming optimization to avoid OOM errors.
+For large datasets (>10M points), NLSQ can use streaming optimization to avoid OOM
+errors.
 
 #### Four Phases
 
 1. **Phase 0**: Parameter normalization setup (bounds-based)
-2. **Phase 1**: L-BFGS warmup with adaptive switching (fast initial exploration)
-3. **Phase 2**: Streaming Gauss-Newton with exact J^T J accumulation
-4. **Phase 3**: Denormalization and covariance transform
+1. **Phase 1**: L-BFGS warmup with adaptive switching (fast initial exploration)
+1. **Phase 2**: Streaming Gauss-Newton with exact J^T J accumulation
+1. **Phase 3**: Denormalization and covariance transform
 
 #### Memory-Based Auto-Selection
 
@@ -1143,10 +1211,9 @@ optimization:
 #### Performance Characteristics
 
 | Mode | Memory | Convergence | Covariance |
-|------|--------|-------------|------------|
-| Stratified LS | ~30+ GB | Exact (L-M) | Exact |
-| Old Streaming | ~2 GB | Slow | Crude |
-| **Hybrid Streaming** | ~2 GB | Fast (Hybrid) | Exact |
+|------|--------|-------------|------------| | Stratified LS | ~30+ GB | Exact (L-M) |
+Exact | | Old Streaming | ~2 GB | Slow | Crude | | **Hybrid Streaming** | ~2 GB | Fast
+(Hybrid) | Exact |
 
 ### Fixed
 
