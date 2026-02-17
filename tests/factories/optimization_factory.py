@@ -67,7 +67,9 @@ def create_mock_optimization_result(
     """
     # Per-angle scaling parameters (contrast, offset for each angle)
     # Realistic values with slight variation per angle
-    contrast_per_angle = TYPICAL_CONTRAST + CONTRAST_NOISE_STD * np.random.randn(n_angles)
+    contrast_per_angle = TYPICAL_CONTRAST + CONTRAST_NOISE_STD * np.random.randn(
+        n_angles
+    )
     offset_per_angle = TYPICAL_OFFSET + OFFSET_NOISE_STD * np.random.randn(n_angles)
 
     if analysis_mode == "static":

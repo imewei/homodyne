@@ -5,10 +5,13 @@ This script simulates the multiprocessing worker environment:
 - Uses the EXACT production model (xpcs_model_scaled) and ParameterSpace
 - Runs MCMC with chain_method="parallel" (pmap) via run_nuts_sampling
 """
+
 import os
 
 # Set XLA device count BEFORE importing JAX
-os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4 --xla_disable_hlo_passes=constant_folding"
+os.environ["XLA_FLAGS"] = (
+    "--xla_force_host_platform_device_count=4 --xla_disable_hlo_passes=constant_folding"
+)
 os.environ["OMP_NUM_THREADS"] = "2"
 
 import traceback

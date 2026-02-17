@@ -57,9 +57,7 @@ def _create_synthetic_hdf5_aps_old(
     half_matrices = []
     for _ in range(n_phi):
         full = 1.0 + 0.3 * np.exp(
-            -0.01 * np.abs(
-                np.arange(n_frames)[:, None] - np.arange(n_frames)[None, :]
-            )
+            -0.01 * np.abs(np.arange(n_frames)[:, None] - np.arange(n_frames)[None, :])
         )
         full += rng.normal(0, 0.005, full.shape)
         # Store as upper triangle (APS convention)
@@ -165,9 +163,9 @@ class TestHDF5ToNLSQStaticMode:
             "t2",
             "c2_exp",
         }
-        assert required_keys.issubset(
-            data.keys()
-        ), f"Missing keys: {required_keys - data.keys()}"
+        assert required_keys.issubset(data.keys()), (
+            f"Missing keys: {required_keys - data.keys()}"
+        )
 
     def test_loaded_shapes_are_consistent(
         self,
@@ -326,9 +324,9 @@ class TestHDF5RoundTripDataIntegrity:
 
         # Loaded q should be a subset or equal to expected
         for q_val in loaded_q:
-            assert np.any(
-                np.abs(expected_q - q_val) < 1e-8
-            ), f"Loaded q={q_val} not found in ground truth"
+            assert np.any(np.abs(expected_q - q_val) < 1e-8), (
+                f"Loaded q={q_val} not found in ground truth"
+            )
 
     def test_correlation_matrix_symmetry(
         self,
@@ -367,8 +365,7 @@ class TestHDF5RoundTripDataIntegrity:
                         mat[col, row],
                         atol=1e-10,
                         err_msg=(
-                            f"Asymmetry at phi_idx={i}, "
-                            f"({row},{col}) vs ({col},{row})"
+                            f"Asymmetry at phi_idx={i}, ({row},{col}) vs ({col},{row})"
                         ),
                     )
 

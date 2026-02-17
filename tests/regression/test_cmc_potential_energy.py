@@ -118,7 +118,9 @@ def test_cmc_potential_energy_availability():
 
         # Verify inference_data structure
         assert hasattr(result, "inference_data"), "Result missing inference_data"
-        assert hasattr(result.inference_data, "sample_stats"), "inference_data missing sample_stats"
+        assert hasattr(result.inference_data, "sample_stats"), (
+            "inference_data missing sample_stats"
+        )
 
         sample_stats = result.inference_data.sample_stats
 

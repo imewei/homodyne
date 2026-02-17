@@ -92,9 +92,7 @@ class TestCLIConfigGeneratorStatic:
         assert isinstance(config, dict), "Config should be a dict"
         assert "analysis_mode" in config, "Config must include analysis_mode"
 
-    def test_static_config_has_analysis_mode(
-        self, tmp_output_dir: Path
-    ) -> None:
+    def test_static_config_has_analysis_mode(self, tmp_output_dir: Path) -> None:
         """Static config analysis_mode should be 'static_isotropic' or 'static'."""
         output_path = tmp_output_dir / "test_static.yaml"
 
@@ -127,9 +125,7 @@ class TestCLIConfigGeneratorStatic:
 class TestCLIConfigGeneratorLaminarFlow:
     """Test homodyne-config generation in laminar_flow mode."""
 
-    def test_generates_laminar_flow_config_file(
-        self, tmp_output_dir: Path
-    ) -> None:
+    def test_generates_laminar_flow_config_file(self, tmp_output_dir: Path) -> None:
         """homodyne-config -m laminar_flow should create a valid YAML file."""
         output_path = tmp_output_dir / "test_flow.yaml"
 
@@ -154,9 +150,7 @@ class TestCLIConfigGeneratorLaminarFlow:
         )
         assert output_path.exists(), "Output YAML file was not created"
 
-    def test_laminar_flow_config_is_valid_yaml(
-        self, tmp_output_dir: Path
-    ) -> None:
+    def test_laminar_flow_config_is_valid_yaml(self, tmp_output_dir: Path) -> None:
         """Generated laminar_flow config must be parseable YAML."""
         output_path = tmp_output_dir / "test_flow.yaml"
 
@@ -180,9 +174,7 @@ class TestCLIConfigGeneratorLaminarFlow:
 
         assert isinstance(config, dict), "Config should be a dict"
 
-    def test_laminar_flow_has_shear_parameters(
-        self, tmp_output_dir: Path
-    ) -> None:
+    def test_laminar_flow_has_shear_parameters(self, tmp_output_dir: Path) -> None:
         """Laminar flow config should include shear-related parameter names."""
         output_path = tmp_output_dir / "test_flow.yaml"
 
@@ -205,9 +197,7 @@ class TestCLIConfigGeneratorLaminarFlow:
             config = yaml.safe_load(f)
 
         mode = config.get("analysis_mode", "")
-        assert mode == "laminar_flow", (
-            f"Expected laminar_flow mode, got '{mode}'"
-        )
+        assert mode == "laminar_flow", f"Expected laminar_flow mode, got '{mode}'"
 
 
 @pytest.mark.integration
@@ -232,9 +222,7 @@ class TestCLIInvalidConfig:
             "Expected non-zero exit code when no mode specified"
         )
 
-    def test_overwrite_without_force_fails(
-        self, tmp_output_dir: Path
-    ) -> None:
+    def test_overwrite_without_force_fails(self, tmp_output_dir: Path) -> None:
         """Generating to an existing path without --force should fail."""
         output_path = tmp_output_dir / "existing.yaml"
 

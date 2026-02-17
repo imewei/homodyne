@@ -882,7 +882,9 @@ def mock_mcmc_samples():
         samples = np.zeros_like(noise)
         samples[:, 0, :] = noise[:, 0, :]
         for i in range(1, n_samples):
-            samples[:, i, :] = rho * samples[:, i - 1, :] + np.sqrt(1 - rho**2) * noise[:, i, :]
+            samples[:, i, :] = (
+                rho * samples[:, i - 1, :] + np.sqrt(1 - rho**2) * noise[:, i, :]
+            )
 
         # Adjust mean and scale to reasonable parameter values (0.5-2.0 range)
         samples = samples * 0.3 + 1.0
