@@ -572,14 +572,16 @@ def _compute_g1_shear_core(
     """
     # Check params length - if < 7, we're in static mode (no shear)
     if safe_len(params) < 7:
-        # Return ones for all phi angles and time combinations (g1_shear = 1)
-        phi_array = jnp.atleast_1d(phi)
-        n_phi = safe_len(phi_array)
-        if t1.ndim == 2:
-            n_times = t1.shape[0]
-            return jnp.ones((n_phi, n_times, n_times))
+        # Return ones matching input dimensionality (g1_shear = 1)
+        if t1.ndim == 1:
+            # Element-wise mode (flat arrays from CMC shards or heatmap generation):
+            # return 1D ones to match g1_diff shape in _compute_g1_total_core
+            return jnp.ones_like(t1)
         else:
-            n_times = safe_len(t1)
+            # Matrix mode: return (n_phi, n_times, n_times) to broadcast with g1_diff
+            phi_array = jnp.atleast_1d(phi)
+            n_phi = safe_len(phi_array)
+            n_times = t1.shape[0]
             return jnp.ones((n_phi, n_times, n_times))
 
     gamma_dot_0, beta, gamma_dot_offset, phi0 = (
