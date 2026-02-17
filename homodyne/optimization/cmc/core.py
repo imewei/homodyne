@@ -180,13 +180,14 @@ def _resolve_max_points_per_shard(
         else:
             base = 8_000  # Small datasets: fewer, larger shards
     else:
-        # Static mode (3 params) - simpler gradients, can handle larger shards
+        # Static mode (3 params) - simpler gradients, ~2x larger shards than laminar_flow.
+        # NUTS is still O(n) per leapfrog step; 100K base caused 2h+ shard timeouts (Feb 2026).
         if n_total >= 100_000_000:  # 100M+ points
-            base = 50_000  # ~2K shards
+            base = 20_000  # ~5K shards
         elif n_total >= 50_000_000:  # 50M+ points
-            base = 80_000  # ~625 shards
+            base = 15_000  # ~3.3K shards
         else:
-            base = 100_000  # Default for static mode
+            base = 10_000  # ~2x laminar_flow base; yields 5-6K after scaling
 
     # Apply angle-aware scaling
     scaled_base = int(base * angle_factor)
