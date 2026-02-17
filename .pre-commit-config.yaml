@@ -55,6 +55,9 @@ repos:
           - types-decorator>=5.1
           - types-setuptools>=68.0
           - types-pyyaml>=6.0
+          - jax>=0.4
+          - nlsq>=0.6.4
+          - scikit-learn>=1.4
         exclude: ^(tests/|docs/)
 
   # Markdown formatting

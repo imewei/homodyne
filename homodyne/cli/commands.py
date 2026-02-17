@@ -263,7 +263,10 @@ def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
             # Record optimization metrics
             if result is not None:
                 # CMCResult.chi_squared is a placeholder (always 0.0) — skip it
-                is_cmc = callable(getattr(result, "is_cmc_result", None)) and result.is_cmc_result()
+                is_cmc = (
+                    callable(getattr(result, "is_cmc_result", None))
+                    and result.is_cmc_result()
+                )
                 if hasattr(result, "chi_squared") and not is_cmc:
                     summary.record_metric("chi_squared", float(result.chi_squared))
                 if hasattr(result, "n_iterations"):
@@ -2809,7 +2812,7 @@ def save_mcmc_results(
             save_dict["acceptance_rate"] = np.array([result.acceptance_rate])
 
         if save_dict:  # Only save if we have data
-            np.savez_compressed(samples_file, **save_dict)
+            np.savez_compressed(str(samples_file), **save_dict)  # type: ignore[arg-type]
             # T058b: Log file size after write completion
             samples_size_mb = samples_file.stat().st_size / (1024 * 1024)
             logger.debug(
@@ -2869,9 +2872,7 @@ def save_mcmc_results(
         )
 
         # Compute theoretical C2 using posterior mean parameters
-        c2_result = _compute_theoretical_c2_from_mcmc(
-            result, filtered_data, config
-        )
+        c2_result = _compute_theoretical_c2_from_mcmc(result, filtered_data, config)
         c2_theoretical_scaled = c2_result["c2_theoretical_scaled"]
         c2_theoretical_raw = c2_result["c2_theoretical_raw"]
         per_angle_scaling = c2_result["per_angle_scaling"]
@@ -3280,7 +3281,7 @@ def _compute_theoretical_c2_from_mcmc(
             "  - Verify initial_parameters.values in config are reasonable"
         )
 
-    return {
+    return {  # type: ignore[return-value]
         "c2_theoretical_scaled": c2_theoretical_scaled,
         "c2_theoretical_raw": np.array(c2_raw_list),
         "per_angle_scaling": np.array(scaling_list),

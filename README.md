@@ -12,22 +12,21 @@
 
 ### CMC Adaptive Sampling and Performance Profiling
 
-**Performance optimization release** adding adaptive NUTS sampling for small datasets and
-JAX profiler integration for XLA-level performance analysis.
+**Performance optimization release** adding adaptive NUTS sampling for small datasets
+and JAX profiler integration for XLA-level performance analysis.
 
 **Key Features:**
 
-- **Adaptive sampling**: Automatically reduces warmup/samples for small datasets (60-80% speedup)
+- **Adaptive sampling**: Automatically reduces warmup/samples for small datasets (60-80%
+  speedup)
 - **max_tree_depth**: Configurable NUTS tree depth to limit leapfrog steps
 - **JAX profiling**: Capture XLA-level performance data invisible to Python profilers
 
 **Adaptive Scaling:**
 
 | Shard Size | Warmup | Samples | Reduction |
-|------------|--------|---------|-----------|
-| 50 points | 140 | 350 | 75% fewer |
-| 5,000 points | 250 | 750 | 50% fewer |
-| 50,000+ points | 500 | 1,500 | Full default |
+|------------|--------|---------|-----------| | 50 points | 140 | 350 | 75% fewer | |
+5,000 points | 250 | 750 | 50% fewer | | 50,000+ points | 500 | 1,500 | Full default |
 
 **Configuration:**
 
@@ -52,31 +51,31 @@ tensorboard --logdir=./profiles/jax
 
 See [CHANGELOG](CHANGELOG.md#2220---2026-02-02) for complete details.
 
----
+______________________________________________________________________
 
 ## 🚀 **What's New in v2.19.0**
 
 ### CMC Convergence and Precision Fixes
 
-**Major release addressing catastrophic CMC failures** on multi-angle datasets. Previously,
-3-angle laminar_flow analysis showed 94% shard timeout, 28.4% divergence rate, and 33-43x
-uncertainty inflation compared to NLSQ.
+**Major release addressing catastrophic CMC failures** on multi-angle datasets.
+Previously, 3-angle laminar_flow analysis showed 94% shard timeout, 28.4% divergence
+rate, and 33-43x uncertainty inflation compared to NLSQ.
 
 **Key Fixes:**
 
-- **Angle-aware shard sizing**: Automatic scaling based on n_phi (30% for n_phi≤3, up to 100%)
-- **Angle-balanced sharding**: Ensures proportional angle coverage per shard (80% minimum)
+- **Angle-aware shard sizing**: Automatic scaling based on n_phi (30% for n_phi≤3, up to
+  100%)
+- **Angle-balanced sharding**: Ensures proportional angle coverage per shard (80%
+  minimum)
 - **NLSQ warm-start priors**: TruncatedNormal priors centered on NLSQ estimates
 - **Early abort mechanism**: Terminates if >50% of first 10 shards fail
 - **NUTS convergence**: Elevated target_accept_prob to 0.9 for laminar_flow
 
 **Performance Impact:**
 
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| Shard success rate | 6% | >90% | 15x |
-| Divergence rate | 28.4% | <5% | 5.7x |
-| Uncertainty ratio vs NLSQ | 33-43x | <5x | 7-9x |
+| Metric | Before | After | Improvement | |--------|--------|-------|-------------| |
+Shard success rate | 6% | >90% | 15x | | Divergence rate | 28.4% | \<5% | 5.7x | |
+Uncertainty ratio vs NLSQ | 33-43x | \<5x | 7-9x |
 
 **Configuration:**
 
@@ -106,7 +105,7 @@ cmc_result = fit_mcmc_jax(data, config, nlsq_result=nlsq_result)
 
 See [CHANGELOG](CHANGELOG.md#2190---2026-01-23) for complete details.
 
----
+______________________________________________________________________
 
 ## 🚀 **What's New in v2.18.0**
 
@@ -116,18 +115,21 @@ See [CHANGELOG](CHANGELOG.md#2190---2026-01-23) for complete details.
 
 **Key Features:**
 
-- **CMC per-angle modes**: `auto`, `constant`, and `individual` modes matching NLSQ anti-degeneracy
+- **CMC per-angle modes**: `auto`, `constant`, and `individual` modes matching NLSQ
+  anti-degeneracy
 - **85% parameter reduction**: For n_phi=23 laminar_flow (54 → 8 or 10 params)
-- **Shared scaling utilities**: New `homodyne.core.scaling_utils` module for unified quantile-based estimation
-- **NLSQ mode refinement**: `auto` → `auto_averaged` (9 params) vs explicit `constant` → `fixed_constant` (7 params)
+- **Shared scaling utilities**: New `homodyne.core.scaling_utils` module for unified
+  quantile-based estimation
+- **NLSQ mode refinement**: `auto` → `auto_averaged` (9 params) vs explicit `constant` →
+  `fixed_constant` (7 params)
 
 **Mode Semantics:**
 
 | Mode | CMC Params (laminar_flow) | Scaling Handling |
-|------|---------------------------|------------------|
-| `auto` (n_phi ≥ 3) | 10 (2 averaged + 7 physical + σ) | Sampled single contrast/offset |
-| `constant` | 8 (7 physical + σ) | Fixed per-angle from quantiles |
-| `individual` | 54 (46 per-angle + 7 physical + σ) | Sampled per-angle |
+|------|---------------------------|------------------| | `auto` (n_phi ≥ 3) | 10 (2
+averaged + 7 physical + σ) | Sampled single contrast/offset | | `constant` | 8 (7
+physical + σ) | Fixed per-angle from quantiles | | `individual` | 54 (46 per-angle + 7
+physical + σ) | Sampled per-angle |
 
 **Configuration:**
 
@@ -138,9 +140,11 @@ optimization:
     constant_scaling_threshold: 3    # Auto uses constant when n_phi >= threshold
 ```
 
-See [CMC Per-Angle Modes Documentation](docs/api-reference/optimization.rst#cmc-per-angle-modes) for details.
+See
+[CMC Per-Angle Modes Documentation](docs/api-reference/optimization.rst#cmc-per-angle-modes)
+for details.
 
----
+______________________________________________________________________
 
 ## 🚀 **What's New in v2.17.0**
 
@@ -150,9 +154,12 @@ See [CMC Per-Angle Modes Documentation](docs/api-reference/optimization.rst#cmc-
 
 **Key Features:**
 
-- **Quantile-based initialization**: Per-angle contrast/offset computed using robust quantile statistics
-- **Constant mode integration**: Anti-degeneracy constant mode now fully integrated with CMA-ES
-- **Parameter bounds fix**: Proper handling of per-angle parameter names in bounds lookup
+- **Quantile-based initialization**: Per-angle contrast/offset computed using robust
+  quantile statistics
+- **Constant mode integration**: Anti-degeneracy constant mode now fully integrated with
+  CMA-ES
+- **Parameter bounds fix**: Proper handling of per-angle parameter names in bounds
+  lookup
 - **Import fixes**: Resolved broken internal module imports
 
 **Configuration:**
@@ -165,9 +172,10 @@ optimization:
       # per_angle_mode: "constant" # Fixed scaling from quantiles, 7 params
 ```
 
-See [Anti-Degeneracy Defense Documentation](docs/research/anti_degeneracy_defense.rst) for details.
+See [Anti-Degeneracy Defense Documentation](docs/research/anti_degeneracy_defense.rst)
+for details.
 
----
+______________________________________________________________________
 
 ## 🚀 **What's New in v2.16.0**
 
@@ -175,26 +183,34 @@ See [Anti-Degeneracy Defense Documentation](docs/research/anti_degeneracy_defens
 
 **Key Features:**
 
-- **CMA-ES popsize configuration**: `cmaes_popsize` field now wires through to override auto-computed value
-- **Adaptive color scaling**: Combined data range for C2 heatmaps eliminates block artifacts
-- **Analysis mode fix**: `AnalysisSummaryLogger` now correctly shows configured analysis mode
+- **CMA-ES popsize configuration**: `cmaes_popsize` field now wires through to override
+  auto-computed value
+- **Adaptive color scaling**: Combined data range for C2 heatmaps eliminates block
+  artifacts
+- **Analysis mode fix**: `AnalysisSummaryLogger` now correctly shows configured analysis
+  mode
 
 See [CHANGELOG](CHANGELOG.md#2160---2026-01-15) for complete details.
 
----
+______________________________________________________________________
 
 ## 🚀 **What's New in v2.14.0**
 
 ### Architecture Refactoring and Config Consolidation
 
-**Improved code organization** and **streamlined configuration** for better maintainability.
+**Improved code organization** and **streamlined configuration** for better
+maintainability.
 
 **Key Features:**
 
-- **NLSQAdapterBase**: Abstract base class providing shared functionality for NLSQAdapter and NLSQWrapper
-- **Validation Utilities**: Extracted `InputValidator` and `ResultValidator` for reusable validation
-- **Config Consolidation**: `NLSQConfig.from_yaml()` as single entry point for configuration
-- **Safe Type Utilities**: `safe_float`, `safe_int`, `safe_bool` in config.py with deprecation warnings for config_utils.py
+- **NLSQAdapterBase**: Abstract base class providing shared functionality for
+  NLSQAdapter and NLSQWrapper
+- **Validation Utilities**: Extracted `InputValidator` and `ResultValidator` for
+  reusable validation
+- **Config Consolidation**: `NLSQConfig.from_yaml()` as single entry point for
+  configuration
+- **Safe Type Utilities**: `safe_float`, `safe_int`, `safe_bool` in config.py with
+  deprecation warnings for config_utils.py
 
 **Quick Usage:**
 
@@ -216,7 +232,7 @@ print(f"Max iterations: {config.max_iterations}")
 
 See [API Reference](docs/api-reference/optimization.rst#nlsq-adapter-base) for details.
 
----
+______________________________________________________________________
 
 ## 🚀 **What's New in v2.11.0**
 
@@ -260,20 +276,24 @@ config = AdapterConfig(
 adapter = NLSQAdapter(config)
 ```
 
-See [NLSQAdapter Documentation](docs/api-reference/optimization.rst#nlsq-adapter) for details.
+See [NLSQAdapter Documentation](docs/api-reference/optimization.rst#nlsq-adapter) for
+details.
 
----
+______________________________________________________________________
 
 ## ⚠️ **Previous Breaking Changes**
 
 ### v2.9.0 - Anti-Degeneracy Defense System
 
-**Comprehensive solution for parameter collapse** in laminar flow mode with many phi angles.
+**Comprehensive solution for parameter collapse** in laminar flow mode with many phi
+angles.
 
 **Key Features:**
 
-- **Layer 1 - Fourier Reparameterization**: Reduces 46 per-angle params to 10 Fourier coefficients (78% reduction for 23 angles)
-- **Layer 2 - Hierarchical Optimization**: Alternates physical/per-angle stages to break gradient cancellation
+- **Layer 1 - Fourier Reparameterization**: Reduces 46 per-angle params to 10 Fourier
+  coefficients (78% reduction for 23 angles)
+- **Layer 2 - Hierarchical Optimization**: Alternates physical/per-angle stages to break
+  gradient cancellation
 - **Layer 3 - Adaptive CV Regularization**: Auto-tuned lambda (100× stronger than v2.8)
 - **Layer 4 - Gradient Collapse Detection**: Runtime monitoring with automatic response
 
@@ -292,7 +312,8 @@ optimization:
         target_cv: 0.10
 ```
 
-See [Anti-Degeneracy Defense Documentation](docs/research/anti_degeneracy_defense.rst) for details.
+See [Anti-Degeneracy Defense Documentation](docs/research/anti_degeneracy_defense.rst)
+for details.
 
 ### v2.5.0 - Streaming Optimizer for Large Datasets
 
@@ -303,11 +324,13 @@ See [Anti-Degeneracy Defense Documentation](docs/research/anti_degeneracy_defens
 - **Streaming mode**: Mini-batch gradient descent for datasets >10M points
 - **Automatic selection**: Switches based on estimated memory vs available RAM
 - **Memory bounded**: ~2 GB usage vs 30+ GB for standard Jacobian computation
-- **Configuration**: New `streaming` section in YAML for batch size, epochs, learning rate
+- **Configuration**: New `streaming` section in YAML for batch size, epochs, learning
+  rate
 
 ### v2.4.3 - NLSQ Element-wise Integration Fix
 
-**NLSQ element-wise mode now uses cumulative trapezoid integration** matching CMC physics.
+**NLSQ element-wise mode now uses cumulative trapezoid integration** matching CMC
+physics.
 
 **Key Changes:**
 
@@ -409,10 +432,12 @@ D(t) = D0 * t^α + D_offset
 ```
 
 Parameter sets:
+
 - Static (3): D0, α, D_offset (shear terms ignored, φ0 = 0)
 - Laminar flow (7): D0, α, D_offset, γ̇0, β, γ̇_offset, φ0
 
-Experimental parameters: q (Å⁻¹), L (Å), φ (deg), dt (s/frame); contrast/offset are per-angle.
+Experimental parameters: q (Å⁻¹), L (Å), φ (deg), dt (s/frame); contrast/offset are
+per-angle.
 
 ## Architecture Overview
 
@@ -422,7 +447,8 @@ compatibility** for all validated components:
 ### Preserved Components
 
 - **`data/`** - Complete XPCS data loading infrastructure (11 files preserved)
-- **`core/`** - Validated physics models and JAX backend (11 files including shared utilities)
+- **`core/`** - Validated physics models and JAX backend (11 files including shared
+  utilities)
 
 ### New Components
 
@@ -501,10 +527,9 @@ print(f"✓ CMC used with {result.num_shards} shards")
 **Performance:**
 
 | Scenario | Shards | Data Size | Runtime | Speedup |
-|----------|--------|-----------|---------|---------|
-| Multi-core CPU (14 cores) | 4 | 50M | ~40 min | 1.4x |
-| HPC CPU (36 cores) | 8 | 200M | ~2 hours | 1.5x |
-| Single-shard (small data) | 1 | 5M | ~10 min | baseline |
+|----------|--------|-----------|---------|---------| | Multi-core CPU (14 cores) | 4 |
+50M | ~40 min | 1.4x | | HPC CPU (36 cores) | 8 | 200M | ~2 hours | 1.5x | |
+Single-shard (small data) | 1 | 5M | ~10 min | baseline |
 
 **Documentation:**
 
@@ -814,12 +839,11 @@ homodyne-post-install --xla-mode mcmc  # Configure for MCMC (4 devices)
 
 ### Configuration Modes
 
-| Mode | Devices | Best For | Hardware |
-|------|---------|----------|----------|
-| **mcmc** | 4 | Multi-core workstations, parallel MCMC chains | 8-15 CPU cores |
-| **mcmc-hpc** | 8 | HPC clusters with many CPU cores | 36+ CPU cores |
-| **nlsq** | 1 | NLSQ-only workflows, memory-constrained systems | Any CPU |
-| **auto** | 2-8 | Automatic detection based on CPU core count | Auto-adaptive |
+| Mode | Devices | Best For | Hardware | |------|---------|----------|----------| |
+**mcmc** | 4 | Multi-core workstations, parallel MCMC chains | 8-15 CPU cores | |
+**mcmc-hpc** | 8 | HPC clusters with many CPU cores | 36+ CPU cores | | **nlsq** | 1 |
+NLSQ-only workflows, memory-constrained systems | Any CPU | | **auto** | 2-8 | Automatic
+detection based on CPU core count | Auto-adaptive |
 
 **Auto mode detection logic:**
 
@@ -873,11 +897,10 @@ source ~/.bashrc
 ### Performance Impact
 
 | Workflow | Device Count | Hardware | Performance |
-|----------|--------------|----------|-------------|
-| MCMC (4 chains) | 4 devices | 14-core CPU | 1.4x speedup |
-| MCMC (8 chains) | 8 devices | 36-core HPC | 1.8x speedup |
-| NLSQ optimization | 1 device | Any CPU | Optimal (no overhead) |
-| Auto mode | 2-8 devices | Adapts to CPU | Automatic optimization |
+|----------|--------------|----------|-------------| | MCMC (4 chains) | 4 devices |
+14-core CPU | 1.4x speedup | | MCMC (8 chains) | 8 devices | 36-core HPC | 1.8x speedup
+| | NLSQ optimization | 1 device | Any CPU | Optimal (no overhead) | | Auto mode | 2-8
+devices | Adapts to CPU | Automatic optimization |
 
 ### Best Practices
 
@@ -949,30 +972,31 @@ source venv/bin/activate
 Default bounds for NLSQ optimization and MCMC priors (updated Nov 15, 2025):
 
 | Parameter | Min | Max | Units | Physical Meaning | Notes |
-|-----------|-----|-----|-------|------------------|-------|
-| **D0** | 1×10² | 1×10⁵ | Å²/s | Diffusion coefficient prefactor | Typical colloidal range |
-| **alpha** | -2.0 | 2.0 | - | Diffusion time exponent | Anomalous diffusion |
-| **D_offset** | -1×10⁵ | 1×10⁵ | Å²/s | Diffusion baseline correction | **Negative for jammed systems** |
-| **gamma_dot_t0** | 1×10⁻⁶ | 0.5 | s⁻¹ | Initial shear rate | Laminar flow only |
-| **beta** | -2.0 | 2.0 | - | Shear rate time exponent | Laminar flow only |
-| **gamma_dot_t_offset** | -0.1 | 0.1 | s⁻¹ | Shear rate baseline correction | Laminar flow only |
-| **phi0** | -10 | 10 | degrees | Initial flow angle | **Uses degrees, not radians** |
+|-----------|-----|-----|-------|------------------|-------| | **D0** | 1×10² | 1×10⁵ |
+Å²/s | Diffusion coefficient prefactor | Typical colloidal range | | **alpha** | -2.0 |
+2.0 | - | Diffusion time exponent | Anomalous diffusion | | **D_offset** | -1×10⁵ |
+1×10⁵ | Å²/s | Diffusion baseline correction | **Negative for jammed systems** | |
+**gamma_dot_t0** | 1×10⁻⁶ | 0.5 | s⁻¹ | Initial shear rate | Laminar flow only | |
+**beta** | -2.0 | 2.0 | - | Shear rate time exponent | Laminar flow only | |
+**gamma_dot_t_offset** | -0.1 | 0.1 | s⁻¹ | Shear rate baseline correction | Laminar
+flow only | | **phi0** | -10 | 10 | degrees | Initial flow angle | **Uses degrees, not
+radians** |
 
 ### Scaling Parameters
 
 | Parameter | Min | Max | Physical Meaning | Notes |
-|-----------|-----|-----|------------------|-------|
-| **contrast** | 0.0 | 1.0 | Visibility parameter | Homodyne detection efficiency |
-| **offset** | 0.5 | 1.5 | Baseline level | ±50% from theoretical g2=1.0 |
+|-----------|-----|-----|------------------|-------| | **contrast** | 0.0 | 1.0 |
+Visibility parameter | Homodyne detection efficiency | | **offset** | 0.5 | 1.5 |
+Baseline level | ±50% from theoretical g2=1.0 |
 
 ### Correlation Function Constraints
 
 Physics-enforced constraints applied during optimization:
 
-| Function | Min | Max | Notes |
-|----------|-----|-----|-------|
-| **g1 (c1)** | 0.0 | 1.0 | Normalized correlation function; log-space clipping: `log(g1) ∈ [-700, 0]` |
-| **g2 (c2)** | 0.5 | 2.5 | Experimental range with headroom; Theoretical: g2 = 1 + contrast × g1² |
+| Function | Min | Max | Notes | |----------|-----|-----|-------| | **g1 (c1)** | 0.0 |
+1.0 | Normalized correlation function; log-space clipping: `log(g1) ∈ [-700, 0]` | |
+**g2 (c2)** | 0.5 | 2.5 | Experimental range with headroom; Theoretical: g2 = 1 +
+contrast × g1² |
 
 **Important Notes:**
 
@@ -1006,20 +1030,18 @@ hardware:
 
 ### Optimization Methods
 
-| Method | Speed | Accuracy | Use Case |
-|--------|-------|----------|----------|
-| **NLSQ** | Fast | Excellent | Production workflows, real-time analysis |
-| **MCMC** | Slower | Excellent | Publication-quality, uncertainty quantification |
+| Method | Speed | Accuracy | Use Case | |--------|-------|----------|----------| |
+**NLSQ** | Fast | Excellent | Production workflows, real-time analysis | | **MCMC** |
+Slower | Excellent | Publication-quality, uncertainty quantification |
 
 ### Validated Performance Benchmarks
 
 Based on comprehensive scientific validation (T036-T041):
 
 | Dataset Size | Points | Optimization Time | Throughput | Convergence |
-|--------------|--------|-------------------|------------|-------------|
-| Small | 500 | 1.6s | 317 pts/s | 100% |
-| Medium | 4,000 | 1.5s | 2,758 pts/s | 100% |
-| Large | 9,375 | 1.6s | 5,977 pts/s | 100% |
+|--------------|--------|-------------------|------------|-------------| | Small | 500 |
+1.6s | 317 pts/s | 100% | | Medium | 4,000 | 1.5s | 2,758 pts/s | 100% | | Large | 9,375
+| 1.6s | 5,977 pts/s | 100% |
 
 **Key Performance Features**:
 
@@ -1090,9 +1112,9 @@ This eliminates OOM errors by processing data in small batches.
 **Why Streaming?**
 
 Standard Levenberg-Marquardt optimization requires computing a dense Jacobian matrix
-(n_points × n_params × 8 bytes) plus JAX autodiff intermediates (~3× Jacobian size).
-For 23M points with 53 parameters, this exceeds 30 GB. Streaming mode processes data
-in 10K-point batches, keeping memory usage below 2 GB.
+(n_points × n_params × 8 bytes) plus JAX autodiff intermediates (~3× Jacobian size). For
+23M points with 53 parameters, this exceeds 30 GB. Streaming mode processes data in
+10K-point batches, keeping memory usage below 2 GB.
 
 **Memory-Based Auto-Selection**:
 
@@ -1126,9 +1148,8 @@ optimization:
 **Performance Comparison**:
 
 | Mode | Memory | Convergence | Time (23M pts) |
-|------|--------|-------------|----------------|
-| Stratified L-M | ~30+ GB | Exact (Newton) | 10-15 min |
-| Streaming | ~2 GB | Approximate (L-BFGS) | 15-30 min |
+|------|--------|-------------|----------------| | Stratified L-M | ~30+ GB | Exact
+(Newton) | 10-15 min | | Streaming | ~2 GB | Approximate (L-BFGS) | 15-30 min |
 
 **Key Benefits**:
 
@@ -1166,16 +1187,13 @@ optimized for multi-core systems and HPC clusters.
 
 ### Performance Summary (14-Core CPU)
 
-| Stage | Backend | Duration | Notes |
-|-------|---------|----------|-------|
-| Config Loading | PyYAML | <1s | I/O bound |
-| Data Loading | h5py+NumPy | ~2s | I/O bound |
-| Data Validation | NumPy+SciPy | <1s | Fast validation |
-| Angle Filtering | NumPy | <1ms | Array operations |
-| **NLSQ Optimization** | **JAX JIT** | **30-60s** | **Multi-core parallel** |
-| **Theoretical Fits** | **JAX JIT** | **~2-3s** | **CPU-accelerated** |
-| Result Saving | json+npz | ~1s | I/O bound |
-| Plotting (Workers) | Datashader | ~12s | Parallel workers |
+| Stage | Backend | Duration | Notes | |-------|---------|----------|-------| | Config
+Loading | PyYAML | \<1s | I/O bound | | Data Loading | h5py+NumPy | ~2s | I/O bound | |
+Data Validation | NumPy+SciPy | \<1s | Fast validation | | Angle Filtering | NumPy |
+\<1ms | Array operations | | **NLSQ Optimization** | **JAX JIT** | **30-60s** |
+**Multi-core parallel** | | **Theoretical Fits** | **JAX JIT** | **~2-3s** |
+**CPU-accelerated** | | Result Saving | json+npz | ~1s | I/O bound | | Plotting
+(Workers) | Datashader | ~12s | Parallel workers |
 
 **Total Runtime**: ~50-80 seconds (14-core CPU)
 
