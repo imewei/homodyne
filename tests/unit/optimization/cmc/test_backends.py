@@ -344,7 +344,7 @@ class TestBackendEdgeCases:
             )
 
         assert combined is not None
-        assert hasattr(combined, 'samples')
+        assert hasattr(combined, "samples")
         assert isinstance(combined.samples, dict)
         for name in sample_param_names:
             assert name in combined.samples
@@ -650,15 +650,15 @@ class TestErrorCategorization:
             shards[:2], method="consensus_mc"
         )  # Only 2 of 4
         assert combined is not None
-        assert hasattr(combined, 'n_chains')
-        assert hasattr(combined, 'samples')
+        assert hasattr(combined, "n_chains")
+        assert hasattr(combined, "samples")
         assert isinstance(combined.samples, dict)
         assert combined.n_chains == shards[0].n_chains
 
         # Single shard should also work
         combined_single = combine_shard_samples(shards[:1], method="consensus_mc")
         assert combined_single is not None
-        assert hasattr(combined_single, 'samples')
+        assert hasattr(combined_single, "samples")
         assert isinstance(combined_single.samples, dict)
 
 
@@ -773,24 +773,38 @@ class TestBimodalCombination:
         for i in range(5):
             if i == 2:
                 # Bimodal shard: 50/50 mix
-                d0 = np.concatenate([
-                    rng.normal(19000, 1200, size=250),
-                    rng.normal(32000, 2100, size=250),
-                ])
+                d0 = np.concatenate(
+                    [
+                        rng.normal(19000, 1200, size=250),
+                        rng.normal(32000, 2100, size=250),
+                    ]
+                )
             else:
                 center = 19000 if i < 3 else 32000
                 d0 = rng.normal(center, 1200, size=500)
-            shards.append(MCMCSamples(
-                samples={"D0": d0.reshape(2, 250)},
-                param_names=["D0"], n_chains=2, n_samples=250,
-            ))
+            shards.append(
+                MCMCSamples(
+                    samples={"D0": d0.reshape(2, 250)},
+                    param_names=["D0"],
+                    n_chains=2,
+                    n_samples=250,
+                )
+            )
 
         # Shard 2 appears in both clusters
         cluster_lower = [0, 1, 2]
         cluster_upper = [2, 3, 4]
         detections = [
-            {"shard": 2, "param": "D0", "mode1": 19000, "mode2": 32000,
-             "std1": 1200, "std2": 2100, "weights": (0.5, 0.5), "separation": 13000},
+            {
+                "shard": 2,
+                "param": "D0",
+                "mode1": 19000,
+                "mode2": 32000,
+                "std1": 1200,
+                "std2": 2100,
+                "weights": (0.5, 0.5),
+                "separation": 13000,
+            },
         ]
 
         combined, bimodal_result = combine_shard_samples_bimodal(

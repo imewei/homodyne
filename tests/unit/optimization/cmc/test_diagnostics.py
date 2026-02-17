@@ -503,12 +503,18 @@ class TestModeClusterTypes:
         )
 
         mode_a = ModeCluster(
-            mean={"D0": 19000.0}, std={"D0": 1200.0},
-            weight=0.55, n_shards=85, samples={"D0": np.ones((2, 100))},
+            mean={"D0": 19000.0},
+            std={"D0": 1200.0},
+            weight=0.55,
+            n_shards=85,
+            samples={"D0": np.ones((2, 100))},
         )
         mode_b = ModeCluster(
-            mean={"D0": 32000.0}, std={"D0": 2100.0},
-            weight=0.45, n_shards=70, samples={"D0": np.ones((2, 100))},
+            mean={"D0": 32000.0},
+            std={"D0": 2100.0},
+            weight=0.45,
+            n_shards=70,
+            samples={"D0": np.ones((2, 100))},
         )
         result = BimodalConsensusResult(
             modes=[mode_a, mode_b],
@@ -524,8 +530,11 @@ class TestClusterShardModes:
     """Tests for joint mode clustering of shard posteriors."""
 
     def _make_shard_samples(
-        self, n_shards: int, bimodal_shards: set[int],
-        mode1_center: float = 19000.0, mode2_center: float = 32000.0,
+        self,
+        n_shards: int,
+        bimodal_shards: set[int],
+        mode1_center: float = 19000.0,
+        mode2_center: float = 32000.0,
     ) -> list:
         """Create mock MCMCSamples-like objects for testing."""
         from types import SimpleNamespace
@@ -534,23 +543,29 @@ class TestClusterShardModes:
         shards = []
         for i in range(n_shards):
             if i in bimodal_shards:
-                d0 = np.concatenate([
-                    rng.normal(mode1_center, 1200, size=500),
-                    rng.normal(mode2_center, 2100, size=500),
-                ])
+                d0 = np.concatenate(
+                    [
+                        rng.normal(mode1_center, 1200, size=500),
+                        rng.normal(mode2_center, 2100, size=500),
+                    ]
+                )
                 alpha_lo, alpha_hi = -1.5, -0.4
-                alpha = np.concatenate([
-                    rng.normal(alpha_lo, 0.12, size=500),
-                    rng.normal(alpha_hi, 0.09, size=500),
-                ])
+                alpha = np.concatenate(
+                    [
+                        rng.normal(alpha_lo, 0.12, size=500),
+                        rng.normal(alpha_hi, 0.09, size=500),
+                    ]
+                )
             else:
                 center = mode1_center if i % 3 != 0 else mode2_center
                 d0 = rng.normal(center, 1200, size=1000)
                 alpha_center = -1.5 if center == mode1_center else -0.4
                 alpha = rng.normal(alpha_center, 0.12, size=1000)
-            shards.append(SimpleNamespace(
-                samples={"D0": d0.reshape(2, 500), "alpha": alpha.reshape(2, 500)},
-            ))
+            shards.append(
+                SimpleNamespace(
+                    samples={"D0": d0.reshape(2, 500), "alpha": alpha.reshape(2, 500)},
+                )
+            )
         return shards
 
     def test_cluster_assigns_all_shards(self):
@@ -559,18 +574,47 @@ class TestClusterShardModes:
 
         shards = self._make_shard_samples(20, bimodal_shards={3, 7, 12})
         detections = [
-            {"shard": 3, "param": "D0", "mode1": 19200, "mode2": 31800,
-             "std1": 1200, "std2": 2100, "weights": (0.5, 0.5), "separation": 12600},
-            {"shard": 7, "param": "D0", "mode1": 18800, "mode2": 32200,
-             "std1": 1100, "std2": 2000, "weights": (0.48, 0.52), "separation": 13400},
-            {"shard": 12, "param": "D0", "mode1": 19500, "mode2": 31500,
-             "std1": 1300, "std2": 2200, "weights": (0.51, 0.49), "separation": 12000},
+            {
+                "shard": 3,
+                "param": "D0",
+                "mode1": 19200,
+                "mode2": 31800,
+                "std1": 1200,
+                "std2": 2100,
+                "weights": (0.5, 0.5),
+                "separation": 12600,
+            },
+            {
+                "shard": 7,
+                "param": "D0",
+                "mode1": 18800,
+                "mode2": 32200,
+                "std1": 1100,
+                "std2": 2000,
+                "weights": (0.48, 0.52),
+                "separation": 13400,
+            },
+            {
+                "shard": 12,
+                "param": "D0",
+                "mode1": 19500,
+                "mode2": 31500,
+                "std1": 1300,
+                "std2": 2200,
+                "weights": (0.51, 0.49),
+                "separation": 12000,
+            },
         ]
         summary = {
             "per_param": {
-                "D0": {"lower_mean": 19200, "upper_mean": 31800,
-                       "lower_std": 300, "upper_std": 400,
-                       "bimodal_fraction": 0.15, "n_detections": 3},
+                "D0": {
+                    "lower_mean": 19200,
+                    "upper_mean": 31800,
+                    "lower_std": 300,
+                    "upper_std": 400,
+                    "bimodal_fraction": 0.15,
+                    "n_detections": 3,
+                },
             },
             "co_occurrence": {},
         }
@@ -593,16 +637,37 @@ class TestClusterShardModes:
 
         shards = self._make_shard_samples(10, bimodal_shards={2, 5})
         detections = [
-            {"shard": 2, "param": "D0", "mode1": 19000, "mode2": 32000,
-             "std1": 1200, "std2": 2100, "weights": (0.5, 0.5), "separation": 13000},
-            {"shard": 5, "param": "D0", "mode1": 19100, "mode2": 31900,
-             "std1": 1100, "std2": 2000, "weights": (0.52, 0.48), "separation": 12800},
+            {
+                "shard": 2,
+                "param": "D0",
+                "mode1": 19000,
+                "mode2": 32000,
+                "std1": 1200,
+                "std2": 2100,
+                "weights": (0.5, 0.5),
+                "separation": 13000,
+            },
+            {
+                "shard": 5,
+                "param": "D0",
+                "mode1": 19100,
+                "mode2": 31900,
+                "std1": 1100,
+                "std2": 2000,
+                "weights": (0.52, 0.48),
+                "separation": 12800,
+            },
         ]
         summary = {
             "per_param": {
-                "D0": {"lower_mean": 19050, "upper_mean": 31950,
-                       "lower_std": 70, "upper_std": 70,
-                       "bimodal_fraction": 0.2, "n_detections": 2},
+                "D0": {
+                    "lower_mean": 19050,
+                    "upper_mean": 31950,
+                    "lower_std": 70,
+                    "upper_std": 70,
+                    "bimodal_fraction": 0.2,
+                    "n_detections": 2,
+                },
             },
             "co_occurrence": {},
         }

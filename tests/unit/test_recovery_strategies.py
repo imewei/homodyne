@@ -54,9 +54,7 @@ class TestRecoveryStrategyApplicator:
         error = NLSQConvergenceError("Failed to converge")
         params = np.array([1.0, 2.0, 3.0])
 
-        result = applicator.get_recovery_strategy(
-            error, params, attempt=0
-        )
+        result = applicator.get_recovery_strategy(error, params, attempt=0)
 
         assert result is not None
         assert isinstance(result, tuple)
@@ -73,9 +71,7 @@ class TestRecoveryStrategyApplicator:
         error = NLSQConvergenceError("Failed to converge")
         params = np.array([1.0, 2.0, 3.0])
 
-        result = applicator.get_recovery_strategy(
-            error, params, attempt=1
-        )
+        result = applicator.get_recovery_strategy(error, params, attempt=1)
 
         assert result is not None
         assert isinstance(result, tuple)
@@ -91,9 +87,7 @@ class TestRecoveryStrategyApplicator:
         error = NLSQConvergenceError("Failed to converge")
         params = np.array([1.0, 2.0, 3.0])
 
-        result = applicator.get_recovery_strategy(
-            error, params, attempt=2
-        )
+        result = applicator.get_recovery_strategy(error, params, attempt=2)
 
         assert result is not None
         assert isinstance(result, tuple)

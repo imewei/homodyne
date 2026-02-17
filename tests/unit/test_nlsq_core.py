@@ -1274,7 +1274,9 @@ class TestNLSQOptimization:
             # If it succeeds, that's also acceptable (robust handling)
             assert result is not None
             # Verify it has the expected attributes
-            assert hasattr(result, 'convergence_status') or hasattr(result, 'chi_squared')
+            assert hasattr(result, "convergence_status") or hasattr(
+                result, "chi_squared"
+            )
         except (ValueError, RuntimeError):
             # Expected error case
             pass

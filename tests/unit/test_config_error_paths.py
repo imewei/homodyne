@@ -47,9 +47,7 @@ class TestCMCConfigValidationErrors:
 
     def test_invalid_sharding_strategy(self):
         """Sharding strategy must be stratified, random, or contiguous."""
-        mgr = self._make_config_with_cmc(
-            {"sharding": {"strategy": "custom_strategy"}}
-        )
+        mgr = self._make_config_with_cmc({"sharding": {"strategy": "custom_strategy"}})
         with pytest.raises(ValueError, match="strategy"):
             mgr.get_cmc_config()
 
@@ -79,84 +77,72 @@ class TestCMCConfigValidationErrors:
 
     def test_invalid_backend_name(self):
         """Invalid backend name is rejected."""
-        mgr = self._make_config_with_cmc(
-            {"backend": {"name": "tensorflow"}}
-        )
+        mgr = self._make_config_with_cmc({"backend": {"name": "tensorflow"}})
         with pytest.raises(ValueError, match="[Bb]ackend"):
             mgr.get_cmc_config()
 
     def test_invalid_combination_method(self):
         """Invalid combination method is rejected."""
-        mgr = self._make_config_with_cmc(
-            {"combination": {"method": "majority_vote"}}
-        )
+        mgr = self._make_config_with_cmc({"combination": {"method": "majority_vote"}})
         with pytest.raises(ValueError, match="[Cc]ombination"):
             mgr.get_cmc_config()
 
     def test_invalid_min_success_rate_too_high(self):
         """min_success_rate > 1.0 is rejected."""
-        mgr = self._make_config_with_cmc(
-            {"combination": {"min_success_rate": 1.5}}
-        )
+        mgr = self._make_config_with_cmc({"combination": {"min_success_rate": 1.5}})
         with pytest.raises(ValueError, match="min_success_rate"):
             mgr.get_cmc_config()
 
     def test_invalid_min_success_rate_negative(self):
         """Negative min_success_rate is rejected."""
-        mgr = self._make_config_with_cmc(
-            {"combination": {"min_success_rate": -0.1}}
-        )
+        mgr = self._make_config_with_cmc({"combination": {"min_success_rate": -0.1}})
         with pytest.raises(ValueError, match="min_success_rate"):
             mgr.get_cmc_config()
 
     def test_invalid_num_warmup_zero(self):
         """num_warmup=0 is rejected."""
-        mgr = self._make_config_with_cmc(
-            {"per_shard_mcmc": {"num_warmup": 0}}
-        )
+        mgr = self._make_config_with_cmc({"per_shard_mcmc": {"num_warmup": 0}})
         with pytest.raises(ValueError, match="num_warmup"):
             mgr.get_cmc_config()
 
     def test_invalid_num_samples_negative(self):
         """Negative num_samples is rejected."""
-        mgr = self._make_config_with_cmc(
-            {"per_shard_mcmc": {"num_samples": -100}}
-        )
+        mgr = self._make_config_with_cmc({"per_shard_mcmc": {"num_samples": -100}})
         with pytest.raises(ValueError, match="num_samples"):
             mgr.get_cmc_config()
 
     def test_invalid_num_chains_float(self):
         """Float num_chains is rejected (must be int)."""
-        mgr = self._make_config_with_cmc(
-            {"per_shard_mcmc": {"num_chains": 4.5}}
-        )
+        mgr = self._make_config_with_cmc({"per_shard_mcmc": {"num_chains": 4.5}})
         with pytest.raises(ValueError, match="num_chains"):
             mgr.get_cmc_config()
 
     def test_invalid_min_per_shard_ess_negative(self):
         """Negative ESS threshold is rejected."""
-        mgr = self._make_config_with_cmc(
-            {"validation": {"min_per_shard_ess": -50}}
-        )
+        mgr = self._make_config_with_cmc({"validation": {"min_per_shard_ess": -50}})
         with pytest.raises(ValueError, match="min_per_shard_ess"):
             mgr.get_cmc_config()
 
     def test_invalid_max_per_shard_rhat_below_one(self):
         """R-hat threshold < 1.0 is rejected."""
-        mgr = self._make_config_with_cmc(
-            {"validation": {"max_per_shard_rhat": 0.5}}
-        )
+        mgr = self._make_config_with_cmc({"validation": {"max_per_shard_rhat": 0.5}})
         with pytest.raises(ValueError, match="max_per_shard_rhat"):
             mgr.get_cmc_config()
 
     def test_valid_cmc_config_passes(self):
         """Valid CMC configuration passes without errors."""
-        mgr = self._make_config_with_cmc({
-            "enable": True,
-            "sharding": {"strategy": "stratified", "num_shards": 10},
-            "combination": {"method": "consensus_mc", "min_success_rate": 0.9},
-            "per_shard_mcmc": {"num_warmup": 200, "num_samples": 500, "num_chains": 4},
-        })
+        mgr = self._make_config_with_cmc(
+            {
+                "enable": True,
+                "sharding": {"strategy": "stratified", "num_shards": 10},
+                "combination": {"method": "consensus_mc", "min_success_rate": 0.9},
+                "per_shard_mcmc": {
+                    "num_warmup": 200,
+                    "num_samples": 500,
+                    "num_chains": 4,
+                },
+            }
+        )
         config = mgr.get_cmc_config()
         assert config["enable"] is True
 

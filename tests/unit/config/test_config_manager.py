@@ -3,7 +3,6 @@
 Tests for ParameterManager, parameter bounds, and validation.
 """
 
-
 from homodyne.config.parameter_manager import ParameterManager
 from homodyne.config.types import (
     LAMINAR_FLOW_PARAM_NAMES,
@@ -235,7 +234,15 @@ class TestStaticVsLaminarFlowParameters:
 
     def test_laminar_flow_params_content(self):
         """Test that laminar_flow params contain expected parameters."""
-        expected = ["D0", "alpha", "D_offset", "gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"]
+        expected = [
+            "D0",
+            "alpha",
+            "D_offset",
+            "gamma_dot_t0",
+            "beta",
+            "gamma_dot_t_offset",
+            "phi0",
+        ]
         for param in expected:
             assert param in LAMINAR_FLOW_PARAM_NAMES
 

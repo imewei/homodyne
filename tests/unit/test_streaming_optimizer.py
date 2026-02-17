@@ -53,11 +53,21 @@ class TestStreamingOptimizerLargeDatasets:
         decision = select_nlsq_strategy(n_points, n_parameters)
 
         # Verify HYBRID_STREAMING or OUT_OF_CORE strategy is selected (both are streaming)
-        assert decision.strategy in [NLSQStrategy.HYBRID_STREAMING, NLSQStrategy.OUT_OF_CORE]
+        assert decision.strategy in [
+            NLSQStrategy.HYBRID_STREAMING,
+            NLSQStrategy.OUT_OF_CORE,
+        ]
         # Verify decision reason mentions memory or streaming
         assert any(
             keyword in decision.reason.lower()
-            for keyword in ["memory", "streaming", "large", "index", "peak", "threshold"]
+            for keyword in [
+                "memory",
+                "streaming",
+                "large",
+                "index",
+                "peak",
+                "threshold",
+            ]
         )
 
     @pytest.mark.slow

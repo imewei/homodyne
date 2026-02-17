@@ -45,6 +45,7 @@ class TestValidateSavePath:
         )
         assert result is not None
         from pathlib import Path
+
         assert isinstance(result, Path)
         assert result.name == "test.txt"
 
@@ -57,6 +58,7 @@ class TestValidateSavePath:
         )
         assert result is not None
         from pathlib import Path
+
         assert isinstance(result, Path)
         assert result == abs_path
 
@@ -98,6 +100,7 @@ class TestValidateSavePath:
         )
         assert result is not None
         from pathlib import Path
+
         assert isinstance(result, Path)
         assert result.suffix == ".png"
 
@@ -120,6 +123,7 @@ class TestValidateSavePath:
         )
         assert result is not None
         from pathlib import Path
+
         assert isinstance(result, Path)
         assert result.suffix.lower() == ".png"
 
@@ -141,6 +145,7 @@ class TestValidateSavePath:
         )
         assert result is not None
         from pathlib import Path
+
         assert isinstance(result, Path)
         assert result.name == "test.txt"
 
@@ -210,6 +215,7 @@ class TestValidatePlotSavePath:
         )
         assert result is not None
         from pathlib import Path
+
         assert isinstance(result, Path)
         assert result.suffix == ".png"
 
@@ -221,6 +227,7 @@ class TestValidatePlotSavePath:
         )
         assert result is not None
         from pathlib import Path
+
         assert isinstance(result, Path)
         assert result.suffix == ".pdf"
 
@@ -232,6 +239,7 @@ class TestValidatePlotSavePath:
         )
         assert result is not None
         from pathlib import Path
+
         assert isinstance(result, Path)
         assert result.suffix == ".svg"
 
@@ -243,6 +251,7 @@ class TestValidatePlotSavePath:
         )
         assert result is not None
         from pathlib import Path
+
         assert isinstance(result, Path)
         assert result.suffix == ".eps"
 
@@ -255,6 +264,7 @@ class TestValidatePlotSavePath:
             )
             assert result is not None
             from pathlib import Path
+
             assert isinstance(result, Path)
             assert result.suffix in [".jpg", ".jpeg"]
 
@@ -267,6 +277,7 @@ class TestValidatePlotSavePath:
             )
             assert result is not None
             from pathlib import Path
+
             assert isinstance(result, Path)
             assert result.suffix in [".tiff", ".tif"]
 
@@ -404,6 +415,7 @@ class TestPathValidationIntegration:
         )
         assert validated is not None
         from pathlib import Path
+
         assert isinstance(validated, Path)
 
         # Should be able to write to validated path
@@ -422,6 +434,7 @@ class TestPathValidationIntegration:
         )
         assert plot_path is not None
         from pathlib import Path
+
         assert isinstance(plot_path, Path)
         assert plot_path.parent.exists()
         assert plot_path.suffix == ".png"
