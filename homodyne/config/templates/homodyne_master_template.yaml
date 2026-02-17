@@ -141,8 +141,8 @@ experimental_data:
   cache_compression: true
 
   # Data format specifications
-  data_type: "float64"     # "float32" or "float64" (recommended)
-  file_format: "HDF5"      # Only HDF5 supported
+  data_type: "float64" # "float32" or "float64" (recommended)
+  file_format: "HDF5" # Only HDF5 supported
   exchange_key: "exchange" # HDF5 exchange group key
 
 # ==============================================================================
@@ -184,13 +184,13 @@ phi_filtering:
 
   # Filtering algorithm settings
   algorithm: "range_based"
-  tolerance: 3.0           # Degrees; angles within tolerance of range edges included
+  tolerance: 3.0 # Degrees; angles within tolerance of range edges included
 
   # Quality control
   quality_control:
-    min_angles_required: 1          # Minimum angles needed (≥2 recommended for flow)
-    max_angle_spread: 36.0          # Maximum spread within each range
-    validate_coverage: true         # Warn if ranges are poorly covered
+    min_angles_required: 1 # Minimum angles needed (≥2 recommended for flow)
+    max_angle_spread: 36.0 # Maximum spread within each range
+    validate_coverage: true # Warn if ranges are poorly covered
     require_orthogonal_angles: true # Recommended for laminar_flow (0°/90°)
 
 # ==============================================================================
@@ -216,13 +216,13 @@ phi_filtering:
 initial_parameters:
   # Physical parameter names (order matters for values list)
   parameter_names:
-    - D0                   # Diffusion prefactor [Å²/s]
-    - alpha                # Anomalous exponent [dimensionless]
-    - D_offset             # Baseline diffusion [Å²/s]
-    - gamma_dot_t0         # Shear rate prefactor [s⁻¹] (laminar_flow only)
-    - beta                 # Shear exponent [dimensionless] (laminar_flow only)
-    - gamma_dot_t_offset   # Baseline shear [s⁻¹] (laminar_flow only)
-    - phi0                 # Flow angle offset [degrees] (laminar_flow only)
+    - D0 # Diffusion prefactor [Å²/s]
+    - alpha # Anomalous exponent [dimensionless]
+    - D_offset # Baseline diffusion [Å²/s]
+    - gamma_dot_t0 # Shear rate prefactor [s⁻¹] (laminar_flow only)
+    - beta # Shear exponent [dimensionless] (laminar_flow only)
+    - gamma_dot_t_offset # Baseline shear [s⁻¹] (laminar_flow only)
+    - phi0 # Flow angle offset [degrees] (laminar_flow only)
 
   # Initial values: list matching parameter_names order, or null for mid-bounds
   # Static example:       [1000.0, 0.5, 10.0]
@@ -234,8 +234,8 @@ initial_parameters:
   # initial values from experimental data using quantile statistics
   # Estimate from data: contrast ≈ (C2_max - C2_min), offset ≈ C2_min
   per_angle_scaling:
-    contrast: null  # null = quantile-based init, or [0.05, 0.06, 0.05] for 3 angles
-    offset: null    # null = quantile-based init, or [1.0, 0.99, 1.01] for 3 angles
+    contrast: null # null = quantile-based init, or [0.05, 0.06, 0.05] for 3 angles
+    offset: null # null = quantile-based init, or [1.0, 0.99, 1.01] for 3 angles
 
   # Units for documentation (not used by optimizer)
   units:
@@ -248,10 +248,10 @@ initial_parameters:
     - "degrees"
 
   # Optional: Optimize only a subset of parameters
-  active_parameters: null  # e.g., ["D0", "alpha", "gamma_dot_t0"]
+  active_parameters: null # e.g., ["D0", "alpha", "gamma_dot_t0"]
 
   # Optional: Fix parameters at specific values
-  fixed_parameters: null   # e.g., {"beta": 0.0, "gamma_dot_t_offset": 0.0}
+  fixed_parameters: null # e.g., {"beta": 0.0, "gamma_dot_t_offset": 0.0}
 
 # ==============================================================================
 # PARAMETER SPACE (Required)
@@ -289,15 +289,15 @@ parameter_space:
     # SCALING PARAMETERS (applied per angle)
     # -------------------------------------------------------------------------
     - name: contrast
-      min: 0.0                       # Physical minimum (no negative contrast)
-      max: 1.0                       # Physical maximum (fully coherent)
+      min: 0.0 # Physical minimum (no negative contrast)
+      max: 1.0 # Physical maximum (fully coherent)
       type: TruncatedNormal
       # CONSTRAINT: max <= 1.0 (physical limit)
       # Typical XPCS values: 0.01-0.2
 
     - name: offset
-      min: 0.5                       # Baseline should be near 1.0
-      max: 1.5                       # Allow some variation
+      min: 0.5 # Baseline should be near 1.0
+      max: 1.5 # Allow some variation
       type: TruncatedNormal
       # Typical XPCS values: 0.9-1.1
 
@@ -305,21 +305,21 @@ parameter_space:
     # DIFFUSION PARAMETERS (all modes)
     # -------------------------------------------------------------------------
     - name: D0
-      min: 100.0                     # Minimum diffusion [Å²/s]
-      max: 100000.0                  # Maximum diffusion [Å²/s]
+      min: 100.0 # Minimum diffusion [Å²/s]
+      max: 100000.0 # Maximum diffusion [Å²/s]
       type: TruncatedNormal
-      prior_mu: 1000.0               # Prior mean for MCMC
-      prior_sigma: 1000.0            # Prior std for MCMC
+      prior_mu: 1000.0 # Prior mean for MCMC
+      prior_sigma: 1000.0 # Prior std for MCMC
       unit: "Å²/s"
       # Physical meaning: Diffusion coefficient magnitude
       # D(t) = D₀·t^α + D_offset
 
     - name: alpha
-      min: -2.0                      # Strong subdiffusion
-      max: 2.0                       # Strong superdiffusion
+      min: -2.0 # Strong subdiffusion
+      max: 2.0 # Strong superdiffusion
       type: TruncatedNormal
-      prior_mu: -1.2                 # Prior mean (subdiffusive default)
-      prior_sigma: 0.3               # Prior std
+      prior_mu: -1.2 # Prior mean (subdiffusive default)
+      prior_sigma: 0.3 # Prior std
       unit: "dimensionless"
       # Physical meaning: Anomalous diffusion exponent
       #   α < 0: Subdiffusion (crowded, jammed systems)
@@ -327,8 +327,8 @@ parameter_space:
       #   α > 0: Superdiffusion (shear-enhanced, active systems)
 
     - name: D_offset
-      min: -100000.0                 # Allow negative (rare but possible)
-      max: 100000.0                  # Wide range for exploratory fits
+      min: -100000.0 # Allow negative (rare but possible)
+      max: 100000.0 # Wide range for exploratory fits
       type: TruncatedNormal
       prior_mu: 0.0
       prior_sigma: 150.0
@@ -340,8 +340,8 @@ parameter_space:
     # FLOW PARAMETERS (laminar_flow mode only)
     # -------------------------------------------------------------------------
     - name: gamma_dot_t0
-      min: 1.0e-6                    # Near-zero shear
-      max: 0.5                       # High shear rate
+      min: 1.0e-6 # Near-zero shear
+      max: 0.5 # High shear rate
       type: TruncatedNormal
       prior_mu: 0.01
       prior_sigma: 0.1
@@ -350,10 +350,10 @@ parameter_space:
       # γ̇(t) = γ̇₀·t^β + γ̇_offset
 
     - name: beta
-      min: -2.0                      # Decreasing shear
-      max: 2.0                       # Increasing shear
+      min: -2.0 # Decreasing shear
+      max: 2.0 # Increasing shear
       type: TruncatedNormal
-      prior_mu: 0.0                  # Default: constant shear
+      prior_mu: 0.0 # Default: constant shear
       prior_sigma: 0.5
       unit: "dimensionless"
       # Physical meaning: Shear rate time evolution
@@ -371,8 +371,8 @@ parameter_space:
       # Physical meaning: Baseline shear rate offset
 
     - name: phi0
-      min: -10.0                     # Tight bounds help MCMC convergence
-      max: 10.0                      # Widen if flow misalignment suspected
+      min: -10.0 # Tight bounds help MCMC convergence
+      max: 10.0 # Widen if flow misalignment suspected
       type: TruncatedNormal
       prior_mu: 0.0
       prior_sigma: 5.0
@@ -430,24 +430,26 @@ optimization:
     #   memory_threshold_gb: Use explicit threshold in GB (fixed)
     #
     # Environment variable override: NLSQ_MEMORY_FRACTION (0.1-0.9)
-    memory_fraction: 0.75           # Use 75% of available RAM
+    memory_fraction: 0.75 # Use 75% of available RAM
     # memory_threshold_gb: 48.0     # OR: explicit 48 GB threshold
 
     # -------------------------------------------------------------------------
     # CONVERGENCE SETTINGS
     # -------------------------------------------------------------------------
-    max_iterations: 100             # Increase to 200-300 if convergence slow
-                                    # CONSTRAINT: > 0
+    max_iterations:
+      100 # Increase to 200-300 if convergence slow
+      # CONSTRAINT: > 0
 
     # Tolerance settings (all must be > 0)
-    tolerance: 1.0e-8               # Function tolerance (ftol)
-    xtol: 1.0e-8                    # Parameter tolerance
-    gtol: 1.0e-8                    # Gradient tolerance
+    tolerance: 1.0e-8 # Function tolerance (ftol)
+    xtol: 1.0e-8 # Parameter tolerance
+    gtol: 1.0e-8 # Gradient tolerance
 
-    trust_region_scale: 1.0         # Scale factor for trust region
-                                    # CONSTRAINT: > 0
+    trust_region_scale:
+      1.0 # Scale factor for trust region
+      # CONSTRAINT: > 0
 
-    verbose: false                  # Enable verbose optimizer output
+    verbose: false # Enable verbose optimizer output
 
     # -------------------------------------------------------------------------
     # LOSS FUNCTION
@@ -514,18 +516,18 @@ optimization:
     # PROGRESS AND LOGGING
     # -------------------------------------------------------------------------
     progress:
-      enable: true                  # Show tqdm progress bar during fitting
-      verbose: 1                    # 0=quiet, 1=milestones, 2=detailed
-      log_interval: 10              # Log every N iterations (for verbose >= 2)
+      enable: true # Show tqdm progress bar during fitting
+      verbose: 1 # 0=quiet, 1=milestones, 2=detailed
+      log_interval: 10 # Log every N iterations (for verbose >= 2)
 
     # -------------------------------------------------------------------------
     # DIAGNOSTICS
     # -------------------------------------------------------------------------
     diagnostics:
-      enabled: false                # Compute diagnostics (Jacobian stats, etc.)
-      sample_size: 2048             # Sample size for gradient checking
-      check_gradients: true         # Verify gradients numerically
-      log_jacobian_norms: false     # Log Jacobian norm per iteration
+      enabled: false # Compute diagnostics (Jacobian stats, etc.)
+      sample_size: 2048 # Sample size for gradient checking
+      check_gradients: true # Verify gradients numerically
+      log_jacobian_norms: false # Log Jacobian norm per iteration
 
     # -------------------------------------------------------------------------
     # HYBRID STREAMING OPTIMIZER (v2.6.0+)
@@ -540,42 +542,47 @@ optimization:
     # Expected: ~10x fewer iterations (110 vs 1000+)
     #
     hybrid_streaming:
-      enable: true                  # Enable for large datasets
+      enable: true # Enable for large datasets
 
       # Normalization settings
-      normalize: true               # Enable parameter normalization
-      normalization_strategy: "auto" # "auto" | "bounds" | "p0" | "none"
-                                    #   auto: selects based on problem characteristics
-                                    #   bounds: normalize to [0,1] using bounds
-                                    #   p0: normalize relative to initial guess
-                                    #   none: no normalization
+      normalize: true # Enable parameter normalization
+      normalization_strategy:
+        "auto" # "auto" | "bounds" | "p0" | "none"
+        #   auto: selects based on problem characteristics
+        #   bounds: normalize to [0,1] using bounds
+        #   p0: normalize relative to initial guess
+        #   none: no normalization
 
       # L-BFGS warmup (Phase 1)
-      warmup_iterations: 200        # L-BFGS iterations before switch check
-                                    # CONSTRAINT: > 0
-      max_warmup_iterations: 500    # Force switch to Gauss-Newton after this
-                                    # CONSTRAINT: > 0
-      warmup_learning_rate: 0.001   # L-BFGS line search scale
-                                    # CONSTRAINT: > 0
+      warmup_iterations:
+        200 # L-BFGS iterations before switch check
+        # CONSTRAINT: > 0
+      max_warmup_iterations:
+        500 # Force switch to Gauss-Newton after this
+        # CONSTRAINT: > 0
+      warmup_learning_rate:
+        0.001 # L-BFGS line search scale
+        # CONSTRAINT: > 0
 
       # Gauss-Newton refinement (Phase 2)
-      gauss_newton_max_iterations: 100  # Max Gauss-Newton iterations
-      gauss_newton_tol: 1.0e-8          # Convergence tolerance
+      gauss_newton_max_iterations: 100 # Max Gauss-Newton iterations
+      gauss_newton_tol: 1.0e-8 # Convergence tolerance
 
       # Streaming settings
-      chunk_size: 10000             # Points per chunk for streaming J^T J
-                                    # CONSTRAINT: > 0
-      trust_region_initial: 1.0     # Initial trust region size
+      chunk_size:
+        10000 # Points per chunk for streaming J^T J
+        # CONSTRAINT: > 0
+      trust_region_initial: 1.0 # Initial trust region size
       regularization_factor: 1.0e-10 # Tikhonov regularization for J^T J
 
       # Checkpointing
-      enable_checkpoints: true      # Enable checkpoint save/resume
-      checkpoint_frequency: 100     # Checkpoint every N iterations
-      validate_numerics: true       # Validate NaN/Inf detection
+      enable_checkpoints: true # Enable checkpoint save/resume
+      checkpoint_frequency: 100 # Checkpoint every N iterations
+      validate_numerics: true # Validate NaN/Inf detection
 
       # Verbosity
-      verbose: 1                    # 0=silent, 1=progress, 2=debug
-      log_frequency: 1              # Log every N iterations
+      verbose: 1 # 0=silent, 1=progress, 2=debug
+      log_frequency: 1 # Log every N iterations
 
       # ---------------------------------------------------------------------
       # 4-LAYER DEFENSE STRATEGY (NLSQ 0.3.6+)
@@ -586,28 +593,33 @@ optimization:
       # Layer 1: Warm Start Detection
       # Skip warmup entirely if already at good solution
       enable_warm_start_detection: true
-      warm_start_threshold: 0.01    # Skip warmup if loss/variance < this
-                                    # CONSTRAINT: > 0
+      warm_start_threshold:
+        0.01 # Skip warmup if loss/variance < this
+        # CONSTRAINT: > 0
 
       # Layer 2: Adaptive Learning Rate
       # Scale LR based on initial loss quality
       enable_adaptive_warmup_lr: true
-      warmup_lr_refinement: 1.0e-6  # LR for good starts (rel_loss < 0.1)
-                                    # CONSTRAINT: > 0
-      warmup_lr_careful: 1.0e-5     # LR for moderate starts (rel_loss < 1.0)
-                                    # CONSTRAINT: > 0
+      warmup_lr_refinement:
+        1.0e-6 # LR for good starts (rel_loss < 0.1)
+        # CONSTRAINT: > 0
+      warmup_lr_careful:
+        1.0e-5 # LR for moderate starts (rel_loss < 1.0)
+        # CONSTRAINT: > 0
 
       # Layer 3: Cost-Increase Guard
       # Abort warmup if loss increases significantly
       enable_cost_guard: true
-      cost_increase_tolerance: 0.05 # Abort if loss increases >5%
-                                    # CONSTRAINT: (0, 1)
+      cost_increase_tolerance:
+        0.05 # Abort if loss increases >5%
+        # CONSTRAINT: (0, 1)
 
       # Layer 4: Step Clipping
       # Limit max parameter change per iteration
       enable_step_clipping: true
-      max_warmup_step_size: 0.1     # Max step (fraction of normalized range)
-                                    # CONSTRAINT: > 0
+      max_warmup_step_size:
+        0.1 # Max step (fraction of normalized range)
+        # CONSTRAINT: > 0
 
     # -------------------------------------------------------------------------
     # ANTI-DEGENERACY DEFENSE SYSTEM (v2.9.0+)
@@ -625,7 +637,7 @@ optimization:
     # For static mode: Can disable (enable: false) as no shear parameters
     #
     anti_degeneracy:
-      enable: true                  # Master enable
+      enable: true # Master enable
 
       # -----------------------------------------------------------------------
       # PER-ANGLE SCALING MODE (v2.18.0+)
@@ -657,66 +669,81 @@ optimization:
       #   - individual:       53 params (7 physical + 46 per-angle scaling)
       #
       per_angle_mode: "auto"
-      constant_scaling_threshold: 3 # Use constant when n_phi >= this
-                                    # CONSTRAINT: >= 1
+      constant_scaling_threshold:
+        3 # Use constant when n_phi >= this
+        # CONSTRAINT: >= 1
 
       # Fourier reparameterization (Layer 1 - legacy, rarely needed)
       fourier:
-        order: 2                    # Number of Fourier harmonics
-                                    # CONSTRAINT: >= 1
-        min_phi_for_fourier: 6      # Min angles for Fourier mode
-                                    # CONSTRAINT: >= 1
+        order:
+          2 # Number of Fourier harmonics
+          # CONSTRAINT: >= 1
+        min_phi_for_fourier:
+          6 # Min angles for Fourier mode
+          # CONSTRAINT: >= 1
         regularize_high_order: false # Regularize high-order Fourier terms
 
       # Hierarchical Optimization (Layer 2)
       # Alternates between physical and per-angle params
       # REQUIRED for shear_weighting to function!
       hierarchical:
-        enable: true                # CRITICAL: Must be true for shear_weighting
-        max_outer_iterations: 5     # Outer loop iterations
-                                    # CONSTRAINT: > 0
-        outer_tolerance: 1.0e-6     # Convergence tolerance
-                                    # CONSTRAINT: > 0
-        physical_max_iterations: 100 # Max iterations for physical params
-                                    # CONSTRAINT: > 0
-        per_angle_max_iterations: 50 # Max iterations for per-angle params
-                                    # CONSTRAINT: > 0
+        enable: true # CRITICAL: Must be true for shear_weighting
+        max_outer_iterations:
+          5 # Outer loop iterations
+          # CONSTRAINT: > 0
+        outer_tolerance:
+          1.0e-6 # Convergence tolerance
+          # CONSTRAINT: > 0
+        physical_max_iterations:
+          100 # Max iterations for physical params
+          # CONSTRAINT: > 0
+        per_angle_max_iterations:
+          50 # Max iterations for per-angle params
+          # CONSTRAINT: > 0
 
       # Adaptive Regularization (Layer 3)
       # CV-based regularization that scales properly with data
       regularization:
-        enable: false               # Enable CV-based regularization
-        mode: "relative"            # "absolute" | "relative" | "auto"
-        lambda: 1.0                 # Base regularization strength (100× v2.8)
-                                    # CONSTRAINT: > 0
-        target_cv: 0.10             # Target 10% coefficient of variation
-                                    # CONSTRAINT: (0, 1)
-        target_contribution: 0.10   # Target 10% of MSE contribution
-                                    # CONSTRAINT: (0, 1)
-        max_cv: 0.20                # Maximum allowed CV
-                                    # CONSTRAINT: (0, 1)
-        auto_tune_lambda: true      # Auto-tune lambda during optimization
+        enable: false # Enable CV-based regularization
+        mode: "relative" # "absolute" | "relative" | "auto"
+        lambda:
+          1.0 # Base regularization strength (100× v2.8)
+          # CONSTRAINT: > 0
+        target_cv:
+          0.10 # Target 10% coefficient of variation
+          # CONSTRAINT: (0, 1)
+        target_contribution:
+          0.10 # Target 10% of MSE contribution
+          # CONSTRAINT: (0, 1)
+        max_cv:
+          0.20 # Maximum allowed CV
+          # CONSTRAINT: (0, 1)
+        auto_tune_lambda: true # Auto-tune lambda during optimization
 
       # Gradient Collapse Detection (Layer 4)
       gradient_monitoring:
-        enable: true                # Enable gradient monitoring
-        ratio_threshold: 0.01       # Trigger if |∇_physical|/|∇_scaling| < 0.01
-                                    # CONSTRAINT: > 0
-        consecutive_triggers: 5     # Must trigger N times consecutively
-                                    # CONSTRAINT: > 0
-        response: "hierarchical"    # Response to gradient collapse
-                                    # Options: "warn", "hierarchical", "reset", "abort"
+        enable: true # Enable gradient monitoring
+        ratio_threshold:
+          0.01 # Trigger if |∇_physical|/|∇_scaling| < 0.01
+          # CONSTRAINT: > 0
+        consecutive_triggers:
+          5 # Must trigger N times consecutively
+          # CONSTRAINT: > 0
+        response:
+          "hierarchical" # Response to gradient collapse
+          # Options: "warn", "hierarchical", "reset", "abort"
 
       # Shear-Sensitivity Weighting (Layer 5)
       # Weights residuals by |cos(φ₀-φ)| to prevent gradient cancellation
       # CRITICAL: Requires hierarchical.enable: true to function!
       shear_weighting:
-        enable: true                # Enable for laminar_flow with n_phi > 3
-        alpha: 1.0                  # Sensitivity exponent (1.0 = linear)
-        min_weight: 0.3             # Minimum weight for perpendicular angles
-        update_frequency: 50        # Update weights every N L-BFGS iterations
-                                    # CONSTRAINT: > 0
-        normalize: true             # Normalize weights so mean = 1.0
+        enable: true # Enable for laminar_flow with n_phi > 3
+        alpha: 1.0 # Sensitivity exponent (1.0 = linear)
+        min_weight: 0.3 # Minimum weight for perpendicular angles
+        update_frequency:
+          50 # Update weights every N L-BFGS iterations
+          # CONSTRAINT: > 0
+        normalize: true # Normalize weights so mean = 1.0
 
     # -------------------------------------------------------------------------
     # MULTI-START OPTIMIZATION (v2.6.0+)
@@ -736,28 +763,34 @@ optimization:
     #   ≥ 500K points: Sequential (avoid serialization overhead)
     #
     multi_start:
-      enable: false                 # DISABLED when CMA-ES is enabled
-      n_starts: 10                  # Number of LHS starting points
-                                    # CONSTRAINT: > 0
-      seed: 42                      # Random seed for reproducibility
-      sampling_strategy: "latin_hypercube"  # "latin_hypercube" | "random"
-      n_workers: 0                  # Parallel workers (0 = auto)
-                                    # CONSTRAINT: >= 0
+      enable: false # DISABLED when CMA-ES is enabled
+      n_starts:
+        10 # Number of LHS starting points
+        # CONSTRAINT: > 0
+      seed: 42 # Random seed for reproducibility
+      sampling_strategy: "latin_hypercube" # "latin_hypercube" | "random"
+      n_workers:
+        0 # Parallel workers (0 = auto)
+        # CONSTRAINT: >= 0
 
       # Screening phase
-      use_screening: true           # Pre-filter poor starting points
-      screen_keep_fraction: 0.5     # Keep top 50% after screening
-                                    # CONSTRAINT: (0, 1]
+      use_screening: true # Pre-filter poor starting points
+      screen_keep_fraction:
+        0.5 # Keep top 50% after screening
+        # CONSTRAINT: (0, 1]
 
       # Refinement phase
-      refine_top_k: 3               # Refine top K solutions
-                                    # CONSTRAINT: >= 0
-      refinement_ftol: 1.0e-12      # Tighter tolerance for refinement
-                                    # CONSTRAINT: > 0
+      refine_top_k:
+        3 # Refine top K solutions
+        # CONSTRAINT: >= 0
+      refinement_ftol:
+        1.0e-12 # Tighter tolerance for refinement
+        # CONSTRAINT: > 0
 
       # Degeneracy detection
-      degeneracy_threshold: 0.1     # Flag if chi² within 10%
-                                    # CONSTRAINT: (0, 1)
+      degeneracy_threshold:
+        0.1 # Flag if chi² within 10%
+        # CONSTRAINT: (0, 1)
 
     # -------------------------------------------------------------------------
     # CMA-ES GLOBAL OPTIMIZATION (v2.15.0+ / NLSQ 0.6.4+)
@@ -783,7 +816,7 @@ optimization:
     #     - Tighter tolerances (1e-10) for precision
     #
     cmaes:
-      enable: false                 # Enable CMA-ES global optimization
+      enable: false # Enable CMA-ES global optimization
 
       # Presets (shorthand for common configurations)
       #   "cmaes-fast": 50 generations (quick exploration)
@@ -792,47 +825,61 @@ optimization:
       preset: "cmaes-global"
 
       # CMA-ES global search settings
-      max_generations: 300          # Maximum CMA-ES generations
-                                    # CONSTRAINT: > 0
-      sigma: 0.5                    # Initial step size (fraction of range)
-                                    # CONSTRAINT: (0, 1]
-      popsize: 40                   # Population size (default ~4+3*ln(n_params))
-                                    # 40 recommended for 13-param laminar_flow
-      tol_fun: 1.0e-8               # Function value tolerance
-                                    # CONSTRAINT: > 0
-      tol_x: 1.0e-8                 # Parameter tolerance
-                                    # CONSTRAINT: > 0
+      max_generations:
+        300 # Maximum CMA-ES generations
+        # CONSTRAINT: > 0
+      sigma:
+        0.5 # Initial step size (fraction of range)
+        # CONSTRAINT: (0, 1]
+      popsize:
+        40 # Population size (default ~4+3*ln(n_params))
+        # 40 recommended for 13-param laminar_flow
+      tol_fun:
+        1.0e-8 # Function value tolerance
+        # CONSTRAINT: > 0
+      tol_x:
+        1.0e-8 # Parameter tolerance
+        # CONSTRAINT: > 0
 
       # Restart strategy
-      restart_strategy: "bipop"     # "none" | "bipop"
-                                    # bipop: alternates large/small populations
-      max_restarts: 20              # Maximum BIPOP restarts
-                                    # CONSTRAINT: >= 0
+      restart_strategy:
+        "bipop" # "none" | "bipop"
+        # bipop: alternates large/small populations
+      max_restarts:
+        20 # Maximum BIPOP restarts
+        # CONSTRAINT: >= 0
 
       # Memory management (null = auto-configure)
-      population_batch_size: null   # Batch size for population evaluation
-      data_chunk_size: null         # Chunk size for data streaming
-      memory_limit_gb: 8.0          # Memory limit for auto-configuration
-                                    # CONSTRAINT: > 0
+      population_batch_size: null # Batch size for population evaluation
+      data_chunk_size: null # Chunk size for data streaming
+      memory_limit_gb:
+        8.0 # Memory limit for auto-configuration
+        # CONSTRAINT: > 0
 
       # Auto-selection based on scale ratio
-      auto_select: true             # Auto-select CMA-ES vs multi-start
-      scale_threshold: 1000.0       # Scale ratio threshold for auto-selection
-                                    # CONSTRAINT: > 0
+      auto_select: true # Auto-select CMA-ES vs multi-start
+      scale_threshold:
+        1000.0 # Scale ratio threshold for auto-selection
+        # CONSTRAINT: > 0
 
       # Post-CMA-ES NLSQ TRF refinement
-      refine_with_nlsq: true        # Refine CMA-ES solution with L-M
-      refinement_workflow: "auto"   # "auto" | "standard" | "streaming"
-      refinement_ftol: 1.0e-10      # Function tolerance for refinement
-                                    # CONSTRAINT: > 0
-      refinement_xtol: 1.0e-10      # Parameter tolerance for refinement
-                                    # CONSTRAINT: > 0
-      refinement_gtol: 1.0e-10      # Gradient tolerance for refinement
-                                    # CONSTRAINT: > 0
-      refinement_max_nfev: 500      # Max function evaluations for refinement
-                                    # CONSTRAINT: > 0
-      refinement_loss: "linear"     # Loss for refinement
-                                    # Options: "linear", "soft_l1", "huber", etc.
+      refine_with_nlsq: true # Refine CMA-ES solution with L-M
+      refinement_workflow: "auto" # "auto" | "standard" | "streaming"
+      refinement_ftol:
+        1.0e-10 # Function tolerance for refinement
+        # CONSTRAINT: > 0
+      refinement_xtol:
+        1.0e-10 # Parameter tolerance for refinement
+        # CONSTRAINT: > 0
+      refinement_gtol:
+        1.0e-10 # Gradient tolerance for refinement
+        # CONSTRAINT: > 0
+      refinement_max_nfev:
+        500 # Max function evaluations for refinement
+        # CONSTRAINT: > 0
+      refinement_loss:
+        "linear" # Loss for refinement
+        # Options: "linear", "soft_l1", "huber", etc.
 
   # ===========================================================================
   # STREAMING CHECKPOINT/RESUME (>100M points)
@@ -841,16 +888,16 @@ optimization:
   # Automatically activated when dataset exceeds streaming threshold.
   #
   streaming:
-    enable_checkpoints: true        # Enable checkpoint save/resume
+    enable_checkpoints: true # Enable checkpoint save/resume
     checkpoint_dir: "./checkpoints" # Checkpoint directory
-    checkpoint_frequency: 10        # Save every N batches
-    resume_from_checkpoint: true    # Auto-resume from checkpoint
-    keep_last_checkpoints: 3        # Keep N recent checkpoints
-    enable_fault_tolerance: true    # Enable fault tolerance
-    max_retries_per_batch: 2        # Retry attempts per batch
-    min_success_rate: 0.5           # Fail if success < 50%
-    batch_size: null                # Batch size (null = auto-detect)
-    adaptive_batching: true         # Adapt batch size dynamically
+    checkpoint_frequency: 10 # Save every N batches
+    resume_from_checkpoint: true # Auto-resume from checkpoint
+    keep_last_checkpoints: 3 # Keep N recent checkpoints
+    enable_fault_tolerance: true # Enable fault tolerance
+    max_retries_per_batch: 2 # Retry attempts per batch
+    min_success_rate: 0.5 # Fail if success < 50%
+    batch_size: null # Batch size (null = auto-detect)
+    adaptive_batching: true # Adapt batch size dynamically
 
   # ===========================================================================
   # STRATIFICATION (Angle-Stratified Chunking)
@@ -862,16 +909,18 @@ optimization:
   # chunks missing certain angles → zero gradients → silent failures.
   #
   stratification:
-    enabled: "auto"                 # "auto" | true | false
-    target_chunk_size: 100000       # Target points per chunk
-                                    # CONSTRAINT: > 0
-    max_imbalance_ratio: 5.0        # Fall back to sequential if exceeded
-                                    # CONSTRAINT: > 0
+    enabled: "auto" # "auto" | true | false
+    target_chunk_size:
+      100000 # Target points per chunk
+      # CONSTRAINT: > 0
+    max_imbalance_ratio:
+      5.0 # Fall back to sequential if exceeded
+      # CONSTRAINT: > 0
     force_sequential_fallback: false # Force per-angle optimization
-    check_memory_safety: true       # Check available memory
-    use_index_based: false          # Zero-copy stratification
-    collect_diagnostics: false      # Collect diagnostics
-    log_diagnostics: false          # Log diagnostics
+    check_memory_safety: true # Check available memory
+    use_index_based: false # Zero-copy stratification
+    collect_diagnostics: false # Collect diagnostics
+    log_diagnostics: false # Log diagnostics
 
   # ===========================================================================
   # SEQUENTIAL (Per-Angle Optimization Fallback)
@@ -880,9 +929,10 @@ optimization:
   # Optimizes each angle independently, then combines with weighted averaging.
   #
   sequential:
-    min_success_rate: 0.5           # Fail if <50% angles converge
-                                    # CONSTRAINT: [0, 1]
-    weighting: "inverse_variance"   # "inverse_variance" | "uniform" | "n_points"
+    min_success_rate:
+      0.5 # Fail if <50% angles converge
+      # CONSTRAINT: [0, 1]
+    weighting: "inverse_variance" # "inverse_variance" | "uniform" | "n_points"
 
   # ===========================================================================
   # RECOVERY SETTINGS
@@ -890,13 +940,14 @@ optimization:
   # Automatic error recovery with progressively conservative settings.
   #
   recovery:
-    enable: true                    # Enable automatic recovery
-    max_attempts: 3                 # Maximum recovery attempts
-                                    # CONSTRAINT: >= 0
-    lr_decay: 0.5                   # Learning rate multiplier per retry
-    lambda_growth: 2.0              # Regularization multiplier per retry
-    trust_decay: 0.5                # Trust region multiplier per retry
-    log_retries: true               # Log retry attempts
+    enable: true # Enable automatic recovery
+    max_attempts:
+      3 # Maximum recovery attempts
+      # CONSTRAINT: >= 0
+    lr_decay: 0.5 # Learning rate multiplier per retry
+    lambda_growth: 2.0 # Regularization multiplier per retry
+    trust_decay: 0.5 # Trust region multiplier per retry
+    log_retries: true # Log retry attempts
 
   # ===========================================================================
   # MCMC - Base MCMC Configuration
@@ -905,23 +956,28 @@ optimization:
   # Used by CMC shards; can be overridden in cmc.per_shard_mcmc.
   #
   mcmc:
-    backend: "numpyro"              # "numpyro" | "blackjax"
-    num_warmup: 1000                # Warmup samples per chain
-                                    # CONSTRAINT: > 0
-    num_samples: 3000               # Posterior samples per chain
-                                    # CONSTRAINT: > 0
-    num_chains: 4                   # Number of chains (≥2 for R-hat)
-                                    # CONSTRAINT: > 0
-    progress_bar: true              # Show progress bar
-    target_accept_prob: 0.90        # NUTS target acceptance
-                                    # CONSTRAINT: (0, 1)
-    max_tree_depth: 12              # NUTS max tree depth
-                                    # CONSTRAINT: > 0
-    dense_mass_matrix: true         # Full covariance adaptation
+    backend: "numpyro" # "numpyro" | "blackjax"
+    num_warmup:
+      1000 # Warmup samples per chain
+      # CONSTRAINT: > 0
+    num_samples:
+      3000 # Posterior samples per chain
+      # CONSTRAINT: > 0
+    num_chains:
+      4 # Number of chains (≥2 for R-hat)
+      # CONSTRAINT: > 0
+    progress_bar: true # Show progress bar
+    target_accept_prob:
+      0.90 # NUTS target acceptance
+      # CONSTRAINT: (0, 1)
+    max_tree_depth:
+      12 # NUTS max tree depth
+      # CONSTRAINT: > 0
+    dense_mass_matrix: true # Full covariance adaptation
 
     # Per-phi initialization (rarely needed)
     initial_values:
-      phi: {}                       # {angle_deg: {contrast: X, offset: Y}}
+      phi: {} # {angle_deg: {contrast: X, offset: Y}}
       percentile_fallback:
         contrast_low_pct: 5
         contrast_high_pct: 95
@@ -952,9 +1008,9 @@ optimization:
   #   - static: 500,000 (3-param model handles larger single-shard runs)
   #
   cmc:
-    enable: "auto"                  # true | false | "auto"
-    min_points_for_cmc: 500000      # Threshold for auto-enable
-    run_id: null                    # Optional run tag
+    enable: "auto" # true | false | "auto"
+    min_points_for_cmc: 500000 # Threshold for auto-enable
+    run_id: null # Optional run tag
 
     # -------------------------------------------------------------------------
     # ANTI-DEGENERACY: PER-ANGLE SCALING MODE (v2.18.0+)
@@ -984,31 +1040,34 @@ optimization:
     #   - Reduction:        85%
     #
     per_angle_mode: "auto"
-    constant_scaling_threshold: 3   # Use constant when n_phi >= this
-                                    # CONSTRAINT: >= 1
+    constant_scaling_threshold:
+      3 # Use constant when n_phi >= this
+      # CONSTRAINT: >= 1
 
     # Computational backend
-    backend: "jax"                  # "jax" | "numpy"
+    backend: "jax" # "jax" | "numpy"
 
     # Parallel execution configuration
     backend_config:
-      name: "auto"                  # "auto" | "multiprocessing" | "pjit" | "pbs" | "slurm"
-      enable_checkpoints: true      # Enable checkpoints
-      checkpoint_frequency: 1       # Checkpoint every N shards
+      name: "auto" # "auto" | "multiprocessing" | "pjit" | "pbs" | "slurm"
+      enable_checkpoints: true # Enable checkpoints
+      checkpoint_frequency: 1 # Checkpoint every N shards
       checkpoint_dir: "./cmc_checkpoints"
-      keep_last_checkpoints: 3      # Keep N recent checkpoints
-      resume_from_checkpoint: true  # Auto-resume
+      keep_last_checkpoints: 3 # Keep N recent checkpoints
+      resume_from_checkpoint: true # Auto-resume
 
     # Data sharding
     sharding:
-      strategy: "stratified"        # "stratified" | "random" | "contiguous"
-      num_shards: "auto"            # "auto" uses n_phi for stratified
-      max_points_per_shard: "auto"  # "auto" → dynamic based on dataset size (v2.20.0)
-                                    # laminar_flow: 12K-21K after angle scaling
-                                    # static: 50K-100K
-      min_points_per_shard: "auto"  # "auto" → 10K (laminar) or 5K (static) (v2.20.0)
-                                    # Prevents data-starved shards
-      seed_base: 0                  # Shard seed = seed_base + shard_id
+      strategy: "stratified" # "stratified" | "random" | "contiguous"
+      num_shards: "auto" # "auto" uses n_phi for stratified
+      max_points_per_shard:
+        "auto" # "auto" → dynamic based on dataset size (v2.20.0)
+        # laminar_flow: 12K-21K after angle scaling
+        # static: 50K-100K
+      min_points_per_shard:
+        "auto" # "auto" → 10K (laminar) or 5K (static) (v2.20.0)
+        # Prevents data-starved shards
+      seed_base: 0 # Shard seed = seed_base + shard_id
 
     # Per-shard timeout (seconds)
     #
@@ -1021,29 +1080,33 @@ optimization:
     # | 10M - 50M    | 10K auto   | 10800s (3 hours)    |
     # | > 50M        | 5K-10K     | 14400s (4 hours)    |
     #
-    per_shard_timeout: 7200         # CONSTRAINT: > 60
-    heartbeat_timeout: 1200         # Terminate unresponsive workers
-                                    # CONSTRAINT: > 60
+    per_shard_timeout: 7200 # CONSTRAINT: > 60
+    heartbeat_timeout:
+      1200 # Terminate unresponsive workers
+      # CONSTRAINT: > 60
 
     # Subposterior combination
     combination:
-      method: "consensus_mc"        # "consensus_mc" | "robust_consensus_mc" | "weighted_gaussian" | "simple_average"
-                                    # consensus_mc: Precision-weighted combination (default)
-                                    # robust_consensus_mc: MAD-based outlier detection (v2.20.0)
-                                    #   - Excludes outlier shards before combination
-                                    #   - Auto-enabled if heterogeneity_abort=false and CV > threshold
-      validate_results: true        # Validate quality
-      min_success_rate: 0.90        # Require 90% shard convergence
-                                    # CONSTRAINT: [0, 1]
-      min_success_rate_warning: 0.80 # Warn if below this
-                                    # CONSTRAINT: [0, 1]
+      method:
+        "consensus_mc" # "consensus_mc" | "robust_consensus_mc" | "weighted_gaussian" | "simple_average"
+        # consensus_mc: Precision-weighted combination (default)
+        # robust_consensus_mc: MAD-based outlier detection (v2.20.0)
+        #   - Excludes outlier shards before combination
+        #   - Auto-enabled if heterogeneity_abort=false and CV > threshold
+      validate_results: true # Validate quality
+      min_success_rate:
+        0.90 # Require 90% shard convergence
+        # CONSTRAINT: [0, 1]
+      min_success_rate_warning:
+        0.80 # Warn if below this
+        # CONSTRAINT: [0, 1]
 
     # Per-shard MCMC (overrides base mcmc settings)
     per_shard_mcmc:
-      num_warmup: 500               # CONSTRAINT: > 0
-      num_samples: 1500             # CONSTRAINT: > 0
-      num_chains: 2                 # CONSTRAINT: > 0
-      target_accept_prob: 0.85      # CONSTRAINT: (0, 1)
+      num_warmup: 500 # CONSTRAINT: > 0
+      num_samples: 1500 # CONSTRAINT: > 0
+      num_chains: 2 # CONSTRAINT: > 0
+      target_accept_prob: 0.85 # CONSTRAINT: (0, 1)
 
       # -----------------------------------------------------------------------
       # ADAPTIVE SAMPLING (v2.22.0 / Feb 2026)
@@ -1065,22 +1128,26 @@ optimization:
       # Minimum bounds ensure statistical validity:
       #   min_warmup ensures mass matrix adaptation has enough data
       #   min_samples ensures ESS targets are achievable (~50 per param)
-      adaptive_sampling: true       # Enable adaptive sample count based on shard size
-                                    # CONSTRAINT: boolean
-                                    # Set false to always use fixed num_warmup/num_samples
+      adaptive_sampling:
+        true # Enable adaptive sample count based on shard size
+        # CONSTRAINT: boolean
+        # Set false to always use fixed num_warmup/num_samples
 
-      max_tree_depth: 10            # NUTS tree depth (max 2^depth leapfrog steps per sample)
-                                    # CONSTRAINT: [1, 15]
-                                    # Lower values (8) reduce overhead for simple posteriors
-                                    # Higher values (12) may help with complex geometry
+      max_tree_depth:
+        10 # NUTS tree depth (max 2^depth leapfrog steps per sample)
+        # CONSTRAINT: [1, 15]
+        # Lower values (8) reduce overhead for simple posteriors
+        # Higher values (12) may help with complex geometry
 
-      min_warmup: 100               # Minimum warmup iterations even for tiny datasets
-                                    # CONSTRAINT: >= 10
-                                    # Ensures mass matrix has enough data to adapt
+      min_warmup:
+        100 # Minimum warmup iterations even for tiny datasets
+        # CONSTRAINT: >= 10
+        # Ensures mass matrix has enough data to adapt
 
-      min_samples: 200              # Minimum samples even for tiny datasets
-                                    # CONSTRAINT: >= 50
-                                    # Ensures ESS targets are achievable
+      min_samples:
+        200 # Minimum samples even for tiny datasets
+        # CONSTRAINT: >= 50
+        # Ensures ESS targets are achievable
 
       # -----------------------------------------------------------------------
       # JAX PROFILING (v2.22.0 / Feb 2026)
@@ -1099,20 +1166,22 @@ optimization:
       #   tensorboard --logdir=./profiles/jax
       #
       # Or upload to https://ui.perfetto.dev/ for detailed trace analysis.
-      enable_jax_profiling: false   # Enable jax.profiler tracing
-                                    # CONSTRAINT: boolean
-                                    # WARNING: Adds overhead; use for debugging only
+      enable_jax_profiling:
+        false # Enable jax.profiler tracing
+        # CONSTRAINT: boolean
+        # WARNING: Adds overhead; use for debugging only
 
-      jax_profile_dir: ./profiles/jax  # Output directory for JAX trace files
-                                       # Created automatically if doesn't exist
+      jax_profile_dir:
+        ./profiles/jax # Output directory for JAX trace files
+        # Created automatically if doesn't exist
 
     # Convergence validation
     validation:
-      strict_mode: true             # Fail if thresholds not met
-      min_per_shard_ess: 100.0      # Effective sample size threshold
-      max_per_shard_rhat: 1.1       # R-hat threshold
-      max_between_shard_kl: 2.0     # KL divergence between shards
-      min_success_rate: 0.90        # CONSTRAINT: [0, 1]
+      strict_mode: true # Fail if thresholds not met
+      min_per_shard_ess: 100.0 # Effective sample size threshold
+      max_per_shard_rhat: 1.1 # R-hat threshold
+      max_between_shard_kl: 2.0 # KL divergence between shards
+      min_success_rate: 0.90 # CONSTRAINT: [0, 1]
 
       # -----------------------------------------------------------------------
       # NLSQ WARM-START & QUALITY CONTROL (v2.20.0)
@@ -1132,23 +1201,27 @@ optimization:
       # -----------------------------------------------------------------------
 
       # Divergence-based quality filtering
-      max_divergence_rate: 0.10     # Filter shards with >10% divergences
-                                    # CONSTRAINT: [0, 1]
-                                    # Shards exceeding this are excluded from combination
+      max_divergence_rate:
+        0.10 # Filter shards with >10% divergences
+        # CONSTRAINT: [0, 1]
+        # Shards exceeding this are excluded from combination
 
       # NLSQ warm-start requirement (API-level only; CLI is automatic)
-      require_nlsq_warmstart: false # Set true to REQUIRE nlsq_result in API calls
-                                    # When true, fit_mcmc_jax() raises ValueError without it
+      require_nlsq_warmstart:
+        false # Set true to REQUIRE nlsq_result in API calls
+        # When true, fit_mcmc_jax() raises ValueError without it
 
       # Heterogeneity detection and abort (v2.20.0)
-      max_parameter_cv: 1.0         # Maximum coefficient of variation across shard means
-                                    # CONSTRAINT: > 0
-                                    # CV = std(shard_means) / |mean(shard_means)|
-                                    # High CV indicates shards sampling different posteriors
+      max_parameter_cv:
+        1.0 # Maximum coefficient of variation across shard means
+        # CONSTRAINT: > 0
+        # CV = std(shard_means) / |mean(shard_means)|
+        # High CV indicates shards sampling different posteriors
 
-      heterogeneity_abort: true     # Abort if heterogeneity exceeds max_parameter_cv
-                                    # When true: raises RuntimeError with guidance
-                                    # When false: falls back to robust_consensus_mc
+      heterogeneity_abort:
+        true # Abort if heterogeneity exceeds max_parameter_cv
+        # When true: raises RuntimeError with guidance
+        # When false: falls back to robust_consensus_mc
 
     # -------------------------------------------------------------------------
     # REPARAMETERIZATION (v2.21.0 / Jan 2026)
@@ -1180,16 +1253,20 @@ optimization:
     #   Alerts are logged when bimodality is detected.
     #
     reparameterization:
-      enable_d_total: true            # Sample D_total = D0 + D_offset
-                                      # Breaks D0/D_offset degeneracy
-      enable_log_gamma: true          # Sample log(gamma_dot_t0) (laminar_flow)
-                                      # Improves sampling for small shear rates
-      bimodal_min_weight: 0.2         # Minimum GMM component weight for bimodal
-                                      # CONSTRAINT: (0, 0.5]
-                                      # Both components must exceed this weight
-      bimodal_min_separation: 0.5     # Minimum relative separation for bimodal
-                                      # CONSTRAINT: (0, 2.0]
-                                      # Separation = |μ1 - μ2| / sqrt(σ1² + σ2²)
+      enable_d_total:
+        true # Sample D_total = D0 + D_offset
+        # Breaks D0/D_offset degeneracy
+      enable_log_gamma:
+        true # Sample log(gamma_dot_t0) (laminar_flow)
+        # Improves sampling for small shear rates
+      bimodal_min_weight:
+        0.2 # Minimum GMM component weight for bimodal
+        # CONSTRAINT: (0, 0.5]
+        # Both components must exceed this weight
+      bimodal_min_separation:
+        0.5 # Minimum relative separation for bimodal
+        # CONSTRAINT: (0, 2.0]
+        # Separation = |μ1 - μ2| / sqrt(σ1² + σ2²)
 
 # ==============================================================================
 # NOISE ESTIMATION (Optional)
@@ -1199,15 +1276,15 @@ optimization:
 #
 noise_estimation:
   enabled: false
-  model: "per_angle"                # "per_angle" | "global"
+  model: "per_angle" # "per_angle" | "global"
 
   adam_config:
-    learning_rate: 0.01             # CONSTRAINT: > 0
-    max_epochs: 500                 # CONSTRAINT: > 0
-    convergence_threshold: 1.0e-6   # CONSTRAINT: > 0
+    learning_rate: 0.01 # CONSTRAINT: > 0
+    max_epochs: 500 # CONSTRAINT: > 0
+    convergence_threshold: 1.0e-6 # CONSTRAINT: > 0
     early_stopping: true
 
-  posterior_samples: 1200           # CONSTRAINT: > 0
+  posterior_samples: 1200 # CONSTRAINT: > 0
 
   validation:
     check_convergence: true
@@ -1225,21 +1302,21 @@ noise_estimation:
 # GPU support removed in v2.3.0 (CPU-only).
 #
 performance:
-  strategy_override: null           # null | "standard" | "large" | "chunked" | "streaming"
-  memory_limit_gb: null             # null = auto-detect
+  strategy_override: null # null | "standard" | "large" | "chunked" | "streaming"
+  memory_limit_gb: null # null = auto-detect
   enable_progress: true
 
   memory_optimization:
     enabled: true
-    max_memory_usage_gb: 6.0        # CONSTRAINT: > 0
-    chunk_size: 8000                # CONSTRAINT: > 0
+    max_memory_usage_gb: 6.0 # CONSTRAINT: > 0
+    chunk_size: 8000 # CONSTRAINT: > 0
     enable_caching: true
-    cache_strategy: "adaptive"      # "adaptive" | "aggressive" | "conservative"
+    cache_strategy: "adaptive" # "adaptive" | "aggressive" | "conservative"
 
   computation:
-    enable_jit: true                # JAX JIT compilation
-    cpu_threads: "auto"             # "auto" or positive int
-    vectorization_level: "high"     # "low" | "medium" | "high"
+    enable_jit: true # JAX JIT compilation
+    cpu_threads: "auto" # "auto" or positive int
+    vectorization_level: "high" # "low" | "medium" | "high"
 
 # ==============================================================================
 # LOGGING
@@ -1248,12 +1325,12 @@ performance:
 #
 logging:
   enabled: true
-  level: "INFO"                     # "DEBUG" | "INFO" | "WARNING" | "ERROR"
+  level: "INFO" # "DEBUG" | "INFO" | "WARNING" | "ERROR"
 
   console:
     enabled: true
     level: "INFO"
-    format: "detailed"              # "simple" | "detailed"
+    format: "detailed" # "simple" | "detailed"
     colors: true
     show_progress: true
 
@@ -1262,15 +1339,15 @@ logging:
     level: "DEBUG"
     path: "./logs/"
     filename: "homodyne_analysis.log"
-    max_size_mb: 10                 # Log rotation size
-    backup_count: 5                 # Number of backup files
+    max_size_mb: 10 # Log rotation size
+    backup_count: 5 # Number of backup files
 
   # Module-specific log levels
   modules:
     "homodyne.data.phi_filtering": "INFO"
     "homodyne.data.xpcs_loader": "INFO"
     "homodyne.optimization.nlsq_wrapper": "INFO"
-    "jax._src": "WARNING"           # Suppress JAX internal messages
+    "jax._src": "WARNING" # Suppress JAX internal messages
 
 # ==============================================================================
 # QUALITY CONTROL (Optional)
@@ -1298,37 +1375,37 @@ quality_control:
 plotting:
   save_plots: true
   show_plots: false
-  format: "png"                     # "png" | "pdf" | "svg"
-  dpi: 300                          # CONSTRAINT: > 0
+  format: "png" # "png" | "pdf" | "svg"
+  dpi: 300 # CONSTRAINT: > 0
   style: "publication"
 
   # Rendering mode
-  preview_mode: false               # false = matplotlib, true = datashader
-  fit_surface: "solver"             # "solver" | "posthoc"
+  preview_mode: false # false = matplotlib, true = datashader
+  fit_surface: "solver" # "solver" | "posthoc"
 
   color_scale:
-    mode: "legacy"                  # "legacy" | "adaptive"
+    mode: "legacy" # "legacy" | "adaptive"
     pin_legacy_range: true
-    percentile_min: 1.0             # CONSTRAINT: [0, 100]
-    percentile_max: 99.0            # CONSTRAINT: [0, 100]
+    percentile_min: 1.0 # CONSTRAINT: [0, 100]
+    percentile_max: 99.0 # CONSTRAINT: [0, 100]
     fixed_min: 1.0
     fixed_max: 1.5
 
   datashader:
-    canvas_width: 1200              # CONSTRAINT: > 0
-    canvas_height: 1200             # CONSTRAINT: > 0
+    canvas_width: 1200 # CONSTRAINT: > 0
+    canvas_height: 1200 # CONSTRAINT: > 0
 
   matplotlib:
-    interpolation: "bilinear"       # "none" | "bilinear" | "bicubic"
+    interpolation: "bilinear" # "none" | "bilinear" | "bicubic"
     use_tight_layout: true
     savefig_kwargs:
       bbox_inches: "tight"
       pad_inches: 0.1
 
   # Plot types to generate
-  correlation_function: true        # C1(t) and C2(t1,t2)
-  fit_quality: true                 # Residuals
-  parameter_distributions: true     # MCMC posteriors
+  correlation_function: true # C1(t) and C2(t1,t2)
+  fit_quality: true # Residuals
+  parameter_distributions: true # MCMC posteriors
   residual_analysis: true
   angle_coverage: true
   angle_correlation: true
@@ -1347,11 +1424,11 @@ output:
     json: true
     csv: true
 
-  create_subdirs: true              # Creates nlsq/, mcmc/, cmc/
+  create_subdirs: true # Creates nlsq/, mcmc/, cmc/
   timestamp_dirs: false
 
   compress_hdf5: true
-  compression_level: 6              # 0-9 (higher = more compression)
+  compression_level: 6 # 0-9 (higher = more compression)
 
 # ==============================================================================
 # VALIDATION (Optional)
@@ -1359,7 +1436,7 @@ output:
 # Configuration validation settings.
 #
 validation:
-  strict_mode: false                # Fail on warnings
+  strict_mode: false # Fail on warnings
   check_file_existence: true
   validate_parameter_ranges: true
   check_mode_compatibility: true

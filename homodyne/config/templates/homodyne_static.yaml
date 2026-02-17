@@ -48,15 +48,15 @@ analysis_mode: "static"
 # ANALYZER PARAMETERS
 # ==============================================================================
 analyzer_parameters:
-  dt: 0.001                           # Time step [seconds]
-  start_frame: 1                      # Starting frame (1-indexed)
-  end_frame: 2000                     # Ending frame (inclusive)
+  dt: 0.001 # Time step [seconds]
+  start_frame: 1 # Starting frame (1-indexed)
+  end_frame: 2000 # Ending frame (inclusive)
 
   scattering:
-    wavevector_q: 0.0054              # Wave vector [Å⁻¹]
+    wavevector_q: 0.0054 # Wave vector [Å⁻¹]
 
   geometry:
-    stator_rotor_gap: 2000000         # Gap [Å] (not used in static, kept for compatibility)
+    stator_rotor_gap: 2000000 # Gap [Å] (not used in static, kept for compatibility)
 
 # ==============================================================================
 # ANALYSIS SETTINGS
@@ -103,7 +103,7 @@ phi_filtering:
       max_angle: 10.0
       description: "Parallel to primary axis"
     - min_angle: 170.0
-      max_angle: -170.0                # Wrap-aware: 170° to -170°
+      max_angle: -170.0 # Wrap-aware: 170° to -170°
       description: "Antiparallel"
     # Optional for anisotropic analysis:
     # - min_angle: 85.0
@@ -118,7 +118,7 @@ phi_filtering:
     min_angles_required: 1
     max_angle_spread: 36.0
     validate_coverage: true
-    require_orthogonal_angles: false  # Not required for static
+    require_orthogonal_angles: false # Not required for static
 
 # ==============================================================================
 # INITIAL PARAMETERS
@@ -127,9 +127,9 @@ phi_filtering:
 # Example: 3 angles → 9 parameters
 initial_parameters:
   parameter_names:
-    - D0                              # Diffusion prefactor [Å²/s]
-    - alpha                           # Anomalous exponent
-    - D_offset                        # Baseline diffusion [Å²/s]
+    - D0 # Diffusion prefactor [Å²/s]
+    - alpha # Anomalous exponent
+    - D_offset # Baseline diffusion [Å²/s]
 
   # Initial values: null = mid-bounds, or list of 3 floats
   values: null
@@ -139,8 +139,8 @@ initial_parameters:
   # v2.17.0+: Quantile-based initialization computes robust initial values
   # from experimental data using quantile statistics when null
   per_angle_scaling:
-    contrast: null                    # null = quantile-based init, or [0.05, 0.06] for 2 angles
-    offset: null                      # null = quantile-based init, or [1.0, 0.99] for 2 angles
+    contrast: null # null = quantile-based init, or [0.05, 0.06] for 2 angles
+    offset: null # null = quantile-based init, or [1.0, 0.99] for 2 angles
 
   units:
     - "Å²/s"
@@ -148,10 +148,10 @@ initial_parameters:
     - "Å²/s"
 
   # Optional: Optimize subset of parameters
-  active_parameters: null             # e.g., ["D0", "alpha"]
+  active_parameters: null # e.g., ["D0", "alpha"]
 
   # Optional: Fix parameters at specific values
-  fixed_parameters: null              # e.g., {"D_offset": 0.0}
+  fixed_parameters: null # e.g., {"D_offset": 0.0}
 
 # ==============================================================================
 # PARAMETER SPACE
@@ -184,7 +184,7 @@ parameter_space:
       min: -2.0
       max: 2.0
       type: TruncatedNormal
-      prior_mu: -1.2                  # Subdiffusion common in equilibrium
+      prior_mu: -1.2 # Subdiffusion common in equilibrium
       prior_sigma: 0.3
       unit: "dimensionless"
 
@@ -200,7 +200,7 @@ parameter_space:
   priors:
     contrast:
       dist_type: TruncatedNormal
-      mu: 0.06                        # Static typically has lower contrast
+      mu: 0.06 # Static typically has lower contrast
       sigma: 0.05
       min_val: 0.0
       max_val: 0.5
@@ -223,19 +223,19 @@ optimization:
   # ===========================================================================
   nlsq:
     # Memory configuration
-    memory_fraction: 0.75             # Use 75% of available RAM
+    memory_fraction: 0.75 # Use 75% of available RAM
     # memory_threshold_gb: 48.0       # OR: explicit threshold
 
     # Convergence settings
     max_iterations: 100
-    tolerance: 1.0e-8                 # Function tolerance (ftol)
-    xtol: 1.0e-8                      # Parameter tolerance
-    gtol: 1.0e-8                      # Gradient tolerance
+    tolerance: 1.0e-8 # Function tolerance (ftol)
+    xtol: 1.0e-8 # Parameter tolerance
+    gtol: 1.0e-8 # Gradient tolerance
     trust_region_scale: 1.0
     verbose: false
 
     # Loss function
-    loss: "soft_l1"                   # Recommended for XPCS data
+    loss: "soft_l1" # Recommended for XPCS data
 
     # Parameter scaling (less critical for static - similar parameter scales)
     x_scale_map: null
@@ -292,7 +292,7 @@ optimization:
     # Anti-degeneracy system is designed for laminar_flow gradient cancellation.
     # Disabled by default; enable only if parameter collapse observed.
     anti_degeneracy:
-      enable: false                   # Not needed for static mode
+      enable: false # Not needed for static mode
       # Per-angle mode selection (v2.18.0+):
       # Static mode has only 3 physical parameters with similar scales.
       # Anti-degeneracy is less critical but available if needed.
@@ -307,10 +307,10 @@ optimization:
       constant_scaling_threshold: 3
 
       gradient_monitoring:
-        enable: true                  # Lightweight diagnostic only
+        enable: true # Lightweight diagnostic only
         ratio_threshold: 0.01
         consecutive_triggers: 5
-        response: "warn"              # Just warn, don't intervene
+        response: "warn" # Just warn, don't intervene
 
     # -------------------------------------------------------------------------
     # MULTI-START OPTIMIZATION
@@ -318,7 +318,7 @@ optimization:
     # For static mode, multi-start OR standard NLSQ is usually sufficient
     # (parameters have similar scales, no need for CMA-ES global search)
     multi_start:
-      enable: false                   # Enable for uncertain initial guesses
+      enable: false # Enable for uncertain initial guesses
       n_starts: 10
       seed: 42
       sampling_strategy: "latin_hypercube"
@@ -335,19 +335,19 @@ optimization:
     # Usually overkill for static mode (similar parameter scales).
     # Consider multi-start instead.
     cmaes:
-      enable: false                     # Static mode typically doesn't need CMA-ES
-      preset: "cmaes-global"            # 200 generations for better global convergence
-      max_generations: 200              # Increased from 100
-      sigma: 0.3                        # Smaller initial step for refined search
-      popsize: 30                       # Larger population for robust optimization
+      enable: false # Static mode typically doesn't need CMA-ES
+      preset: "cmaes-global" # 200 generations for better global convergence
+      max_generations: 200 # Increased from 100
+      sigma: 0.3 # Smaller initial step for refined search
+      popsize: 30 # Larger population for robust optimization
       tol_fun: 1.0e-8
       tol_x: 1.0e-8
       restart_strategy: "bipop"
-      max_restarts: 15                  # More restarts to escape local minima
+      max_restarts: 15 # More restarts to escape local minima
       population_batch_size: null
       data_chunk_size: null
       memory_limit_gb: 8.0
-      auto_select: false              # Disabled for static (similar scales)
+      auto_select: false # Disabled for static (similar scales)
       scale_threshold: 1000.0
 
       # Post-CMA-ES refinement
@@ -410,7 +410,7 @@ optimization:
   # ===========================================================================
   mcmc:
     backend: "numpyro"
-    num_warmup: 1000                  # More warmup OK for 3 params
+    num_warmup: 1000 # More warmup OK for 3 params
     num_samples: 3000
     num_chains: 4
     progress_bar: true
@@ -434,7 +434,7 @@ optimization:
   #
   cmc:
     enable: "auto"
-    min_points_for_cmc: 500000        # Higher threshold for simpler model
+    min_points_for_cmc: 500000 # Higher threshold for simpler model
     run_id: null
     backend: "jax"
 
@@ -451,7 +451,7 @@ optimization:
     #   "individual": Per-angle contrast/offset sampled.
     #
     per_angle_mode: "auto"
-    constant_scaling_threshold: 3     # Use constant when n_phi >= this
+    constant_scaling_threshold: 3 # Use constant when n_phi >= this
 
     backend_config:
       name: "auto"
@@ -464,17 +464,17 @@ optimization:
     sharding:
       strategy: "stratified"
       num_shards: "auto"
-      max_points_per_shard: "auto"    # 50K-100K for static (10x larger than laminar)
-      min_points_per_shard: 5000      # Lower minimum OK for 3-param model
+      max_points_per_shard: "auto" # 50K-100K for static (10x larger than laminar)
+      min_points_per_shard: 5000 # Lower minimum OK for 3-param model
       seed_base: 0
 
-    per_shard_timeout: 7200           # 2 hours (static converges faster)
+    per_shard_timeout: 7200 # 2 hours (static converges faster)
     heartbeat_timeout: 600
 
     combination:
       method: "consensus_mc"
       validate_results: true
-      min_success_rate: 0.90          # Higher for simpler model
+      min_success_rate: 0.90 # Higher for simpler model
       min_success_rate_warning: 0.80
 
     per_shard_mcmc:
@@ -494,10 +494,10 @@ optimization:
       #   50 pts → 140 warmup, 350 samples (75% reduction)
       #   5000 pts → 250 warmup, 750 samples (50% reduction)
       #   50000+ pts → full defaults (no reduction)
-      adaptive_sampling: true         # Enable adaptive sample count
-      max_tree_depth: 10              # NUTS tree depth (max 2^depth leapfrog steps)
-      min_warmup: 100                 # Minimum warmup even for tiny datasets
-      min_samples: 200                # Minimum samples for statistical validity
+      adaptive_sampling: true # Enable adaptive sample count
+      max_tree_depth: 10 # NUTS tree depth (max 2^depth leapfrog steps)
+      min_warmup: 100 # Minimum warmup even for tiny datasets
+      min_samples: 200 # Minimum samples for statistical validity
 
       # -----------------------------------------------------------------------
       # JAX PROFILING (v2.22.0 / Feb 2026)
@@ -505,11 +505,11 @@ optimization:
       # py-spy only profiles Python code; XLA runs native code invisible to it.
       # Enable JAX profiling to capture XLA-level performance data.
       # View with: tensorboard --logdir=./profiles/jax
-      enable_jax_profiling: false     # Enable jax.profiler tracing
+      enable_jax_profiling: false # Enable jax.profiler tracing
       jax_profile_dir: ./profiles/jax # Output directory for JAX traces
 
     validation:
-      strict_mode: true               # Strict OK for simpler model
+      strict_mode: true # Strict OK for simpler model
       min_per_shard_ess: 100.0
       max_per_shard_rhat: 1.1
       max_between_shard_kl: 2.0
@@ -517,10 +517,10 @@ optimization:
 
       # NLSQ warm-start & quality control (v2.20.0)
       # NOTE: CLI automatically runs NLSQ before CMC (homodyne --method cmc)
-      max_divergence_rate: 0.10       # Filter shards with >10% divergences
-      require_nlsq_warmstart: false   # Optional for static (simpler model)
-      max_parameter_cv: 1.5           # Higher threshold OK for static
-      heterogeneity_abort: true       # Abort with guidance if CV exceeded
+      max_divergence_rate: 0.10 # Filter shards with >10% divergences
+      require_nlsq_warmstart: false # Optional for static (simpler model)
+      max_parameter_cv: 1.5 # Higher threshold OK for static
+      heterogeneity_abort: true # Abort with guidance if CV exceeded
 
     # -------------------------------------------------------------------------
     # REPARAMETERIZATION (v2.21.0 / Jan 2026)
@@ -540,12 +540,14 @@ optimization:
     #   Post-sampling GMM analysis to detect bimodal posteriors.
     #
     reparameterization:
-      enable_d_total: true            # Sample D_total = D0 + D_offset
-      enable_log_gamma: false         # N/A for static (no shear params)
-      bimodal_min_weight: 0.2         # Minimum GMM component weight
-                                      # CONSTRAINT: (0, 0.5]
-      bimodal_min_separation: 0.5     # Minimum relative separation
-                                      # CONSTRAINT: (0, 2.0]
+      enable_d_total: true # Sample D_total = D0 + D_offset
+      enable_log_gamma: false # N/A for static (no shear params)
+      bimodal_min_weight:
+        0.2 # Minimum GMM component weight
+        # CONSTRAINT: (0, 0.5]
+      bimodal_min_separation:
+        0.5 # Minimum relative separation
+        # CONSTRAINT: (0, 2.0]
 
 # ==============================================================================
 # NOISE ESTIMATION (Optional)
