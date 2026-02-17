@@ -422,6 +422,7 @@ def _compute_g1_diffusion_core(
     t2: jnp.ndarray,
     wavevector_q_squared_half_dt: float,
     dt: float,
+    time_grid: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Compute diffusion contribution to g1 using reference implementation approach.
 
@@ -444,43 +445,51 @@ def _compute_g1_diffusion_core(
         t1, t2: Time grids (should be identical: t1 = t2 = t)
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt from configuration
         dt: Time step from experimental configuration (time per frame)
+        time_grid: Caller-provided time grid for cumulative trapezoid integration.
+            When provided, used directly instead of building an internal grid.
+            Required for element-wise mode to cover the full data time range.
 
     Returns:
         Diffusion contribution to g1 correlation function
     """
     D0, alpha, D_offset = params[0], params[1], params[2]
 
-    # CRITICAL FIX (Nov 2025): Detect element-wise data to prevent 35TB matrix allocation
-    # Same issue as in _compute_g1_shear_core
-    is_elementwise = t1.ndim == 1 and safe_len(t1) > 2000
+    # P0-2: Dispatch element-wise mode based on dimensionality only (not size threshold).
+    # 1D t1 = element-wise CMC/paired data; 2D t1 = meshgrid (NLSQ matrix mode).
+    # The old `safe_len(t1) > 2000` heuristic caused small shards (<= 2000 pts)
+    # to fall into matrix mode, producing wrong shapes for CMC models.
+    is_elementwise = t1.ndim == 1
 
     if is_elementwise:
         # ELEMENT-WISE MODE: Use cumulative trapezoid for accurate integration
-        # FIX (Dec 2025): Replace single trapezoid with cumulative trapezoid
-        # to match CMC physics accuracy (fixes up to 3.4% C2 error in transitions)
         t1_arr = jnp.atleast_1d(t1)
         t2_arr = jnp.atleast_1d(t2)
 
-        # Build dense time grid for cumulative trapezoid
-        # Use fixed max grid size (JAX JIT requires static shapes)
-        # 10001 points covers t_max up to 10000*dt (e.g., 1000s at dt=0.1s)
-        MAX_GRID_SIZE = 10001
-        # Create grid with exact dt spacing: [0, dt, 2*dt, 3*dt, ...]
-        grid_indices = jnp.arange(MAX_GRID_SIZE, dtype=jnp.float64)
-        time_grid = grid_indices * dt
+        # P0-1: Use caller-provided time_grid instead of fixed 10001-point grid.
+        # The old hardcoded MAX_GRID_SIZE=10001 truncated integrals for datasets
+        # with t_max > 10000*dt, silently biasing g1 values.
+        # CMC callers always provide time_grid via model_kwargs.
+        # NLSQ callers use matrix mode (t1.ndim==2), so this branch is not reached.
+        if time_grid is not None:
+            time_grid_used = time_grid
+        else:
+            # Legacy fallback for direct calls: use static max size for JIT compat
+            _FALLBACK_GRID_SIZE = 10001
+            grid_indices = jnp.arange(_FALLBACK_GRID_SIZE, dtype=jnp.float64)
+            time_grid_used = grid_indices * dt
+
+        grid_size = safe_len(time_grid_used)
 
         # Compute D(t) on grid and build cumulative trapezoid
         D_grid = _calculate_diffusion_coefficient_impl_jax(
-            time_grid, D0, alpha, D_offset
+            time_grid_used, D0, alpha, D_offset
         )
         D_cumsum = _trapezoid_cumsum(D_grid)
 
         # Map times to grid indices using searchsorted (FR-007: clamp to valid range)
-        # CRITICAL: Use searchsorted to match CMC physics exactly (not round(t/dt))
-        # searchsorted finds insertion point, giving correct integral bounds
-        max_index = MAX_GRID_SIZE - 1
-        idx1 = jnp.clip(jnp.searchsorted(time_grid, t1_arr, side="left"), 0, max_index)
-        idx2 = jnp.clip(jnp.searchsorted(time_grid, t2_arr, side="left"), 0, max_index)
+        max_index = grid_size - 1
+        idx1 = jnp.clip(jnp.searchsorted(time_grid_used, t1_arr, side="left"), 0, max_index)
+        idx2 = jnp.clip(jnp.searchsorted(time_grid_used, t2_arr, side="left"), 0, max_index)
 
         # Lookup integrals with smooth abs for gradient stability (FR-008)
         epsilon_abs = 1e-20
@@ -525,12 +534,10 @@ def _compute_g1_diffusion_core(
     # Compute exponential with safeguards (safe_exp handles edge cases)
     g1_result = safe_exp(log_g1_bounded)
 
-    # Apply ONLY upper bound (g1 ≤ 1.0 is physical constraint)
-    # No lower bound clipping - preserves full precision down to machine epsilon
-    # This eliminates artificial plateaus from overly aggressive clipping
-    g1_safe = jnp.minimum(g1_result, 1.0)
-
-    return g1_safe
+    # P1-2: Removed jnp.minimum(g1_result, 1.0) — the log-space clip above
+    # (jnp.clip(log_g1, -700, 0)) already guarantees g1 = exp(log_g1) ≤ 1.0.
+    # The hard min killed gradients at g1=1.0 (diagonal elements), harming NUTS.
+    return g1_result
 
 
 @jit
@@ -541,6 +548,7 @@ def _compute_g1_shear_core(
     phi: jnp.ndarray,
     sinc_prefactor: float,
     dt: float,
+    time_grid: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Compute shear contribution to g1 using reference implementation approach.
 
@@ -591,39 +599,35 @@ def _compute_g1_shear_core(
         params[6],
     )
 
-    # CRITICAL FIX (Nov 2025): Detect element-wise data to prevent 35TB matrix allocation
-    # For CMC shards with flattened element-wise data (len > 2000), t1 and t2 are paired arrays
-    # where each element i corresponds to one measurement at (t1[i], t2[i], phi[i])
-    # We need element-wise integrals, NOT a full (n×n) matrix!
-    is_elementwise = t1.ndim == 1 and safe_len(t1) > 2000
+    # P0-2: Dispatch element-wise mode based on dimensionality only (not size threshold).
+    # Same rationale as _compute_g1_diffusion_core.
+    is_elementwise = t1.ndim == 1
 
     if is_elementwise:
         # ELEMENT-WISE MODE: Use cumulative trapezoid for accurate integration
-        # FIX (Dec 2025): Replace single trapezoid with cumulative trapezoid
-        # to match CMC physics accuracy (fixes up to 3.4% C2 error in transitions)
         t1_arr = jnp.atleast_1d(t1)
         t2_arr = jnp.atleast_1d(t2)
 
-        # Build dense time grid for cumulative trapezoid
-        # Use fixed max grid size (JAX JIT requires static shapes)
-        # 10001 points covers t_max up to 10000*dt (e.g., 1000s at dt=0.1s)
-        MAX_GRID_SIZE = 10001
-        # Create grid with exact dt spacing: [0, dt, 2*dt, 3*dt, ...]
-        grid_indices = jnp.arange(MAX_GRID_SIZE, dtype=jnp.float64)
-        time_grid = grid_indices * dt
+        # P0-1: Use caller-provided time_grid instead of fixed 10001-point grid.
+        if time_grid is not None:
+            time_grid_used = time_grid
+        else:
+            _FALLBACK_GRID_SIZE = 10001
+            grid_indices = jnp.arange(_FALLBACK_GRID_SIZE, dtype=jnp.float64)
+            time_grid_used = grid_indices * dt
+
+        grid_size = safe_len(time_grid_used)
 
         # Compute γ̇(t) on grid and build cumulative trapezoid
         gamma_grid = _calculate_shear_rate_impl_jax(
-            time_grid, gamma_dot_0, beta, gamma_dot_offset
+            time_grid_used, gamma_dot_0, beta, gamma_dot_offset
         )
         gamma_cumsum = _trapezoid_cumsum(gamma_grid)
 
         # Map times to grid indices using searchsorted (FR-007: clamp to valid range)
-        # CRITICAL: Use searchsorted to match CMC physics exactly (not round(t/dt))
-        # searchsorted finds insertion point, giving correct integral bounds
-        max_index = MAX_GRID_SIZE - 1
-        idx1 = jnp.clip(jnp.searchsorted(time_grid, t1_arr, side="left"), 0, max_index)
-        idx2 = jnp.clip(jnp.searchsorted(time_grid, t2_arr, side="left"), 0, max_index)
+        max_index = grid_size - 1
+        idx1 = jnp.clip(jnp.searchsorted(time_grid_used, t1_arr, side="left"), 0, max_index)
+        idx2 = jnp.clip(jnp.searchsorted(time_grid_used, t2_arr, side="left"), 0, max_index)
 
         # Lookup integrals with smooth abs for gradient stability (FR-008)
         epsilon_abs = 1e-20
@@ -743,6 +747,7 @@ def _compute_g1_total_core(
     wavevector_q_squared_half_dt: float,
     sinc_prefactor: float,
     dt: float,
+    time_grid: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Compute total g1 correlation function as product of diffusion and shear.
 
@@ -758,17 +763,22 @@ def _compute_g1_total_core(
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt from configuration
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt from configuration
         dt: Time step from experimental configuration (time per frame)
+        time_grid: Caller-provided time grid for element-wise cumulative trapezoid.
+            Threaded through to diffusion/shear core functions.
 
     Returns:
         Total g1 correlation function with shape (n_phi, n_times, n_times)
+        or (n_total,) in element-wise mode.
     """
     # Compute diffusion contribution
     g1_diff = _compute_g1_diffusion_core(
-        params, t1, t2, wavevector_q_squared_half_dt, dt
+        params, t1, t2, wavevector_q_squared_half_dt, dt, time_grid=time_grid
     )
 
     # Compute shear contribution
-    g1_shear = _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor, dt)
+    g1_shear = _compute_g1_shear_core(
+        params, t1, t2, phi, sinc_prefactor, dt, time_grid=time_grid
+    )
 
     # CRITICAL FIX (Nov 2025): Handle element-wise vs matrix mode
     # Element-wise mode: both g1_diff and g1_shear are 1D (shape (n,))
@@ -808,13 +818,12 @@ def _compute_g1_total_core(
                 f"Original error: {e}",
             ) from e
 
-    # Apply physical bounds for g1: (0, 2]
-    # Theoretical: g1 is the normalized field correlation function, range (0, 1]
-    # Lower bound: epsilon (effectively 0) for numerical stability
-    # Upper bound: 2.0 (loose bound allowing for experimental variations beyond theoretical 1.0)
-    # ✅ UPDATED (Nov 11, 2025): Loosened bounds to g1 ∈ (0, 2] for fitting flexibility
+    # P1-2: Keep only lower bound for numerical stability (prevents log(0)).
+    # Upper clip removed — g1_diff is already bounded ≤ 1.0 from log-space clip,
+    # and g1_shear (sinc²) is naturally bounded ≤ 1.0. Hard upper clips kill
+    # gradients at the boundary, harming NUTS exploration.
     epsilon = 1e-10
-    g1_bounded = jnp.clip(g1_total, epsilon, 2.0)
+    g1_bounded = jnp.maximum(g1_total, epsilon)
 
     return jnp.asarray(g1_bounded)
 

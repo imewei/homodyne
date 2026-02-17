@@ -1108,6 +1108,9 @@ def fit_mcmc_jax(
     ):
         model_kwargs["fixed_contrast"] = fixed_contrast
         model_kwargs["fixed_offset"] = fixed_offset
+        # P0-4: Pass global phi_unique so shards can remap shard-local phi_indices
+        # to global indices when looking up fixed_contrast/fixed_offset arrays.
+        model_kwargs["global_phi_unique"] = jnp.array(prepared.phi_unique)
 
     # Prior tempering (Feb 2026): pass actual shard count so each shard's model
     # uses prior^(1/K) via Normal(0, sqrt(K)) instead of Normal(0, 1).

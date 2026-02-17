@@ -145,10 +145,19 @@ def extract_phi_info(phi: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     phi_unique = np.unique(phi)
     n_phi = len(phi_unique)
 
-    # Create index mapping
-    # CRITICAL FIX: Clip indices to valid range to prevent out-of-bounds access
-    phi_indices = np.clip(np.searchsorted(phi_unique, phi), 0, n_phi - 1)
-    phi_indices = phi_indices.astype(np.int32)
+    # P2-2: Use tolerance-aware nearest-neighbor matching instead of searchsorted.
+    # searchsorted + clip silently assigns points to the wrong angle when phi
+    # values have float precision differences (e.g., after dtype conversion).
+    # np.argmin(|phi - phi_unique|) always finds the closest angle.
+    if n_phi <= 256:
+        # Nearest-neighbor: O(n * n_phi), feasible for typical angle counts
+        phi_indices = np.argmin(
+            np.abs(phi[:, None] - phi_unique[None, :]), axis=1
+        ).astype(np.int32)
+    else:
+        # Fallback for extremely many angles: searchsorted + validate
+        phi_indices = np.clip(np.searchsorted(phi_unique, phi), 0, n_phi - 1)
+        phi_indices = phi_indices.astype(np.int32)
 
     logger.debug(f"Extracted {n_phi} unique phi angles: {phi_unique}")
 

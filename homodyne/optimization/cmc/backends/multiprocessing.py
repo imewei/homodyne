@@ -356,7 +356,13 @@ def _run_shard_worker(
     os.environ.pop("OMP_PROC_BIND", None)
     os.environ.pop("OMP_PLACES", None)
 
+    # P0-3: Enable float64 precision BEFORE importing JAX.
+    # Spawned workers don't inherit the parent's x64 mode (which was set via
+    # nlsq import side-effect). Without this, all JAX ops run in float32,
+    # silently losing precision for parameters spanning 6+ orders of magnitude.
     import jax
+
+    jax.config.update("jax_enable_x64", True)
     import jax.numpy as jnp
 
     from homodyne.config.parameter_space import ParameterSpace
@@ -785,6 +791,7 @@ class MultiprocessingBackend(CMCBackend):
             "dt": model_kwargs["dt"],
             "fixed_contrast": model_kwargs.get("fixed_contrast"),
             "fixed_offset": model_kwargs.get("fixed_offset"),
+            "global_phi_unique": model_kwargs.get("global_phi_unique"),
             "per_angle_mode": model_kwargs.get("per_angle_mode", "individual"),
             "nlsq_prior_config": model_kwargs.get("nlsq_prior_config"),
             "num_shards": model_kwargs.get("num_shards", 1),

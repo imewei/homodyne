@@ -753,7 +753,19 @@ def run_nuts_sampling(
     # This catches common causes of 0% acceptance (NaNs/-inf log prob) before
     # spending wall-clock hours running many CMC shards.
     sigma_init = float(max(model_kwargs.get("noise_scale", 0.1), 1e-6))
-    preflight_params = dict(z_space_init)
+
+    # P1-5: NLSQ-informed models (averaged, constant_averaged) sample parameters
+    # with original-space names ("D0", "alpha", ...) NOT z-space names ("D0_z").
+    # The preflight must use matching names or NumPyro silently ignores them.
+    nlsq_prior_config = model_kwargs.get("nlsq_prior_config")
+    if nlsq_prior_config is not None and per_angle_mode in (
+        "auto",
+        "constant_averaged",
+    ):
+        # Use original-space names for NLSQ-informed models
+        preflight_params = dict(full_init)
+    else:
+        preflight_params = dict(z_space_init)
     preflight_params["sigma"] = sigma_init
     _preflight_log_density(
         model=model,

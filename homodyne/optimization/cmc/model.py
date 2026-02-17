@@ -157,21 +157,15 @@ def xpcs_model(
     # c2 = contrast * g1^2 + offset
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
-    c2_theory_raw = contrast_per_point * g1_per_point**2 + offset_per_point
-
-    # =========================================================================
-    # 5b. Numerical stability safeguard
-    # =========================================================================
-    # Replace NaN/Inf with bounded values to prevent likelihood becoming -inf
-    # This allows sampling to continue while flagging problematic regions
-    c2_theory = jnp.where(
-        jnp.isfinite(c2_theory_raw),
-        c2_theory_raw,
-        jnp.full_like(c2_theory_raw, 1e6),  # Large penalty to push NUTS away from NaN regions
-    )
+    # P1-1: Sanitize g1 BEFORE squaring to prevent NaN gradient contamination.
+    # jnp.where(isfinite(c2_raw), c2_raw, 1e6) evaluates both branches in backward
+    # pass; 0 * NaN = NaN contaminates gradients. nan_to_num zeroes NaN in the
+    # forward pass so gradients never touch NaN values.
+    g1_per_point = jnp.nan_to_num(g1_per_point, nan=0.0, posinf=0.0, neginf=0.0)
+    c2_theory = contrast_per_point * g1_per_point**2 + offset_per_point
 
     # Expose numerical health as deterministic for diagnostics
-    n_nan = jnp.sum(~jnp.isfinite(c2_theory_raw))
+    n_nan = jnp.sum(~jnp.isfinite(c2_theory))
     numpyro.deterministic("n_numerical_issues", n_nan)
 
     # =========================================================================
@@ -394,16 +388,11 @@ def xpcs_model_scaled(
     # =========================================================================
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
-    c2_theory_raw = contrast_per_point * g1_per_point**2 + offset_per_point
+    # P1-1: Sanitize g1 BEFORE squaring to prevent NaN gradient contamination.
+    g1_per_point = jnp.nan_to_num(g1_per_point, nan=0.0, posinf=0.0, neginf=0.0)
+    c2_theory = contrast_per_point * g1_per_point**2 + offset_per_point
 
-    # Numerical stability safeguard
-    c2_theory = jnp.where(
-        jnp.isfinite(c2_theory_raw),
-        c2_theory_raw,
-        jnp.full_like(c2_theory_raw, 1e6),
-    )
-
-    n_nan = jnp.sum(~jnp.isfinite(c2_theory_raw))
+    n_nan = jnp.sum(~jnp.isfinite(c2_theory))
     numpyro.deterministic("n_numerical_issues", n_nan)
 
     # =========================================================================
@@ -489,9 +478,21 @@ def xpcs_model_constant(
             "These should be estimated from quantile analysis before calling."
         )
 
-    # Use fixed per-angle values (NOT sampled)
-    contrast_arr = fixed_contrast
-    offset_arr = fixed_offset
+    # P0-4: Remap fixed_contrast/fixed_offset from global angle ordering to shard-local.
+    # fixed_contrast is indexed 0..global_n_phi-1 (built from full dataset),
+    # but phi_indices in each shard are 0..shard_n_phi-1 (recomputed per shard).
+    # Without remapping, shard-local index 0 fetches global angle 0's contrast
+    # instead of the correct global angle for this shard's first angle.
+    global_phi_unique = kwargs.get("global_phi_unique", None)
+    if global_phi_unique is not None and phi_unique is not None:
+        # Map each shard-local phi_unique entry to its global index
+        global_indices = jnp.searchsorted(global_phi_unique, phi_unique)
+        contrast_arr = fixed_contrast[global_indices]  # shape: (shard_n_phi,)
+        offset_arr = fixed_offset[global_indices]  # shape: (shard_n_phi,)
+    else:
+        # Fallback: use directly (single-shard or matching phi ordering)
+        contrast_arr = fixed_contrast
+        offset_arr = fixed_offset
 
     # =========================================================================
     # 1. Compute scaling factors and prior tempering scale
@@ -545,16 +546,11 @@ def xpcs_model_constant(
     # =========================================================================
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
-    c2_theory_raw = contrast_per_point * g1_per_point**2 + offset_per_point
+    # P1-1: Sanitize g1 BEFORE squaring to prevent NaN gradient contamination.
+    g1_per_point = jnp.nan_to_num(g1_per_point, nan=0.0, posinf=0.0, neginf=0.0)
+    c2_theory = contrast_per_point * g1_per_point**2 + offset_per_point
 
-    # Numerical stability safeguard
-    c2_theory = jnp.where(
-        jnp.isfinite(c2_theory_raw),
-        c2_theory_raw,
-        jnp.full_like(c2_theory_raw, 1e6),
-    )
-
-    n_nan = jnp.sum(~jnp.isfinite(c2_theory_raw))
+    n_nan = jnp.sum(~jnp.isfinite(c2_theory))
     numpyro.deterministic("n_numerical_issues", n_nan)
 
     # =========================================================================
@@ -666,9 +662,11 @@ def xpcs_model_averaged(
         ):
             from homodyne.optimization.cmc.priors import build_nlsq_informed_prior
 
-            # Apply prior tempering: scale width_factor by sqrt(K)
+            # P1-3: Do NOT temper NLSQ-informed priors. The NLSQ estimate is
+            # data-driven (not a vague base prior), so tempering by sqrt(K) would
+            # make the prior effectively uniform for large shard counts, defeating
+            # the warm-start. Only non-NLSQ z-space priors should be tempered.
             base_width = nlsq_prior_config.get("width_factor", 3.0)
-            tempered_width = base_width * prior_scale
 
             prior = build_nlsq_informed_prior(
                 param_name=name,
@@ -677,7 +675,7 @@ def xpcs_model_averaged(
                 if nlsq_prior_config.get("uncertainties")
                 else None,
                 bounds=parameter_space.get_bounds(name),
-                width_factor=tempered_width,
+                width_factor=base_width,
             )
             return numpyro.sample(name, prior)
         return sample_scaled_parameter(name, scalings[name], prior_scale=prior_scale)
@@ -714,6 +712,7 @@ def xpcs_model_averaged(
         wavevector_q_squared_half_dt=wavevector_q_squared_half_dt,
         sinc_prefactor=sinc_prefactor,
         dt=dt,
+        time_grid=time_grid,
     )
 
     # =========================================================================
@@ -721,16 +720,11 @@ def xpcs_model_averaged(
     # =========================================================================
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
-    c2_theory_raw = offset_per_point + contrast_per_point * g1**2
+    # P1-1: Sanitize g1 BEFORE squaring to prevent NaN gradient contamination.
+    g1 = jnp.nan_to_num(g1, nan=0.0, posinf=0.0, neginf=0.0)
+    c2_theory = offset_per_point + contrast_per_point * g1**2
 
-    # Numerical stability safeguard
-    c2_theory = jnp.where(
-        jnp.isfinite(c2_theory_raw),
-        c2_theory_raw,
-        jnp.full_like(c2_theory_raw, 1e6),
-    )
-
-    n_nan = jnp.sum(~jnp.isfinite(c2_theory_raw))
+    n_nan = jnp.sum(~jnp.isfinite(c2_theory))
     numpyro.deterministic("n_numerical_issues", n_nan)
 
     # =========================================================================
@@ -859,7 +853,7 @@ def xpcs_model_constant_averaged(
                 if nlsq_prior_config.get("uncertainties")
                 else None,
                 bounds=parameter_space.get_bounds(name),
-                width_factor=tempered_width,
+                width_factor=base_width,
             )
             return numpyro.sample(name, prior)
         return sample_scaled_parameter(name, scalings[name], prior_scale=prior_scale)
@@ -896,6 +890,7 @@ def xpcs_model_constant_averaged(
         wavevector_q_squared_half_dt=wavevector_q_squared_half_dt,
         sinc_prefactor=sinc_prefactor,
         dt=dt,
+        time_grid=time_grid,
     )
 
     # =========================================================================
@@ -903,16 +898,11 @@ def xpcs_model_constant_averaged(
     # =========================================================================
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
-    c2_theory_raw = offset_per_point + contrast_per_point * g1**2
+    # P1-1: Sanitize g1 BEFORE squaring to prevent NaN gradient contamination.
+    g1 = jnp.nan_to_num(g1, nan=0.0, posinf=0.0, neginf=0.0)
+    c2_theory = offset_per_point + contrast_per_point * g1**2
 
-    # Numerical stability safeguard
-    c2_theory = jnp.where(
-        jnp.isfinite(c2_theory_raw),
-        c2_theory_raw,
-        jnp.full_like(c2_theory_raw, 1e6),
-    )
-
-    n_nan = jnp.sum(~jnp.isfinite(c2_theory_raw))
+    n_nan = jnp.sum(~jnp.isfinite(c2_theory))
     numpyro.deterministic("n_numerical_issues", n_nan)
 
     # =========================================================================
@@ -1010,8 +1000,8 @@ def xpcs_model_reparameterized(
         ):
             from homodyne.optimization.cmc.priors import build_nlsq_informed_prior
 
+            # P1-3: Do NOT temper NLSQ-informed priors (see averaged model).
             base_width = nlsq_prior_config.get("width_factor", 2.0)
-            tempered_width = base_width * prior_scale
 
             prior = build_nlsq_informed_prior(
                 param_name=name,
@@ -1020,7 +1010,7 @@ def xpcs_model_reparameterized(
                 if nlsq_prior_config.get("uncertainties")
                 else None,
                 bounds=parameter_space.get_bounds(name),
-                width_factor=tempered_width,
+                width_factor=base_width,
             )
             return numpyro.sample(name, prior)
         return sample_scaled_parameter(name, scalings[name], prior_scale=prior_scale)
@@ -1119,6 +1109,7 @@ def xpcs_model_reparameterized(
         wavevector_q_squared_half_dt=wavevector_q_squared_half_dt,
         sinc_prefactor=sinc_prefactor,
         dt=dt,
+        time_grid=time_grid,
     )
 
     # =========================================================================
@@ -1126,16 +1117,11 @@ def xpcs_model_reparameterized(
     # =========================================================================
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
-    c2_theory_raw = offset_per_point + contrast_per_point * g1**2
+    # P1-1: Sanitize g1 BEFORE squaring to prevent NaN gradient contamination.
+    g1 = jnp.nan_to_num(g1, nan=0.0, posinf=0.0, neginf=0.0)
+    c2_theory = offset_per_point + contrast_per_point * g1**2
 
-    # Numerical stability safeguard
-    c2_theory = jnp.where(
-        jnp.isfinite(c2_theory_raw),
-        c2_theory_raw,
-        jnp.full_like(c2_theory_raw, 1e6),
-    )
-
-    n_nan = jnp.sum(~jnp.isfinite(c2_theory_raw))
+    n_nan = jnp.sum(~jnp.isfinite(c2_theory))
     numpyro.deterministic("n_numerical_issues", n_nan)
 
     # =========================================================================

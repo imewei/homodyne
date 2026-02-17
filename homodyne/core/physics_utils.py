@@ -92,13 +92,21 @@ def safe_sinc(x: jnp.ndarray) -> jnp.ndarray:
     This matches the reference implementation which uses sin(arg) / arg directly.
     The phase argument already includes all necessary scaling factors.
 
+    P2-4: Uses a Taylor expansion near zero (1 - x²/6 + x⁴/120) for smooth
+    gradient continuity. The old hard switch from sin(x)/x to 1.0 at |x|=EPS
+    created a gradient discontinuity that caused spurious NUTS rejections near
+    gamma_dot_t0 ≈ 0.
+
     Args:
         x: Input array
 
     Returns:
-        sin(x)/x where abs(x) > EPS, else 1.0
+        sin(x)/x for |x| >= 1e-4, Taylor approximation for |x| < 1e-4
     """
-    return jnp.where(jnp.abs(x) > EPS, jnp.sin(x) / x, 1.0)
+    x2 = x * x
+    near_zero = 1.0 - x2 / 6.0 + x2 * x2 / 120.0
+    far = jnp.sin(x) / jnp.where(jnp.abs(x) > EPS, x, 1.0)  # avoid div/0
+    return jnp.where(jnp.abs(x) < 1e-4, near_zero, far)
 
 
 # =============================================================================

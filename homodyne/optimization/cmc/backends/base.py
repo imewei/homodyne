@@ -314,7 +314,8 @@ def _combine_shard_chunk(
             # Precision-weighted combination on filtered data
             precisions = [1.0 / max(v, 1e-10) for v in filtered_vars]
             combined_precision = sum(precisions)
-            combined_variance = 1.0 / combined_precision
+            # P2-3: Floor combined_variance to prevent point-mass posteriors.
+            combined_variance = max(1.0 / combined_precision, 1e-12)
 
             weighted_mean_sum = sum(
                 p * m for p, m in zip(precisions, filtered_means, strict=False)
@@ -357,7 +358,9 @@ def _combine_shard_chunk(
             # Combined precision = sum of precisions
             precisions = [1.0 / max(v, 1e-10) for v in shard_variances]
             combined_precision = sum(precisions)
-            combined_variance = 1.0 / combined_precision
+            # P2-3: Floor combined_variance to prevent point-mass posteriors
+            # when degenerate shards produce near-zero variance.
+            combined_variance = max(1.0 / combined_precision, 1e-12)
 
             # Combined mean = (combined_variance) * sum(precision_s * mean_s)
             weighted_mean_sum = sum(
