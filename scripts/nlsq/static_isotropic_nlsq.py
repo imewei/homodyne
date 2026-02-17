@@ -92,7 +92,7 @@ output:
 """
 
 
-def main():
+def main() -> None:
     """Run static isotropic NLSQ example."""
     print("Static Isotropic NLSQ Optimization Example")
     print("=" * 60)

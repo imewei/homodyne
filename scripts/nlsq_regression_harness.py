@@ -15,10 +15,14 @@ Usage:
        python scripts/nlsq_regression_harness.py --compare
 """
 
+from __future__ import annotations
+
 import os
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -40,7 +44,6 @@ from nlsq import curve_fit  # noqa: E402
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-
 def generate_deterministic_data(
     seed: int = 42,
     n_phi: int = 5,
@@ -57,7 +60,7 @@ def generate_deterministic_data(
 
     # Known ground truth
     ground_truth = {
-        "D0": 100.0,      # Scaled for numerical stability
+        "D0": 100.0,  # Scaled for numerical stability
         "alpha": 0.5,
         "D_offset": 1.0,  # Scaled for numerical stability
         "contrast": 0.5,
@@ -72,7 +75,7 @@ def generate_deterministic_data(
     t2 = np.linspace(0.1, 1.0, n_t2)
 
     # Generate theoretical data using simplified model
-    T1, T2 = np.meshgrid(t1, t2, indexing='ij')
+    T1, T2 = np.meshgrid(t1, t2, indexing="ij")
 
     xdata_list = []
     ydata_list = []
@@ -85,7 +88,10 @@ def generate_deterministic_data(
 
         # Simplified model: g2 = offset + contrast * exp(-D_eff * (t1 + t2))
         tau = np.sqrt(t1_flat * t2_flat)
-        D_eff = ground_truth["D0"] * np.power(tau + 0.01, ground_truth["alpha"] - 1.0) + ground_truth["D_offset"]
+        D_eff = (
+            ground_truth["D0"] * np.power(tau + 0.01, ground_truth["alpha"] - 1.0)
+            + ground_truth["D_offset"]
+        )
         decay = np.exp(-D_eff * (t1_flat + t2_flat) * q * q)
         g2_theoretical = ground_truth["offset"] + ground_truth["contrast"] * decay
 
@@ -94,12 +100,16 @@ def generate_deterministic_data(
         noise = np.random.normal(0, 1, n_points) * sigma
         g2_noisy = g2_theoretical + noise
 
-        xdata_list.append(np.column_stack([
-            t1_flat,
-            t2_flat,
-            np.full(n_points, phi_val),
-            np.full(n_points, i),  # phi index for per-angle params
-        ]))
+        xdata_list.append(
+            np.column_stack(
+                [
+                    t1_flat,
+                    t2_flat,
+                    np.full(n_points, phi_val),
+                    np.full(n_points, i),  # phi index for per-angle params
+                ]
+            )
+        )
         ydata_list.append(g2_noisy)
         sigma_list.append(sigma)
 
@@ -123,14 +133,16 @@ def generate_deterministic_data(
     return xdata, ydata, sigma, metadata
 
 
-def create_model_function(q: float, L: float, dt: float, n_phi: int):
+def create_model_function(
+    q: float, L: float, dt: float, n_phi: int
+) -> Callable[..., Any]:
     """Create model function for curve_fit.
 
     Uses a simple exponential decay model as a proxy for XPCS g2 to enable
     fast testing of NLSQ optimizer behavior without full physics computation.
     """
 
-    def model(xdata, *params):
+    def model(xdata: Any, *params: Any) -> Any:
         """Model: per-angle (contrast, offset) + physical params (D0, alpha, D_offset).
 
         Simplified model: g2 = offset + contrast * exp(-D_eff * (t1 + t2))
@@ -139,10 +151,10 @@ def create_model_function(q: float, L: float, dt: float, n_phi: int):
         # Parse params: [contrast_0..N, offset_0..N, D0, alpha, D_offset]
         params_arr = jnp.array(params)
         contrasts = params_arr[:n_phi]
-        offsets = params_arr[n_phi:2*n_phi]
-        D0 = params_arr[2*n_phi]
-        alpha = params_arr[2*n_phi + 1]
-        D_offset = params_arr[2*n_phi + 2]
+        offsets = params_arr[n_phi : 2 * n_phi]
+        D0 = params_arr[2 * n_phi]
+        alpha = params_arr[2 * n_phi + 1]
+        D_offset = params_arr[2 * n_phi + 2]
 
         # xdata is (4, n_points) - NLSQ transposed format
         # Rows: [t1, t2, phi, phi_idx]
@@ -192,20 +204,22 @@ def run_nlsq_fit(
     )
 
     # Initial parameters (10% perturbation from truth)
-    p0 = []
+    p0_list: list[float] = []
     # Per-angle contrasts
     for _ in range(n_phi):
-        p0.append(ground_truth["contrast"] * 1.1)
+        p0_list.append(ground_truth["contrast"] * 1.1)
     # Per-angle offsets
     for _ in range(n_phi):
-        p0.append(ground_truth["offset"] * 1.05)
+        p0_list.append(ground_truth["offset"] * 1.05)
     # Physical params
-    p0.extend([
-        ground_truth["D0"] * 1.15,
-        ground_truth["alpha"] * 0.9,
-        ground_truth["D_offset"] * 1.2,
-    ])
-    p0 = np.array(p0)
+    p0_list.extend(
+        [
+            ground_truth["D0"] * 1.15,
+            ground_truth["alpha"] * 0.9,
+            ground_truth["D_offset"] * 1.2,
+        ]
+    )
+    p0 = np.array(p0_list)
 
     # Bounds (adjusted for scaled parameters)
     lower = []
@@ -219,25 +233,26 @@ def run_nlsq_fit(
         lower.append(0.5)
         upper.append(1.5)
     # Physical params (scaled)
-    lower.extend([10.0, 0.1, 0.1])   # D0, alpha, D_offset
+    lower.extend([10.0, 0.1, 0.1])  # D0, alpha, D_offset
     upper.extend([1000.0, 1.0, 10.0])
 
     bounds = (np.array(lower), np.array(upper))
 
     if verbose:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"NLSQ Version: {nlsq_version}")
         print(f"Data points: {len(ydata)}")
         print(f"Parameters: {len(p0)}")
-        print(f"Initial D0: {p0[2*n_phi]:.2f}")
-        print(f"Initial alpha: {p0[2*n_phi+1]:.3f}")
-        print(f"Initial D_offset: {p0[2*n_phi+2]:.2f}")
-        print(f"{'='*60}")
+        print(f"Initial D0: {p0[2 * n_phi]:.2f}")
+        print(f"Initial alpha: {p0[2 * n_phi + 1]:.3f}")
+        print(f"Initial D_offset: {p0[2 * n_phi + 2]:.2f}")
+        print(f"{'=' * 60}")
 
     # Get stability mode from environment (default: "auto" like homodyne)
     stability_mode = os.environ.get("NLSQ_STABILITY", "auto")
+    stability_mode_val: str | bool = stability_mode
     if stability_mode.lower() == "false":
-        stability_mode = False
+        stability_mode_val = False
 
     # Run curve_fit
     start_time = time.time()
@@ -254,7 +269,7 @@ def run_nlsq_fit(
             xtol=1e-8,
             gtol=1e-8,
             max_nfev=500,
-            stability=stability_mode,  # Use environment-specified stability mode
+            stability=stability_mode_val,  # type: ignore[arg-type]  # Use environment-specified stability mode
             verbose=2 if verbose else 0,
         )
 
@@ -279,10 +294,10 @@ def run_nlsq_fit(
     # Extract recovered parameters
     recovered = {
         "contrast": np.mean(popt[:n_phi]),
-        "offset": np.mean(popt[n_phi:2*n_phi]),
-        "D0": popt[2*n_phi],
-        "alpha": popt[2*n_phi + 1],
-        "D_offset": popt[2*n_phi + 2],
+        "offset": np.mean(popt[n_phi : 2 * n_phi]),
+        "D0": popt[2 * n_phi],
+        "alpha": popt[2 * n_phi + 1],
+        "D_offset": popt[2 * n_phi + 2],
     }
 
     # Compute errors
@@ -317,11 +332,11 @@ def run_nlsq_fit(
     }
 
 
-def print_results(result: dict):
+def print_results(result: dict) -> None:
     """Print formatted results."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"RESULTS (NLSQ {result['nlsq_version']})")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Success: {result['success']}")
     print(f"Message: {result['message']}")
     print(f"Time: {result['elapsed_time']:.2f}s")
@@ -330,17 +345,17 @@ def print_results(result: dict):
     print()
     print("Parameter Recovery:")
     print(f"  {'Param':<12} {'True':>12} {'Recovered':>12} {'Error %':>10}")
-    print(f"  {'-'*48}")
-    for key in result['ground_truth']:
-        true_val = result['ground_truth'][key]
-        rec_val = result['recovered'][key]
-        err = result['errors_pct'][key]
+    print(f"  {'-' * 48}")
+    for key in result["ground_truth"]:
+        true_val = result["ground_truth"][key]
+        rec_val = result["recovered"][key]
+        err = result["errors_pct"][key]
         status = "OK" if err < 15 else "POOR" if err < 50 else "FAIL"
         print(f"  {key:<12} {true_val:>12.4f} {rec_val:>12.4f} {err:>10.2f}% {status}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
 
-def main():
+def main() -> None:
     print("NLSQ Regression Test Harness")
     print(f"Python: {sys.version}")
     print(f"NLSQ Version: {nlsq_version}")
@@ -366,7 +381,9 @@ def main():
     print_results(result)
 
     # Save results for comparison
-    output_file = Path(__file__).parent / f"nlsq_result_{nlsq_version.replace('.', '_')}.npz"
+    output_file = (
+        Path(__file__).parent / f"nlsq_result_{nlsq_version.replace('.', '_')}.npz"
+    )
     np.savez(
         output_file,
         popt=result["popt"],
@@ -377,8 +394,6 @@ def main():
         nlsq_version=nlsq_version,
     )
     print(f"\nResults saved to: {output_file}")
-
-    return result
 
 
 if __name__ == "__main__":

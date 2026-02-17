@@ -208,7 +208,7 @@ def run_baseline_benchmark(
     return metrics
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="CMC Performance Baseline")
     parser.add_argument(
         "--dataset",

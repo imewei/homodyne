@@ -26,7 +26,7 @@ from homodyne.config.parameter_space import ParameterSpace
 from homodyne.optimization.cmc.model import xpcs_model
 
 
-def load_shard(cache_path: Path, angle_ranges) -> dict:
+def load_shard(cache_path: Path, angle_ranges: list) -> dict:
     """Load cached C2 and build a single-shard slice matching CMC prep.
 
     Returns dict with data/t1/t2/phi_unique/phi_indices and q, dt, noise_scale.
@@ -119,18 +119,17 @@ def build_init_dict(
 
 def main(args: argparse.Namespace) -> None:
     cm = ConfigManager(str(args.config))
-    ps = ParameterSpace.from_config(cm.config, analysis_mode="laminar_flow")
+    config = cm.config or {}
+    ps = ParameterSpace.from_config(config, analysis_mode="laminar_flow")
 
     # angle filter ranges from config; fallback to defaults used in run
-    angle_filter = cm.config.get("optimization", {}).get("angle_filtering", {})
+    angle_filter = config.get("optimization", {}).get("angle_filtering", {})
     ranges = angle_filter.get("ranges", [[-10.0, 10.0], [85.0, 95.0]])
     angle_ranges = [(float(lo), float(hi)) for lo, hi in ranges]
 
     shard = load_shard(Path(args.cache), angle_ranges)
 
-    init_cfg = (
-        cm.config.get("optimization", {}).get("mcmc", {}).get("initial_values", {})
-    )
+    init_cfg = config.get("optimization", {}).get("mcmc", {}).get("initial_values", {})
     contrast = float(init_cfg.get("contrast", 0.5))
     offset = float(init_cfg.get("offset", 1.0))
 

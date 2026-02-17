@@ -135,7 +135,7 @@ output:
 """
 
 
-def main():
+def main() -> None:
     """Run laminar flow NLSQ example."""
     print("Laminar Flow NLSQ with Angle Filtering Example")
     print("=" * 60)

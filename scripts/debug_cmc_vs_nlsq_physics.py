@@ -57,7 +57,9 @@ def compute_c2_nlsq(
 
     # Compute for each phi angle with its contrast/offset
     c2_all = []
-    for _i, (phi_val, contrast, offset) in enumerate(zip(phi, contrasts, offsets, strict=True)):
+    for _i, (phi_val, contrast, offset) in enumerate(
+        zip(phi, contrasts, offsets, strict=True)
+    ):
         c2_phi = nlsq_compute_g2(
             jnp.array(params),
             jnp.array(t1_grid),
@@ -186,7 +188,7 @@ def compare_integration_methods(
     }
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Compare CMC vs NLSQ physics")
     parser.add_argument(
         "--params",
@@ -194,10 +196,14 @@ def main():
         default="19230,-1.063,879,0.078,-0.61,-0.0089,5.8",
         help="Comma-separated physical parameters: D0,alpha,D_offset,gamma_dot_t0,beta,gamma_dot_t_offset,phi0",
     )
-    parser.add_argument("--n-times", type=int, default=100, help="Number of time points")
+    parser.add_argument(
+        "--n-times", type=int, default=100, help="Number of time points"
+    )
     parser.add_argument("--dt", type=float, default=0.001, help="Time step (seconds)")
     parser.add_argument("--q", type=float, default=0.01, help="Wave vector magnitude")
-    parser.add_argument("--L", type=float, default=1e6, help="Stator-rotor gap (Angstrom)")
+    parser.add_argument(
+        "--L", type=float, default=1e6, help="Stator-rotor gap (Angstrom)"
+    )
     parser.add_argument(
         "--phi",
         type=str,
@@ -276,9 +282,7 @@ def main():
     )
 
     print("Computing C2 using CMC physics...")
-    c2_cmc = compute_c2_cmc(
-        params, t, phi, args.q, args.L, args.dt, contrasts, offsets
-    )
+    c2_cmc = compute_c2_cmc(params, t, phi, args.q, args.L, args.dt, contrasts, offsets)
 
     # Compare
     print()

@@ -87,7 +87,7 @@ output:
 """
 
 
-def main():
+def main() -> None:
     """Run MCMC uncertainty example."""
     print("MCMC Uncertainty Quantification Example (v2.1.0)")
     print("=" * 60)

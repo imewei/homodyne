@@ -36,8 +36,19 @@ def benchmark_jacobian_forward_mode() -> dict:
             target = jnp.array(rng.normal(0, 1, size=m))
             params = jnp.array(rng.uniform(0.1, 10.0, size=n))
 
-            def residual(p: jnp.ndarray) -> jnp.ndarray:
-                return jnp.sum(p[:, None] * jnp.power(t[None, :], jnp.arange(n)[:, None]), axis=0) - target
+            def residual(
+                p: jnp.ndarray,
+                t: jnp.ndarray = t,
+                n: int = n,
+                target: jnp.ndarray = target,
+            ) -> jnp.ndarray:
+                return (
+                    jnp.sum(
+                        p[:, None] * jnp.power(t[None, :], jnp.arange(n)[:, None]),
+                        axis=0,
+                    )
+                    - target
+                )
 
             # Warmup
             J = jax.jacfwd(residual)(params)
@@ -103,7 +114,9 @@ def benchmark_xdata_caching() -> dict:
         wc = np.mean(times_cache)
         speedup = nc / wc if wc > 0 else float("inf")
         results[m] = {"nocache": nc, "cache": wc, "speedup": speedup}
-        print(f"  m={m:>10,}: nocache={nc:.4f}s, cache={wc:.6f}s, speedup={speedup:.1f}x")
+        print(
+            f"  m={m:>10,}: nocache={nc:.4f}s, cache={wc:.6f}s, speedup={speedup:.1f}x"
+        )
 
     return results
 
@@ -161,25 +174,31 @@ def benchmark_covariance_expansion() -> dict:
             n_expanded = 2 * n_phi + n_physical
             expanded_v = np.zeros((n_expanded, n_expanded))
             expanded_v[:n_phi, :n_phi] = final_cov[0, 0]
-            expanded_v[n_phi:2 * n_phi, n_phi:2 * n_phi] = final_cov[1, 1]
-            expanded_v[:n_phi, n_phi:2 * n_phi] = final_cov[0, 1]
-            expanded_v[n_phi:2 * n_phi, :n_phi] = final_cov[0, 1]
-            expanded_v[2 * n_phi:, 2 * n_phi:] = final_cov[2:2 + n_physical, 2:2 + n_physical]
+            expanded_v[n_phi : 2 * n_phi, n_phi : 2 * n_phi] = final_cov[1, 1]
+            expanded_v[:n_phi, n_phi : 2 * n_phi] = final_cov[0, 1]
+            expanded_v[n_phi : 2 * n_phi, :n_phi] = final_cov[0, 1]
+            expanded_v[2 * n_phi :, 2 * n_phi :] = final_cov[
+                2 : 2 + n_physical, 2 : 2 + n_physical
+            ]
             for i in range(n_physical):
                 expanded_v[:n_phi, 2 * n_phi + i] = final_cov[0, 2 + i]
                 expanded_v[2 * n_phi + i, :n_phi] = final_cov[0, 2 + i]
-                expanded_v[n_phi:2 * n_phi, 2 * n_phi + i] = final_cov[1, 2 + i]
-                expanded_v[2 * n_phi + i, n_phi:2 * n_phi] = final_cov[1, 2 + i]
+                expanded_v[n_phi : 2 * n_phi, 2 * n_phi + i] = final_cov[1, 2 + i]
+                expanded_v[2 * n_phi + i, n_phi : 2 * n_phi] = final_cov[1, 2 + i]
             times_vec.append(time.perf_counter() - t0)
 
         # Verify equivalence
-        assert np.allclose(expanded, expanded_v), "Vectorized result differs from loop-based!"
+        assert np.allclose(expanded, expanded_v), (
+            "Vectorized result differs from loop-based!"
+        )
 
         lp = np.mean(times_loop)
         vp = np.mean(times_vec)
         speedup = lp / vp if vp > 0 else float("inf")
         results[n_phi] = {"loop": lp, "vectorized": vp, "speedup": speedup}
-        print(f"  n_phi={n_phi:>3}: loop={lp:.6f}s, vec={vp:.6f}s, speedup={speedup:.1f}x")
+        print(
+            f"  n_phi={n_phi:>3}: loop={lp:.6f}s, vec={vp:.6f}s, speedup={speedup:.1f}x"
+        )
 
     return results
 
@@ -188,8 +207,6 @@ def benchmark_shared_memory() -> dict:
     """Benchmark SharedDataManager creation and reconstruction."""
     print("\n4. SharedDataManager (CMC Shared Memory)")
     print("-" * 50)
-
-    import multiprocessing as mp
 
     from homodyne.optimization.cmc.backends.multiprocessing import (
         SharedDataManager,
@@ -245,7 +262,9 @@ def benchmark_shared_memory() -> dict:
     results["reconstruct"] = rt
     print(f"  Create (3 blocks):       {ct:.6f}s")
     print(f"  Reconstruct (3 blocks):  {rt:.6f}s")
-    print(f"  Savings per 500 shards:  ~{500 * rt:.3f}s reconstruct vs ~{500 * ct:.3f}s create")
+    print(
+        f"  Savings per 500 shards:  ~{500 * rt:.3f}s reconstruct vs ~{500 * ct:.3f}s create"
+    )
 
     return results
 
@@ -260,7 +279,7 @@ def benchmark_logging_guard() -> dict:
     logger = logging.getLogger("benchmark_test")
     logger.setLevel(logging.WARNING)  # Disable DEBUG
 
-    results = {}
+    results: dict[str, float] = {}
 
     # Simulate hot-path data
     shape = (1000,)
@@ -271,7 +290,9 @@ def benchmark_logging_guard() -> dict:
     times_unguarded = []
     for _ in range(10000):
         t0 = time.perf_counter()
-        logger.debug(f"params.shape={params.shape}, min={params.min():.6e}, max={params.max():.6e}")
+        logger.debug(
+            f"params.shape={params.shape}, min={params.min():.6e}, max={params.max():.6e}"
+        )
         times_unguarded.append(time.perf_counter() - t0)
 
     # Guarded: isEnabledFor short-circuits
@@ -280,17 +301,22 @@ def benchmark_logging_guard() -> dict:
     for _ in range(10000):
         t0 = time.perf_counter()
         if logger.isEnabledFor(10):
-            logger.debug("params.shape=%s, min=%s, max=%s", params.shape, params.min(), params.max())
+            logger.debug(
+                "params.shape=%s, min=%s, max=%s",
+                params.shape,
+                params.min(),
+                params.max(),
+            )
         times_guarded.append(time.perf_counter() - t0)
 
-    ug = np.mean(times_unguarded)
-    gd = np.mean(times_guarded)
+    ug = float(np.mean(times_unguarded))
+    gd = float(np.mean(times_guarded))
     speedup = ug / gd if gd > 0 else float("inf")
     results["unguarded"] = ug
     results["guarded"] = gd
     results["speedup"] = speedup
-    print(f"  Unguarded:  {ug*1e6:.2f} us/call")
-    print(f"  Guarded:    {gd*1e6:.2f} us/call")
+    print(f"  Unguarded:  {ug * 1e6:.2f} us/call")
+    print(f"  Guarded:    {gd * 1e6:.2f} us/call")
     print(f"  Speedup:    {speedup:.1f}x")
 
     return results

@@ -71,7 +71,7 @@ output:
 """
 
 
-def main():
+def main() -> None:
     """Run automatic CMC selection example."""
     print("Large Dataset with Automatic CMC Selection (v2.1.0)")
     print("=" * 60)

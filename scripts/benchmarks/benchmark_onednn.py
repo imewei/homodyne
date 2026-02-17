@@ -62,12 +62,12 @@ def run_benchmark(enable_onednn: bool, num_iterations: int = 5) -> dict:
 
     # Simulate typical XPCS operations
     test_size = 1000
-    results = {"timings": []}
+    results: dict[str, list] = {"timings": []}
 
     print(f"\nRunning {num_iterations} iterations...")
 
     @jax.jit
-    def xpcs_like_computation(t1, t2, phi, params):
+    def xpcs_like_computation(t1, t2, phi, params):  # type: ignore[no-untyped-def]
         """Simulate typical XPCS correlation function computation.
 
         This includes:
@@ -141,7 +141,7 @@ def run_benchmark(enable_onednn: bool, num_iterations: int = 5) -> dict:
     return results
 
 
-def main():
+def main() -> None:
     """Main benchmark function."""
     print("\n" + "=" * 60)
     print(" Intel oneDNN Performance Benchmark for XPCS Analysis")

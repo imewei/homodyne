@@ -48,7 +48,7 @@ from homodyne.device import configure_cpu_hpc, detect_cpu_info, get_optimal_batc
 from homodyne.optimization import fit_nlsq_jax
 
 
-def detect_hpc_environment():
+def detect_hpc_environment() -> dict:
     """
     Detect HPC cluster environment and optimize configuration.
 
@@ -101,7 +101,7 @@ def detect_hpc_environment():
     }
 
 
-def configure_cpu_optimal(cpu_info):
+def configure_cpu_optimal(cpu_info: dict) -> dict:
     """
     Configure CPU optimization based on detected environment.
 
@@ -144,7 +144,7 @@ def configure_cpu_optimal(cpu_info):
     return config
 
 
-def generate_synthetic_xpcs_data(n_times=100, n_angles=12):
+def generate_synthetic_xpcs_data(n_times: int = 100, n_angles: int = 12) -> dict:
     """
     Generate synthetic XPCS data for demonstration.
 
@@ -199,7 +199,7 @@ def generate_synthetic_xpcs_data(n_times=100, n_angles=12):
     }
 
 
-def run_cpu_optimized_analysis(data, cpu_info):
+def run_cpu_optimized_analysis(data: dict, cpu_info: dict) -> dict:
     """
     Run CPU-optimized NLSQ analysis.
 
@@ -253,7 +253,7 @@ def run_cpu_optimized_analysis(data, cpu_info):
 
         if hasattr(result, "parameters"):
             print("\n   Fitted parameters:")
-            for key, val in result.parameters.items():
+            for key, val in result.parameters.items():  # type: ignore[attr-defined]
                 print(f"   - {key}: {val:.6f}")
 
         if hasattr(result, "chi_squared"):
@@ -279,7 +279,7 @@ def run_cpu_optimized_analysis(data, cpu_info):
         }
 
 
-def benchmark_and_report():
+def benchmark_and_report() -> dict:
     """Report CPU performance capabilities."""
     print("\n📈 CPU Performance Report...")
     print("-" * 60)
@@ -302,7 +302,7 @@ def benchmark_and_report():
     return {"cores": cores, "estimated_ghz": estimated_ghz}
 
 
-def print_hpc_submission_examples():
+def print_hpc_submission_examples() -> None:
     """Print example HPC job submission scripts."""
     print("\n📋 HPC Job Submission Examples")
     print("=" * 60)
@@ -398,7 +398,7 @@ free -h
     )
 
 
-def main():
+def main() -> None:
     """Main CPU optimization demonstration."""
     print("\n" + "=" * 60)
     print(" CPU-Optimized Homodyne.3 Analysis Example")

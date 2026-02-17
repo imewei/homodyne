@@ -24,18 +24,18 @@ sys.path.insert(0, str(project_root))
 from homodyne.core.physics_cmc import compute_g1_total as cmc_compute_g1  # noqa: E402
 
 
-def load_nlsq_results(results_dir: str) -> dict:
+def load_nlsq_results(results_dir: str | Path) -> dict:
     """Load NLSQ results from directory."""
     import json
 
-    results_dir = Path(results_dir)
+    results_path = Path(results_dir)
 
     # Load parameters
-    with open(results_dir / "parameters.json") as f:
+    with open(results_path / "parameters.json") as f:
         params_data = json.load(f)
 
     # Load fitted data
-    fitted_data = np.load(results_dir / "fitted_data.npz", allow_pickle=True)
+    fitted_data = np.load(results_path / "fitted_data.npz", allow_pickle=True)
 
     return {
         "params": params_data["parameters"],
@@ -104,7 +104,7 @@ def compute_c2_cmc(
     return np.stack(c2_all, axis=0)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Compare NLSQ and CMC C2 heatmaps")
     parser.add_argument(
         "--nlsq-dir",
@@ -127,7 +127,7 @@ def main():
     parser.add_argument(
         "--output",
         type=str,
-        default="/tmp/nlsq_vs_cmc_comparison.png",
+        default="nlsq_vs_cmc_comparison.png",  # nosec B108
         help="Output file path",
     )
     parser.add_argument(
@@ -188,8 +188,8 @@ def main():
     print("\nPer-angle scaling:")
     for i, phi in enumerate(phi_angles):
         print(
-            f"  phi={phi:7.3f}°: contrast={per_angle_scaling[i,0]:.6f}, "
-            f"offset={per_angle_scaling[i,1]:.6f}"
+            f"  phi={phi:7.3f}°: contrast={per_angle_scaling[i, 0]:.6f}, "
+            f"offset={per_angle_scaling[i, 1]:.6f}"
         )
 
     # Subsample for faster computation
@@ -270,9 +270,7 @@ def main():
         plt.colorbar(im1, ax=axes[1, i])
 
         # Absolute difference
-        im2 = axes[2, i].imshow(
-            diff[i], origin="lower", extent=t_extent, cmap="RdBu_r"
-        )
+        im2 = axes[2, i].imshow(diff[i], origin="lower", extent=t_extent, cmap="RdBu_r")
         axes[2, i].set_title("Diff (NLSQ - CMC)")
         axes[2, i].set_xlabel("t2 (s)")
         axes[2, i].set_ylabel("t1 (s)")
@@ -282,7 +280,7 @@ def main():
         im3 = axes[3, i].imshow(
             rel_diff[i] * 100, origin="lower", extent=t_extent, cmap="Reds", vmax=1.0
         )
-        axes[3, i].set_title(f"Rel. Diff (%) - max={rel_diff[i].max()*100:.2f}%")
+        axes[3, i].set_title(f"Rel. Diff (%) - max={rel_diff[i].max() * 100:.2f}%")
         axes[3, i].set_xlabel("t2 (s)")
         axes[3, i].set_ylabel("t1 (s)")
         plt.colorbar(im3, ax=axes[3, i], label="%")

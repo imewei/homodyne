@@ -21,6 +21,7 @@ from __future__ import annotations
 import gc
 import time
 import tracemalloc
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -29,7 +30,7 @@ import numpy as np
 
 def create_xpcs_residual_fn(
     m: int, n: int
-) -> tuple[callable, jnp.ndarray, jnp.ndarray]:
+) -> tuple[Callable, jnp.ndarray, jnp.ndarray]:
     """Create a synthetic XPCS-like residual function.
 
     Mimics the structure of homodyne's model evaluation:
@@ -78,8 +79,8 @@ def create_xpcs_residual_fn(
             gamma0 = params[5]
             phi0 = params[7] if n > 7 else 0.0
         else:
-            contrast = 0.3
-            offset = 1.0
+            contrast = 0.3  # type: ignore[assignment]
+            offset = 1.0  # type: ignore[assignment]
             D0 = params[0]
             alpha = params[1]
             D_offset = params[2]
@@ -87,7 +88,7 @@ def create_xpcs_residual_fn(
         # Diffusion: exp(-q^2 * D(t) * |dt|)
         dt = jnp.abs(t2 - t1)
         D_eff = D0 * jnp.power(dt + 1e-10, alpha) + D_offset
-        g1_diff = jnp.exp(-q**2 * D_eff * dt)
+        g1_diff = jnp.exp(-(q**2) * D_eff * dt)
 
         if n >= 7:
             # Shear: sinc^2 modulation
@@ -117,7 +118,7 @@ def create_xpcs_residual_fn(
 
 def benchmark_ad_mode(
     mode: str,
-    residual_fn: callable,
+    residual_fn: Callable,
     params: jnp.ndarray,
     n_warmup: int = 2,
     n_trials: int = 5,
@@ -196,9 +197,9 @@ def run_benchmark(m: int, n: int) -> dict:
     dict
         Results for both modes.
     """
-    print(f"\n{'='*70}")
-    print(f"  Benchmark: m={m:,} residuals, n={n} params (ratio={m/n:.0f}:1)")
-    print(f"{'='*70}")
+    print(f"\n{'=' * 70}")
+    print(f"  Benchmark: m={m:,} residuals, n={n} params (ratio={m / n:.0f}:1)")
+    print(f"{'=' * 70}")
 
     residual_fn, params, _ = create_xpcs_residual_fn(m, n)
 
@@ -213,21 +214,25 @@ def run_benchmark(m: int, n: int) -> dict:
             res = benchmark_ad_mode(mode, residual_fn, params)
             results[mode] = res
             print(f"    JIT-cold:  {res['cold_time_s']:.4f}s")
-            print(f"    JIT-warm:  {res['warm_mean_s']:.4f}s +/- {res['warm_std_s']:.4f}s")
+            print(
+                f"    JIT-warm:  {res['warm_mean_s']:.4f}s +/- {res['warm_std_s']:.4f}s"
+            )
             print(f"    Peak mem:  {res['peak_memory_mb']:.1f} MB")
         except Exception as e:
             print(f"    FAILED: {e}")
             results[mode] = {"error": str(e)}
 
     # Numerical equivalence check
-    if "jacobian" in results.get("jacfwd", {}) and "jacobian" in results.get("jacrev", {}):
+    if "jacobian" in results.get("jacfwd", {}) and "jacobian" in results.get(
+        "jacrev", {}
+    ):
         J_fwd = results["jacfwd"]["jacobian"]
         J_rev = results["jacrev"]["jacobian"]
         try:
             max_diff = np.max(np.abs(J_fwd - J_rev))
             rel_diff = np.max(np.abs(J_fwd - J_rev) / (np.abs(J_rev) + 1e-30))
             is_close = np.allclose(J_fwd, J_rev, rtol=1e-6)
-            print(f"\n  Numerical equivalence:")
+            print("\n  Numerical equivalence:")
             print(f"    Max abs diff:  {max_diff:.2e}")
             print(f"    Max rel diff:  {rel_diff:.2e}")
             print(f"    np.allclose(rtol=1e-6): {is_close}")
@@ -240,7 +245,9 @@ def run_benchmark(m: int, n: int) -> dict:
         rev_t = results["jacrev"]["warm_mean_s"]
         speedup = rev_t / fwd_t if fwd_t > 0 else float("inf")
         winner = "jacfwd" if fwd_t < rev_t else "jacrev"
-        print(f"\n  Winner: {winner} ({speedup:.2f}x {'faster' if winner == 'jacfwd' else 'slower'} than jacfwd)")
+        print(
+            f"\n  Winner: {winner} ({speedup:.2f}x {'faster' if winner == 'jacfwd' else 'slower'} than jacfwd)"
+        )
 
     return results
 
@@ -280,7 +287,9 @@ def main() -> None:
             results = run_benchmark(m, n)
             all_results[(m, n)] = results
 
-            if all("warm_mean_s" in results.get(mode, {}) for mode in ["jacfwd", "jacrev"]):
+            if all(
+                "warm_mean_s" in results.get(mode, {}) for mode in ["jacfwd", "jacrev"]
+            ):
                 fwd_t = results["jacfwd"]["warm_mean_s"]
                 rev_t = results["jacrev"]["warm_mean_s"]
                 winner = "jacfwd" if fwd_t < rev_t else "jacrev"
@@ -290,16 +299,20 @@ def main() -> None:
             print(f"\n  BENCHMARK FAILED for m={m}, n={n}: {e}")
 
     # Summary table
-    print(f"\n\n{'='*70}")
+    print(f"\n\n{'=' * 70}")
     print("  SUMMARY")
-    print(f"{'='*70}")
-    print(f"  {'m':>10s}  {'n':>4s}  {'Winner':>8s}  {'Speedup':>8s}  {'jacfwd':>10s}  {'jacrev':>10s}")
-    print(f"  {'-'*10}  {'-'*4}  {'-'*8}  {'-'*8}  {'-'*10}  {'-'*10}")
+    print(f"{'=' * 70}")
+    print(
+        f"  {'m':>10s}  {'n':>4s}  {'Winner':>8s}  {'Speedup':>8s}  {'jacfwd':>10s}  {'jacrev':>10s}"
+    )
+    print(f"  {'-' * 10}  {'-' * 4}  {'-' * 8}  {'-' * 8}  {'-' * 10}  {'-' * 10}")
     for m, n, winner, speedup, fwd_t, rev_t in summary:
-        print(f"  {m:>10,}  {n:>4}  {winner:>8s}  {speedup:>7.2f}x  {fwd_t:>9.4f}s  {rev_t:>9.4f}s")
+        print(
+            f"  {m:>10,}  {n:>4}  {winner:>8s}  {speedup:>7.2f}x  {fwd_t:>9.4f}s  {rev_t:>9.4f}s"
+        )
 
     # Decision
-    print(f"\n  DECISION GATE:")
+    print("\n  DECISION GATE:")
     if summary:
         # Count wins for typical XPCS regime (m >= 50K)
         typical = [(m, n, w, s) for m, n, w, s, _, _ in summary if m >= 50_000]
@@ -307,7 +320,9 @@ def main() -> None:
             fwd_wins = sum(1 for _, _, w, _ in typical if w == "jacfwd")
             rev_wins = sum(1 for _, _, w, _ in typical if w == "jacrev")
             overall = "jacfwd" if fwd_wins >= rev_wins else "jacrev"
-            print(f"  For typical XPCS (m >= 50K): jacfwd wins {fwd_wins}/{len(typical)}, jacrev wins {rev_wins}/{len(typical)}")
+            print(
+                f"  For typical XPCS (m >= 50K): jacfwd wins {fwd_wins}/{len(typical)}, jacrev wins {rev_wins}/{len(typical)}"
+            )
             print(f"  Recommendation: Use {overall} across all call sites")
         else:
             print("  No results for typical XPCS regime")

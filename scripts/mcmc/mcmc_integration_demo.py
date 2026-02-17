@@ -12,7 +12,7 @@ Date: 2025-10-24
 import numpy as np
 
 
-def demo_automatic_selection():
+def demo_automatic_selection() -> None:
     """Demonstrate automatic method selection (v2.1.0)."""
     print("=" * 70)
     print("DEMO 1: Automatic Method Selection (v2.1.0)")
@@ -55,7 +55,7 @@ def demo_automatic_selection():
     print("   # Automatically selects NUTS for small datasets")
 
 
-def demo_forced_nuts():
+def demo_forced_nuts() -> None:
     """Demonstrate NUTS method (v2.1.0: automatic selection)."""
     print("\n" + "=" * 70)
     print("DEMO 2: NUTS Method (v2.1.0: Automatic Selection)")
@@ -73,7 +73,7 @@ def demo_forced_nuts():
     print("   # Automatic: NUTS for small datasets")
 
 
-def demo_forced_cmc():
+def demo_forced_cmc() -> None:
     """Demonstrate CMC method (v2.1.0: automatic selection)."""
     print("\n" + "=" * 70)
     print("DEMO 3: CMC Method (v2.1.0: Automatic Selection)")
@@ -100,7 +100,7 @@ def demo_forced_cmc():
     print("   # Automatic: CMC when >=15 samples OR >=30% memory")
 
 
-def demo_backward_compatibility():
+def demo_backward_compatibility() -> None:
     """Demonstrate backward compatibility (v2.1.0)."""
     print("\n" + "=" * 70)
     print("DEMO 4: Backward Compatibility (v2.1.0)")
@@ -125,7 +125,7 @@ def demo_backward_compatibility():
     print("  5. Add 'min_samples_for_cmc', 'memory_threshold_pct' to YAML")
 
 
-def demo_result_inspection():
+def demo_result_inspection() -> None:
     """Demonstrate how to inspect results."""
     print("\n" + "=" * 70)
     print("DEMO 5: Inspecting Results")

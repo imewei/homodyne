@@ -5,8 +5,11 @@ Test LeastSquares class directly (what homodyne uses).
 This tests enable_stability=True behavior between v0.3.0 and HEAD.
 """
 
+from __future__ import annotations
+
 import os
 import sys
+from typing import Any
 
 # Allow NLSQ path override
 NLSQ_PATH = os.environ.get("NLSQ_PATH")
@@ -42,7 +45,7 @@ ground_truth = {
 np.random.seed(42)
 t1 = np.linspace(0.1, 1.0, 10)
 t2 = np.linspace(0.1, 1.0, 10)
-T1, T2 = np.meshgrid(t1, t2, indexing='ij')
+T1, T2 = np.meshgrid(t1, t2, indexing="ij")
 
 xdata_list = []
 ydata_list = []
@@ -53,7 +56,10 @@ for i in range(n_phi):
     t2_flat = T2.ravel()
 
     tau = np.sqrt(t1_flat * t2_flat)
-    D_eff = ground_truth["D0"] * np.power(tau + 0.01, ground_truth["alpha"] - 1.0) + ground_truth["D_offset"]
+    D_eff = (
+        ground_truth["D0"] * np.power(tau + 0.01, ground_truth["alpha"] - 1.0)
+        + ground_truth["D_offset"]
+    )
     decay = np.exp(-D_eff * (t1_flat + t2_flat) * q * q)
     g2_theoretical = ground_truth["offset"] + ground_truth["contrast"] * decay
 
@@ -61,11 +67,16 @@ for i in range(n_phi):
     noise = np.random.normal(0, 1, len(t1_flat)) * sigma
     g2_noisy = g2_theoretical + noise
 
-    xdata_list.append(np.column_stack([
-        t1_flat, t2_flat,
-        np.full(len(t1_flat), phi_val),
-        np.full(len(t1_flat), i),
-    ]))
+    xdata_list.append(
+        np.column_stack(
+            [
+                t1_flat,
+                t2_flat,
+                np.full(len(t1_flat), phi_val),
+                np.full(len(t1_flat), i),
+            ]
+        )
+    )
     ydata_list.append(g2_noisy)
 
 xdata = jnp.array(np.vstack(xdata_list))  # (n_total, 4)
@@ -79,14 +90,14 @@ bounds = (
 )
 
 
-def model_func(xdata_chunk, *params):
+def model_func(xdata_chunk: Any, *params: Any) -> Any:
     """Model function for LeastSquares."""
     params_arr = jnp.array(params)
     contrasts = params_arr[:n_phi]
-    offsets = params_arr[n_phi:2*n_phi]
-    D0 = params_arr[2*n_phi]
-    alpha = params_arr[2*n_phi + 1]
-    D_offset = params_arr[2*n_phi + 2]
+    offsets = params_arr[n_phi : 2 * n_phi]
+    D0 = params_arr[2 * n_phi]
+    alpha = params_arr[2 * n_phi + 1]
+    D_offset = params_arr[2 * n_phi + 2]
 
     t1 = xdata_chunk[:, 0]
     t2 = xdata_chunk[:, 1]
@@ -131,9 +142,11 @@ print("=" * 60)
 print(f"NLSQ Version: {nlsq_version}")
 print(f"Success: {result.get('success', 'N/A')}")
 print(f"Cost: {result.get('cost', 'N/A')}")
-print(f"D0: {popt[2*n_phi]:.4f} (true: {ground_truth['D0']})")
-print(f"alpha: {popt[2*n_phi + 1]:.4f} (true: {ground_truth['alpha']})")
-print(f"D_offset: {popt[2*n_phi + 2]:.4f} (true: {ground_truth['D_offset']})")
+print(f"D0: {popt[2 * n_phi]:.4f} (true: {ground_truth['D0']})")
+print(f"alpha: {popt[2 * n_phi + 1]:.4f} (true: {ground_truth['alpha']})")
+print(f"D_offset: {popt[2 * n_phi + 2]:.4f} (true: {ground_truth['D_offset']})")
 print(f"Contrast mean: {np.mean(popt[:n_phi]):.4f} (true: {ground_truth['contrast']})")
-print(f"Offset mean: {np.mean(popt[n_phi:2*n_phi]):.4f} (true: {ground_truth['offset']})")
+print(
+    f"Offset mean: {np.mean(popt[n_phi : 2 * n_phi]):.4f} (true: {ground_truth['offset']})"
+)
 print("=" * 60)

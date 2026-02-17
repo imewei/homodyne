@@ -38,10 +38,13 @@ GPU support removed in v2.3.0. Use multi-core CPU parallelism for
 throughput scaling instead of relying on GPU acceleration.
 """
 
+from __future__ import annotations
+
 import json
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -117,7 +120,7 @@ def generate_multiple_datasets(
         datasets.append(dataset)
 
     print(f"✓ Generated {num_datasets} datasets")
-    total_size = sum(d["data_size"] for d in datasets)
+    total_size = sum(d["data_size"] for d in datasets)  # type: ignore[misc]
     print(f"  Total data points: {total_size:,}")
 
     return datasets
@@ -192,7 +195,7 @@ def process_single_dataset(dataset: dict) -> tuple[int, dict]:
 
 def parallel_batch_processing(
     datasets: list[dict],
-    max_workers: int = None,
+    max_workers: int | None = None,
 ) -> dict:
     """
     Process multiple datasets in parallel using multi-core execution.
@@ -208,15 +211,18 @@ def parallel_batch_processing(
     print("-" * 60)
 
     # Auto-detect optimal number of workers
+    effective_workers: int
     if max_workers is None:
         cpu_info = detect_cpu_info()
-        max_workers = max(1, cpu_info["logical_cores"] - 1)
+        effective_workers = max(1, cpu_info["logical_cores"] - 1)
+    else:
+        effective_workers = max_workers
 
-    print(f"CPU cores available: {max_workers}")
+    print(f"CPU cores available: {effective_workers}")
     print(f"Datasets to process: {len(datasets)}")
 
     # Track results
-    results = {
+    results: dict[str, Any] = {
         "total_datasets": len(datasets),
         "successful": 0,
         "failed": 0,
@@ -229,7 +235,7 @@ def parallel_batch_processing(
     overall_start = time.perf_counter()
 
     # Process datasets in parallel
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+    with ProcessPoolExecutor(max_workers=effective_workers) as executor:
         # Submit all jobs
         future_to_dataset = {
             executor.submit(process_single_dataset, dataset): dataset
@@ -324,7 +330,7 @@ def print_batch_results(results: dict) -> None:
             print(f"  Dataset {dataset_id}: FAILED - {result['error']}")
 
 
-def save_batch_results(results: dict, output_dir: Path = None) -> None:
+def save_batch_results(results: dict, output_dir: Path | None = None) -> None:
     """
     Save batch processing results to JSON file.
 
@@ -475,7 +481,7 @@ Debugging:
     )
 
 
-def main():
+def main() -> None:
     """Main batch processing demonstration."""
     print("\n" + "=" * 60)
     print(" Multi-Core Batch Processing Example - Homodyne.3")

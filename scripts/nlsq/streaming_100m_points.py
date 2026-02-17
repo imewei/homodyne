@@ -73,7 +73,7 @@ output:
 """
 
 
-def main():
+def main() -> None:
     """Run streaming optimization example."""
     print("Streaming Optimization (100M+ Points) Example")
     print("=" * 60)
