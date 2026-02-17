@@ -161,7 +161,7 @@ def xpcs_model(
     # jnp.where(isfinite(c2_raw), c2_raw, 1e6) evaluates both branches in backward
     # pass; 0 * NaN = NaN contaminates gradients. nan_to_num zeroes NaN in the
     # forward pass so gradients never touch NaN values.
-    g1_per_point = jnp.nan_to_num(g1_per_point, nan=0.0, posinf=0.0, neginf=0.0)
+    g1_per_point = jnp.where(jnp.isfinite(g1_per_point), g1_per_point, 1e-10)
     c2_theory = contrast_per_point * g1_per_point**2 + offset_per_point
 
     # Expose numerical health as deterministic for diagnostics
@@ -389,7 +389,7 @@ def xpcs_model_scaled(
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
     # P1-1: Sanitize g1 BEFORE squaring to prevent NaN gradient contamination.
-    g1_per_point = jnp.nan_to_num(g1_per_point, nan=0.0, posinf=0.0, neginf=0.0)
+    g1_per_point = jnp.where(jnp.isfinite(g1_per_point), g1_per_point, 1e-10)
     c2_theory = contrast_per_point * g1_per_point**2 + offset_per_point
 
     n_nan = jnp.sum(~jnp.isfinite(c2_theory))
@@ -547,7 +547,7 @@ def xpcs_model_constant(
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
     # P1-1: Sanitize g1 BEFORE squaring to prevent NaN gradient contamination.
-    g1_per_point = jnp.nan_to_num(g1_per_point, nan=0.0, posinf=0.0, neginf=0.0)
+    g1_per_point = jnp.where(jnp.isfinite(g1_per_point), g1_per_point, 1e-10)
     c2_theory = contrast_per_point * g1_per_point**2 + offset_per_point
 
     n_nan = jnp.sum(~jnp.isfinite(c2_theory))
@@ -721,7 +721,7 @@ def xpcs_model_averaged(
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
     # P1-1: Sanitize g1 BEFORE squaring to prevent NaN gradient contamination.
-    g1 = jnp.nan_to_num(g1, nan=0.0, posinf=0.0, neginf=0.0)
+    g1 = jnp.where(jnp.isfinite(g1), g1, 1e-10)
     c2_theory = offset_per_point + contrast_per_point * g1**2
 
     n_nan = jnp.sum(~jnp.isfinite(c2_theory))
@@ -844,7 +844,6 @@ def xpcs_model_constant_averaged(
             from homodyne.optimization.cmc.priors import build_nlsq_informed_prior
 
             base_width = nlsq_prior_config.get("width_factor", 3.0)
-            tempered_width = base_width * prior_scale
 
             prior = build_nlsq_informed_prior(
                 param_name=name,
@@ -899,7 +898,7 @@ def xpcs_model_constant_averaged(
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
     # P1-1: Sanitize g1 BEFORE squaring to prevent NaN gradient contamination.
-    g1 = jnp.nan_to_num(g1, nan=0.0, posinf=0.0, neginf=0.0)
+    g1 = jnp.where(jnp.isfinite(g1), g1, 1e-10)
     c2_theory = offset_per_point + contrast_per_point * g1**2
 
     n_nan = jnp.sum(~jnp.isfinite(c2_theory))
@@ -1118,7 +1117,7 @@ def xpcs_model_reparameterized(
     contrast_per_point = contrast_arr[phi_indices]
     offset_per_point = offset_arr[phi_indices]
     # P1-1: Sanitize g1 BEFORE squaring to prevent NaN gradient contamination.
-    g1 = jnp.nan_to_num(g1, nan=0.0, posinf=0.0, neginf=0.0)
+    g1 = jnp.where(jnp.isfinite(g1), g1, 1e-10)
     c2_theory = offset_per_point + contrast_per_point * g1**2
 
     n_nan = jnp.sum(~jnp.isfinite(c2_theory))

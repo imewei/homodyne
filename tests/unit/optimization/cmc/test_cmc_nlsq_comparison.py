@@ -67,7 +67,7 @@ class TestCMCNLSQDiffusionComparison:
         # Compare: D_matrix[i,j] should equal |D_cumsum[i] - D_cumsum[j]|
         for i in range(n_times):
             for j in range(n_times):
-                expected = np.sqrt((D_cumsum[i] - D_cumsum[j]) ** 2 + 1e-20)
+                expected = np.sqrt((D_cumsum[i] - D_cumsum[j]) ** 2 + 1e-12)
                 actual = D_matrix[i, j]
                 assert np.isclose(expected, actual, rtol=1e-10), (
                     f"Integral mismatch at ({i},{j}): matrix={actual:.6g}, "

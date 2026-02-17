@@ -356,10 +356,17 @@ def _run_shard_worker(
     os.environ.pop("OMP_PROC_BIND", None)
     os.environ.pop("OMP_PLACES", None)
 
-    # P0-3: Enable float64 precision BEFORE importing JAX.
+    # P0-1: Enable float64 precision and XLA device count BEFORE importing JAX.
     # Spawned workers don't inherit the parent's x64 mode (which was set via
     # nlsq import side-effect). Without this, all JAX ops run in float32,
     # silently losing precision for parameters spanning 6+ orders of magnitude.
+    # P1-5: Ensure XLA_FLAGS propagates to spawned workers regardless of spawn
+    # method (fork vs spawn). Parent sets this in homodyne/__init__.py but
+    # spawn-mode workers may not inherit in-memory os.environ changes.
+    os.environ["JAX_ENABLE_X64"] = "true"
+    if "XLA_FLAGS" not in os.environ or "xla_force_host_platform_device_count" not in os.environ.get("XLA_FLAGS", ""):
+        os.environ["XLA_FLAGS"] = os.environ.get("XLA_FLAGS", "") + " --xla_force_host_platform_device_count=4"
+
     import jax
 
     jax.config.update("jax_enable_x64", True)

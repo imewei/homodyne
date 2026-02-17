@@ -290,7 +290,8 @@ def create_time_integral_matrix(
     # jnp.abs() has undefined gradient at x=0, causing NaN in backpropagation
     # The diagonal of diff matrix is exactly 0 (cumsum[i] - cumsum[i] = 0)
     # Solution: sqrt(x² + ε) ≈ |x| but is differentiable everywhere
-    epsilon = 1e-20
+    # P0-2: epsilon=1e-12 (was 1e-20, below float32 machine epsilon ~1.2e-7).
+    epsilon = 1e-12
     matrix = jnp.sqrt(diff**2 + epsilon)  # Shape: (n, n)
 
     return matrix

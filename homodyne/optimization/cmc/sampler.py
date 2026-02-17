@@ -27,6 +27,12 @@ from homodyne.optimization.cmc.scaling import (
 )
 from homodyne.utils.logging import get_logger, with_context
 
+# Divergence rate thresholds for NUTS convergence diagnostics.
+# P2-2: Centralized constants to ensure consistency across sampler paths.
+DIVERGENCE_RATE_TARGET = 0.05  # Below this: acceptable
+DIVERGENCE_RATE_HIGH = 0.10  # Above this: posterior may be biased
+DIVERGENCE_RATE_CRITICAL = 0.30  # Above this: posterior likely unreliable
+
 
 def _subset_model_kwargs_for_preflight(
     model_kwargs: dict[str, Any],
@@ -921,20 +927,20 @@ def run_nuts_sampling(
     total_samples = num_samples * config.num_chains
     if total_samples > 0:
         divergence_rate = num_divergent / total_samples
-        if divergence_rate > 0.30:
+        if divergence_rate > DIVERGENCE_RATE_CRITICAL:
             run_logger.error(
                 f"CRITICAL: Divergence rate {divergence_rate:.1%} ({num_divergent}/{total_samples}) "
-                f"exceeds 30% threshold. Posterior is likely unreliable. Consider:\n"
+                f"exceeds {DIVERGENCE_RATE_CRITICAL:.0%} threshold. Posterior is likely unreliable. Consider:\n"
                 "  1. Reducing shard size (smaller max_points_per_shard)\n"
                 "  2. Using NLSQ warm-start for better initial values\n"
                 "  3. Widening priors or fixing problematic parameters"
             )
-        elif divergence_rate > 0.10:
+        elif divergence_rate > DIVERGENCE_RATE_HIGH:
             run_logger.warning(
                 f"High divergence rate: {divergence_rate:.1%} ({num_divergent}/{total_samples}). "
-                f"Posterior may be biased. Target: <5%"
+                f"Posterior may be biased. Target: <{DIVERGENCE_RATE_TARGET:.0%}"
             )
-        elif divergence_rate > 0.05:
+        elif divergence_rate > DIVERGENCE_RATE_TARGET:
             run_logger.info(
                 f"Elevated divergence rate: {divergence_rate:.1%} ({num_divergent}/{total_samples}). "
                 f"Acceptable but monitor closely."
@@ -1194,7 +1200,7 @@ def run_nuts_with_retry(
         attempt_start = time.perf_counter()
 
         # Adaptive divergence threshold: stricter on first attempt
-        divergence_threshold = 0.05 if attempt == 0 else 0.10
+        divergence_threshold = DIVERGENCE_RATE_TARGET if attempt == 0 else DIVERGENCE_RATE_HIGH
 
         attempt_logger.info(
             f"🔄 Attempt {attempt_num}/{max_retries}: starting NUTS "

@@ -78,8 +78,11 @@ def _compute_g1_diffusion_elementwise(
     idx1 = jnp.clip(jnp.searchsorted(time_grid, t1, side="left"), 0, max_index)
     idx2 = jnp.clip(jnp.searchsorted(time_grid, t2, side="left"), 0, max_index)
 
-    # Trapezoidal integral steps between indices with smooth abs for stability
-    epsilon_abs = 1e-20
+    # Trapezoidal integral steps between indices with smooth abs for stability.
+    # epsilon_abs must be large enough for float32 precision (>= 1e-12).
+    # Previous value 1e-20 was below float32 machine epsilon, making the
+    # smooth-abs non-functional in float32 (x² + 1e-20 == x² due to underflow).
+    epsilon_abs = 1e-12
     integral_steps = jnp.sqrt((D_cumsum[idx2] - D_cumsum[idx1]) ** 2 + epsilon_abs)
 
     # Compute g1 using log-space for numerical stability
@@ -152,8 +155,9 @@ def _compute_g1_shear_elementwise(
     idx1 = jnp.clip(jnp.searchsorted(time_grid, t1, side="left"), 0, max_index)
     idx2 = jnp.clip(jnp.searchsorted(time_grid, t2, side="left"), 0, max_index)
 
-    # Trapezoidal integration using cumulative sums with smooth abs for stability
-    epsilon_abs = 1e-20
+    # Trapezoidal integration using cumulative sums with smooth abs for stability.
+    # epsilon_abs=1e-12: float32/float64-safe (see P0-2 fix in diffusion path).
+    epsilon_abs = 1e-12
     gamma_integral_elementwise = jnp.sqrt(
         (gamma_cumsum[idx2] - gamma_cumsum[idx1]) ** 2 + epsilon_abs
     )
@@ -223,11 +227,7 @@ def _compute_g1_total_elementwise(
     # Multiply: g₁_total[phi, i] = g₁_diffusion[i] × g₁_shear[phi, i]
     g1_total = g1_diff_broadcasted * g1_shear
 
-    # Apply positive-only constraint with minimum threshold for numerical stability
-    epsilon = 1e-10
-    g1_bounded = jnp.maximum(g1_total, epsilon)
-
-    return g1_bounded
+    return g1_total
 
 
 # =============================================================================

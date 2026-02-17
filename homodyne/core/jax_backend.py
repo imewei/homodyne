@@ -491,8 +491,9 @@ def _compute_g1_diffusion_core(
         idx1 = jnp.clip(jnp.searchsorted(time_grid_used, t1_arr, side="left"), 0, max_index)
         idx2 = jnp.clip(jnp.searchsorted(time_grid_used, t2_arr, side="left"), 0, max_index)
 
-        # Lookup integrals with smooth abs for gradient stability (FR-008)
-        epsilon_abs = 1e-20
+        # Lookup integrals with smooth abs for gradient stability (FR-008).
+        # P0-2: epsilon_abs=1e-12 (was 1e-20, below float32 precision).
+        epsilon_abs = 1e-12
         D_integral = jnp.sqrt((D_cumsum[idx2] - D_cumsum[idx1]) ** 2 + epsilon_abs)
 
     else:
@@ -629,8 +630,9 @@ def _compute_g1_shear_core(
         idx1 = jnp.clip(jnp.searchsorted(time_grid_used, t1_arr, side="left"), 0, max_index)
         idx2 = jnp.clip(jnp.searchsorted(time_grid_used, t2_arr, side="left"), 0, max_index)
 
-        # Lookup integrals with smooth abs for gradient stability (FR-008)
-        epsilon_abs = 1e-20
+        # Lookup integrals with smooth abs for gradient stability (FR-008).
+        # P0-2: epsilon_abs=1e-12 (was 1e-20, below float32 precision).
+        epsilon_abs = 1e-12
         gamma_integral = jnp.sqrt(
             (gamma_cumsum[idx2] - gamma_cumsum[idx1]) ** 2 + epsilon_abs
         )
@@ -878,14 +880,11 @@ def _compute_g2_scaled_core(
     # The baseline "1" is included in the offset parameter (offset ≈ 1.0 for physical data)
     g2 = offset + contrast * g1**2
 
-    # Apply physical bounds: 0.5 < g2 ≤ 2.5
-    # Updated bounds (Nov 11, 2025) to reflect realistic homodyne detection range:
-    # - Lower bound 0.5: Allows for significant negative offset deviations
-    # - Upper bound 2.5: Theoretical maximum for g₂ = 1 + 1×1² = 2, plus 25% headroom
-    # - Physical constraint: 0.5 ≤ g2 ≤ 2.5 for homodyne detection
-    g2_bounded = jnp.clip(g2, 0.5, 2.5)
-
-    return g2_bounded
+    # P0-3: Removed hard jnp.clip(g2, 0.5, 2.5) — it kills gradients at boundaries.
+    # For NLSQ (TRF optimizer), the bounds are enforced via parameter bounds, not g2 clipping.
+    # For NUTS/MCMC, hard clips create zero-gradient plateaus that stall the sampler.
+    # Physical range (0.5-2.5) is enforced through parameter priors instead.
+    return g2
 
 
 # =============================================================================

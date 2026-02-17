@@ -225,6 +225,21 @@ class CMCConfig:
         ValueError
             If required fields are missing or invalid.
         """
+        # P2-4: Warn about unrecognized top-level keys that may be typos.
+        _known_keys = {
+            "sharding", "backend", "backend_config", "per_shard_mcmc",
+            "validation", "combination", "reparameterization",
+            "enable", "min_points_for_cmc", "per_angle_mode",
+            "constant_scaling_threshold", "run_id", "per_shard_timeout",
+            "heartbeat_timeout", "prior_tempering",
+        }
+        unknown_keys = set(config_dict.keys()) - _known_keys
+        if unknown_keys:
+            logger.warning(
+                f"CMC config contains unrecognized keys (possible typos): "
+                f"{sorted(unknown_keys)}"
+            )
+
         # Extract nested sections
         sharding = config_dict.get("sharding", {})
         backend = config_dict.get("backend", {})

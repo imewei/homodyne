@@ -284,8 +284,12 @@ def transform_to_physics_space(
         # D0 = D_ref * t_ref^(-alpha)
         result["D0"] = D_ref * (t_ref ** (-alpha))
         # D_offset = D_ref * frac / (1 - frac)
+        # P1-2: Clip D_offset_frac to prevent D_offset → ∞ when frac → 1.0.
+        # The sampling prior caps at 0.5 via TruncatedNormal, but posterior
+        # samples may exceed this during post-processing back-transform.
+        D_offset_frac_safe = np.clip(D_offset_frac, 0.0, 1.0 - 1e-6)
         result["D_offset"] = (
-            D_ref * D_offset_frac / np.maximum(1 - D_offset_frac, 1e-10)
+            D_ref * D_offset_frac_safe / (1 - D_offset_frac_safe)
         )
         del result["log_D_ref"]
         del result["D_offset_frac"]

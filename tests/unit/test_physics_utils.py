@@ -421,8 +421,9 @@ class TestCreateTimeIntegralMatrix:
         values = jnp.array([1.0, 1.0, 1.0, 1.0])
         result = create_time_integral_matrix(values)
         # Diagonal should be sqrt(0 + epsilon) ≈ epsilon^0.5
+        # With epsilon=1e-12, diagonal ≈ 1e-6
         diagonal = jnp.diag(result)
-        assert jnp.all(diagonal < 1e-9)
+        assert jnp.all(diagonal < 1.1e-6)
 
     def test_symmetry(self):
         """Test matrix is symmetric."""
@@ -445,7 +446,7 @@ class TestCreateTimeIntegralMatrix:
             for j in range(5):
                 # Using trapezoidal rule: result[i,j] ≈ |i-j|
                 expected = abs(i - j)
-                assert_allclose(result[i, j], expected, atol=1e-9)
+                assert_allclose(result[i, j], expected, atol=1.1e-6)
 
     def test_single_element(self):
         """Test with single element array."""

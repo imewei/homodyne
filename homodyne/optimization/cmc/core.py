@@ -795,7 +795,22 @@ def fit_mcmc_jax(
         nlsq_used = []
         for param in physical_params:
             if param in nlsq_values:
-                initial_values[param] = nlsq_values[param]
+                val = nlsq_values[param]
+                # P2-3: Clip NLSQ values to CMC parameter bounds to prevent
+                # out-of-bounds initial values from crashing NUTS initialization.
+                if parameter_space is not None:
+                    try:
+                        lo, hi = parameter_space.get_bounds(param)
+                        if val < lo or val > hi:
+                            clipped = max(lo, min(hi, val))
+                            run_logger.warning(
+                                f"NLSQ value {param}={val:.4g} outside CMC bounds "
+                                f"[{lo:.4g}, {hi:.4g}], clipping to {clipped:.4g}"
+                            )
+                            val = clipped
+                    except KeyError:
+                        pass  # Parameter not in space (e.g., reparameterized)
+                initial_values[param] = val
                 nlsq_used.append(param)
 
         run_logger.info(
