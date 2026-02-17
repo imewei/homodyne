@@ -852,7 +852,7 @@ def log_precision_analysis(
 
 @dataclass
 class BimodalResult:
-    """Result of bimodal detection for a single parameter.
+    r"""Result of bimodal detection for a single parameter.
 
     Attributes
     ----------
@@ -867,7 +867,7 @@ class BimodalResult:
     separation : float
         Absolute distance between means.
     relative_separation : float
-        Separation relative to scale (separation / |mean(means)|).
+        Separation relative to scale (separation / ``|mean(means)|``).
     """
 
     is_bimodal: bool
@@ -1075,7 +1075,9 @@ def summarize_cross_shard_bimodality(
         # Separation significance: how many pooled-std apart are the mode clusters?
         pooled_std = np.sqrt(lower_std**2 + upper_std**2)
         sep_significance = (
-            abs(upper_mean - lower_mean) / pooled_std if pooled_std > 0 else float("inf")
+            abs(upper_mean - lower_mean) / pooled_std
+            if pooled_std > 0
+            else float("inf")
         )
 
         # Check if consensus falls between modes (density trough)

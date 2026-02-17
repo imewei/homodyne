@@ -87,13 +87,13 @@ def safe_exp(x: jnp.ndarray, max_val: float = 700.0) -> jnp.ndarray:
 
 @jit
 def safe_sinc(x: jnp.ndarray) -> jnp.ndarray:
-    """Safe UNNORMALIZED sinc function: sin(x) / x (NOT sin(πx) / (πx)).
+    r"""Safe UNNORMALIZED sinc function: sin(x) / x (NOT sin(πx) / (πx)).
 
     This matches the reference implementation which uses sin(arg) / arg directly.
     The phase argument already includes all necessary scaling factors.
 
     P2-4: Uses a Taylor expansion near zero (1 - x²/6 + x⁴/120) for smooth
-    gradient continuity. The old hard switch from sin(x)/x to 1.0 at |x|=EPS
+    gradient continuity. The old hard switch from sin(x)/x to 1.0 at ``|x|``\=EPS
     created a gradient discontinuity that caused spurious NUTS rejections near
     gamma_dot_t0 ≈ 0.
 
@@ -101,7 +101,7 @@ def safe_sinc(x: jnp.ndarray) -> jnp.ndarray:
         x: Input array
 
     Returns:
-        sin(x)/x for |x| >= 1e-4, Taylor approximation for |x| < 1e-4
+        sin(x)/x for ``|x|`` >= 1e-4, Taylor approximation for ``|x|`` < 1e-4
     """
     x2 = x * x
     near_zero = 1.0 - x2 / 6.0 + x2 * x2 / 120.0
@@ -143,7 +143,7 @@ def calculate_diffusion_coefficient(
         dt_inferred = jnp.abs(time_array[1] - time_array[0])
         epsilon = jnp.maximum(dt_inferred * 0.5, 1e-8)
     else:
-        epsilon = 1e-3
+        epsilon = 1e-3  # type: ignore[assignment]
     time_safe = jnp.maximum(time_array, epsilon)
 
     # Compute diffusion coefficient
@@ -220,7 +220,9 @@ def calculate_shear_rate_cmc(
         # CRITICAL FIX: Ensure dt > 0 to prevent 0^(negative beta) = infinity
         # CMC element-wise data can have consecutive zeros: t[0]=0, t[1]=0 → dt=0
         # This causes NaN when beta < 0 in gamma_t = gamma_dot_0 * (time_safe**beta)
-        dt = jnp.maximum(dt, 1e-5)  # Minimum 1e-5 for numerical stability with negative beta
+        dt = jnp.maximum(
+            dt, 1e-5
+        )  # Minimum 1e-5 for numerical stability with negative beta
     else:
         dt = 1e-3  # Fallback for single time point
 
