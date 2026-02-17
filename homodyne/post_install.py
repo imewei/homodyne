@@ -750,7 +750,9 @@ def interactive_setup() -> tuple[bool, list[str]]:
     # XLA configuration
     logger.info("2. XLA_FLAGS Configuration")
     logger.info("   - Auto-configures JAX CPU devices on venv activation")
-    logger.info("   - Modes: cmc (4 devices), cmc-hpc (8 devices), nlsq (1 device), auto")
+    logger.info(
+        "   - Modes: cmc (4 devices), cmc-hpc (8 devices), nlsq (1 device), auto"
+    )
     logger.info("   - Essential for MCMC parallelization and optimal CPU usage")
 
     configure_xla = input("   Configure XLA_FLAGS? [Y/n]: ").lower() != "n"
@@ -832,7 +834,9 @@ def main() -> int:
     system = platform.system()
 
     logger.info("Platform: %s", system)
-    logger.info("Environment: %s", "Virtual Environment" if is_venv else "System Python")
+    logger.info(
+        "Environment: %s", "Virtual Environment" if is_venv else "System Python"
+    )
 
     if not is_venv and not args.force:
         logger.warning("Virtual environment recommended for optimal setup")

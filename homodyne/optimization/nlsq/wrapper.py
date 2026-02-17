@@ -4216,7 +4216,9 @@ class NLSQWrapper(NLSQAdapterBase):
             # Extract results
             popt = np.asarray(result["x"])
             pcov = np.asarray(result.get("pcov", np.eye(len(popt))))
-            perr = np.asarray(result.get("perr", _safe_uncertainties_from_pcov(pcov, len(popt))))
+            perr = np.asarray(
+                result.get("perr", _safe_uncertainties_from_pcov(pcov, len(popt)))
+            )
 
             # Build info dict with phase diagnostics
             info = {

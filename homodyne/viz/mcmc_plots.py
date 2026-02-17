@@ -1692,7 +1692,11 @@ def print_mcmc_summary(result: Any) -> None:  # MCMCResult type
         if ci_lower is not None and ci_upper is not None:
             logger.info(
                 "  %20s: %12.4f +/- %8.4f  [%.4f, %.4f]",
-                name, mean, std, ci_lower[i], ci_upper[i],
+                name,
+                mean,
+                std,
+                ci_lower[i],
+                ci_upper[i],
             )
         else:
             logger.info("  %20s: %12.4f +/- %8.4f", name, mean, std)

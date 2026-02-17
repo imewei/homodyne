@@ -737,7 +737,10 @@ class NLSQAdapter(NLSQAdapterBase):
                 else:
                     g1_per_point = g1_arr.ravel()
 
-                g2_pred = offset_vals[phi_idx_all] + contrast_vals[phi_idx_all] * g1_per_point**2
+                g2_pred = (
+                    offset_vals[phi_idx_all]
+                    + contrast_vals[phi_idx_all] * g1_per_point**2
+                )
                 return g2_pred
 
             return model_func, False, False

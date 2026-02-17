@@ -234,7 +234,7 @@ def validate_initial_params(
         if logger:
             logger.warning(f"Clipped {n_clipped} initial parameters to bounds")
 
-    return clipped
+    return clipped  # type: ignore[no-any-return]
 
 
 def convert_bounds_to_nlsq_format(
