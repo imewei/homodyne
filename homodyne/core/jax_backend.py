@@ -488,8 +488,12 @@ def _compute_g1_diffusion_core(
 
         # Map times to grid indices using searchsorted (FR-007: clamp to valid range)
         max_index = grid_size - 1
-        idx1 = jnp.clip(jnp.searchsorted(time_grid_used, t1_arr, side="left"), 0, max_index)
-        idx2 = jnp.clip(jnp.searchsorted(time_grid_used, t2_arr, side="left"), 0, max_index)
+        idx1 = jnp.clip(
+            jnp.searchsorted(time_grid_used, t1_arr, side="left"), 0, max_index
+        )
+        idx2 = jnp.clip(
+            jnp.searchsorted(time_grid_used, t2_arr, side="left"), 0, max_index
+        )
 
         # Lookup integrals with smooth abs for gradient stability (FR-008).
         # P0-2: epsilon_abs=1e-12 (was 1e-20, below float32 precision).
@@ -538,7 +542,7 @@ def _compute_g1_diffusion_core(
     # P1-2: Removed jnp.minimum(g1_result, 1.0) — the log-space clip above
     # (jnp.clip(log_g1, -700, 0)) already guarantees g1 = exp(log_g1) ≤ 1.0.
     # The hard min killed gradients at g1=1.0 (diagonal elements), harming NUTS.
-    return g1_result
+    return g1_result  # type: ignore[no-any-return]
 
 
 @jit
@@ -627,8 +631,12 @@ def _compute_g1_shear_core(
 
         # Map times to grid indices using searchsorted (FR-007: clamp to valid range)
         max_index = grid_size - 1
-        idx1 = jnp.clip(jnp.searchsorted(time_grid_used, t1_arr, side="left"), 0, max_index)
-        idx2 = jnp.clip(jnp.searchsorted(time_grid_used, t2_arr, side="left"), 0, max_index)
+        idx1 = jnp.clip(
+            jnp.searchsorted(time_grid_used, t1_arr, side="left"), 0, max_index
+        )
+        idx2 = jnp.clip(
+            jnp.searchsorted(time_grid_used, t2_arr, side="left"), 0, max_index
+        )
 
         # Lookup integrals with smooth abs for gradient stability (FR-008).
         # P0-2: epsilon_abs=1e-12 (was 1e-20, below float32 precision).
@@ -884,7 +892,7 @@ def _compute_g2_scaled_core(
     # For NLSQ (TRF optimizer), the bounds are enforced via parameter bounds, not g2 clipping.
     # For NUTS/MCMC, hard clips create zero-gradient plateaus that stall the sampler.
     # Physical range (0.5-2.5) is enforced through parameter priors instead.
-    return g2
+    return g2  # type: ignore[no-any-return]
 
 
 # =============================================================================

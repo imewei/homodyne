@@ -52,7 +52,7 @@ def detect_cpu_info() -> dict[str, Any]:
     dict
         CPU information including cores, architecture, and optimization hints
     """
-    info = {
+    info: dict[str, Any] = {
         "physical_cores": psutil.cpu_count(logical=False),
         "logical_cores": psutil.cpu_count(logical=True),
         "architecture": platform.machine(),
@@ -99,15 +99,19 @@ def detect_cpu_info() -> dict[str, Any]:
             logger.debug("NUMA detection via lscpu failed: %s", exc)
 
         # Set optimization recommendations
-        if "Intel" in info["cpu_brand"]:
-            info["optimization_flags"].append("intel_mkl")
-        elif "AMD" in info["cpu_brand"]:
-            info["optimization_flags"].append("amd_blis")
+        cpu_brand = info["cpu_brand"]
+        optimization_flags = info["optimization_flags"]
+        assert isinstance(cpu_brand, str)
+        assert isinstance(optimization_flags, list)
+        if "Intel" in cpu_brand:
+            optimization_flags.append("intel_mkl")
+        elif "AMD" in cpu_brand:
+            optimization_flags.append("amd_blis")
 
         if info["supports_avx512"]:
-            info["optimization_flags"].append("avx512")
+            optimization_flags.append("avx512")
         elif info["supports_avx"]:
-            info["optimization_flags"].append("avx2")
+            optimization_flags.append("avx2")
 
     except Exception as e:
         logger.warning(f"Could not detect full CPU information: {e}")

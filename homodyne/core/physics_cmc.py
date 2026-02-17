@@ -98,7 +98,7 @@ def _compute_g1_diffusion_elementwise(
     # P1-2: Removed jnp.minimum(g1_diffusion, 1.0) — the log-space clip above
     # (jnp.clip(log_g1, -700, 0)) already guarantees g1 = exp(log_g1) ≤ 1.0.
     # The hard min killed gradients at g1=1.0 (diagonal elements), harming NUTS.
-    return g1_diffusion  # Shape: (n_points,)
+    return g1_diffusion  # type: ignore[no-any-return]  # Shape: (n_points,)
 
 
 @jit
@@ -227,7 +227,7 @@ def _compute_g1_total_elementwise(
     # Multiply: g₁_total[phi, i] = g₁_diffusion[i] × g₁_shear[phi, i]
     g1_total = g1_diff_broadcasted * g1_shear
 
-    return g1_total
+    return g1_total  # type: ignore[no-any-return]
 
 
 # =============================================================================

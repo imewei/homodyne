@@ -346,7 +346,9 @@ def _diagonal_correction_batch_numpy(
         for i in range(n_phi):
             c2_mat = c2_np[i]
             # Extract side band values (average both diagonals for symmetry)
-            side_band = 0.5 * (c2_mat[idx_upper, idx_lower] + c2_mat[idx_lower, idx_upper])
+            side_band = 0.5 * (
+                c2_mat[idx_upper, idx_lower] + c2_mat[idx_lower, idx_upper]
+            )
 
             # Compute diagonal values
             diag_val = np.zeros(size)
