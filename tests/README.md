@@ -169,8 +169,6 @@ make test-nlsq         # NLSQ optimization tests
 make test-mcmc         # MCMC validation tests
 ```
 
-
-
 ### Direct Pytest Usage
 
 ```bash
