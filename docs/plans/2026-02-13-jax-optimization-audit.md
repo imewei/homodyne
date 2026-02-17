@@ -1,36 +1,46 @@
 # JAX Optimization Audit — Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this
+> plan task-by-task.
 
-**Goal:** Add `static_argnums` to 15 JIT-compiled physics functions to enable XLA constant folding for dataset-invariant parameters, and audit XLA CPU flags for completeness.
+**Goal:** Add `static_argnums` to 15 JIT-compiled physics functions to enable XLA
+constant folding for dataset-invariant parameters, and audit XLA CPU flags for
+completeness.
 
-**Architecture:** All changes are decorator-level (`@jit` → `@partial(jit, static_argnums=(...))`) or configuration audit. No function signatures, logic, or APIs change. The `functools.partial` pattern already exists in `fit_computation.py:27`.
+**Architecture:** All changes are decorator-level (`@jit` →
+`@partial(jit, static_argnums=(...))`) or configuration audit. No function signatures,
+logic, or APIs change. The `functools.partial` pattern already exists in
+`fit_computation.py:27`.
 
 **Tech Stack:** JAX (`jax.jit`, `functools.partial`), existing test suite via pytest
 
----
+______________________________________________________________________
 
 ## Context: What Deep Analysis Revealed
 
 The initial audit identified 4 optimization areas. Deep analysis eliminated 2:
 
-| Section | Status | Reason |
-|---------|--------|--------|
-| static_argnums expansion | **PROCEED** | 15 functions have truly-static float params (dt, q, L, prefactors) |
-| vmap per-angle loops | **DROPPED** | Dynamic shapes (variable points per angle) prevent vmap; already optimized with pre-sorted grouped ops |
-| JIT caching in residual strategies | **DROPPED** | Already properly cached as instance attributes in `__init__` |
-| XLA CPU flags audit | **PROCEED** | Comprehensive config exists; verify completeness |
+| Section | Status | Reason | |---------|--------|--------| | static_argnums expansion |
+**PROCEED** | 15 functions have truly-static float params (dt, q, L, prefactors) | |
+vmap per-angle loops | **DROPPED** | Dynamic shapes (variable points per angle) prevent
+vmap; already optimized with pre-sorted grouped ops | | JIT caching in residual
+strategies | **DROPPED** | Already properly cached as instance attributes in `__init__`
+| | XLA CPU flags audit | **PROCEED** | Comprehensive config exists; verify completeness
+|
 
 **CRITICAL safety rules for static_argnums:**
+
 - `contrast` and `offset`: **NEVER static** — they vary per optimization call
 - Physics params (D0, alpha, etc.): **NEVER static** — they're optimized each iteration
-- Dataset constants (dt, q, L, sinc_prefactor, wavevector_q_squared_half_dt): **SAFE** — constant per dataset run
+- Dataset constants (dt, q, L, sinc_prefactor, wavevector_q_squared_half_dt): **SAFE** —
+  constant per dataset run
 
----
+______________________________________________________________________
 
 ### Task 1: Add static_argnums to `core/jax_backend.py` (7 functions)
 
 **Files:**
+
 - Modify: `homodyne/core/jax_backend.py`
 - Test: `tests/unit/test_fit_computation.py`, `tests/unit/test_nlsq_core.py`
 
@@ -103,8 +113,8 @@ Static args: `wavevector_q_squared_half_dt` (4), `sinc_prefactor` (5), `dt` (6)
 @partial(jit, static_argnums=(4, 5, 8))
 ```
 
-Static args: `wavevector_q_squared_half_dt` (4), `sinc_prefactor` (5), `dt` (8)
-**NOT static**: `contrast` (6), `offset` (7) — these vary during optimization
+Static args: `wavevector_q_squared_half_dt` (4), `sinc_prefactor` (5), `dt` (8) **NOT
+static**: `contrast` (6), `offset` (7) — these vary during optimization
 
 **Step 7: Update `compute_g2_scaled_with_factors` (line 1101)**
 
@@ -126,8 +136,8 @@ Same rationale as Step 6.
 @partial(jit, static_argnums=(6, 7, 10))
 ```
 
-Static args: `q` (6), `L` (7), `dt` (10)
-**NOT static**: `contrast` (8), `offset` (9) — vary during optimization
+Static args: `q` (6), `L` (7), `dt` (10) **NOT static**: `contrast` (8), `offset` (9) —
+vary during optimization
 
 **Step 9: Run tests to verify**
 
@@ -147,11 +157,12 @@ traced as they vary during optimization.
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 ```
 
----
+______________________________________________________________________
 
 ### Task 2: Add static_argnums to `core/physics_nlsq.py` (5 functions)
 
 **Files:**
+
 - Modify: `homodyne/core/physics_nlsq.py`
 - Test: `tests/unit/test_fit_computation.py`, `tests/unit/test_nlsq_core.py`
 
@@ -222,11 +233,12 @@ Contrast/offset remain traced.
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 ```
 
----
+______________________________________________________________________
 
 ### Task 3: Add static_argnums to `core/physics_cmc.py` (3 functions)
 
 **Files:**
+
 - Modify: `homodyne/core/physics_cmc.py`
 - Test: `tests/unit/optimization/cmc/test_core.py`
 
@@ -267,8 +279,8 @@ Static: `wavevector_q_squared_half_dt` (5), `sinc_prefactor` (6)
 
 **Step 5: Run tests**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_core.py -v`
-Expected: All tests PASS
+Run: `uv run pytest tests/unit/optimization/cmc/test_core.py -v` Expected: All tests
+PASS
 
 **Step 6: Commit**
 
@@ -283,11 +295,12 @@ floats computed in the wrapper, not NumPyro traced values.
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 ```
 
----
+______________________________________________________________________
 
 ### Task 4: Add static_argnums to `core/fitting.py` (1 function)
 
 **Files:**
+
 - Modify: `homodyne/core/fitting.py`
 - Test: `tests/unit/test_fit_computation.py`
 
@@ -304,8 +317,7 @@ Static: `regularization` (2) — always 1e-10 default
 
 **Step 2: Run tests**
 
-Run: `uv run pytest tests/unit/test_fit_computation.py -v`
-Expected: All tests PASS
+Run: `uv run pytest tests/unit/test_fit_computation.py -v` Expected: All tests PASS
 
 **Step 3: Commit**
 
@@ -316,69 +328,76 @@ git commit -m "perf(jax): add static_argnums to fitting.py regularization param
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 ```
 
----
+______________________________________________________________________
 
 ### Task 5: XLA CPU Flags Audit
 
 **Files:**
+
 - Read: `homodyne/__init__.py`, `homodyne/device/cpu.py`, `homodyne/device/__init__.py`
 - Read: `homodyne/runtime/shell/activation/xla_config.bash`
 
 **Step 1: Verify current flags are comprehensive**
 
 Current XLA flags audit:
+
 - `--xla_force_host_platform_device_count=4` ✓ (virtual devices for CMC)
-- `--xla_disable_hlo_passes=constant_folding` ✓ (prevents slow compilation for large datasets)
+- `--xla_disable_hlo_passes=constant_folding` ✓ (prevents slow compilation for large
+  datasets)
 - `--xla_cpu_multi_thread_eigen=true` ✓ (in cpu.py)
 - `--xla_cpu_enable_fast_math=true` ✓ (AVX-512 detected)
 
 **Step 2: Check for missing beneficial flags**
 
 Potentially beneficial flags to evaluate:
+
 - `--xla_cpu_enable_fast_min_max=true` — Faster min/max for clipping operations
-- `--xla_cpu_fast_math_honor_nans=true` — Maintain NaN correctness with fast math (CRITICAL for XPCS)
+- `--xla_cpu_fast_math_honor_nans=true` — Maintain NaN correctness with fast math
+  (CRITICAL for XPCS)
 
 **Step 3: Document findings**
 
-Document the complete flag inventory and any recommendations in the audit report.
-No code changes unless a clearly beneficial missing flag is identified.
+Document the complete flag inventory and any recommendations in the audit report. No
+code changes unless a clearly beneficial missing flag is identified.
 
 **Step 4: Commit documentation if any changes made**
 
----
+______________________________________________________________________
 
 ### Task 6: Run Full Test Suite
 
 **Step 1: Run full unit test suite**
 
-Run: `uv run pytest tests/unit/ -v --tb=short`
-Expected: All tests PASS (no regressions from decorator changes)
+Run: `uv run pytest tests/unit/ -v --tb=short` Expected: All tests PASS (no regressions
+from decorator changes)
 
 **Step 2: Run integration tests if available**
 
-Run: `uv run pytest tests/integration/ -v --tb=short`
-Expected: All tests PASS
+Run: `uv run pytest tests/integration/ -v --tb=short` Expected: All tests PASS
 
 **Step 3: Final verification commit if needed**
 
----
+______________________________________________________________________
 
 ## Summary of Changes
 
-| File | Functions Modified | Change |
-|------|-------------------|--------|
-| `core/jax_backend.py` | 7 | `@jit` → `@partial(jit, static_argnums=(...))` |
-| `core/physics_nlsq.py` | 5 | Same pattern |
-| `core/physics_cmc.py` | 3 | Same pattern |
-| `core/fitting.py` | 1 | Same pattern |
-| **Total** | **16** | Decorator-only changes |
+| File | Functions Modified | Change | |------|-------------------|--------| |
+`core/jax_backend.py` | 7 | `@jit` → `@partial(jit, static_argnums=(...))` | |
+`core/physics_nlsq.py` | 5 | Same pattern | | `core/physics_cmc.py` | 3 | Same pattern |
+| `core/fitting.py` | 1 | Same pattern | | **Total** | **16** | Decorator-only changes |
 
 ## What Was Ruled Out (and Why)
 
-1. **vmap in scaling_utils.py**: Dynamic shapes (variable points per angle) prevent vmap. Boolean indexing in quantile estimation creates ragged arrays. Already optimized with pre-sorted grouped operations.
+1. **vmap in scaling_utils.py**: Dynamic shapes (variable points per angle) prevent
+   vmap. Boolean indexing in quantile estimation creates ragged arrays. Already
+   optimized with pre-sorted grouped operations.
 
-2. **JIT caching in residual strategies**: Both `residual.py` and `residual_jit.py` already cache JIT results as instance attributes during `__init__`. No work needed.
+1. **JIT caching in residual strategies**: Both `residual.py` and `residual_jit.py`
+   already cache JIT results as instance attributes during `__init__`. No work needed.
 
-3. **static_argnums for physics params (D0, alpha, etc.)**: These are OPTIMIZED parameters that change every iteration. Making them static would cause catastrophic recompilation.
+1. **static_argnums for physics params (D0, alpha, etc.)**: These are OPTIMIZED
+   parameters that change every iteration. Making them static would cause catastrophic
+   recompilation.
 
-4. **static_argnums for contrast/offset**: These vary per optimization call in per-angle modes. Must remain traced.
+1. **static_argnums for contrast/offset**: These vary per optimization call in per-angle
+   modes. Must remain traced.

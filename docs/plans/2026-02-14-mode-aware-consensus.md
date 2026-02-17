@@ -1,24 +1,32 @@
 # Mode-Aware Consensus MC Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this
+> plan task-by-task.
 
-**Goal:** Fix consensus combination to handle bimodal per-shard posteriors by extracting per-component GMM statistics, jointly clustering shards into mode populations, and running separate consensus MC per mode.
+**Goal:** Fix consensus combination to handle bimodal per-shard posteriors by extracting
+per-component GMM statistics, jointly clustering shards into mode populations, and
+running separate consensus MC per mode.
 
-**Architecture:** Enrich `BimodalResult` with per-component stds from GMM. Add joint mode clustering in `diagnostics.py`. Add bimodal-aware combination in `backends/base.py`. Wire the mode-aware path in `multiprocessing.py` before the existing combine step. Attach `BimodalConsensusResult` metadata to `MCMCSamples`.
+**Architecture:** Enrich `BimodalResult` with per-component stds from GMM. Add joint
+mode clustering in `diagnostics.py`. Add bimodal-aware combination in
+`backends/base.py`. Wire the mode-aware path in `multiprocessing.py` before the existing
+combine step. Attach `BimodalConsensusResult` metadata to `MCMCSamples`.
 
 **Tech Stack:** NumPy, scikit-learn (GaussianMixture — already used), dataclasses
 
----
+______________________________________________________________________
 
 ### Task 1: Add `stds` field to `BimodalResult` and extract from GMM
 
 **Files:**
+
 - Modify: `homodyne/optimization/cmc/diagnostics.py:853-921`
 - Test: `tests/unit/optimization/cmc/test_diagnostics.py`
 
 **Step 1: Write the failing test**
 
-Add to the `TestBimodalDetection` class in `tests/unit/optimization/cmc/test_diagnostics.py` (after line 440):
+Add to the `TestBimodalDetection` class in
+`tests/unit/optimization/cmc/test_diagnostics.py` (after line 440):
 
 ```python
 def test_bimodal_result_contains_stds(self):
@@ -40,7 +48,8 @@ def test_bimodal_result_contains_stds(self):
 
 **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::TestBimodalDetection::test_bimodal_result_contains_stds -v`
+Run:
+`uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::TestBimodalDetection::test_bimodal_result_contains_stds -v`
 Expected: FAIL with `AttributeError: 'BimodalResult' object has no attribute 'stds'`
 
 **Step 3: Implement — add `stds` to `BimodalResult` and `detect_bimodal()`**
@@ -99,13 +108,14 @@ class BimodalResult:
 
 **Step 4: Run test to verify it passes**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::TestBimodalDetection -v`
+Run:
+`uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::TestBimodalDetection -v`
 Expected: All 5 tests PASS (including the new one)
 
 **Step 5: Run full diagnostics test suite to check for regressions**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_diagnostics.py -v`
-Expected: All tests PASS
+Run: `uv run pytest tests/unit/optimization/cmc/test_diagnostics.py -v` Expected: All
+tests PASS
 
 **Step 6: Commit**
 
@@ -118,11 +128,12 @@ and store in BimodalResult.stds. Required for mode-aware consensus
 which needs per-component variance, not inflated full-posterior variance."
 ```
 
----
+______________________________________________________________________
 
 ### Task 2: Add `ModeCluster` and `BimodalConsensusResult` dataclasses
 
 **Files:**
+
 - Modify: `homodyne/optimization/cmc/diagnostics.py` (after `BimodalResult`, ~line 876)
 - Test: `tests/unit/optimization/cmc/test_diagnostics.py`
 
@@ -176,12 +187,14 @@ class TestModeClusterTypes:
 
 **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::TestModeClusterTypes -v`
+Run:
+`uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::TestModeClusterTypes -v`
 Expected: FAIL with `ImportError: cannot import name 'ModeCluster'`
 
 **Step 3: Implement — add dataclasses after `BimodalResult`**
 
-In `homodyne/optimization/cmc/diagnostics.py`, after the `BimodalResult` dataclass (after line ~876, before `detect_bimodal`):
+In `homodyne/optimization/cmc/diagnostics.py`, after the `BimodalResult` dataclass
+(after line ~876, before `detect_bimodal`):
 
 ```python
 @dataclass
@@ -233,7 +246,8 @@ class BimodalConsensusResult:
 
 **Step 4: Run test to verify it passes**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::TestModeClusterTypes -v`
+Run:
+`uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::TestModeClusterTypes -v`
 Expected: PASS
 
 **Step 5: Commit**
@@ -247,12 +261,14 @@ per-mode consensus statistics; BimodalConsensusResult holds the
 full bimodal analysis attached to MCMCSamples."
 ```
 
----
+______________________________________________________________________
 
 ### Task 3: Implement `cluster_shard_modes()` in `diagnostics.py`
 
 **Files:**
-- Modify: `homodyne/optimization/cmc/diagnostics.py` (after `summarize_cross_shard_bimodality`, ~line 1062)
+
+- Modify: `homodyne/optimization/cmc/diagnostics.py` (after
+  `summarize_cross_shard_bimodality`, ~line 1062)
 - Test: `tests/unit/optimization/cmc/test_diagnostics.py`
 
 **Step 1: Write the failing tests**
@@ -383,12 +399,14 @@ class TestClusterShardModes:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::TestClusterShardModes -v`
+Run:
+`uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::TestClusterShardModes -v`
 Expected: FAIL with `ImportError: cannot import name 'cluster_shard_modes'`
 
 **Step 3: Implement `cluster_shard_modes()`**
 
-In `homodyne/optimization/cmc/diagnostics.py`, after `summarize_cross_shard_bimodality()`:
+In `homodyne/optimization/cmc/diagnostics.py`, after
+`summarize_cross_shard_bimodality()`:
 
 ```python
 def cluster_shard_modes(
@@ -492,13 +510,14 @@ def cluster_shard_modes(
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::TestClusterShardModes -v`
+Run:
+`uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::TestClusterShardModes -v`
 Expected: All 3 tests PASS
 
 **Step 5: Run full diagnostics suite**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_diagnostics.py -v`
-Expected: All tests PASS
+Run: `uv run pytest tests/unit/optimization/cmc/test_diagnostics.py -v` Expected: All
+tests PASS
 
 **Step 6: Commit**
 
@@ -512,12 +531,14 @@ one component to each cluster. Unimodal shards assigned by nearest
 centroid distance."
 ```
 
----
+______________________________________________________________________
 
 ### Task 4: Implement `combine_shard_samples_bimodal()` in `backends/base.py`
 
 **Files:**
-- Modify: `homodyne/optimization/cmc/backends/base.py` (after `_combine_shard_chunk`, ~line 441)
+
+- Modify: `homodyne/optimization/cmc/backends/base.py` (after `_combine_shard_chunk`,
+  ~line 441)
 - Test: `tests/unit/optimization/cmc/test_backends.py`
 
 **Step 1: Write the failing tests**
@@ -649,12 +670,14 @@ class TestBimodalCombination:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_backends.py::TestBimodalCombination -v`
+Run:
+`uv run pytest tests/unit/optimization/cmc/test_backends.py::TestBimodalCombination -v`
 Expected: FAIL with `ImportError: cannot import name 'combine_shard_samples_bimodal'`
 
 **Step 3: Implement `combine_shard_samples_bimodal()`**
 
-In `homodyne/optimization/cmc/backends/base.py`, after `_combine_shard_chunk()` (after line 441):
+In `homodyne/optimization/cmc/backends/base.py`, after `_combine_shard_chunk()` (after
+line 441):
 
 ```python
 def combine_shard_samples_bimodal(
@@ -874,13 +897,14 @@ from typing import Any
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_backends.py::TestBimodalCombination -v`
+Run:
+`uv run pytest tests/unit/optimization/cmc/test_backends.py::TestBimodalCombination -v`
 Expected: All 3 tests PASS
 
 **Step 5: Run full backends test suite**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_backends.py -v`
-Expected: All tests PASS
+Run: `uv run pytest tests/unit/optimization/cmc/test_backends.py -v` Expected: All tests
+PASS
 
 **Step 6: Commit**
 
@@ -893,11 +917,12 @@ statistics for bimodal shards. Produces mixture-drawn output
 samples and BimodalConsensusResult metadata."
 ```
 
----
+______________________________________________________________________
 
 ### Task 5: Add `bimodal_consensus` field to `MCMCSamples`
 
 **Files:**
+
 - Modify: `homodyne/optimization/cmc/sampler.py` (MCMCSamples dataclass, ~line 287)
 - Test: `tests/unit/optimization/cmc/test_diagnostics.py`
 
@@ -920,22 +945,26 @@ def test_mcmc_samples_has_bimodal_consensus_field():
 
 **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::test_mcmc_samples_has_bimodal_consensus_field -v`
+Run:
+`uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::test_mcmc_samples_has_bimodal_consensus_field -v`
 Expected: FAIL with `AttributeError`
 
 **Step 3: Add the field to MCMCSamples**
 
-In `homodyne/optimization/cmc/sampler.py`, add to the `MCMCSamples` dataclass after `shard_adapted_n_warmup`:
+In `homodyne/optimization/cmc/sampler.py`, add to the `MCMCSamples` dataclass after
+`shard_adapted_n_warmup`:
 
 ```python
     bimodal_consensus: Any = None  # BimodalConsensusResult when mode-aware consensus used
 ```
 
-Use `Any` to avoid circular import (BimodalConsensusResult is in diagnostics.py). The type annotation in the docstring is sufficient for documentation.
+Use `Any` to avoid circular import (BimodalConsensusResult is in diagnostics.py). The
+type annotation in the docstring is sufficient for documentation.
 
 **Step 4: Run test to verify it passes**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::test_mcmc_samples_has_bimodal_consensus_field -v`
+Run:
+`uv run pytest tests/unit/optimization/cmc/test_diagnostics.py::test_mcmc_samples_has_bimodal_consensus_field -v`
 Expected: PASS
 
 **Step 5: Commit**
@@ -949,16 +978,18 @@ when mode-aware consensus is used. Uses Any type to avoid
 circular import with diagnostics module."
 ```
 
----
+______________________________________________________________________
 
 ### Task 6: Enrich bimodal detections with `std1`/`std2` in `multiprocessing.py`
 
 **Files:**
+
 - Modify: `homodyne/optimization/cmc/backends/multiprocessing.py:1432-1453`
 
 **Step 1: Update the detection collection block**
 
-In `multiprocessing.py`, modify the bimodal detection loop (lines 1432-1453) to include `std1`/`std2`:
+In `multiprocessing.py`, modify the bimodal detection loop (lines 1432-1453) to include
+`std1`/`std2`:
 
 Change the dict construction from:
 
@@ -994,9 +1025,8 @@ To:
 
 **Step 2: Run lint and type checks**
 
-Run: `uv run ruff check homodyne/optimization/cmc/backends/multiprocessing.py`
-Run: `uv run mypy homodyne/optimization/cmc/backends/multiprocessing.py`
-Expected: Both pass
+Run: `uv run ruff check homodyne/optimization/cmc/backends/multiprocessing.py` Run:
+`uv run mypy homodyne/optimization/cmc/backends/multiprocessing.py` Expected: Both pass
 
 **Step 3: Commit**
 
@@ -1009,11 +1039,12 @@ Required for mode-aware consensus which needs per-component
 variance instead of inflated full-posterior variance."
 ```
 
----
+______________________________________________________________________
 
 ### Task 7: Wire mode-aware consensus path in `multiprocessing.py`
 
 **Files:**
+
 - Modify: `homodyne/optimization/cmc/backends/multiprocessing.py:1455-1477`
 - Test: Run existing CMC test suite for regression
 
@@ -1041,7 +1072,8 @@ from homodyne.optimization.cmc.backends.base import (
 
 **Step 2: Replace the combine block**
 
-Replace the block from the `if bimodal_detections:` section through `combined = combine_shard_samples(...)` (lines 1455-1477) with:
+Replace the block from the `if bimodal_detections:` section through
+`combined = combine_shard_samples(...)` (lines 1455-1477) with:
 
 ```python
         if bimodal_detections:
@@ -1122,14 +1154,13 @@ Replace the block from the `if bimodal_detections:` section through `combined = 
 
 **Step 3: Run lint and type checks**
 
-Run: `uv run ruff check homodyne/optimization/cmc/backends/multiprocessing.py`
-Run: `uv run mypy homodyne/optimization/cmc/backends/multiprocessing.py`
-Expected: Both pass
+Run: `uv run ruff check homodyne/optimization/cmc/backends/multiprocessing.py` Run:
+`uv run mypy homodyne/optimization/cmc/backends/multiprocessing.py` Expected: Both pass
 
 **Step 4: Run full CMC test suite for regression**
 
-Run: `uv run pytest tests/unit/optimization/cmc/ -q --tb=short`
-Expected: All 443+ tests PASS
+Run: `uv run pytest tests/unit/optimization/cmc/ -q --tb=short` Expected: All 443+ tests
+PASS
 
 **Step 5: Commit**
 
@@ -1143,39 +1174,43 @@ Falls back to standard combination when bimodality is below threshold
 or absent."
 ```
 
----
+______________________________________________________________________
 
 ### Task 8: Quality checks and final verification
 
 **Step 1: Run full project lint**
 
-Run: `uv run ruff check homodyne/optimization/cmc/diagnostics.py homodyne/optimization/cmc/backends/multiprocessing.py homodyne/optimization/cmc/backends/base.py homodyne/optimization/cmc/sampler.py`
+Run:
+`uv run ruff check homodyne/optimization/cmc/diagnostics.py homodyne/optimization/cmc/backends/multiprocessing.py homodyne/optimization/cmc/backends/base.py homodyne/optimization/cmc/sampler.py`
 Expected: All checks passed
 
 **Step 2: Run full project type check**
 
-Run: `uv run mypy homodyne/optimization/cmc/diagnostics.py homodyne/optimization/cmc/backends/multiprocessing.py homodyne/optimization/cmc/backends/base.py homodyne/optimization/cmc/sampler.py`
+Run:
+`uv run mypy homodyne/optimization/cmc/diagnostics.py homodyne/optimization/cmc/backends/multiprocessing.py homodyne/optimization/cmc/backends/base.py homodyne/optimization/cmc/sampler.py`
 Expected: No issues found
 
 **Step 3: Run full CMC test suite**
 
-Run: `uv run pytest tests/unit/optimization/cmc/ -v --tb=short`
-Expected: All tests PASS (443 original + ~10 new = ~453)
+Run: `uv run pytest tests/unit/optimization/cmc/ -v --tb=short` Expected: All tests PASS
+(443 original + ~10 new = ~453)
 
 **Step 4: Run full project tests**
 
-Run: `uv run pytest tests/unit/ -q --tb=short`
-Expected: All tests PASS
+Run: `uv run pytest tests/unit/ -q --tb=short` Expected: All tests PASS
 
----
+______________________________________________________________________
 
 ## File Change Summary
 
-| File | Changes |
-|------|---------|
-| `homodyne/optimization/cmc/diagnostics.py` | Add `stds` to `BimodalResult`; add `ModeCluster`, `BimodalConsensusResult` dataclasses; add `cluster_shard_modes()` |
-| `homodyne/optimization/cmc/backends/base.py` | Add `combine_shard_samples_bimodal()` |
-| `homodyne/optimization/cmc/backends/multiprocessing.py` | Enrich detections with `std1`/`std2`; wire mode-aware consensus branch |
-| `homodyne/optimization/cmc/sampler.py` | Add `bimodal_consensus` field to `MCMCSamples` |
-| `tests/unit/optimization/cmc/test_diagnostics.py` | Tests for `stds`, `ModeCluster`, `BimodalConsensusResult`, `cluster_shard_modes()` |
-| `tests/unit/optimization/cmc/test_backends.py` | Tests for `combine_shard_samples_bimodal()` |
+| File | Changes | |------|---------| | `homodyne/optimization/cmc/diagnostics.py` | Add
+`stds` to `BimodalResult`; add `ModeCluster`, `BimodalConsensusResult` dataclasses; add
+`cluster_shard_modes()` | | `homodyne/optimization/cmc/backends/base.py` | Add
+`combine_shard_samples_bimodal()` | |
+`homodyne/optimization/cmc/backends/multiprocessing.py` | Enrich detections with
+`std1`/`std2`; wire mode-aware consensus branch | |
+`homodyne/optimization/cmc/sampler.py` | Add `bimodal_consensus` field to `MCMCSamples`
+| | `tests/unit/optimization/cmc/test_diagnostics.py` | Tests for `stds`, `ModeCluster`,
+`BimodalConsensusResult`, `cluster_shard_modes()` | |
+`tests/unit/optimization/cmc/test_backends.py` | Tests for
+`combine_shard_samples_bimodal()` |

@@ -16,6 +16,7 @@ author = "Wei Chen, Hongrui He"
 # Get version dynamically from package (matching the test expectation)
 try:
     from homodyne import __version__ as _pkg_version
+
     # Extract base version (before any .post or +dirty suffixes)
     version = _pkg_version.split(".post")[0].split("+")[0]
 except ImportError:

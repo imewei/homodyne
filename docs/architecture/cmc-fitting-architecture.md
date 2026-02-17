@@ -2,27 +2,26 @@
 
 Complete documentation of the CMC (Consensus Monte Carlo) fitting system in homodyne.
 
-**Version:** 2.22.0
-**Last Updated:** February 2026
+**Version:** 2.22.0 **Last Updated:** February 2026
 
 ## Table of Contents
 
 1. [High-Level Architecture](#high-level-architecture)
-2. [Entry Point & Orchestration](#1-entry-point--orchestration)
-3. [Data Preparation & Sharding](#2-data-preparation--sharding)
-4. [Auto Shard Size Selection](#3-auto-shard-size-selection)
-5. [Time Grid Construction](#4-time-grid-construction)
-6. [Physics Model](#5-physics-model)
-7. [Gradient Balancing (Z-Space)](#6-gradient-balancing-z-space)
-8. [NUTS Sampling](#7-nuts-sampling)
-9. [Backend Execution](#8-backend-execution)
-10. [Sample Combination](#9-sample-combination)
-11. [Result Creation & Diagnostics](#10-result-creation--diagnostics)
-12. [Complete Data Flow](#complete-data-flow)
-13. [Quick Reference Tables](#quick-reference-tables)
-14. [Key Files Reference](#key-files-reference)
+1. [Entry Point & Orchestration](#1-entry-point--orchestration)
+1. [Data Preparation & Sharding](#2-data-preparation--sharding)
+1. [Auto Shard Size Selection](#3-auto-shard-size-selection)
+1. [Time Grid Construction](#4-time-grid-construction)
+1. [Physics Model](#5-physics-model)
+1. [Gradient Balancing (Z-Space)](#6-gradient-balancing-z-space)
+1. [NUTS Sampling](#7-nuts-sampling)
+1. [Backend Execution](#8-backend-execution)
+1. [Sample Combination](#9-sample-combination)
+1. [Result Creation & Diagnostics](#10-result-creation--diagnostics)
+1. [Complete Data Flow](#complete-data-flow)
+1. [Quick Reference Tables](#quick-reference-tables)
+1. [Key Files Reference](#key-files-reference)
 
----
+______________________________________________________________________
 
 ## High-Level Architecture
 
@@ -101,7 +100,7 @@ Complete documentation of the CMC (Consensus Monte Carlo) fitting system in homo
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+______________________________________________________________________
 
 ## 1. Entry Point & Orchestration
 
@@ -149,7 +148,7 @@ def fit_mcmc_jax(
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+______________________________________________________________________
 
 ## 2. Data Preparation & Sharding
 
@@ -200,7 +199,7 @@ def fit_mcmc_jax(
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+______________________________________________________________________
 
 ## 3. Auto Shard Size Selection
 
@@ -209,10 +208,12 @@ def fit_mcmc_jax(
 ### Critical Design Principles (v2.20.0)
 
 **Minimum Shard Size Enforcement:**
+
 - **laminar_flow**: 3,000 points minimum (reparameterization fixes bimodal posteriors)
 - **static**: 5,000 points minimum
 
 **Dynamic max_shards Scaling:**
+
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
 │ max_shards by Dataset Size (v2.20.0)                                       │
@@ -228,7 +229,8 @@ def fit_mcmc_jax(
 
 ### Angle-Aware Scaling
 
-The shard size is adjusted based on the number of phi angles to ensure each shard has sufficient data per angle:
+The shard size is adjusted based on the number of phi angles to ensure each shard has
+sufficient data per angle:
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -296,7 +298,7 @@ The shard size is adjusted based on the number of phi angles to ensure each shar
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+______________________________________________________________________
 
 ## 4. Time Grid Construction
 
@@ -321,7 +323,7 @@ The shard size is adjusted based on the number of phi angles to ensure each shar
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+______________________________________________________________________
 
 ## 5. Physics Model
 
@@ -329,11 +331,10 @@ The shard size is adjusted based on the number of phi angles to ensure each shar
 
 ### Three Model Variants (v2.18.0)
 
-| Model | Purpose | Per-Angle Mode |
-|-------|---------|----------------|
-| `xpcs_model()` | Original model with standard parameterization | Legacy |
-| `xpcs_model_scaled()` | Gradient-balanced model with z-space sampling | individual |
-| `xpcs_model_constant()` | Fixed per-angle scaling (not sampled) | auto/constant |
+| Model | Purpose | Per-Angle Mode | |-------|---------|----------------| |
+`xpcs_model()` | Original model with standard parameterization | Legacy | |
+`xpcs_model_scaled()` | Gradient-balanced model with z-space sampling | individual | |
+`xpcs_model_constant()` | Fixed per-angle scaling (not sampled) | auto/constant |
 
 ### Per-Angle Mode Selection (v2.18.0)
 
@@ -366,9 +367,9 @@ The shard size is adjusted based on the number of phi angles to ensure each shar
 **Key Distinction: Auto vs Constant Mode**
 
 | Mode | Quantile Estimation | Fixed Values Used |
-|------|---------------------|-------------------|
-| `auto` (n_phi ≥ 3) | Estimate 23 per-angle → **AVERAGE** → single value | Same value for all angles (NLSQ parity) |
-| `constant` | Estimate 23 per-angle → use **DIRECTLY** | Different value per angle |
+|------|---------------------|-------------------| | `auto` (n_phi ≥ 3) | Estimate 23
+per-angle → **AVERAGE** → single value | Same value for all angles (NLSQ parity) | |
+`constant` | Estimate 23 per-angle → use **DIRECTLY** | Different value per angle |
 
 ### xpcs_model_scaled() Structure
 
@@ -463,7 +464,7 @@ sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
 numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
 ```
 
----
+______________________________________________________________________
 
 ## 6. Gradient Balancing (Z-Space)
 
@@ -507,7 +508,7 @@ This causes 10⁶:1 gradient imbalance → 0% NUTS acceptance rate
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+______________________________________________________________________
 
 ## 7. NUTS Sampling
 
@@ -639,7 +640,7 @@ class MCMCSamples:
     bimodal_consensus: Any = None     # BimodalConsensusResult (Feb 2026)
 ```
 
----
+______________________________________________________________________
 
 ## 8. Backend Execution
 
@@ -696,7 +697,7 @@ def select_backend(config: CMCConfig) -> CMCBackend:
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+______________________________________________________________________
 
 ## 9. Sample Combination
 
@@ -794,7 +795,7 @@ def select_backend(config: CMCConfig) -> CMCBackend:
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+______________________________________________________________________
 
 ## 10. Result Creation & Diagnostics
 
@@ -863,7 +864,7 @@ class CMCResult:
 └─ "not_converged": R-hat ≥ 1.1 OR ESS < 100
 ```
 
----
+______________________________________________________________________
 
 ## Complete Data Flow
 
@@ -939,7 +940,7 @@ CMCResult.from_mcmc_samples()
 └─ Return CMCResult
 ```
 
----
+______________________________________________________________________
 
 ## Quick Reference Tables
 
@@ -948,104 +949,96 @@ CMCResult.from_mcmc_samples()
 #### Laminar Flow Mode (with n_phi ≤ 3, angle_factor = 0.6)
 
 | Dataset Size | Base Size | After Scaling | max_shards | Est. Shards |
-|--------------|-----------|---------------|------------|-------------|
-| < 2M | 8K | 4.8K | 2,000 | ~400 |
-| 2M - 50M | 5K | 3K | 2,000 | 600-16K |
-| 50M - 100M | 8K | 4.8K | 10,000 | 10K-20K |
-| 100M - 1B | 8K | 4.8K | 50,000 | 20K-50K |
-| 1B+ | 10K | 6K | 100,000 | 100K+ |
+|--------------|-----------|---------------|------------|-------------| | < 2M | 8K |
+4.8K | 2,000 | ~400 | | 2M - 50M | 5K | 3K | 2,000 | 600-16K | | 50M - 100M | 8K | 4.8K
+| 10,000 | 10K-20K | | 100M - 1B | 8K | 4.8K | 50,000 | 20K-50K | | 1B+ | 10K | 6K |
+100,000 | 100K+ |
 
 **Minimum shard size: 3,000 points** (reparameterization fixes bimodal posteriors)
 
 #### Static Mode (10× larger shards)
 
 | Dataset Size | max_points_per_shard | Est. Shards |
-|--------------|---------------------|-------------|
-| < 50M | 100K | ~500 |
-| 50M - 100M | 80K | ~1K |
-| 100M+ | 50K | ~2K+ |
+|--------------|---------------------|-------------| | < 50M | 100K | ~500 | | 50M -
+100M | 80K | ~1K | | 100M+ | 50K | ~2K+ |
 
 **Minimum shard size: 5,000 points**
 
 ### Dynamic max_shards by Dataset Size
 
-| Dataset Size | max_shards | Rationale |
-|--------------|------------|-----------|
-| < 10M points | 2,000 | Standard parallel workload |
-| 10M - 100M | 10,000 | Balanced shard count |
-| 100M - 1B | 50,000 | High parallelism for large datasets |
-| 1B+ | 100,000 | Extreme scale support |
+| Dataset Size | max_shards | Rationale | |--------------|------------|-----------| | \<
+10M points | 2,000 | Standard parallel workload | | 10M - 100M | 10,000 | Balanced shard
+count | | 100M - 1B | 50,000 | High parallelism for large datasets | | 1B+ | 100,000 |
+Extreme scale support |
 
 ### Mode-Specific Parameters
 
 | Mode | Physical Params | Per-Angle Params (23 angles) | Total |
-|------|----------------|------------------------------|-------|
-| static | 3: D₀, α, D_offset | 46: contrast + offset | 49 + σ |
-| laminar_flow | 7: + γ̇₀, β, γ̇_offset, φ₀ | 46: contrast + offset | 53 + σ |
+|------|----------------|------------------------------|-------| | static | 3: D₀, α,
+D_offset | 46: contrast + offset | 49 + σ | | laminar_flow | 7: + γ̇₀, β, γ̇_offset, φ₀
+| 46: contrast + offset | 53 + σ |
 
 ### CMC Configuration Defaults (v2.20.0)
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| min_points_for_cmc | 500,000 | Auto-enable threshold |
-| sharding_strategy | "stratified" | "stratified" or "random" |
-| backend_name | "auto" | → "multiprocessing" |
-| num_warmup | 500 | NUTS warmup iterations |
-| num_samples | 1500 | NUTS sampling iterations |
-| num_chains | 4 | Parallel chains |
-| target_accept_prob | 0.85 | NUTS target acceptance |
-| max_r_hat | 1.1 | Convergence threshold |
-| min_ess | 100.0 | Minimum effective sample size |
-| max_divergence_rate | 0.10 | Quality filter threshold |
-| require_nlsq_warmstart | False | Enforce NLSQ warm-start |
-| combination_method | "consensus_mc" | Shard combination algorithm |
-| per_shard_timeout | 3600 | 1 hour max per shard |
-| **min_points_per_shard** | 3,000 (laminar) / 5,000 (static) | **NEW**: Minimum shard size |
-| **max_parameter_cv** | 1.0 | **NEW**: Heterogeneity abort threshold |
-| **heterogeneity_abort** | True | **NEW**: Abort on high heterogeneity |
+| Parameter | Default | Description | |-----------|---------|-------------| |
+min_points_for_cmc | 500,000 | Auto-enable threshold | | sharding_strategy |
+"stratified" | "stratified" or "random" | | backend_name | "auto" | → "multiprocessing"
+| | num_warmup | 500 | NUTS warmup iterations | | num_samples | 1500 | NUTS sampling
+iterations | | num_chains | 4 | Parallel chains | | target_accept_prob | 0.85 | NUTS
+target acceptance | | max_r_hat | 1.1 | Convergence threshold | | min_ess | 100.0 |
+Minimum effective sample size | | max_divergence_rate | 0.10 | Quality filter threshold
+| | require_nlsq_warmstart | False | Enforce NLSQ warm-start | | combination_method |
+"consensus_mc" | Shard combination algorithm | | per_shard_timeout | 3600 | 1 hour max
+per shard | | **min_points_per_shard** | 3,000 (laminar) / 5,000 (static) | **NEW**:
+Minimum shard size | | **max_parameter_cv** | 1.0 | **NEW**: Heterogeneity abort
+threshold | | **heterogeneity_abort** | True | **NEW**: Abort on high heterogeneity |
 
----
+______________________________________________________________________
 
 ## Key Files Reference
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| **core.py** | 807 | Main orchestration, shard size selection, runtime estimation |
-| **data_prep.py** | 622 | Validation, sharding (stratified & random), noise estimation |
-| **sampler.py** | 1084 | NUTS sampling, preflight checks, MCMC-safe adjustments |
-| **model.py** | 373 | xpcs_model & xpcs_model_scaled (z-space) |
-| **scaling.py** | 342 | Gradient balancing via ParameterScaling & z-space |
-| **priors.py** | 791 | Prior distributions, data-driven initial value estimation |
-| **results.py** | 598 | CMCResult dataclass, convergence diagnostics |
-| **config.py** | 477 | CMCConfig parsing, validation, defaults |
-| **diagnostics.py** | 1000+ | R-hat, ESS, bimodal detection, cross-shard analysis, mode clustering |
-| **backends/base.py** | 400+ | Abstract backend, combine_shard_samples(), combine_shard_samples_bimodal() |
-| **backends/multiprocessing.py** | 400+ | Parallel execution, worker pool, thread management |
-| **io.py** | 403 | Result serialization (JSON/NPZ) |
-| **plotting.py** | 478 | Visualization utilities |
+| File | Lines | Purpose | |------|-------|---------| | **core.py** | 807 | Main
+orchestration, shard size selection, runtime estimation | | **data_prep.py** | 622 |
+Validation, sharding (stratified & random), noise estimation | | **sampler.py** | 1084 |
+NUTS sampling, preflight checks, MCMC-safe adjustments | | **model.py** | 373 |
+xpcs_model & xpcs_model_scaled (z-space) | | **scaling.py** | 342 | Gradient balancing
+via ParameterScaling & z-space | | **priors.py** | 791 | Prior distributions,
+data-driven initial value estimation | | **results.py** | 598 | CMCResult dataclass,
+convergence diagnostics | | **config.py** | 477 | CMCConfig parsing, validation,
+defaults | | **diagnostics.py** | 1000+ | R-hat, ESS, bimodal detection, cross-shard
+analysis, mode clustering | | **backends/base.py** | 400+ | Abstract backend,
+combine_shard_samples(), combine_shard_samples_bimodal() | |
+**backends/multiprocessing.py** | 400+ | Parallel execution, worker pool, thread
+management | | **io.py** | 403 | Result serialization (JSON/NPZ) | | **plotting.py** |
+478 | Visualization utilities |
 
----
+______________________________________________________________________
 
 ## Critical Features & Fixes
 
 ### v2.14.2: Diagonal Point Filtering
+
 - Excludes t1 == t2 points (autocorrelation peaks)
 - Prevents biasing fit with synthetic/interpolated data
 
 ### v2.12.0: Correct Consensus MC
+
 - Implements Scott et al. (2016) properly
 - Precision-weighted combination of posterior moments
 
 ### December 2025: Smooth Bounding
+
 - Replaced hard clipping with tanh-based smooth bounds
 - Prevents non-smooth behavior at parameter boundaries
 - Enables better HMC/NUTS adaptation during warmup
 
 ### December 2025: Proper Time Grid Construction
+
 - Fixed incorrect grid density from `np.unique(t1, t2)`
 - Constructs with explicit dt spacing matching NLSQ
 
 ### Dense Mass Matrix
+
 - `dense_mass=True` is CRITICAL for NUTS
 - Learns parameter covariance during warmup
 - Handles 10⁶:1 gradient imbalance from different parameter scales
@@ -1054,7 +1047,8 @@ CMCResult.from_mcmc_samples()
 
 **Divergence-Based Shard Quality Filter**
 
-After root cause analysis of CMC runs with 28% divergence rates, automatic quality filtering was added:
+After root cause analysis of CMC runs with 28% divergence rates, automatic quality
+filtering was added:
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -1078,14 +1072,17 @@ After root cause analysis of CMC runs with 28% divergence rates, automatic quali
 **Root Cause Analysis**
 
 CMC was producing parameter estimates diverging significantly from NLSQ:
+
 - D0: -37% difference (12,444 vs 19,665)
 - D_offset: -92% difference (71 vs 844)
 - CMC uncertainties artificially small (precision-weighted bias)
 
 Root causes identified:
+
 1. **Excessive sharding**: 999 shards with only 3000 points each (data-starved)
-2. **No NLSQ warm-start**: Cold start from config values → 28% divergence rate
-3. **Consensus MC bias**: Precision-weighted combination biased toward low-variance shards
+1. **No NLSQ warm-start**: Cold start from config values → 28% divergence rate
+1. **Consensus MC bias**: Precision-weighted combination biased toward low-variance
+   shards
 
 **Automatic NLSQ→CMC Warm-Start (CLI)**
 
@@ -1200,61 +1197,56 @@ Root causes identified:
 
 ### New CMCConfig Fields (v2.20.0)
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `max_divergence_rate` | float | 0.10 | Filter shards exceeding this divergence rate |
-| `require_nlsq_warmstart` | bool | False | Require NLSQ warm-start (API-level) |
-| `min_points_per_shard` | int | 3,000 (laminar) / 5,000 (static) | **NEW**: Enforced minimum shard size |
-| `max_parameter_cv` | float | 1.0 | **NEW**: Heterogeneity abort threshold |
-| `heterogeneity_abort` | bool | True | **NEW**: Abort on high heterogeneity |
-| `min_points_per_param` | int | 1,500 | **NEW**: Param-aware shard sizing floor |
+| Field | Type | Default | Description | |-------|------|---------|-------------| |
+`max_divergence_rate` | float | 0.10 | Filter shards exceeding this divergence rate | |
+`require_nlsq_warmstart` | bool | False | Require NLSQ warm-start (API-level) | |
+`min_points_per_shard` | int | 3,000 (laminar) / 5,000 (static) | **NEW**: Enforced
+minimum shard size | | `max_parameter_cv` | float | 1.0 | **NEW**: Heterogeneity abort
+threshold | | `heterogeneity_abort` | bool | True | **NEW**: Abort on high heterogeneity
+| | `min_points_per_param` | int | 1,500 | **NEW**: Param-aware shard sizing floor |
 
 ### February 2026: Mode-Aware Consensus MC (v2.22.0)
 
 Standard consensus MC assumes per-shard posteriors are approximately Gaussian. When
-shards have bimodal posteriors (e.g., D₀ ~19K and ~32K with 50/50 weight splits),
-the naive mean falls in the density trough between modes and the variance is
-inflated by `w1·w2·(μ1−μ2)²`. Mode-aware consensus decomposes bimodal shards into
-per-component GMM statistics and runs precision-weighted consensus separately per
-mode cluster, producing a mixture-drawn output. See §9 for algorithm details.
+shards have bimodal posteriors (e.g., D₀ ~19K and ~32K with 50/50 weight splits), the
+naive mean falls in the density trough between modes and the variance is inflated by
+`w1·w2·(μ1−μ2)²`. Mode-aware consensus decomposes bimodal shards into per-component GMM
+statistics and runs precision-weighted consensus separately per mode cluster, producing
+a mixture-drawn output. See §9 for algorithm details.
 
 ### January 2026: Heterogeneity Prevention (v2.21.0)
 
 **Parameter Degeneracy in Laminar Flow Mode**
 
-The `laminar_flow` model has two known parameter degeneracies that can cause
-high heterogeneity across CMC shards:
+The `laminar_flow` model has two known parameter degeneracies that can cause high
+heterogeneity across CMC shards:
 
 **1. D₀/D_offset Linear Degeneracy**
 
-The diffusion contribution depends on `D₀ + D_offset`, creating a linear manifold
-in parameter space where different (D₀, D_offset) pairs produce equivalent fits.
+The diffusion contribution depends on `D₀ + D_offset`, creating a linear manifold in
+parameter space where different (D₀, D_offset) pairs produce equivalent fits.
 
-| Symptom | Cause |
-|---------|-------|
-| `D_offset` CV > 1.0 | Shards find different points along the D₀ + D_offset = const ridge |
-| `D_offset` spans positive and negative | Ridge crosses zero for D_offset |
-| High `D₀` range despite good NLSQ fit | Compensating D_offset values |
+| Symptom | Cause | |---------|-------| | `D_offset` CV > 1.0 | Shards find different
+points along the D₀ + D_offset = const ridge | | `D_offset` spans positive and negative
+| Ridge crosses zero for D_offset | | High `D₀` range despite good NLSQ fit |
+Compensating D_offset values |
 
-**Mitigation (automatic in v2.21.0+):**
-CMC internally reparameterizes to `D_total = D₀ + D_offset` and
-`D_offset_frac = D_offset / D_total`, which are orthogonal and well-constrained.
-Results are automatically converted back to D₀/D_offset for output.
+**Mitigation (automatic in v2.21.0+):** CMC internally reparameterizes to
+`D_total = D₀ + D_offset` and `D_offset_frac = D_offset / D_total`, which are orthogonal
+and well-constrained. Results are automatically converted back to D₀/D_offset for
+output.
 
 **2. γ̇₀/β Multiplicative Correlation**
 
-The shear contribution scales as `γ̇₀ · t^(1+β)`. Higher γ̇₀ with more negative β
-can produce similar effects to lower γ̇₀ with less negative β.
+The shear contribution scales as `γ̇₀ · t^(1+β)`. Higher γ̇₀ with more negative β can
+produce similar effects to lower γ̇₀ with less negative β.
 
-| Symptom | Cause |
-|---------|-------|
-| `gamma_dot_t0` CV > 1.0 | Shards explore the γ̇₀-β correlation ridge |
-| `gamma_dot_t0` spans 10-100× range | Compensating β values |
+| Symptom | Cause | |---------|-------| | `gamma_dot_t0` CV > 1.0 | Shards explore the
+γ̇₀-β correlation ridge | | `gamma_dot_t0` spans 10-100× range | Compensating β values |
 | `beta` moderate heterogeneity (CV ~0.5-0.8) | Correlated with γ̇₀ |
 
-**Mitigation (automatic in v2.21.0+):**
-CMC samples `log(γ̇₀)` instead of γ̇₀ directly, which improves conditioning
-and reduces posterior ridge exploration.
+**Mitigation (automatic in v2.21.0+):** CMC samples `log(γ̇₀)` instead of γ̇₀ directly,
+which improves conditioning and reduces posterior ridge exploration.
 
 **Bimodal Detection & Mode-Aware Consensus (v2.22.0)**
 
@@ -1340,12 +1332,9 @@ and reduces posterior ridge exploration.
 
 When heterogeneity abort triggers, check these indicators:
 
-| Indicator | Healthy | Problematic |
-|-----------|---------|-------------|
-| D_offset CV | < 0.5 | > 1.0 |
-| D_offset range | Within ±20% of D₀ | Spans ±D₀ or sign changes |
-| gamma_dot_t0 CV | < 0.5 | > 1.0 |
-| Bimodal warnings | 0 | Multiple shards |
+| Indicator | Healthy | Problematic | |-----------|---------|-------------| | D_offset
+CV | < 0.5 | > 1.0 | | D_offset range | Within ±20% of D₀ | Spans ±D₀ or sign changes |
+| gamma_dot_t0 CV | < 0.5 | > 1.0 | | Bimodal warnings | 0 | Multiple shards |
 
 **Configuration Options**
 

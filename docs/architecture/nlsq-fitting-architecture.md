@@ -2,27 +2,26 @@
 
 Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in homodyne.
 
-**Version:** 2.22.0
-**Last Updated:** February 2026
+**Version:** 2.22.0 **Last Updated:** February 2026
 
 ## Table of Contents
 
 1. [High-Level Architecture](#high-level-architecture)
-2. [Setup Phase](#1-setup-phase)
-3. [Global Optimization Selection](#2-global-optimization-selection)
-4. [CMA-ES Global Optimization](#3-cma-es-global-optimization)
-5. [Adapter Selection](#4-adapter-selection)
-6. [Memory & Strategy Selection](#5-memory--strategy-selection)
-7. [Stratification Decision](#6-stratification-decision)
-8. [Residual Function Setup](#7-residual-function-setup)
-9. [Anti-Degeneracy Defense System](#8-anti-degeneracy-defense-system)
-10. [Strategy Execution](#9-strategy-execution)
-11. [Error Recovery](#10-error-recovery)
-12. [Result Building](#11-result-building)
-13. [Quick Reference Tables](#quick-reference-tables)
-14. [Key Files Reference](#key-files-reference)
+1. [Setup Phase](#1-setup-phase)
+1. [Global Optimization Selection](#2-global-optimization-selection)
+1. [CMA-ES Global Optimization](#3-cma-es-global-optimization)
+1. [Adapter Selection](#4-adapter-selection)
+1. [Memory & Strategy Selection](#5-memory--strategy-selection)
+1. [Stratification Decision](#6-stratification-decision)
+1. [Residual Function Setup](#7-residual-function-setup)
+1. [Anti-Degeneracy Defense System](#8-anti-degeneracy-defense-system)
+1. [Strategy Execution](#9-strategy-execution)
+1. [Error Recovery](#10-error-recovery)
+1. [Result Building](#11-result-building)
+1. [Quick Reference Tables](#quick-reference-tables)
+1. [Key Files Reference](#key-files-reference)
 
----
+______________________________________________________________________
 
 ## High-Level Architecture
 
@@ -145,7 +144,7 @@ Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in h
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+______________________________________________________________________
 
 ## 1. Setup Phase
 
@@ -189,7 +188,7 @@ Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in h
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+______________________________________________________________________
 
 ## 2. Global Optimization Selection
 
@@ -236,12 +235,13 @@ scale_ratio = 49,900 / 0.00999 ≈ 5 × 10⁶   ──▶ CMA-ES recommended
 ### Global Optimization Comparison
 
 | Method | Best For | Convergence | Memory |
-|--------|----------|-------------|--------|
-| **CMA-ES** | Multi-scale problems (ratio > 1000), complex landscapes | Global (covariance adaptation) | Bounded |
-| **Multi-start** | Multiple local minima, degeneracy detection | Local from N starting points | N × single fit |
-| **Local (TRF)** | Well-behaved problems, good initial guess | Local (quadratic) | Jacobian-based |
+|--------|----------|-------------|--------| | **CMA-ES** | Multi-scale problems (ratio
+\> 1000), complex landscapes | Global (covariance adaptation) | Bounded | |
+**Multi-start** | Multiple local minima, degeneracy detection | Local from N starting
+points | N × single fit | | **Local (TRF)** | Well-behaved problems, good initial guess
+| Local (quadratic) | Jacobian-based |
 
----
+______________________________________________________________________
 
 ## 3. CMA-ES Global Optimization
 
@@ -250,6 +250,7 @@ scale_ratio = 49,900 / 0.00999 ≈ 5 × 10⁶   ──▶ CMA-ES recommended
 ### When to Use CMA-ES
 
 CMA-ES (Covariance Matrix Adaptation Evolution Strategy) excels when:
+
 - **Multi-scale parameters**: D₀ ~ 10⁴ vs γ̇₀ ~ 10⁻³ (scale ratio > 10⁶)
 - **Complex loss landscapes**: Multiple local minima, saddle points
 - **Poor initial guess**: CMA-ES explores globally, not just locally
@@ -313,13 +314,11 @@ CMA-ES (Covariance Matrix Adaptation Evolution Strategy) excels when:
 ### CMA-ES vs NLSQ Internal Refinement
 
 | Aspect | NLSQ Internal | Homodyne Explicit |
-|--------|---------------|-------------------|
-| `workflow` | `"auto"` | `"auto"` (configurable) |
-| `ftol` | ~1.49e-8 (default) | **1e-10** (tighter) |
-| `xtol` | ~1.49e-8 (default) | **1e-10** (tighter) |
-| `gtol` | ~1.49e-8 (default) | **1e-10** (tighter) |
-| `max_nfev` | Unbounded | **500** (bounded) |
-| Configurability | None | Full YAML config |
+|--------|---------------|-------------------| | `workflow` | `"auto"` | `"auto"`
+(configurable) | | `ftol` | ~1.49e-8 (default) | **1e-10** (tighter) | | `xtol` |
+~1.49e-8 (default) | **1e-10** (tighter) | | `gtol` | ~1.49e-8 (default) | **1e-10**
+(tighter) | | `max_nfev` | Unbounded | **500** (bounded) | | Configurability | None |
+Full YAML config |
 
 ### Configuration
 
@@ -371,7 +370,7 @@ if wrapper.should_use_cmaes(bounds, scale_threshold=1000):
     print(f"Improvement: {result.diagnostics.get('chi_squared_improvement', 0):.2%}")
 ```
 
----
+______________________________________________________________________
 
 ## 4. Adapter Selection
 
@@ -421,16 +420,13 @@ if wrapper.should_use_cmaes(bounds, scale_threshold=1000):
 
 ### Adapter Comparison
 
-| Feature | NLSQAdapter | NLSQWrapper |
-|---------|-------------|-------------|
-| Model caching | Yes (3-5× speedup) | No |
-| JIT compilation | Yes (2-3× speedup) | No |
-| Anti-degeneracy | No | Yes (5 layers) |
-| Error recovery | Basic | 3-attempt with perturbation |
-| Streaming mode | No | Yes |
-| Best for | Standard fits, multistart | Complex laminar_flow, large datasets |
+| Feature | NLSQAdapter | NLSQWrapper | |---------|-------------|-------------| | Model
+caching | Yes (3-5× speedup) | No | | JIT compilation | Yes (2-3× speedup) | No | |
+Anti-degeneracy | No | Yes (5 layers) | | Error recovery | Basic | 3-attempt with
+perturbation | | Streaming mode | No | Yes | | Best for | Standard fits, multistart |
+Complex laminar_flow, large datasets |
 
----
+______________________________________________________________________
 
 ## 5. Memory & Strategy Selection
 
@@ -496,7 +492,7 @@ NLSQStrategy Enum → Executor Mapping:
 └─ HYBRID_STREAMING → StreamingExecutor     → AdaptiveHybridStreamingOptimizer
 ```
 
----
+______________________________________________________________________
 
 ## 6. Stratification Decision
 
@@ -533,6 +529,7 @@ NLSQStrategy Enum → Executor Mapping:
 **Problem Solved:**
 
 NLSQ's default chunking splits data ARBITRARILY without angle awareness:
+
 - Some chunks may have NO points for angle[i]
 - Gradient w.r.t. contrast[i] = ZERO
 - Optimization fails silently (no convergence)
@@ -553,23 +550,22 @@ Example (3 angles, 1.2M points, target 100k chunks):
 ```
 
 **Key Functions:**
+
 - `create_angle_stratified_data()` - Full copy approach
 - `create_angle_stratified_indices()` - Zero-copy approach (~1% memory overhead)
 
----
+______________________________________________________________________
 
 ## 7. Residual Function Setup
 
 ### Comparison
 
 | Feature | StratifiedResidualFunction | StratifiedResidualFunctionJIT |
-|---------|---------------------------|------------------------------|
-| File | `strategies/residual.py` | `strategies/residual_jit.py` |
-| Callable | Python | JIT-compiled |
-| Shapes | Dynamic | Static (padded) |
-| Parallelization | Vectorized indexing | vmap over chunks |
-| Memory | Lower | Slightly higher (padding) |
-| Speed | 15-20% speedup | 2-3× after JIT compile |
+|---------|---------------------------|------------------------------| | File |
+`strategies/residual.py` | `strategies/residual_jit.py` | | Callable | Python |
+JIT-compiled | | Shapes | Dynamic | Static (padded) | | Parallelization | Vectorized
+indexing | vmap over chunks | | Memory | Lower | Slightly higher (padding) | | Speed |
+15-20% speedup | 2-3× after JIT compile |
 
 ### Residual Computation Flow
 
@@ -588,20 +584,23 @@ Per-angle parameter handling:
 ### Optimizations
 
 **StratifiedResidualFunction:**
+
 - Pre-compute global unique (phi, t1, t2) at init
 - Pre-compute flat indices (avoid searchsorted in loop)
 - Vectorized indexing (15-20% per-iter speedup)
 
 **StratifiedResidualFunctionJIT:**
+
 - Padded arrays to max_chunk_size (static shapes for JIT)
 - vmap parallelization over chunks
 - Boolean mask for real vs padded data
 
----
+______________________________________________________________________
 
 ## 8. Anti-Degeneracy Defense System
 
 **Activation Conditions (ALL must be true):**
+
 - `analysis_mode = laminar_flow`
 - `n_phi > 3` (many angles where absorption is problematic)
 - `per_angle_scaling = True`
@@ -717,7 +716,7 @@ Effect: Emphasizes shear-sensitive angles (where cos is large)
 Config: enable=true, min_weight=0.3, alpha=1.0, normalize=true
 ```
 
----
+______________________________________________________________________
 
 ## 9. Strategy Execution
 
@@ -845,7 +844,7 @@ Config: enable=true, min_weight=0.3, alpha=1.0, normalize=true
 ╚═══════════════════════════════════════════════════════════════════════════╝
 ```
 
----
+______________________________________________________________________
 
 ## 10. Error Recovery
 
@@ -879,7 +878,7 @@ Config: enable=true, min_weight=0.3, alpha=1.0, normalize=true
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+______________________________________________________________________
 
 ## 11. Result Building
 
@@ -923,75 +922,70 @@ class OptimizationResult:
 └─ "poor":     reduced_χ² ≥ 5.0 OR failed
 ```
 
----
+______________________________________________________________________
 
 ## Quick Reference Tables
 
 ### Strategy Selection
 
 | Dataset Size | Peak Memory | Strategy | Executor | NLSQ Function | Memory Pattern |
-|--------------|-------------|----------|----------|---------------|----------------|
-| < 1M pts | < threshold | **STANDARD** | StandardExecutor | `curve_fit()` | Full J in RAM |
-| 1M - 100M | < threshold | **OUT_OF_CORE** | LargeDatasetExecutor | `curve_fit_large()` | Chunked J^T J |
-| Any | > threshold | **HYBRID_STREAMING** | StreamingExecutor | `AdaptiveHybridStreaming` | Bounded ~2 GB |
+|--------------|-------------|----------|----------|---------------|----------------| |
+< 1M pts | < threshold | **STANDARD** | StandardExecutor | `curve_fit()` | Full J in RAM
+| | 1M - 100M | < threshold | **OUT_OF_CORE** | LargeDatasetExecutor |
+`curve_fit_large()` | Chunked J^T J | | Any | > threshold | **HYBRID_STREAMING** |
+StreamingExecutor | `AdaptiveHybridStreaming` | Bounded ~2 GB |
 
 ### Mode-Specific Parameters
 
 | Mode | Physical Params | With 23-angle scaling | Anti-degeneracy |
-|------|----------------|----------------------|-----------------|
-| static_isotropic | 3: D₀, α, D_offset | 3 + 46 = 49 total | No |
-| laminar_flow | 7: + γ̇₀, β, γ̇_offset, φ₀ | 7 + 46 = 53 total | **Yes (5 layers)** |
+|------|----------------|----------------------|-----------------| | static_isotropic |
+3: D₀, α, D_offset | 3 + 46 = 49 total | No | | laminar_flow | 7: + γ̇₀, β, γ̇_offset,
+φ₀ | 7 + 46 = 53 total | **Yes (5 layers)** |
 
 ### Jacobian Overhead Factor Evolution
 
-| Version | Factor | Justification |
-|---------|--------|---------------|
-| v2.7.0 | 3.0× | Initial estimate |
-| v2.11.0 | 4.0× | Added JAX overhead |
-| v2.13.0 | 5.0× | Padding + stratification |
-| v2.14.0 | **6.5×** | Empirical validation on 23M dataset |
+| Version | Factor | Justification | |---------|--------|---------------| | v2.7.0 |
+3.0× | Initial estimate | | v2.11.0 | 4.0× | Added JAX overhead | | v2.13.0 | 5.0× |
+Padding + stratification | | v2.14.0 | **6.5×** | Empirical validation on 23M dataset |
 
----
+______________________________________________________________________
 
 ## Key Files Reference
 
-| File | Purpose |
-|------|---------|
-| `core.py` | Entry points: `fit_nlsq_jax()`, `fit_nlsq_multistart()` |
-| `cmaes_wrapper.py` | CMA-ES global optimization: `CMAESWrapper`, `fit_with_cmaes()` |
-| `config.py` | `NLSQConfig` with CMA-ES and refinement settings |
-| `memory.py` | `select_nlsq_strategy()`, memory estimation (6.5× factor) |
-| `adapter.py` | NLSQAdapter with model caching |
-| `wrapper.py` | NLSQWrapper with full feature set + 3-attempt recovery |
-| `strategies/chunking.py` | `create_angle_stratified_data()`, `should_use_stratification()` |
-| `strategies/residual.py` | `StratifiedResidualFunction` (Python-callable) |
-| `strategies/residual_jit.py` | `StratifiedResidualFunctionJIT` (JIT-compiled) |
-| `strategies/executors.py` | StandardExecutor, LargeDatasetExecutor, StreamingExecutor |
-| `anti_degeneracy_controller.py` | 5-layer defense orchestration |
-| `fourier_reparam.py` | Layer 1: Fourier parameter compression |
-| `hierarchical.py` | Layer 2: Alternating physical/per-angle stages |
-| `adaptive_regularization.py` | Layer 3: CV-based regularization |
-| `gradient_monitor.py` | Layer 4: Runtime collapse detection |
-| `shear_weighting.py` | Layer 5: Angle-dependent loss weighting |
-| `multistart.py` | Multi-start optimization with LHS |
-| `result_builder.py` | Result construction and quality assessment |
+| File | Purpose | |------|---------| | `core.py` | Entry points: `fit_nlsq_jax()`,
+`fit_nlsq_multistart()` | | `cmaes_wrapper.py` | CMA-ES global optimization:
+`CMAESWrapper`, `fit_with_cmaes()` | | `config.py` | `NLSQConfig` with CMA-ES and
+refinement settings | | `memory.py` | `select_nlsq_strategy()`, memory estimation (6.5×
+factor) | | `adapter.py` | NLSQAdapter with model caching | | `wrapper.py` | NLSQWrapper
+with full feature set + 3-attempt recovery | | `strategies/chunking.py` |
+`create_angle_stratified_data()`, `should_use_stratification()` | |
+`strategies/residual.py` | `StratifiedResidualFunction` (Python-callable) | |
+`strategies/residual_jit.py` | `StratifiedResidualFunctionJIT` (JIT-compiled) | |
+`strategies/executors.py` | StandardExecutor, LargeDatasetExecutor, StreamingExecutor |
+| `anti_degeneracy_controller.py` | 5-layer defense orchestration | |
+`fourier_reparam.py` | Layer 1: Fourier parameter compression | | `hierarchical.py` |
+Layer 2: Alternating physical/per-angle stages | | `adaptive_regularization.py` | Layer
+3: CV-based regularization | | `gradient_monitor.py` | Layer 4: Runtime collapse
+detection | | `shear_weighting.py` | Layer 5: Angle-dependent loss weighting | |
+`multistart.py` | Multi-start optimization with LHS | | `result_builder.py` | Result
+construction and quality assessment |
 
----
+______________________________________________________________________
 
 ## NLSQ as CMC Warm-Start Provider (v2.20.0)
 
 ### The Problem: Cold-Start CMC Divergence
 
-When CMC (Consensus Monte Carlo) starts from configuration initial values without NLSQ warm-start:
+When CMC (Consensus Monte Carlo) starts from configuration initial values without NLSQ
+warm-start:
 
 | Metric | Cold-Start CMC | NLSQ Warm-Start CMC |
-|--------|----------------|---------------------|
-| Divergence Rate | ~28% | <5% |
-| D0 Accuracy | -37% from NLSQ | Within 10% |
-| D_offset Accuracy | -92% from NLSQ | Within 20% |
-| Uncertainty Quality | Artificially small | Proper magnitude |
+|--------|----------------|---------------------| | Divergence Rate | ~28% | \<5% | | D0
+Accuracy | -37% from NLSQ | Within 10% | | D_offset Accuracy | -92% from NLSQ | Within
+20% | | Uncertainty Quality | Artificially small | Proper magnitude |
 
-Root cause: NUTS adaptation wastes warmup iterations searching a 6+ order-of-magnitude parameter space when initial values are far from the posterior mode.
+Root cause: NUTS adaptation wastes warmup iterations searching a 6+ order-of-magnitude
+parameter space when initial values are far from the posterior mode.
 
 ### Automatic Warm-Start via CLI (v2.20.0)
 
@@ -1046,18 +1040,17 @@ cmc_result = fit_mcmc_jax(
 
 ### Benefits of NLSQ Warm-Start
 
-1. **Reduced Divergences**: ~28% → <5% divergence rate
-2. **Accurate Parameter Estimates**: CMC results within 10-20% of NLSQ
-3. **Proper Uncertainties**: No artificial precision from biased combination
-4. **Faster Convergence**: NUTS adapts from near-mode instead of searching
-5. **Consistent Parameterization**: NLSQ's per_angle_mode propagates to CMC
+1. **Reduced Divergences**: ~28% → \<5% divergence rate
+1. **Accurate Parameter Estimates**: CMC results within 10-20% of NLSQ
+1. **Proper Uncertainties**: No artificial precision from biased combination
+1. **Faster Convergence**: NUTS adapts from near-mode instead of searching
+1. **Consistent Parameterization**: NLSQ's per_angle_mode propagates to CMC
 
 ### NLSQ and Bimodal CMC Posteriors (v2.22.0)
 
 When per-shard CMC posteriors are bimodal (e.g., D₀ ~19K and ~32K), NLSQ typically
-converges to one mode. Standard consensus MC averages both modes into a density
-trough, producing a z-score > 100 disagreement with NLSQ. Mode-aware consensus
-(v2.22.0) decomposes bimodal shards into per-component GMM statistics and runs
-consensus separately per mode cluster, preserving both physical solutions. The NLSQ
-result then matches one of the two consensus modes rather than disagreeing with
-a corrupted average.
+converges to one mode. Standard consensus MC averages both modes into a density trough,
+producing a z-score > 100 disagreement with NLSQ. Mode-aware consensus (v2.22.0)
+decomposes bimodal shards into per-component GMM statistics and runs consensus
+separately per mode cluster, preserving both physical solutions. The NLSQ result then
+matches one of the two consensus modes rather than disagreeing with a corrupted average.
