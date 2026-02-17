@@ -15,9 +15,9 @@ import pytest
 # Skip if arviz is not installed (CMC requires it)
 az = pytest.importorskip("arviz")
 
-from homodyne.config.parameter_space import ParameterSpace
-from homodyne.optimization.cmc.core import CMCConfig, fit_mcmc_jax
-from homodyne.optimization.cmc.data_prep import (
+from homodyne.config.parameter_space import ParameterSpace  # noqa: E402
+from homodyne.optimization.cmc.core import CMCConfig, fit_mcmc_jax  # noqa: E402
+from homodyne.optimization.cmc.data_prep import (  # noqa: E402
     PreparedData,
     estimate_noise_scale,
     extract_phi_info,
@@ -29,7 +29,7 @@ logger = logging.getLogger("test_cmc_potential_energy")
 
 def generate_synthetic_data(n_points=1000, n_phi=2):
     """Generate minimal synthetic data for testing.
-    
+
     Scaled down from original 20k points for faster regression testing.
     """
     rng = np.random.default_rng(42)
@@ -119,9 +119,9 @@ def test_cmc_potential_energy_availability():
         # Verify inference_data structure
         assert hasattr(result, "inference_data"), "Result missing inference_data"
         assert hasattr(result.inference_data, "sample_stats"), "inference_data missing sample_stats"
-        
+
         sample_stats = result.inference_data.sample_stats
-        
+
         # KEY CHECK: potential_energy must be present
         assert "potential_energy" in sample_stats, (
             f"'potential_energy' missing. Available vars: {list(sample_stats.data_vars)}"

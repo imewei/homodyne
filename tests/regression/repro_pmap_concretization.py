@@ -20,10 +20,10 @@ import numpy as np
 # Ensure 4 devices
 print(f"JAX devices: {jax.device_count()}")
 
-from homodyne.optimization.cmc.model import get_xpcs_model
-from homodyne.optimization.cmc.sampler import run_nuts_sampling
-from homodyne.optimization.cmc.config import CMCConfig
-from homodyne.config.parameter_space import ParameterSpace
+from homodyne.config.parameter_space import ParameterSpace  # noqa: E402
+from homodyne.optimization.cmc.config import CMCConfig  # noqa: E402
+from homodyne.optimization.cmc.model import get_xpcs_model  # noqa: E402
+from homodyne.optimization.cmc.sampler import run_nuts_sampling  # noqa: E402
 
 
 def main():
