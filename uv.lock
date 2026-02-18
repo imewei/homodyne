@@ -807,6 +807,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "scikit-learn" },
     { name = "scipy" },
+    { name = "tqdm" },
     { name = "xarray" },
 ]
 
@@ -823,7 +824,7 @@ all = [
     { name = "sphinx" },
     { name = "sphinx-autodoc-typehints" },
     { name = "sphinx-copybutton" },
-    { name = "tqdm" },
+    { name = "types-pyyaml" },
 ]
 dev = [
     { name = "mypy" },
@@ -832,7 +833,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
     { name = "ruff" },
-    { name = "tqdm" },
+    { name = "types-pyyaml" },
 ]
 docs = [
     { name = "furo" },
@@ -840,11 +841,6 @@ docs = [
     { name = "sphinx" },
     { name = "sphinx-autodoc-typehints" },
     { name = "sphinx-copybutton" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "types-pyyaml" },
 ]
 
 [package.metadata]
@@ -879,13 +875,11 @@ requires-dist = [
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=8.2.3" },
     { name = "sphinx-autodoc-typehints", marker = "extra == 'docs'", specifier = ">=3.5.2" },
     { name = "sphinx-copybutton", marker = "extra == 'docs'", specifier = ">=0.5.2" },
-    { name = "tqdm", marker = "extra == 'dev'", specifier = ">=4.67.1" },
+    { name = "tqdm", specifier = ">=4.67.1" },
+    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12.20250915" },
     { name = "xarray", specifier = ">=2025.12" },
 ]
 provides-extras = ["dev", "docs", "all"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "types-pyyaml", specifier = ">=6.0.12.20250915" }]
 
 [[package]]
 name = "httpcore"
