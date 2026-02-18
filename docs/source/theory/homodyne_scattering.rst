@@ -186,7 +186,8 @@ For reference, the analytical result is:
 where :math:`\beta_\gamma` is the shear exponent parameter (named ``beta`` in config,
 not to be confused with optical contrast).
 
-**Full parameter set for** ``laminar_flow`` **mode**:
+**Full parameter set for** ``laminar_flow`` **mode**
+(see :ref:`parameter_guide` for physical interpretation and default bounds):
 
 .. list-table::
    :header-rows: 1

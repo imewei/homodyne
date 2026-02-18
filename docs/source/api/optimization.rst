@@ -135,14 +135,3 @@ Package Structure
        ├── priors.py            # Prior distribution builders
        └── backends/
            └── multiprocessing.py  # Multi-process execution
-
-----
-
-.. toctree::
-   :hidden:
-
-   nlsq_adapter
-   nlsq_wrapper
-   cmc
-   cmc_sampler
-   cmc_backends

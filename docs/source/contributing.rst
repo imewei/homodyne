@@ -9,11 +9,6 @@ This page provides a brief overview.  For the full contribution guide,
 development environment setup, code style standards, testing requirements,
 and pull request guidelines, see the :doc:`developer/index` section.
 
-.. toctree::
-   :hidden:
-
-   developer/index
-
 ----
 
 Quick Links

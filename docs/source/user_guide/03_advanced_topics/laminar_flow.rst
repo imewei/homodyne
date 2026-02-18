@@ -96,6 +96,8 @@ Minimum required configuration:
        initial: 0.0
        bounds: [-180.0, 180.0]
 
+See :doc:`../04_practical_guides/configuration` for the complete YAML schema.
+
 **Generate a laminar flow template:**
 
 .. code-block:: bash

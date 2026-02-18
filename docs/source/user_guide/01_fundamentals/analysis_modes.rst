@@ -64,7 +64,7 @@ growth of mean-squared displacement — and the integral
 interval :math:`[t_1, t_2]`. Homodyne evaluates this integral **numerically**
 using cumulative trapezoidal integration (see :ref:`theory_transport_coefficient`).
 
-**Free parameters (3):**
+**Free parameters (3):** :math:`D_0`, :math:`\alpha`, :math:`D_\text{offset}`
 
 .. list-table::
    :header-rows: 1
@@ -86,6 +86,9 @@ using cumulative trapezoidal integration (see :ref:`theory_transport_coefficient
      - :math:`D_\text{offset}`
      - Å²/s
      - Baseline (constant) diffusion rate
+
+See :doc:`parameter_guide` for physical interpretation, typical ranges, and
+default bounds.
 
 **Example YAML configuration for static mode:**
 
@@ -191,6 +194,9 @@ convention). See :ref:`theory_homodyne_scattering` for the full derivation.
      - :math:`\phi_0`
      - degrees
      - Angular offset (flow direction)
+
+See :doc:`parameter_guide` for physical interpretation, typical ranges, and
+default bounds.
 
 **Example YAML configuration for laminar flow mode:**
 
