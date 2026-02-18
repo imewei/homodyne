@@ -80,7 +80,7 @@ repos:
     rev: 1.9.1
     hooks:
       - id: nbqa-ruff
-        args: [--ignore=E402]
+        args: [--ignore=E402, --ignore=B905]
         additional_dependencies: [ruff>=0.14.11]
 
 default_language_version:
