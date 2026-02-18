@@ -28,8 +28,12 @@ Overview of Sections
    heterodyne_scattering
    classical_processes
    yielding_dynamics
+   theoretical_framework
+   analysis_modes
    anti_degeneracy
+   anti_degeneracy_defense
    computational_methods
+   computational_methods_guide
    citations
 
 Quick Physics Reference
