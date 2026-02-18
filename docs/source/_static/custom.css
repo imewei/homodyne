@@ -1,0 +1,214 @@
+/*
+ * custom.css  --  Homodyne documentation style overrides
+ *
+ * Layered on top of the Furo theme. All variables use Furo's CSS custom
+ * property names so they compose correctly with light/dark mode switching.
+ */
+
+/* =========================================================================
+   1. Typography
+   ========================================================================= */
+
+/* Pull in Inter (UI) and JetBrains Mono (code) from Google Fonts */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+
+/* Apply custom font stacks globally (Furo variables are set in conf.py) */
+body {
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+code,
+kbd,
+samp,
+pre {
+    font-variant-ligatures: none; /* disable ligatures in code for clarity */
+}
+
+/* Slightly tighter line-height for headings */
+h1,
+h2,
+h3,
+h4 {
+    line-height: 1.25;
+    font-weight: 600;
+}
+
+/* =========================================================================
+   2. Table styling — striped rows
+   ========================================================================= */
+
+/* Base table reset */
+table.docutils {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    margin: 1.25rem 0;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* Header row */
+table.docutils thead tr {
+    background: var(--color-brand-primary);
+    color: #ffffff;
+    text-align: left;
+}
+
+table.docutils thead th {
+    padding: 0.6rem 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+/* Body cells */
+table.docutils tbody td {
+    padding: 0.5rem 0.9rem;
+    vertical-align: top;
+    border-bottom: 1px solid var(--color-background-border);
+}
+
+/* Zebra striping — even rows */
+table.docutils tbody tr:nth-child(even) {
+    background-color: var(--color-background-secondary);
+}
+
+/* Hover highlight */
+table.docutils tbody tr:hover {
+    background-color: var(--color-highlight-on-target);
+}
+
+/* Remove bottom border on last row */
+table.docutils tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* =========================================================================
+   3. Code blocks — visual polish
+   ========================================================================= */
+
+div[class*="highlight"] {
+    border-radius: 6px;
+    overflow: hidden;
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+/* Ensure copy button is visually distinct */
+button.copybtn {
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+}
+
+button.copybtn:hover {
+    opacity: 1;
+}
+
+/* Inline code */
+code.literal {
+    font-size: 0.875em;
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+    background-color: var(--color-background-secondary);
+    color: var(--color-brand-content);
+}
+
+/* =========================================================================
+   4. Admonition refinements
+   ========================================================================= */
+
+/* Add left border accent to all admonitions */
+.admonition {
+    border-left-width: 4px;
+    border-left-style: solid;
+    border-radius: 4px;
+}
+
+/* Warning: amber accent */
+.admonition.warning {
+    border-left-color: #F57F17;
+}
+
+/* Caution / danger: red accent */
+.admonition.caution,
+.admonition.danger {
+    border-left-color: #B71C1C;
+}
+
+/* Note: brand-blue accent */
+.admonition.note {
+    border-left-color: var(--color-admonition-title-note, #1565C0);
+}
+
+/* Tip: teal accent */
+.admonition.tip,
+.admonition.hint {
+    border-left-color: var(--color-admonition-title-tip, #00897B);
+}
+
+/* =========================================================================
+   5. Navigation sidebar tweaks
+   ========================================================================= */
+
+/* Tighten caption spacing in toctree */
+.toctree-wrapper p.caption {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-foreground-muted);
+    margin-bottom: 0.25rem;
+}
+
+/* Active page link */
+nav.contents a.current {
+    font-weight: 600;
+    color: var(--color-brand-primary);
+}
+
+/* =========================================================================
+   6. Landing page badge row
+   ========================================================================= */
+
+.badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0.75rem 0 1.5rem;
+}
+
+.badge-row img {
+    height: 20px;
+    vertical-align: middle;
+}
+
+/* =========================================================================
+   7. API reference — parameter tables
+   ========================================================================= */
+
+/* Compact the parameter/returns tables generated by Napoleon */
+.field-list dt {
+    font-weight: 600;
+    color: var(--color-brand-content);
+}
+
+.field-list dd {
+    margin-left: 1.5rem;
+}
+
+/* =========================================================================
+   8. Mobile responsive tweaks
+   ========================================================================= */
+
+@media (max-width: 768px) {
+    table.docutils {
+        font-size: 0.8rem;
+    }
+
+    table.docutils thead th,
+    table.docutils tbody td {
+        padding: 0.4rem 0.6rem;
+    }
+}
