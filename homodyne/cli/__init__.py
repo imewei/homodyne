@@ -6,7 +6,7 @@ Provides essential commands for optimization with minimal complexity.
 
 Usage:
     homodyne --method nlsq --config config.yaml
-    homodyne --method mcmc --data-file data.h5
+    homodyne --method cmc --config config.yaml --nlsq-result results/
 """
 
 from homodyne.cli.args_parser import create_parser, validate_args
