@@ -76,6 +76,7 @@ dependencies = [
     # System utilities
     "psutil>=7.2",
     "cloudpickle>=3.1",
+    "tqdm>=4.67.1",
     # Plotting
     "matplotlib>=3.10",
     # Fast visualization (includes numba as transitive dependency)
@@ -93,7 +94,7 @@ dev = [
     "ruff>=0.14.11",
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
-    "tqdm>=4.67.1",
+    "types-pyyaml>=6.0.12.20250915",
 ]
 
 docs = [
@@ -393,11 +394,6 @@ output_format = "yaml"
 cpu_threads = "auto"
 enable_jit = true
 cache_compilation = true
-
-[dependency-groups]
-dev = [
-    "types-pyyaml>=6.0.12.20250915",
-]
 
 # [tool.uv.sources]
 # Uncomment to use local NLSQ for development:
