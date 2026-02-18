@@ -9,31 +9,31 @@ from pathlib import Path
 
 
 def test_developer_guide_index_exists():
-    """Test that developer-guide/index.rst exists."""
+    """Test that developer/index.rst exists."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    dev_guide_index = docs_path / "developer-guide" / "index.rst"
+    dev_guide_index = docs_path / "source" / "developer" / "index.rst"
 
     assert dev_guide_index.exists(), (
-        f"developer-guide/index.rst not found at {dev_guide_index}"
+        f"developer/index.rst not found at {dev_guide_index}"
     )
 
     # Verify file is not empty
     content = dev_guide_index.read_text()
-    assert len(content) > 0, "developer-guide/index.rst is empty"
-    assert "toctree" in content, "developer-guide/index.rst missing toctree directive"
+    assert len(content) > 0, "developer/index.rst is empty"
+    assert "toctree" in content, "developer/index.rst missing toctree directive"
 
 
 def test_developer_guide_contributing_exists():
-    """Test that developer-guide/contributing.rst exists."""
+    """Test that developer/contributing_guide.rst exists."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    contributing = docs_path / "developer-guide" / "contributing.rst"
+    contributing = docs_path / "source" / "developer" / "contributing_guide.rst"
 
     assert contributing.exists(), (
-        f"developer-guide/contributing.rst not found at {contributing}"
+        f"developer/contributing_guide.rst not found at {contributing}"
     )
 
     content = contributing.read_text()
-    assert len(content) > 0, "developer-guide/contributing.rst is empty"
+    assert len(content) > 0, "developer/contributing_guide.rst is empty"
 
     # Verify key sections exist
     required_sections = [
@@ -45,21 +45,21 @@ def test_developer_guide_contributing_exists():
     ]
     for section in required_sections:
         assert section in content, (
-            f"Required section '{section}' not found in contributing.rst"
+            f"Required section '{section}' not found in contributing_guide.rst"
         )
 
 
 def test_developer_guide_testing_exists():
-    """Test that developer-guide/testing.rst exists."""
+    """Test that developer/testing_guide.rst exists."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    testing_guide = docs_path / "developer-guide" / "testing.rst"
+    testing_guide = docs_path / "source" / "developer" / "testing_guide.rst"
 
     assert testing_guide.exists(), (
-        f"developer-guide/testing.rst not found at {testing_guide}"
+        f"developer/testing_guide.rst not found at {testing_guide}"
     )
 
     content = testing_guide.read_text()
-    assert len(content) > 0, "developer-guide/testing.rst is empty"
+    assert len(content) > 0, "developer/testing_guide.rst is empty"
 
     # Verify key sections exist
     required_sections = [
@@ -71,14 +71,14 @@ def test_developer_guide_testing_exists():
     ]
     for section in required_sections:
         assert section in content, (
-            f"Required section '{section}' not found in testing.rst"
+            f"Required section '{section}' not found in testing_guide.rst"
         )
 
 
 def test_configuration_index_exists():
     """Test that configuration/index.rst exists."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    config_index = docs_path / "configuration" / "index.rst"
+    config_index = docs_path / "source" / "configuration" / "index.rst"
 
     assert config_index.exists(), f"configuration/index.rst not found at {config_index}"
 
@@ -90,7 +90,7 @@ def test_configuration_index_exists():
 def test_configuration_templates_exists():
     """Test that configuration/templates.rst exists."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    templates = docs_path / "configuration" / "templates.rst"
+    templates = docs_path / "source" / "configuration" / "templates.rst"
 
     assert templates.exists(), f"configuration/templates.rst not found at {templates}"
 
@@ -108,7 +108,7 @@ def test_configuration_templates_exists():
 def test_configuration_options_exists():
     """Test that configuration/options.rst exists."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    options = docs_path / "configuration" / "options.rst"
+    options = docs_path / "source" / "configuration" / "options.rst"
 
     assert options.exists(), f"configuration/options.rst not found at {options}"
 
@@ -131,13 +131,13 @@ def test_configuration_options_exists():
 def test_developer_guide_references_claude_md():
     """Test that developer guide references CLAUDE.md for commands."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    contributing = docs_path / "developer-guide" / "contributing.rst"
-    testing_guide = docs_path / "developer-guide" / "testing.rst"
+    contributing = docs_path / "source" / "developer" / "contributing_guide.rst"
+    testing_guide = docs_path / "source" / "developer" / "testing_guide.rst"
 
     contributing_content = contributing.read_text()
     testing_content = testing_guide.read_text()
 
-    # Check for command references (make test, black, ruff, mypy, etc.)
+    # Check for command references (make test, black, ruff, mypy, pytest, uv)
     expected_refs = ["make test", "black", "ruff", "mypy", "pytest", "uv"]
 
     combined_content = contributing_content + testing_content
@@ -150,7 +150,7 @@ def test_developer_guide_references_claude_md():
 def test_configuration_templates_reference_yaml():
     """Test that configuration templates reference the YAML templates."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    templates = docs_path / "configuration" / "templates.rst"
+    templates = docs_path / "source" / "configuration" / "templates.rst"
 
     content = templates.read_text()
 
@@ -163,9 +163,7 @@ def test_configuration_templates_reference_yaml():
 def test_internal_links_in_developer_guide():
     """Test that internal links in developer guide are properly formatted."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    dev_guide_index = docs_path / "developer-guide" / "index.rst"
-    docs_path / "developer-guide" / "contributing.rst"
-    docs_path / "developer-guide" / "testing.rst"
+    dev_guide_index = docs_path / "source" / "developer" / "index.rst"
 
     # Check that index.rst has proper toctree
     index_content = dev_guide_index.read_text()
@@ -180,9 +178,7 @@ def test_internal_links_in_developer_guide():
 def test_internal_links_in_configuration():
     """Test that internal links in configuration guide are properly formatted."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    config_index = docs_path / "configuration" / "index.rst"
-    docs_path / "configuration" / "templates.rst"
-    docs_path / "configuration" / "options.rst"
+    config_index = docs_path / "source" / "configuration" / "index.rst"
 
     # Check that index.rst has proper toctree
     index_content = config_index.read_text()
@@ -199,12 +195,12 @@ def test_sphinx_rst_formatting():
     docs_path = Path(__file__).parent.parent.parent / "docs"
 
     rst_files = [
-        docs_path / "developer-guide" / "index.rst",
-        docs_path / "developer-guide" / "contributing.rst",
-        docs_path / "developer-guide" / "testing.rst",
-        docs_path / "configuration" / "index.rst",
-        docs_path / "configuration" / "templates.rst",
-        docs_path / "configuration" / "options.rst",
+        docs_path / "source" / "developer" / "index.rst",
+        docs_path / "source" / "developer" / "contributing_guide.rst",
+        docs_path / "source" / "developer" / "testing_guide.rst",
+        docs_path / "source" / "configuration" / "index.rst",
+        docs_path / "source" / "configuration" / "templates.rst",
+        docs_path / "source" / "configuration" / "options.rst",
     ]
 
     for rst_file in rst_files:

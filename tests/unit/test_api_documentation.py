@@ -102,11 +102,11 @@ def test_docstring_parsing_with_napoleon():
 def test_api_reference_rst_files_exist():
     """Test that API reference RST files will be created."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    api_ref_path = docs_path / "api-reference"
+    api_ref_path = docs_path / "source" / "api"
 
-    # Check that api-reference directory exists
-    assert api_ref_path.exists(), f"api-reference directory not found at {api_ref_path}"
-    assert api_ref_path.is_dir(), "api-reference should be a directory"
+    # Check that api directory exists under docs/source/
+    assert api_ref_path.exists(), f"api directory not found at {api_ref_path}"
+    assert api_ref_path.is_dir(), "api should be a directory"
 
 
 @pytest.mark.slow

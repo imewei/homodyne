@@ -11,12 +11,12 @@ from pathlib import Path
 def test_conf_py_loads_without_errors():
     """Test that conf.py can be loaded without import errors."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    conf_path = docs_path / "conf.py"
+    conf_path = docs_path / "source" / "conf.py"
 
     assert conf_path.exists(), f"conf.py not found at {conf_path}"
 
     # Add docs directory to path temporarily
-    sys.path.insert(0, str(docs_path))
+    sys.path.insert(0, str(docs_path / "source"))
 
     try:
         # Import conf.py as module
@@ -41,10 +41,10 @@ def test_conf_py_loads_without_errors():
 def test_required_extensions_enabled():
     """Test that all required Sphinx extensions are enabled."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    conf_path = docs_path / "conf.py"
+    conf_path = docs_path / "source" / "conf.py"
 
     # Add docs directory to path temporarily
-    sys.path.insert(0, str(docs_path))
+    sys.path.insert(0, str(docs_path / "source"))
 
     try:
         import importlib.util
@@ -75,9 +75,9 @@ def test_required_extensions_enabled():
 def test_intersphinx_mappings_resolve():
     """Test that intersphinx mappings are properly configured."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    conf_path = docs_path / "conf.py"
+    conf_path = docs_path / "source" / "conf.py"
 
-    sys.path.insert(0, str(docs_path))
+    sys.path.insert(0, str(docs_path / "source"))
 
     try:
         import importlib.util
@@ -109,9 +109,9 @@ def test_intersphinx_mappings_resolve():
 def test_mathjax3_configuration():
     """Test that MathJax 3 is properly configured."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    conf_path = docs_path / "conf.py"
+    conf_path = docs_path / "source" / "conf.py"
 
-    sys.path.insert(0, str(docs_path))
+    sys.path.insert(0, str(docs_path / "source"))
 
     try:
         import importlib.util
@@ -146,12 +146,12 @@ def test_mathjax3_configuration():
 def test_autodoc_mock_imports_allowed():
     """Test that autodoc_mock_imports only contains expected optional dependencies."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    conf_path = docs_path / "conf.py"
+    conf_path = docs_path / "source" / "conf.py"
 
     # Optional dependencies that are allowed to be mocked
     allowed_mocks = {"arviz"}
 
-    sys.path.insert(0, str(docs_path))
+    sys.path.insert(0, str(docs_path / "source"))
 
     try:
         import importlib.util
@@ -180,9 +180,9 @@ def test_sphinx_rtd_theme_configuration():
     Note: Project uses furo theme (not sphinx_rtd_theme) as of v2.14.0.
     """
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    conf_path = docs_path / "conf.py"
+    conf_path = docs_path / "source" / "conf.py"
 
-    sys.path.insert(0, str(docs_path))
+    sys.path.insert(0, str(docs_path / "source"))
 
     try:
         import importlib.util
@@ -206,8 +206,8 @@ def test_sphinx_rtd_theme_configuration():
         assert theme_opts.get("source_branch") == "main", (
             "source_branch should be 'main'"
         )
-        assert theme_opts.get("source_directory") == "docs/", (
-            "source_directory should be 'docs/'"
+        assert theme_opts.get("source_directory") == "docs/source/", (
+            "source_directory should be 'docs/source/'"
         )
 
         # Check sourcelink is disabled
@@ -223,9 +223,9 @@ def test_sphinx_rtd_theme_configuration():
 def test_myst_parser_extensions():
     """Test that MyST parser extensions are properly configured."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    conf_path = docs_path / "conf.py"
+    conf_path = docs_path / "source" / "conf.py"
 
-    sys.path.insert(0, str(docs_path))
+    sys.path.insert(0, str(docs_path / "source"))
 
     try:
         import importlib.util
@@ -257,9 +257,9 @@ def test_myst_parser_extensions():
 def test_project_metadata():
     """Test that project metadata is correctly configured."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    conf_path = docs_path / "conf.py"
+    conf_path = docs_path / "source" / "conf.py"
 
-    sys.path.insert(0, str(docs_path))
+    sys.path.insert(0, str(docs_path / "source"))
 
     try:
         import importlib.util
@@ -303,9 +303,9 @@ def test_project_metadata():
 def test_warning_suppression():
     """Test that expected warnings are suppressed."""
     docs_path = Path(__file__).parent.parent.parent / "docs"
-    conf_path = docs_path / "conf.py"
+    conf_path = docs_path / "source" / "conf.py"
 
-    sys.path.insert(0, str(docs_path))
+    sys.path.insert(0, str(docs_path / "source"))
 
     try:
         import importlib.util
