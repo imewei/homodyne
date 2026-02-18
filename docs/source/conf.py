@@ -38,19 +38,19 @@ source_encoding = "utf-8"
 
 extensions = [
     # Sphinx built-ins
-    "sphinx.ext.autodoc",          # Auto-generate API docs from docstrings
-    "sphinx.ext.autosummary",      # Summary tables for modules/classes
-    "sphinx.ext.napoleon",         # NumPy/Google-style docstring support
-    "sphinx.ext.viewcode",         # Source code links in API pages
-    "sphinx.ext.intersphinx",      # Cross-project hyperlinks
-    "sphinx.ext.mathjax",          # LaTeX math rendering via MathJax
-    "sphinx.ext.doctest",          # Doctest validation in documentation
-    "sphinx.ext.todo",             # TODO items support
-    "sphinx.ext.coverage",         # API coverage reporting
+    "sphinx.ext.autodoc",  # Auto-generate API docs from docstrings
+    "sphinx.ext.autosummary",  # Summary tables for modules/classes
+    "sphinx.ext.napoleon",  # NumPy/Google-style docstring support
+    "sphinx.ext.viewcode",  # Source code links in API pages
+    "sphinx.ext.intersphinx",  # Cross-project hyperlinks
+    "sphinx.ext.mathjax",  # LaTeX math rendering via MathJax
+    "sphinx.ext.doctest",  # Doctest validation in documentation
+    "sphinx.ext.todo",  # TODO items support
+    "sphinx.ext.coverage",  # API coverage reporting
     # Third-party
-    "myst_parser",                 # Markdown (.md) file support
-    "sphinx_autodoc_typehints",    # Type hint rendering in API docs
-    "sphinx_copybutton",           # Copy-to-clipboard button on code blocks
+    "myst_parser",  # Markdown (.md) file support
+    "sphinx_autodoc_typehints",  # Type hint rendering in API docs
+    "sphinx_copybutton",  # Copy-to-clipboard button on code blocks
 ]
 
 # Template paths (relative to this conf.py directory)

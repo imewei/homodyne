@@ -192,4 +192,3 @@ Next Steps
 - :doc:`user_guide/03_advanced_topics/laminar_flow` — laminar flow mode
 - :doc:`theory/index` — mathematical foundation
 - :doc:`api/index` — full API reference
-
