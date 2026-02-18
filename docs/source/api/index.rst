@@ -50,6 +50,12 @@ Module Overview
      - ``ConfigManager``, ``ParameterSpace``, YAML schema
    * - :doc:`cli`
      - All CLI entry points and shell completion system
+   * - :doc:`device`
+     - CPU device management, NUMA configuration, and status utilities
+   * - :doc:`io`
+     - Result saving (JSON, NPZ) and serialization utilities
+   * - :doc:`viz`
+     - Plotting, visualization, and diagnostic figure generation
    * - :doc:`utils`
      - Logging utilities, CPU/NUMA detection
 
@@ -95,6 +101,7 @@ Quick Navigation
    models
    theory_engine
    optimization
+   optimization_guide
    nlsq_adapter
    nlsq_wrapper
    cmc
@@ -103,4 +110,7 @@ Quick Navigation
    data
    config
    cli
+   device
+   io
+   viz
    utils

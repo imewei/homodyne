@@ -11,7 +11,9 @@ Homodyne's internal design, run the test suite, or submit improvements.
    :caption: Getting Started
 
    contributing
+   contributing_guide
    testing
+   testing_guide
 
 .. toctree::
    :maxdepth: 2
