@@ -559,11 +559,11 @@ docs:
 	@echo "$(BOLD)$(BLUE)Building documentation...$(RESET)"
 	cd $(DOCS_DIR) && $(MAKE) html
 	@echo "$(BOLD)$(GREEN)✓ Documentation built!$(RESET)"
-	@echo "Open: $(DOCS_DIR)/_build/html/index.html"
+	@echo "Open: $(DOCS_DIR)/build/html/index.html"
 
 docs-serve:
 	@echo "$(BOLD)$(BLUE)Serving documentation locally...$(RESET)"
-	cd $(DOCS_DIR)/_build/html && $(PYTHON) -m http.server 8000
+	cd $(DOCS_DIR)/build/html && $(PYTHON) -m http.server 8000
 
 docs-clean:
 	@echo "$(BOLD)$(BLUE)Cleaning documentation build...$(RESET)"
