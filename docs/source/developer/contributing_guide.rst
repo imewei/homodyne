@@ -1,3 +1,5 @@
+.. _developer_contributing:
+
 Contributing to Homodyne
 ========================
 

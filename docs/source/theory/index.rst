@@ -33,7 +33,6 @@ Overview of Sections
    anti_degeneracy
    anti_degeneracy_defense
    computational_methods
-   computational_methods_guide
    citations
 
 Quick Physics Reference

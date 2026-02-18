@@ -1,3 +1,5 @@
+.. _developer_testing:
+
 Testing Guide
 =============
 
