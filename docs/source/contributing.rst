@@ -14,9 +14,9 @@ and pull request guidelines, see the :doc:`developer/index` section.
 Quick Links
 -----------
 
-- :doc:`developer/contributing` — development environment, commit conventions,
+- :doc:`developer/contributing_guide` — development environment, commit conventions,
   pull request checklist
-- :doc:`developer/testing` — test organization, running the suite, coverage
+- :doc:`developer/testing_guide` — test organization, running the suite, coverage
   requirements
 - :doc:`developer/architecture` — code layout, design decisions, ADRs
 
