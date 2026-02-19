@@ -1578,7 +1578,11 @@ def _run_optimization(
                     )
                     else 1.0
                 ),
-                L=2000000.0,  # Default: 200 µm stator-rotor gap (typical rheology-XPCS)
+                L=float(
+                    config_config.get("analyzer_parameters", {})
+                    .get("geometry", {})
+                    .get("stator_rotor_gap", 2000000.0)
+                ),
                 analysis_mode=cast(
                     str, config_config.get("analysis_mode", "static_isotropic")
                 ),

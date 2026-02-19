@@ -489,7 +489,7 @@ class NLSQConfig:
             enable_hybrid_streaming=hybrid_streaming.get("enable", True),
             hybrid_normalize=hybrid_streaming.get("normalize", True),
             hybrid_normalization_strategy=hybrid_streaming.get(
-                "normalization_strategy", "bounds"
+                "normalization_strategy", "auto"
             ),
             hybrid_warmup_iterations=hybrid_streaming.get("warmup_iterations", 100),
             hybrid_max_warmup_iterations=hybrid_streaming.get(

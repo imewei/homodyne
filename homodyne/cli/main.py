@@ -16,6 +16,9 @@ import sys
 # Configure JAX to use multiple CPU devices for parallel MCMC chains
 # This MUST be set before JAX/XLA is initialized (import time)
 # Default: 4 devices for parallel MCMC, can be overridden by user
+# P2-A: Set JAX_ENABLE_X64 explicitly before any JAX import.
+os.environ.setdefault("JAX_ENABLE_X64", "1")
+
 if "XLA_FLAGS" not in os.environ:
     # No existing XLA_FLAGS, set default
     os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"

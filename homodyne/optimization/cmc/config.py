@@ -317,7 +317,7 @@ class CMCConfig:
             per_angle_mode=config_dict.get("per_angle_mode", "auto"),
             constant_scaling_threshold=config_dict.get("constant_scaling_threshold", 3),
             # Sharding
-            sharding_strategy=sharding.get("strategy", "stratified"),
+            sharding_strategy=sharding.get("strategy", "random"),
             num_shards=num_shards_val,
             max_points_per_shard=max_points_val,
             # Backend
@@ -361,6 +361,7 @@ class CMCConfig:
             max_parameter_cv=validation.get("max_parameter_cv", 1.0),
             heterogeneity_abort=validation.get("heterogeneity_abort", True),
             min_points_per_shard=sharding.get("min_points_per_shard", 10000),
+            min_points_per_param=sharding.get("min_points_per_param", 1500),
             # Reparameterization (Jan 2026 v3)
             reparameterization_d_total=reparameterization.get("enable_d_total", True),
             reparameterization_log_gamma=reparameterization.get(
