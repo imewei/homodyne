@@ -11,12 +11,15 @@ Optimizations (v2.9.1):
 
 from __future__ import annotations
 
+import logging
 import multiprocessing as mp
 import multiprocessing.shared_memory
 import os
 import queue
+import tempfile
 import threading
 import time
+from pathlib import Path
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -366,6 +369,10 @@ def _run_shard_worker(
     # method (fork vs spawn). Parent sets this in homodyne/__init__.py but
     # spawn-mode workers may not inherit in-memory os.environ changes.
     os.environ["JAX_ENABLE_X64"] = "true"
+    if "JAX_COMPILATION_CACHE_DIR" not in os.environ:
+        os.environ["JAX_COMPILATION_CACHE_DIR"] = str(
+            Path(tempfile.gettempdir()) / "homodyne_jax_cache"
+        )
     if (
         "XLA_FLAGS" not in os.environ
         or "xla_force_host_platform_device_count" not in os.environ.get("XLA_FLAGS", "")
@@ -416,17 +423,18 @@ def _run_shard_worker(
         rng_key = jax.random.PRNGKey(42 + shard_idx)
 
     # Prepare model kwargs - must match xpcs_model() signature
+    # jnp.asarray avoids a copy when the source is already a contiguous ndarray.
     model_kwargs = {
-        "data": jnp.array(shard_data["data"]),
-        "t1": jnp.array(shard_data["t1"]),
-        "t2": jnp.array(shard_data["t2"]),
-        "phi_unique": jnp.array(shard_data["phi_unique"]),
-        "phi_indices": jnp.array(shard_data["phi_indices"]),
+        "data": jnp.asarray(shard_data["data"]),
+        "t1": jnp.asarray(shard_data["t1"]),
+        "t2": jnp.asarray(shard_data["t2"]),
+        "phi_unique": jnp.asarray(shard_data["phi_unique"]),
+        "phi_indices": jnp.asarray(shard_data["phi_indices"]),
         "q": shard_data["q"],
         "L": shard_data["L"],
         "dt": shard_data["dt"],
         "time_grid": (
-            jnp.array(shard_data["time_grid"])
+            jnp.asarray(shard_data["time_grid"])
             if shard_data.get("time_grid") is not None
             else None
         ),
@@ -463,6 +471,23 @@ def _run_shard_worker(
     # Restore t_ref for reference-time reparameterization
     if shard_data.get("t_ref") is not None:
         model_kwargs["t_ref"] = shard_data["t_ref"]
+
+    # D2: Pre-compute shard-constant quantities (time_safe + searchsorted indices)
+    # once before NUTS starts.  Eliminates redundant work on every leapfrog step.
+    try:
+        from homodyne.core.physics_cmc import precompute_shard_grid
+
+        _t1 = model_kwargs["t1"]
+        _t2 = model_kwargs["t2"]
+        _time_grid = model_kwargs.get("time_grid")
+        _dt = model_kwargs.get("dt", 1e-3)
+        if _time_grid is not None:
+            model_kwargs["shard_grid"] = precompute_shard_grid(
+                _time_grid, _t1, _t2, _dt
+            )
+    except Exception:
+        # Non-fatal: fall back to legacy compute_g1_total path in model.py
+        pass
 
     # Heartbeat thread to emit liveness updates back to the parent.
     # Optimization: Use Event.wait(timeout) instead of busy-wait loop.
@@ -824,11 +849,12 @@ class MultiprocessingBackend(CMCBackend):
         for shard in shards:
             shard_data_list.append(
                 {
-                    "data": np.array(shard.data),
-                    "t1": np.array(shard.t1),
-                    "t2": np.array(shard.t2),
-                    "phi_unique": np.array(shard.phi_unique),
-                    "phi_indices": np.array(shard.phi_indices),
+                    # np.asarray avoids a copy when shard arrays are already ndarrays.
+                    "data": np.asarray(shard.data),
+                    "t1": np.asarray(shard.t1),
+                    "t2": np.asarray(shard.t2),
+                    "phi_unique": np.asarray(shard.phi_unique),
+                    "phi_indices": np.asarray(shard.phi_indices),
                     "noise_scale": shard.noise_scale,
                 }
             )
@@ -1034,7 +1060,8 @@ class MultiprocessingBackend(CMCBackend):
                                 proc.join(timeout=1)
                         continue
 
-                    run_logger.debug(f"Ignoring unexpected queue message: {message}")
+                    if run_logger.isEnabledFor(logging.DEBUG):
+                        run_logger.debug(f"Ignoring unexpected queue message: {message}")
 
                 # Launch new processes up to max workers
                 while len(active_processes) < actual_workers and pending_shards:
@@ -1203,16 +1230,17 @@ class MultiprocessingBackend(CMCBackend):
                             f"active={len(active_processes)} elapsed={mins}m{secs:02d}s"
                         )
 
-                    if time.time() - last_status_log >= status_log_interval:
+                    _now = time.time()
+                    if _now - last_status_log >= status_log_interval:
                         heartbeat_snapshot = {
-                            k: f"{time.time() - v:.0f}s"
+                            k: f"{_now - v:.0f}s"
                             for k, v in last_heartbeat.items()
                         }
                         run_logger.info(
                             f"CMC status: {completed_count}/{n_shards} complete; "
                             f"active={len(active_processes)}; last_heartbeats={heartbeat_snapshot}"
                         )
-                        last_status_log = time.time()
+                        last_status_log = _now
 
                     # Adaptive polling: gradually increase interval if no recent completions
                     # This reduces CPU overhead during long-running shards

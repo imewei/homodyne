@@ -261,7 +261,16 @@ class CMCResult:
             # Not enough samples for covariance - return zeros
             covariance = np.zeros((all_samples.shape[1], all_samples.shape[1]))
         else:
-            covariance = np.cov(all_samples, rowvar=False)
+            # Q4: Subsample to at most 10K rows before computing covariance.
+            # np.cov is O(N*P^2); for N=600K, P=9 this takes ~1 s and uses ~170 MB.
+            # 10K rows give a statistically equivalent 9x9 result in ~50 ms.
+            _max_cov_samples = 10_000
+            if all_samples.shape[0] > _max_cov_samples:
+                rng = np.random.default_rng(seed=0)
+                idx = rng.choice(all_samples.shape[0], size=_max_cov_samples, replace=False)
+                covariance = np.cov(all_samples[idx], rowvar=False)
+            else:
+                covariance = np.cov(all_samples, rowvar=False)
 
         # Create ArviZ InferenceData
         inference_data = create_inference_data(mcmc_samples)
@@ -505,6 +514,7 @@ def compute_fitted_c2(
     tuple[np.ndarray, np.ndarray]
         (c2_fitted_mean, c2_fitted_std) from posterior.
     """
+    import jax
     import jax.numpy as jnp
 
     from homodyne.core.physics_cmc import compute_g1_total
@@ -544,55 +554,78 @@ def compute_fitted_c2(
     # CRITICAL FIX: Clip indices to valid range to prevent out-of-bounds access
     phi_indices = np.clip(np.searchsorted(phi_unique, phi), 0, n_phi - 1)
 
-    # Apply scaling
+    # Apply scaling: gather the right phi row from g1 per data point.
+    # g1 shape is (n_phi, n_points); phi_indices maps each point to its phi row.
     contrast_per_point = contrasts[phi_indices]
     offset_per_point = offsets[phi_indices]
 
-    c2_fitted = contrast_per_point * np.array(g1) ** 2 + offset_per_point
+    g1_arr = np.array(g1)  # (n_phi, n_points)
+    g1_at_phi = g1_arr[phi_indices, np.arange(len(phi_indices))]  # (n_points,)
 
-    # Compute uncertainty by sampling
+    c2_fitted = contrast_per_point * g1_at_phi**2 + offset_per_point
+
+    # D4: Compute uncertainty by batched vmap instead of a Python loop.
+    # Previously: 100 sequential compute_g1_total calls (100 JAX dispatches).
+    # Now: build (n_posterior_samples, n_params) batch array and call vmap once.
     n_posterior_samples = min(100, result.n_samples)
-    c2_samples = []
 
-    for sample_idx in range(n_posterior_samples):
-        # Get parameters from this sample
-        chain_idx = sample_idx % result.n_chains
-        within_chain_idx = sample_idx // result.n_chains
+    # Build batch arrays: each row is one posterior draw.
+    # Index draws round-robin across chains to match the original ordering.
+    chain_indices = np.arange(n_posterior_samples) % result.n_chains
+    within_chain_indices = np.arange(n_posterior_samples) // result.n_chains
 
-        sample_params = np.array(
-            [result.samples[name][chain_idx, within_chain_idx] for name in param_names]
-        )
+    batched_params = np.stack(
+        [
+            np.array(
+                [result.samples[name][chain_indices[i], within_chain_indices[i]] for name in param_names]
+            )
+            for i in range(n_posterior_samples)
+        ]
+    )  # shape: (n_posterior_samples, n_physical_params)
 
-        sample_g1 = compute_g1_total(
-            jnp.array(sample_params),
-            jnp.array(t1),
-            jnp.array(t2),
-            jnp.array(phi_unique),
-            q,
-            L,
-            dt,
-        )
+    batched_contrasts = np.stack(
+        [
+            np.array(
+                [result.samples[f"contrast_{j}"][chain_indices[i], within_chain_indices[i]] for j in range(n_phi)]
+            )
+            for i in range(n_posterior_samples)
+        ]
+    )  # shape: (n_posterior_samples, n_phi)
 
-        sample_contrasts = np.array(
-            [
-                result.samples[f"contrast_{i}"][chain_idx, within_chain_idx]
-                for i in range(n_phi)
-            ]
-        )
-        sample_offsets = np.array(
-            [
-                result.samples[f"offset_{i}"][chain_idx, within_chain_idx]
-                for i in range(n_phi)
-            ]
-        )
+    batched_offsets = np.stack(
+        [
+            np.array(
+                [result.samples[f"offset_{j}"][chain_indices[i], within_chain_indices[i]] for j in range(n_phi)]
+            )
+            for i in range(n_posterior_samples)
+        ]
+    )  # shape: (n_posterior_samples, n_phi)
 
-        sample_c2 = (
-            sample_contrasts[phi_indices] * np.array(sample_g1) ** 2
-            + sample_offsets[phi_indices]
-        )
-        c2_samples.append(sample_c2)
+    # vmap over the first axis (sample index); all other args are fixed.
+    _t1_jnp = jnp.array(t1)
+    _t2_jnp = jnp.array(t2)
+    _phi_jnp = jnp.array(phi_unique)
 
-    c2_samples_arr = np.array(c2_samples)
+    def _g1_single(single_params: jnp.ndarray) -> jnp.ndarray:
+        return compute_g1_total(single_params, _t1_jnp, _t2_jnp, _phi_jnp, q, L, dt)
+
+    batched_g1 = jax.vmap(_g1_single)(jnp.array(batched_params))
+    # batched_g1 shape: (n_posterior_samples, n_phi, n_points)
+
+    # Apply per-angle contrast/offset scaling for each sample.
+    # batched_contrasts[:, phi_indices] -> (n_posterior_samples, n_points)
+    sample_contrasts_mapped = batched_contrasts[:, phi_indices]  # (S, N)
+    sample_offsets_mapped = batched_offsets[:, phi_indices]      # (S, N)
+
+    # Gather the right phi row per data point.
+    # phi_indices is (n_points,); combine with a point index to select from dim-2.
+    n_points = len(phi_indices)
+    batched_g1_at_phi = batched_g1[:, phi_indices, np.arange(n_points)]
+    # shape: (n_posterior_samples, n_points)
+
+    c2_samples_arr = np.array(
+        sample_contrasts_mapped * np.array(batched_g1_at_phi) ** 2 + sample_offsets_mapped
+    )  # (n_posterior_samples, n_points)
     c2_fitted_std = np.std(c2_samples_arr, axis=0)
 
     return c2_fitted, c2_fitted_std

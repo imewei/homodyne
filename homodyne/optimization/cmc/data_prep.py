@@ -389,13 +389,13 @@ def shard_data_stratified(
                 effective_max_points = (
                     n_points + max_shards_per_angle - 1
                 ) // max_shards_per_angle
-                logger.info(
+                logger.debug(
                     f"Angle {angle_idx} (phi={angle_phi_value:.4f}): {n_points:,} points → "
                     f"{max_shards_per_angle} shards (~{effective_max_points:,} points each, "
                     f"increased from {max_points_per_shard:,} to fit all data)"
                 )
             else:
-                logger.info(
+                logger.debug(
                     f"Angle {angle_idx} (phi={angle_phi_value:.4f}): {n_points:,} points → "
                     f"{n_angle_shards} shards (~{max_points_per_shard:,} points each)"
                 )

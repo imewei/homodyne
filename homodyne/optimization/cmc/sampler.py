@@ -58,6 +58,11 @@ def _subset_model_kwargs_for_preflight(
         arr = model_kwargs.get(key)
         if arr is not None:
             reduced[key] = arr[idx]
+    # Drop pre-computed shard_grid: its idx1/idx2 are aligned with the full
+    # shard (length N), not the preflight subset (length max_points).  The
+    # model functions fall back to the legacy compute_g1_total path when
+    # shard_grid is absent.
+    reduced.pop("shard_grid", None)
     return reduced
 
 
@@ -864,6 +869,11 @@ def run_nuts_sampling(
         # Request only essential extra fields to minimize extraction overhead.
         # Previously we requested 7 fields which caused 25-45 minute extraction times
         # due to JAX lazy evaluation materializing large intermediate arrays.
+        # NOTE: "adapt_state.inverse_mass_matrix" is intentionally omitted here.
+        # Requesting it stores the full mass matrix at every warmup+sample step,
+        # producing a (n_chains, n_warmup+n_samples, n_params, n_params) tensor that
+        # wastes 5-180 MB per shard (scales with n_params²). The final adapted mass
+        # matrix is already extracted from mcmc.last_state via _extract_adapt_states.
         mcmc.run(
             rng_key,
             extra_fields=(
@@ -872,7 +882,6 @@ def run_nuts_sampling(
                 "num_steps",
                 "potential_energy",
                 "adapt_state.step_size",
-                "adapt_state.inverse_mass_matrix",
             ),
             **model_kwargs,
         )

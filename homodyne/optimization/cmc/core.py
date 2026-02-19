@@ -1116,6 +1116,20 @@ def fit_mcmc_jax(
         "noise_scale": prepared.noise_scale,
     }
 
+    # D2: Pre-compute shard-constant grid quantities for single-shard path.
+    # (Multi-shard path: each worker builds its own ShardGrid in _run_shard_worker.)
+    try:
+        from homodyne.core.physics_cmc import precompute_shard_grid
+
+        model_kwargs["shard_grid"] = precompute_shard_grid(
+            time_grid,
+            model_kwargs["t1"],
+            model_kwargs["t2"],
+            dt_used,
+        )
+    except Exception:
+        pass  # Non-fatal: model functions fall back to legacy compute_g1_total
+
     # Add fixed scaling arrays for constant/constant_averaged mode (v2.18.0+)
     if (
         effective_per_angle_mode in ("constant", "constant_averaged")

@@ -23,8 +23,11 @@ import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 
-from homodyne.core.physics_cmc import compute_g1_total
-from homodyne.optimization.cmc.priors import build_prior
+from homodyne.core.physics_cmc import (
+    ShardGrid,
+    compute_g1_total,
+    compute_g1_total_with_precomputed,
+)
 from homodyne.optimization.cmc.scaling import (
     compute_scaling_factors,
     sample_scaled_parameter,
@@ -36,153 +39,6 @@ if TYPE_CHECKING:
     from homodyne.optimization.cmc.reparameterization import ReparamConfig
 
 logger = get_logger(__name__)
-
-
-def xpcs_model(
-    data: jnp.ndarray,
-    t1: jnp.ndarray,
-    t2: jnp.ndarray,
-    phi_unique: jnp.ndarray,
-    phi_indices: jnp.ndarray,
-    q: float,
-    L: float,
-    dt: float,
-    analysis_mode: str,
-    parameter_space: ParameterSpace,
-    n_phi: int,
-    time_grid: jnp.ndarray | None = None,
-    noise_scale: float = 0.1,
-    **kwargs,
-) -> None:
-    """NumPyro model for XPCS two-time correlation function.
-
-    This model uses the EXACT same physics as NLSQ via compute_g1_total.
-
-    CRITICAL: Parameters are sampled in this EXACT order to ensure
-    init_to_value() works correctly:
-    1. contrast_0, contrast_1, ..., contrast_{n_phi-1}
-    2. offset_0, offset_1, ..., offset_{n_phi-1}
-    3. D0, alpha, D_offset (static)
-    4. gamma_dot_t0, beta, gamma_dot_t_offset, phi0 (laminar_flow only)
-
-    Parameters
-    ----------
-    data : jnp.ndarray
-        Observed C2 correlation data, shape (n_total,).
-    t1 : jnp.ndarray
-        Time coordinates t1, shape (n_total,).
-    t2 : jnp.ndarray
-        Time coordinates t2, shape (n_total,).
-    phi_unique : jnp.ndarray
-        Unique phi angles, shape (n_phi,).
-    phi_indices : jnp.ndarray
-        Index into per-angle arrays for each point, shape (n_total,).
-    q : float
-        Wavevector magnitude.
-    L : float
-        Stator-rotor gap length (nm).
-    dt : float
-        Time step.
-    analysis_mode : str
-        Analysis mode: "static" or "laminar_flow".
-    parameter_space : ParameterSpace
-        Parameter space with bounds and priors.
-    n_phi : int
-        Number of unique phi angles.
-    noise_scale : float
-        Initial estimate of observation noise.
-    """
-    # =========================================================================
-    # 1. Sample per-angle CONTRAST parameters (FIRST)
-    # =========================================================================
-    contrasts = []
-    for i in range(n_phi):
-        contrast_prior = build_prior("contrast", parameter_space)
-        c_i = numpyro.sample(f"contrast_{i}", contrast_prior)
-        contrasts.append(c_i)
-    contrast_arr = jnp.array(contrasts)
-
-    # =========================================================================
-    # 2. Sample per-angle OFFSET parameters (SECOND)
-    # =========================================================================
-    offsets = []
-    for i in range(n_phi):
-        offset_prior = build_prior("offset", parameter_space)
-        o_i = numpyro.sample(f"offset_{i}", offset_prior)
-        offsets.append(o_i)
-    offset_arr = jnp.array(offsets)
-
-    # =========================================================================
-    # 3. Sample PHYSICAL parameters (THIRD)
-    # =========================================================================
-    # Always sample these in canonical order
-    D0 = numpyro.sample("D0", build_prior("D0", parameter_space))
-    alpha = numpyro.sample("alpha", build_prior("alpha", parameter_space))
-    D_offset = numpyro.sample("D_offset", build_prior("D_offset", parameter_space))
-
-    if analysis_mode == "laminar_flow":
-        gamma_dot_t0 = numpyro.sample(
-            "gamma_dot_t0", build_prior("gamma_dot_t0", parameter_space)
-        )
-        beta = numpyro.sample("beta", build_prior("beta", parameter_space))
-        gamma_dot_t_offset = numpyro.sample(
-            "gamma_dot_t_offset", build_prior("gamma_dot_t_offset", parameter_space)
-        )
-        phi0 = numpyro.sample("phi0", build_prior("phi0", parameter_space))
-
-        # Build parameter vector for physics model
-        params = jnp.array(
-            [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
-        )
-    else:
-        # Static mode
-        params = jnp.array([D0, alpha, D_offset])
-
-    # =========================================================================
-    # 4. Compute theoretical g1 using EXACT same physics as NLSQ
-    # =========================================================================
-    # Note: compute_g1_total infers mode from params array length (3=static, 7=laminar)
-    # IMPORTANT: phi_unique must be UNIQUE to avoid n_points^2 blowup (see physics_cmc docs)
-    g1_all_phi = compute_g1_total(
-        params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
-    )  # shape: (n_phi, n_points)
-
-    # Map each pooled data point to its phi row to keep a 1D vector aligned with data
-    point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
-    g1_per_point = g1_all_phi[phi_indices, point_idx]
-
-    # =========================================================================
-    # 5. Apply per-angle scaling to get C2
-    # =========================================================================
-    # c2 = contrast * g1^2 + offset
-    contrast_per_point = contrast_arr[phi_indices]
-    offset_per_point = offset_arr[phi_indices]
-    # P1-1: Sanitize g1 BEFORE squaring to prevent NaN gradient contamination.
-    # jnp.where(isfinite(c2_raw), c2_raw, 1e6) evaluates both branches in backward
-    # pass; 0 * NaN = NaN contaminates gradients. nan_to_num zeroes NaN in the
-    # forward pass so gradients never touch NaN values.
-    g1_per_point = jnp.where(jnp.isfinite(g1_per_point), g1_per_point, 1e-10)
-    c2_theory = contrast_per_point * g1_per_point**2 + offset_per_point
-
-    # Expose numerical health as deterministic for diagnostics
-    n_nan = jnp.sum(~jnp.isfinite(c2_theory))
-    numpyro.deterministic("n_numerical_issues", n_nan)
-
-    # =========================================================================
-    # 6. Likelihood with noise model
-    # =========================================================================
-    # Sample observation noise
-    # MCMC-SAFE FIX: Use 3x multiplier on noise_scale to allow larger sigma values.
-    # The original noise_scale from data variance is often too tight, causing NUTS
-    # to reject all proposals because the sigma prior strongly prefers small values
-    # while the data needs larger sigma to account for model-data mismatch.
-    # The 3x multiplier allows sigma to explore a wider range during MCMC warmup.
-    # Jan 2026: Reduced from 3.0x to 1.5x for tighter precision
-    sigma_scale = noise_scale * 1.5
-    sigma = numpyro.sample("sigma", dist.HalfNormal(scale=sigma_scale))
-
-    # Observation likelihood
-    numpyro.sample("obs", dist.Normal(c2_theory, sigma), obs=data)
 
 
 def validate_model_output(
@@ -277,6 +133,7 @@ def xpcs_model_scaled(
     time_grid: jnp.ndarray | None = None,
     noise_scale: float = 0.1,
     num_shards: int = 1,
+    shard_grid: ShardGrid | None = None,
     **kwargs,
 ) -> None:
     """NumPyro model with non-centered parameterization for gradient balancing.
@@ -376,9 +233,16 @@ def xpcs_model_scaled(
     # =========================================================================
     # 4. Compute theoretical g1 using EXACT same physics as NLSQ
     # =========================================================================
-    g1_all_phi = compute_g1_total(
-        params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
-    )
+    if shard_grid is not None:
+        wavevector_q_squared_half_dt = jnp.asarray(0.5 * (q**2) * dt)
+        sinc_prefactor = jnp.asarray(0.5 / math.pi * q * L * dt)
+        g1_all_phi = compute_g1_total_with_precomputed(
+            params, phi_unique, shard_grid, wavevector_q_squared_half_dt, sinc_prefactor
+        )
+    else:
+        g1_all_phi = compute_g1_total(
+            params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
+        )
 
     point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
     g1_per_point = g1_all_phi[phi_indices, point_idx]
@@ -423,6 +287,7 @@ def xpcs_model_constant(
     fixed_contrast: jnp.ndarray | None = None,
     fixed_offset: jnp.ndarray | None = None,
     num_shards: int = 1,
+    shard_grid: ShardGrid | None = None,
     **kwargs,
 ) -> None:
     """NumPyro model with FIXED per-angle scaling (anti-degeneracy constant mode).
@@ -534,9 +399,16 @@ def xpcs_model_constant(
     # =========================================================================
     # 3. Compute theoretical g1 using EXACT same physics as NLSQ
     # =========================================================================
-    g1_all_phi = compute_g1_total(
-        params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
-    )
+    if shard_grid is not None:
+        wavevector_q_squared_half_dt = jnp.asarray(0.5 * (q**2) * dt)
+        sinc_prefactor = jnp.asarray(0.5 / math.pi * q * L * dt)
+        g1_all_phi = compute_g1_total_with_precomputed(
+            params, phi_unique, shard_grid, wavevector_q_squared_half_dt, sinc_prefactor
+        )
+    else:
+        g1_all_phi = compute_g1_total(
+            params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
+        )
 
     point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
     g1_per_point = g1_all_phi[phi_indices, point_idx]
@@ -581,6 +453,7 @@ def xpcs_model_averaged(
     fixed_offset: jnp.ndarray | None = None,
     nlsq_prior_config: dict | None = None,
     num_shards: int = 1,
+    shard_grid: ShardGrid | None = None,
     **kwargs,
 ) -> None:
     """NumPyro model with SAMPLED averaged per-angle scaling (auto mode).
@@ -697,23 +570,23 @@ def xpcs_model_averaged(
         params = jnp.array([D0, alpha, D_offset])
 
     # =========================================================================
-    # 3. Compute theoretical C2 (same as other models)
+    # 3. Compute theoretical C2
     # =========================================================================
-    from homodyne.core.jax_backend import _compute_g1_total_core
+    wavevector_q_squared_half_dt = jnp.asarray(0.5 * (q**2) * dt)
+    sinc_prefactor = jnp.asarray(0.5 / math.pi * q * L * dt)
 
-    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
-    sinc_prefactor = 0.5 / math.pi * q * L * dt
-
-    g1 = _compute_g1_total_core(
-        params=params,
-        t1=t1,
-        t2=t2,
-        phi=phi_unique[phi_indices],
-        wavevector_q_squared_half_dt=wavevector_q_squared_half_dt,
-        sinc_prefactor=sinc_prefactor,
-        dt=dt,
-        time_grid=time_grid,
-    )
+    if shard_grid is not None:
+        g1_all_phi = compute_g1_total_with_precomputed(
+            params, phi_unique, shard_grid, wavevector_q_squared_half_dt, sinc_prefactor
+        )
+        point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
+        g1 = g1_all_phi[phi_indices, point_idx]
+    else:
+        g1_all_phi = compute_g1_total(
+            params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
+        )
+        point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
+        g1 = g1_all_phi[phi_indices, point_idx]
 
     # =========================================================================
     # 4. Apply per-point contrast and offset
@@ -757,6 +630,7 @@ def xpcs_model_constant_averaged(
     fixed_offset: jnp.ndarray | None = None,
     nlsq_prior_config: dict | None = None,
     num_shards: int = 1,
+    shard_grid: ShardGrid | None = None,
     **kwargs,
 ) -> None:
     """NumPyro model with FIXED averaged per-angle scaling (NLSQ parity mode).
@@ -874,23 +748,23 @@ def xpcs_model_constant_averaged(
         params = jnp.array([D0, alpha, D_offset])
 
     # =========================================================================
-    # 3. Compute theoretical C2 (same as other models)
+    # 3. Compute theoretical C2
     # =========================================================================
-    from homodyne.core.jax_backend import _compute_g1_total_core
+    wavevector_q_squared_half_dt = jnp.asarray(0.5 * (q**2) * dt)
+    sinc_prefactor = jnp.asarray(0.5 / math.pi * q * L * dt)
 
-    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
-    sinc_prefactor = 0.5 / math.pi * q * L * dt
-
-    g1 = _compute_g1_total_core(
-        params=params,
-        t1=t1,
-        t2=t2,
-        phi=phi_unique[phi_indices],
-        wavevector_q_squared_half_dt=wavevector_q_squared_half_dt,
-        sinc_prefactor=sinc_prefactor,
-        dt=dt,
-        time_grid=time_grid,
-    )
+    if shard_grid is not None:
+        g1_all_phi = compute_g1_total_with_precomputed(
+            params, phi_unique, shard_grid, wavevector_q_squared_half_dt, sinc_prefactor
+        )
+        point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
+        g1 = g1_all_phi[phi_indices, point_idx]
+    else:
+        g1_all_phi = compute_g1_total(
+            params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
+        )
+        point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
+        g1 = g1_all_phi[phi_indices, point_idx]
 
     # =========================================================================
     # 4. Apply FIXED averaged scaling to get C2
@@ -935,6 +809,7 @@ def xpcs_model_reparameterized(
     nlsq_prior_config: dict | None = None,
     num_shards: int = 1,
     t_ref: float = 1.0,
+    shard_grid: ShardGrid | None = None,
     **kwargs,
 ) -> None:
     """NumPyro model with reference-time reparameterized sampling space.
@@ -1020,17 +895,20 @@ def xpcs_model_reparameterized(
     # Alpha is sampled directly (not reparameterized, nearly orthogonal to D_ref)
     alpha = _sample_param("alpha")
 
+    # Initialize reparam dicts unconditionally so both enable_d_ref and
+    # enable_gamma_ref branches can access them without NameError.
+    reparam_vals = (
+        nlsq_prior_config.get("reparam_values", {}) if nlsq_prior_config else {}
+    )
+    reparam_uncs = (
+        nlsq_prior_config.get("reparam_uncertainties", {})
+        if nlsq_prior_config
+        else {}
+    )
+
     if reparam_config.enable_d_ref:
         # --- Reference-time diffusion reparameterization ---
         # Sample log_D_ref where D_ref = D0 * t_ref^alpha (well-constrained by data)
-        reparam_vals = (
-            nlsq_prior_config.get("reparam_values", {}) if nlsq_prior_config else {}
-        )
-        reparam_uncs = (
-            nlsq_prior_config.get("reparam_uncertainties", {})
-            if nlsq_prior_config
-            else {}
-        )
 
         log_D_ref_loc = reparam_vals.get("log_D_ref", 10.0)  # ~exp(10) ≈ 22K
         log_D_ref_scale = reparam_uncs.get("log_D_ref", 1.0)
@@ -1095,21 +973,21 @@ def xpcs_model_reparameterized(
     # =========================================================================
     # 3. Compute theoretical C2
     # =========================================================================
-    from homodyne.core.jax_backend import _compute_g1_total_core
+    wavevector_q_squared_half_dt = jnp.asarray(0.5 * (q**2) * dt)
+    sinc_prefactor = jnp.asarray(0.5 / math.pi * q * L * dt)
 
-    wavevector_q_squared_half_dt = 0.5 * (q**2) * dt
-    sinc_prefactor = 0.5 / math.pi * q * L * dt
-
-    g1 = _compute_g1_total_core(
-        params=params,
-        t1=t1,
-        t2=t2,
-        phi=phi_unique[phi_indices],
-        wavevector_q_squared_half_dt=wavevector_q_squared_half_dt,
-        sinc_prefactor=sinc_prefactor,
-        dt=dt,
-        time_grid=time_grid,
-    )
+    if shard_grid is not None:
+        g1_all_phi = compute_g1_total_with_precomputed(
+            params, phi_unique, shard_grid, wavevector_q_squared_half_dt, sinc_prefactor
+        )
+        point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
+        g1 = g1_all_phi[phi_indices, point_idx]
+    else:
+        g1_all_phi = compute_g1_total(
+            params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
+        )
+        point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
+        g1 = g1_all_phi[phi_indices, point_idx]
 
     # =========================================================================
     # 4. Apply per-point contrast and offset
