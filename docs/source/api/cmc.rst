@@ -135,8 +135,9 @@ YAML Configuration Reference
      cmc:
        enable: true
        sharding:
-         strategy: "stratified"           # stratified | random | contiguous
+         strategy: "random"               # random | stratified | contiguous
          max_points_per_shard: "auto"     # ALWAYS use auto
+         min_points_per_param: 1500       # Minimum data points per parameter
        backend_name: "auto"               # auto | multiprocessing | pjit | pbs
        per_angle_mode: "auto"             # Match NLSQ per_angle_mode
        combination_method: "consensus_mc" # Recommended

@@ -2,7 +2,7 @@
 
 Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in homodyne.
 
-**Version:** 2.22.0 **Last Updated:** February 2026
+**Version:** 2.22.1 **Last Updated:** February 2026
 
 ## Table of Contents
 

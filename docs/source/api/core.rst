@@ -57,6 +57,17 @@ Key functions:
   expansion near zero. Uses ``EPS = 1e-12`` as the zero threshold.
 - ``calculate_diffusion_coefficient`` / ``_calculate_diffusion_coefficient_impl_jax``
   — Time-dependent diffusion :math:`D(t) = D_0 \cdot t^\alpha + D_\text{offset}`.
+- ``calculate_shear_rate`` / ``calculate_shear_rate_cmc``
+  — Time-dependent shear rate :math:`\dot\gamma(t) = \dot\gamma_0 \cdot t^\beta + \dot\gamma_\text{offset}`.
+
+.. admonition:: Gradient-safe numerical floors
+   :class: important
+
+   All positivity floors in ``physics_utils`` use ``jnp.where(x > eps, x, eps)``
+   rather than ``jnp.maximum(x, eps)``. This preserves non-zero gradients when
+   the input is below the floor — critical for NLSQ Jacobian computation and
+   NUTS leapfrog integration. Using ``jnp.maximum`` would silently zero the
+   gradient, causing the optimizer to stall near the boundary.
 
 .. warning::
 

@@ -38,9 +38,13 @@ The recommended backend for CPU-based systems. Key architecture:
 2. **Shared memory** — ``SharedDataManager`` shares config, parameter space,
    and time grids across workers via ``multiprocessing.shared_memory``,
    avoiding per-shard pickling overhead.
-3. **XLA configuration** — each worker sets ``JAX_ENABLE_X64`` and configures
-   ``XLA_FLAGS`` with ``--xla_force_host_platform_device_count=4`` *before*
-   importing JAX, providing 4 virtual devices per worker for ``parallel`` chains.
+3. **XLA configuration** — the parent process sets ``JAX_ENABLE_X64=1`` in
+   ``homodyne/__init__.py`` and ``cli/main.py`` before any JAX import. Each
+   spawned worker also sets ``JAX_ENABLE_X64`` and configures ``XLA_FLAGS``
+   with ``--xla_force_host_platform_device_count=4`` *before* importing JAX,
+   providing 4 virtual devices per worker for ``parallel`` chains. The
+   redundant worker-side set is required because spawn-mode workers start
+   fresh processes that do not inherit the parent's ``jax.config`` state.
 4. **Thread environment** — ``OMP_NUM_THREADS`` is set to 1–2 per worker to
    prevent thread oversubscription. ``OMP_PROC_BIND`` and ``OMP_PLACES`` are
    cleared before spawning and restored afterwards.
