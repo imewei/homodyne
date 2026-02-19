@@ -937,8 +937,10 @@ def xpcs_model_reparameterized(
 
         # Recover physics parameters as deterministics
         D0 = numpyro.deterministic("D0", D_ref * effective_t_ref ** (-alpha))
+        _denom = 1 - D_offset_frac
         D_offset = numpyro.deterministic(
-            "D_offset", D_ref * D_offset_frac / jnp.maximum(1 - D_offset_frac, 1e-10)
+            "D_offset",
+            D_ref * D_offset_frac / jnp.where(_denom > 1e-10, _denom, 1e-10),
         )
     else:
         # Standard sampling

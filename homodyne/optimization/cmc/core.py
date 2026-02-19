@@ -755,7 +755,7 @@ def fit_mcmc_jax(
     # with NLSQ warm-start.
     no_warmstart = nlsq_result is None and initial_values is None
     if no_warmstart and analysis_mode == "laminar_flow":
-        require_warmstart = getattr(cmc_config, "require_nlsq_warmstart", False)
+        require_warmstart = config.require_nlsq_warmstart
         if require_warmstart:
             raise ValueError(
                 "CMC WARM-START REQUIRED: laminar_flow mode requires NLSQ warm-start "

@@ -48,6 +48,8 @@ import jax.numpy as jnp
 from jax import jit
 
 from homodyne.core.physics_utils import (
+    calculate_diffusion_coefficient as _calc_diff,
+    calculate_shear_rate_cmc as _calc_shear,
     safe_exp,
     safe_len,
     safe_sinc,
@@ -343,10 +345,6 @@ def _compute_g1_diffusion_elementwise(
         Prefer ``_compute_g1_diffusion_from_idx`` + ``precompute_shard_grid`` in
         NUTS hot paths to avoid repeating ``searchsorted`` every leapfrog step.
     """
-    from homodyne.core.physics_utils import (
-        calculate_diffusion_coefficient as _calc_diff,
-    )
-
     D0, alpha, D_offset = params[0], params[1], params[2]
 
     # Build diffusion on the 1D grid and cumulative trapezoid (no dt scaling here)
@@ -411,10 +409,6 @@ def _compute_g1_shear_elementwise(
         Prefer ``_compute_g1_shear_from_idx`` + ``precompute_shard_grid`` in
         NUTS hot paths to avoid repeating ``searchsorted`` every leapfrog step.
     """
-    from homodyne.core.physics_utils import (
-        calculate_shear_rate_cmc as _calc_shear,
-    )
-
     # Check params length - if < 7, we're in static mode (no shear)
     if safe_len(params) < 7:
         # Return ones for all unique phi angles and time combinations (g1_shear = 1)

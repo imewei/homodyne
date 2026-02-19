@@ -150,8 +150,9 @@ def calculate_diffusion_coefficient(
     # Compute diffusion coefficient
     D_t = D0 * (time_safe**alpha) + D_offset
 
-    # Ensure positive values
-    return jnp.maximum(D_t, 1e-10)
+    # Ensure positive values — use jnp.where (not jnp.maximum) to preserve
+    # gradients below the floor for NLSQ Jacobian computation and NUTS leapfrog.
+    return jnp.where(D_t > 1e-10, D_t, 1e-10)
 
 
 @jit
@@ -192,8 +193,8 @@ def calculate_shear_rate(
     time_safe = jnp.where(time_array == 0.0, dt, time_array)
 
     gamma_t = gamma_dot_0 * (time_safe**beta) + gamma_dot_offset
-    # Ensure positive values with numerical stability floor
-    return jnp.maximum(gamma_t, 1e-10)
+    # Ensure positive values — use jnp.where (not jnp.maximum) to preserve gradients.
+    return jnp.where(gamma_t > 1e-10, gamma_t, 1e-10)
 
 
 @jit
@@ -233,7 +234,8 @@ def calculate_shear_rate_cmc(
     time_safe = jnp.where(time_array == 0.0, dt, time_array)
 
     gamma_t = gamma_dot_0 * (time_safe**beta) + gamma_dot_offset
-    return jnp.maximum(gamma_t, 1e-10)
+    # Ensure positive values — use jnp.where (not jnp.maximum) to preserve gradients.
+    return jnp.where(gamma_t > 1e-10, gamma_t, 1e-10)
 
 
 @jit
