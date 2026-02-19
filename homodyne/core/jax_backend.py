@@ -474,8 +474,10 @@ def _compute_g1_diffusion_core(
             time_grid_used = time_grid
         else:
             # Legacy fallback for direct calls: use static max size for JIT compat
+            # T3-1: Use jnp.result_type(dt) to infer dtype from context instead of
+            # hardcoding float64, which silently downcasts to float32 without X64.
             _FALLBACK_GRID_SIZE = 10001
-            grid_indices = jnp.arange(_FALLBACK_GRID_SIZE, dtype=jnp.float64)
+            grid_indices = jnp.arange(_FALLBACK_GRID_SIZE, dtype=jnp.result_type(dt))
             time_grid_used = grid_indices * dt
 
         grid_size = safe_len(time_grid_used)
@@ -584,7 +586,7 @@ def _compute_g1_shear_core(
         Shear contribution to g1 correlation function (sinc² values)
     """
     # Check params length - if < 7, we're in static mode (no shear)
-    if safe_len(params) < 7:
+    if params.shape[0] < 7:
         # Return ones matching input dimensionality (g1_shear = 1)
         if t1.ndim == 1:
             # Element-wise mode (flat arrays from CMC shards or heatmap generation):
@@ -617,8 +619,9 @@ def _compute_g1_shear_core(
         if time_grid is not None:
             time_grid_used = time_grid
         else:
+            # T3-1: Use jnp.result_type(dt) instead of hardcoding float64.
             _FALLBACK_GRID_SIZE = 10001
-            grid_indices = jnp.arange(_FALLBACK_GRID_SIZE, dtype=jnp.float64)
+            grid_indices = jnp.arange(_FALLBACK_GRID_SIZE, dtype=jnp.result_type(dt))
             time_grid_used = grid_indices * dt
 
         grid_size = safe_len(time_grid_used)
@@ -677,7 +680,9 @@ def _compute_g1_shear_core(
 
     # Fix phi shape if it has extra dimensions
     # Handle case where phi might be (1, 1, 1, 23) instead of (23,) or other malformed shapes
-    phi = jnp.asarray(phi, dtype=jnp.float64)  # Ensure it's a JAX float64 array
+    # T3-1: Use jnp.result_type to infer dtype from context instead of
+    # hardcoding float64, which silently downcasts without JAX_ENABLE_X64.
+    phi = jnp.asarray(phi, dtype=jnp.result_type(phi))
 
     # Remove all leading singleton dimensions and flatten to 1D
     while phi.ndim > 1:
@@ -799,12 +804,13 @@ def _compute_g1_total_core(
         # g₁_total[phi, i, j] = g₁_diffusion[i, j] × g₁_shear[phi, i, j]
         g1_total = g1_diff_broadcasted * g1_shear
 
-    # P1-2: Keep only lower bound for numerical stability (prevents log(0)).
+    # P1-2: Keep only gradient-safe lower floor (prevents log(0)).
     # Upper clip removed — g1_diff is already bounded ≤ 1.0 from log-space clip,
     # and g1_shear (sinc²) is naturally bounded ≤ 1.0. Hard upper clips kill
     # gradients at the boundary, harming NUTS exploration.
+    # Use jnp.where instead of jnp.maximum for gradient safety at the floor.
     epsilon = 1e-10
-    g1_bounded = jnp.maximum(g1_total, epsilon)
+    g1_bounded = jnp.where(g1_total > epsilon, g1_total, epsilon)
 
     return jnp.asarray(g1_bounded)
 

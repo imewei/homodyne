@@ -129,12 +129,10 @@ def _compute_g1_diffusion_meshgrid(
     # Compute exponential with safeguards (safe_exp handles edge cases)
     g1_result = safe_exp(log_g1_bounded)
 
-    # Apply ONLY upper bound (g1 ≤ 1.0 is physical constraint)
-    # No lower bound clipping - preserves full precision down to machine epsilon
-    # This eliminates artificial plateaus from overly aggressive clipping
-    g1_safe = jnp.minimum(g1_result, 1.0)
-
-    return g1_safe
+    # P1-2: Removed jnp.minimum(g1_result, 1.0) — the log-space clip above
+    # (jnp.clip(log_g1, -700, 0)) already guarantees g1 = exp(log_g1) ≤ 1.0.
+    # The hard min killed gradients at g1=1.0 (diagonal elements), harming NLSQ Jacobians.
+    return g1_result
 
 
 @jit
@@ -167,7 +165,7 @@ def _compute_g1_shear_meshgrid(
         So t1/t2 arrays contain physical time [0.0, 0.1, 0.2, ...], NOT frame indices.
     """
     # Check params length - if < 7, we're in static mode (no shear)
-    if safe_len(params) < 7:
+    if params.shape[0] < 7:
         # Return ones for all phi angles and time combinations (g1_shear = 1)
         phi_array = jnp.atleast_1d(phi)
         n_phi = safe_len(phi_array)
@@ -254,17 +252,9 @@ def _compute_g1_shear_meshgrid(
         )
 
     # Compute phase matrix for all phi angles: shape (n_phi, n_times, n_times)
-    try:
-        phase = (
-            prefactor * gamma_integral
-        )  # Broadcast: (n_phi, 1, 1) * (n_times, n_times)
-    except Exception as e:
-        # Enhanced error message for debugging
-        raise ValueError(
-            f"Broadcasting error in _compute_g1_shear_meshgrid: "
-            f"prefactor.shape={prefactor.shape}, gamma_integral.shape={gamma_integral.shape}. "
-            f"Original error: {e}",
-        ) from e
+    # P2: Removed try/except — JAX traces through try/except at compile time;
+    # exceptions cannot be caught at JIT runtime.
+    phase = prefactor * gamma_integral  # Broadcast: (n_phi, 1, 1) * (n_times, n_times)
 
     # Compute sinc² values: [sinc(Φ)]² for all phi angles
     sinc_val = safe_sinc(phase)
@@ -316,22 +306,15 @@ def _compute_g1_total_meshgrid(
     )
 
     # Multiply: g₁_total[phi, i, j] = g₁_diffusion[i, j] × g₁_shear[phi, i, j]
-    try:
-        g1_total = g1_diff_broadcasted * g1_shear
-    except Exception as e:
-        # Enhanced error message for debugging
-        raise ValueError(
-            f"Broadcasting error in _compute_g1_total_meshgrid: "
-            f"g1_diff_broadcasted.shape={g1_diff_broadcasted.shape}, g1_shear.shape={g1_shear.shape}. "
-            f"Original error: {e}",
-        ) from e
+    # P2: Removed try/except — JAX traces through try/except at compile time;
+    # exceptions cannot be caught at JIT runtime. Dead code that added confusion.
+    g1_total = g1_diff_broadcasted * g1_shear
 
-    # Apply physical bounds for g1: (0, 2]
-    # Lower bound: epsilon (effectively 0) for numerical stability
-    # Upper bound: 2.0 (loose bound allowing for experimental variations beyond theoretical 1.0)
-    # ✅ UPDATED (Nov 11, 2025): Loosened bounds to g1 ∈ (0, 2] for fitting flexibility
+    # P1-2: Keep only gradient-safe lower floor. Upper clip removed — g1_diff is
+    # already bounded ≤ 1.0 from log-space clip, and g1_shear (sinc²) is naturally
+    # bounded ≤ 1.0. Hard clips kill gradients at boundaries, harming NLSQ Jacobians.
     epsilon = 1e-10
-    g1_bounded = jnp.clip(g1_total, epsilon, 2.0)
+    g1_bounded = jnp.where(g1_total > epsilon, g1_total, epsilon)
 
     return g1_bounded
 
@@ -391,14 +374,10 @@ def _compute_g2_scaled_meshgrid(
     # This causes visualization to use different values than optimization used!
     g2 = offset + contrast * g1**2
 
-    # Apply physical bounds: 0.5 < g2 ≤ 2.5
-    # Updated bounds (Nov 11, 2025) to reflect realistic homodyne detection range:
-    # - Lower bound 0.5: Allows for significant negative offset deviations
-    # - Upper bound 2.5: Theoretical maximum for g₂ = 1 + 1×1² = 2, plus 25% headroom
-    # - Physical constraint: 0.5 ≤ g2 ≤ 2.5 for homodyne detection
-    g2_bounded = jnp.clip(g2, 0.5, 2.5)
-
-    return g2_bounded
+    # P0-3: Removed hard jnp.clip(g2, 0.5, 2.5) — it kills gradients at boundaries.
+    # For NLSQ (TRF optimizer), the bounds are enforced via parameter bounds, not g2 clipping.
+    # Physical range (0.5-2.5) is enforced through parameter priors instead.
+    return g2
 
 
 # =============================================================================

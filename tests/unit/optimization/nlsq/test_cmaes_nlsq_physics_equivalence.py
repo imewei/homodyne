@@ -186,13 +186,13 @@ class TestCMAESvsNLSQPhysicsEquivalence:
             err_msg="g2 values diverge between CMA-ES inline and NLSQ compute_g2_scaled",
         )
 
-    def test_g2_clipping_difference_documented(
+    def test_g2_no_clipping_equivalence(
         self, laminar_params, physics_config, phi_angles
     ):
-        """Document that NLSQ clips g2 to [0.5, 2.5] while CMA-ES does not.
+        """Verify NLSQ and CMA-ES produce identical g2 (no clipping in either path).
 
-        This test uses extreme parameters that push g2 outside [0.5, 2.5]
-        to verify the clipping behavior difference.
+        Previously NLSQ clipped g2 to [0.5, 2.5] (removed in NEW-P0 fix).
+        Both paths should now produce unclipped, physically correct g2 values.
         """
         # Use very short time grid where g1 ≈ 1.0
         dt = physics_config["dt"]
@@ -212,7 +212,7 @@ class TestCMAESvsNLSQPhysicsEquivalence:
             dt,
         )
 
-        # Compute CMA-ES g2 (no clipping)
+        # Compute CMA-ES g2 (inline)
         wq = physics_config["wavevector_q_squared_half_dt"]
         sp = physics_config["sinc_prefactor"]
         t1_grid, t2_grid = jnp.meshgrid(t_short, t_short, indexing="ij")
@@ -221,13 +221,17 @@ class TestCMAESvsNLSQPhysicsEquivalence:
         )
         g2_cmaes = offset + contrast * g1**2
 
-        # NLSQ should clip at 2.5, CMA-ES should exceed it
+        # Both should now exceed 2.5 (no clipping) and be equivalent
         nlsq_max = float(jnp.max(g2_nlsq))
         cmaes_max = float(jnp.max(g2_cmaes))
 
-        assert nlsq_max <= 2.5, f"NLSQ g2 should be clipped to ≤2.5, got {nlsq_max}"
-        assert cmaes_max > 2.5, (
-            f"CMA-ES g2 should exceed 2.5 with contrast={contrast}, got {cmaes_max}"
+        assert nlsq_max > 2.5, f"NLSQ g2 should be unclipped (>2.5), got {nlsq_max}"
+        assert cmaes_max > 2.5, f"CMA-ES g2 should exceed 2.5, got {cmaes_max}"
+        np.testing.assert_allclose(
+            np.asarray(g2_nlsq),
+            np.asarray(g2_cmaes),
+            rtol=1e-10,
+            err_msg="NLSQ and CMA-ES g2 should be identical (no clipping in either)",
         )
 
 
