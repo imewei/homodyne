@@ -244,7 +244,9 @@ def xpcs_model_scaled(
             params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
         )
 
-    point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
+    # T3-3: Use int32 for point indices regardless of phi_indices.dtype to prevent
+    # silent wrong indexing if phi_indices were accidentally float.
+    point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
     g1_per_point = g1_all_phi[phi_indices, point_idx]
 
     # =========================================================================
@@ -410,7 +412,9 @@ def xpcs_model_constant(
             params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
         )
 
-    point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
+    # T3-3: Use int32 for point indices regardless of phi_indices.dtype to prevent
+    # silent wrong indexing if phi_indices were accidentally float.
+    point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
     g1_per_point = g1_all_phi[phi_indices, point_idx]
 
     # =========================================================================
@@ -579,14 +583,15 @@ def xpcs_model_averaged(
         g1_all_phi = compute_g1_total_with_precomputed(
             params, phi_unique, shard_grid, wavevector_q_squared_half_dt, sinc_prefactor
         )
-        point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
-        g1 = g1_all_phi[phi_indices, point_idx]
     else:
         g1_all_phi = compute_g1_total(
             params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
         )
-        point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
-        g1 = g1_all_phi[phi_indices, point_idx]
+
+    # T3-3: Use int32 for point indices regardless of phi_indices.dtype to prevent
+    # silent wrong indexing if phi_indices were accidentally float.
+    point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
+    g1 = g1_all_phi[phi_indices, point_idx]
 
     # =========================================================================
     # 4. Apply per-point contrast and offset
@@ -757,14 +762,15 @@ def xpcs_model_constant_averaged(
         g1_all_phi = compute_g1_total_with_precomputed(
             params, phi_unique, shard_grid, wavevector_q_squared_half_dt, sinc_prefactor
         )
-        point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
-        g1 = g1_all_phi[phi_indices, point_idx]
     else:
         g1_all_phi = compute_g1_total(
             params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
         )
-        point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
-        g1 = g1_all_phi[phi_indices, point_idx]
+
+    # T3-3: Use int32 for point indices regardless of phi_indices.dtype to prevent
+    # silent wrong indexing if phi_indices were accidentally float.
+    point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
+    g1 = g1_all_phi[phi_indices, point_idx]
 
     # =========================================================================
     # 4. Apply FIXED averaged scaling to get C2
@@ -980,14 +986,15 @@ def xpcs_model_reparameterized(
         g1_all_phi = compute_g1_total_with_precomputed(
             params, phi_unique, shard_grid, wavevector_q_squared_half_dt, sinc_prefactor
         )
-        point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
-        g1 = g1_all_phi[phi_indices, point_idx]
     else:
         g1_all_phi = compute_g1_total(
             params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
         )
-        point_idx = jnp.arange(phi_indices.shape[0], dtype=phi_indices.dtype)
-        g1 = g1_all_phi[phi_indices, point_idx]
+
+    # T3-3: Use int32 for point indices regardless of phi_indices.dtype to prevent
+    # silent wrong indexing if phi_indices were accidentally float.
+    point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
+    g1 = g1_all_phi[phi_indices, point_idx]
 
     # =========================================================================
     # 4. Apply per-point contrast and offset
@@ -1065,7 +1072,14 @@ def get_xpcs_model(
             "CMC: Using constant_averaged mode model (fixed averaged scaling, 8 params, NLSQ parity)"
         )
         return xpcs_model_constant_averaged
-    else:
-        # Default: individual mode
+    elif per_angle_mode == "individual":
         logger.info("CMC: Using individual mode model (sampled per-angle scaling)")
         return xpcs_model_scaled
+    else:
+        # T3-2: Reject unsupported modes (e.g., "fourier") instead of silently
+        # falling through to individual mode with wrong parameterization.
+        raise ValueError(
+            f"Unsupported CMC per_angle_mode: '{per_angle_mode}'. "
+            f"Valid modes: 'auto', 'constant', 'constant_averaged', 'individual'. "
+            f"NLSQ 'fourier' mode has no CMC equivalent."
+        )

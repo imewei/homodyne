@@ -419,6 +419,17 @@ def validate_args(args: argparse.Namespace) -> bool:
         # Note: --cmc-plot-diagnostics is deprecated and ignored for all methods
         # ArviZ diagnostic plots are now always generated for CMC
 
+    # T3-8: Validate --phi-angles format (comma-separated floats)
+    if args.phi_angles is not None:
+        try:
+            [float(x.strip()) for x in args.phi_angles.split(",")]
+        except ValueError:
+            print(
+                f"Error: --phi-angles must be comma-separated numbers "
+                f"(e.g., '0,45,90,135'), got: '{args.phi_angles}'"
+            )
+            return False
+
     # Validate parameter override values
     if args.initial_d0 is not None and args.initial_d0 <= 0:
         print("Error: --initial-d0 must be positive")

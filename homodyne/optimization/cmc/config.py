@@ -294,14 +294,20 @@ class CMCConfig:
             )
             backend_name = "multiprocessing"
 
-        # Normalize possibly stringified ints
+        # T3-6: Normalize possibly stringified numbers (handles "10" and "10.0")
         num_shards_val = sharding.get("num_shards", "auto")
-        if isinstance(num_shards_val, str) and num_shards_val.isdigit():
-            num_shards_val = int(num_shards_val)
+        if isinstance(num_shards_val, str) and num_shards_val != "auto":
+            try:
+                num_shards_val = int(float(num_shards_val))
+            except ValueError:
+                pass  # Leave as string; validate() will catch it
 
         max_points_val = sharding.get("max_points_per_shard", "auto")
-        if isinstance(max_points_val, str) and max_points_val.isdigit():
-            max_points_val = int(max_points_val)
+        if isinstance(max_points_val, str) and max_points_val != "auto":
+            try:
+                max_points_val = int(float(max_points_val))
+            except ValueError:
+                pass  # Leave as string; validate() will catch it
 
         config = cls(
             # Enable settings
