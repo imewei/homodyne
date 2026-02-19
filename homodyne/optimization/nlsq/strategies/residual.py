@@ -8,7 +8,6 @@ import jax.numpy as jnp
 import numpy as np
 
 from homodyne.core.physics_nlsq import compute_g2_scaled
-from homodyne.core.physics_utils import apply_diagonal_correction
 from homodyne.utils.logging import get_logger, log_phase
 
 
@@ -332,6 +331,70 @@ class StratifiedResidualFunction:
             f"boundaries={list(self.chunk_boundaries[:5])}..."
         )
 
+        # Build stable vmap functions now that chunk metadata is available
+        self._setup_vmap_functions()
+
+    def _setup_vmap_functions(self) -> None:
+        """Create vmap-wrapped g2 computation functions once during init.
+
+        Avoids re-creating closures on every NLSQ iteration (fixes #20-analog
+        for residual.py). The closures capture stable values (t1_unique, q, L, dt)
+        while physical_params is passed as an explicit argument.
+        """
+        dt_value = self._chunk_dt if self._chunk_dt is not None else 0.001
+
+        # Per-angle scaling: physical_params, phi, contrast, offset all vary
+        def _g2_per_angle(
+            physical_params: jnp.ndarray,
+            phi_val: float,
+            contrast_val: float,
+            offset_val: float,
+        ) -> jnp.ndarray:
+            return jnp.squeeze(
+                compute_g2_scaled(
+                    params=physical_params,
+                    t1=self._t1_unique,
+                    t2=self._t2_unique,
+                    phi=phi_val,
+                    q=self._chunk_q,
+                    L=self._chunk_L,
+                    contrast=contrast_val,
+                    offset=offset_val,
+                    dt=dt_value,
+                ),
+                axis=0,
+            )
+
+        self._vmap_g2_per_angle = jax.vmap(
+            _g2_per_angle, in_axes=(None, 0, 0, 0)
+        )
+
+        # Scalar scaling: contrast/offset are scalars, only phi varies
+        def _g2_scalar(
+            physical_params: jnp.ndarray,
+            contrast_val: float,
+            offset_val: float,
+            phi_val: float,
+        ) -> jnp.ndarray:
+            return jnp.squeeze(
+                compute_g2_scaled(
+                    params=physical_params,
+                    t1=self._t1_unique,
+                    t2=self._t2_unique,
+                    phi=phi_val,
+                    q=self._chunk_q,
+                    L=self._chunk_L,
+                    contrast=contrast_val,
+                    offset=offset_val,
+                    dt=dt_value,
+                ),
+                axis=0,
+            )
+
+        self._vmap_g2_scalar = jax.vmap(
+            _g2_scalar, in_axes=(None, None, None, 0)
+        )
+
     def _compute_chunk_residuals_raw(
         self,
         g2_obs: jnp.ndarray,
@@ -438,9 +501,9 @@ class StratifiedResidualFunction:
             compute_g2_vmap = jax.vmap(compute_for_angle_scalar, in_axes=0)
             g2_theory_grid = compute_g2_vmap(phi_unique)  # Shape: (n_phi, n_t1, n_t2)
 
-        # Apply diagonal correction (matches experimental data preprocessing)
-        apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
-        g2_theory_grid = apply_diagonal_vmap(g2_theory_grid)
+        # Note: diagonal correction is not applied to the theory grid here.
+        # Diagonal points (t1==t2) are masked to zero residuals below,
+        # making any theory value at those points irrelevant to the fit.
 
         # Flatten theory grid
         g2_theory_flat = g2_theory_grid.flatten()
@@ -513,61 +576,28 @@ class StratifiedResidualFunction:
 
         # Compute theoretical g2 grid ONCE for all data
         # (Previously computed redundantly per-chunk)
-        dt_value = self._chunk_dt if self._chunk_dt is not None else 0.001
+        # Uses pre-built vmap functions (created once in _setup_vmap_functions)
+        # to avoid re-creating closures on every NLSQ iteration.
         if self.per_angle_scaling:
-
-            def compute_for_angle(
-                phi_val: float, contrast_val: float, offset_val: float
-            ) -> jnp.ndarray:
-                return jnp.squeeze(
-                    compute_g2_scaled(
-                        params=physical_params,
-                        t1=self._t1_unique,
-                        t2=self._t2_unique,
-                        phi=phi_val,
-                        q=self._chunk_q,
-                        L=self._chunk_L,
-                        contrast=contrast_val,
-                        offset=offset_val,
-                        dt=dt_value,
-                    ),
-                    axis=0,
-                )
-
-            compute_g2_vmap = jax.vmap(compute_for_angle, in_axes=(0, 0, 0))
-            g2_theory_grid = compute_g2_vmap(self._phi_unique, contrast, offset)
+            g2_theory_grid = self._vmap_g2_per_angle(
+                physical_params, self._phi_unique, contrast, offset
+            )
         else:
+            g2_theory_grid = self._vmap_g2_scalar(
+                physical_params, contrast, offset, self._phi_unique
+            )
 
-            def compute_for_angle_scalar(phi_val: float) -> jnp.ndarray:
-                return jnp.squeeze(
-                    compute_g2_scaled(
-                        params=physical_params,
-                        t1=self._t1_unique,
-                        t2=self._t2_unique,
-                        phi=phi_val,
-                        q=self._chunk_q,
-                        L=self._chunk_L,
-                        contrast=float(contrast),
-                        offset=float(offset),
-                        dt=dt_value,
-                    ),
-                    axis=0,
-                )
-
-            compute_g2_vmap = jax.vmap(compute_for_angle_scalar, in_axes=0)
-            g2_theory_grid = compute_g2_vmap(self._phi_unique)
-
-        # Apply diagonal correction (vectorized over phi angles)
-        apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
-        g2_theory_grid = apply_diagonal_vmap(g2_theory_grid)
+        # Note: diagonal correction is not applied to the theory grid here.
+        # Diagonal points (t1==t2) are masked to zero residuals below,
+        # making any theory value at those points irrelevant to the fit.
 
         # Flatten and extract theory values for ALL points at once
         # (Single indexing operation instead of per-chunk)
-        g2_theory_flat = g2_theory_grid.flatten()
+        g2_theory_flat = g2_theory_grid.reshape(-1)
         g2_theory_all = g2_theory_flat[self.flat_indices_all]
 
         # Get sigma values for ALL points (single indexing operation)
-        sigma_flat = sigma_full.flatten()
+        sigma_flat = sigma_full.reshape(-1)
         sigma_all = sigma_flat[self.flat_indices_all]
 
         # Compute ALL residuals in single vectorized operation

@@ -5472,9 +5472,9 @@ class NLSQWrapper(NLSQAdapterBase):
                     )
                     g2_theory_grid = compute_g2_vmap(phi_unique)
 
-                # Apply diagonal correction (same as stratified LS)
-                apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
-                g2_theory_grid = apply_diagonal_vmap(g2_theory_grid)
+                # NOTE: Diagonal correction skipped — residuals with t1==t2 are
+                # masked out below via `jnp.where(t1_c != t2_c, res, 0.0)`,
+                # so theory grid diagonal values are never used.
 
                 # === FLAT INDEXING: Extract chunk values from grid ===
                 g2_theory_flat = g2_theory_grid.flatten()
@@ -5553,9 +5553,8 @@ class NLSQWrapper(NLSQAdapterBase):
                 )
                 g2_theory_grid = compute_g2_vmap(phi_unique)
 
-            # Apply diagonal correction
-            apply_diagonal_vmap = jax.vmap(apply_diagonal_correction, in_axes=0)
-            g2_theory_grid = apply_diagonal_vmap(g2_theory_grid)
+            # NOTE: Diagonal correction skipped — chi2 with t1==t2 is masked
+            # out below via `jnp.where(t1_c != t2_c, res, 0.0)`.
 
             # === FLAT INDEXING: Extract chunk values ===
             g2_theory_flat = g2_theory_grid.flatten()
