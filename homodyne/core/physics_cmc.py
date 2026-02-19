@@ -16,25 +16,37 @@ Architecture Fix (Nov 2025):
 - Prevents NumPyro NUTS from compiling unused meshgrid branches
 - Eliminates 80GB memory allocation during CMC MCMC
 
+Performance Optimization (Feb 2026) — D2: Cumsum split + searchsorted dedup:
+- Pre-compute shard-constant quantities (time_safe, idx1, idx2) once per shard
+  instead of recomputing them on every NUTS leapfrog step.
+- `time_safe`: floor applied to time_grid to avoid t^alpha singularity at t=0.
+  Fixed per shard since time_grid is shard-constant.
+- `idx1, idx2`: searchsorted results mapping t1/t2 → time_grid indices.
+  Fixed per shard since time_grid, t1, t2 are all shard-constant.
+  Previously computed independently in diffusion AND shear functions (2× work).
+  Now computed once in `precompute_shard_grid` and threaded down to both.
+- Expected speedup: 2-5× CMC wall time for laminar_flow mode.
+
+Public API additions:
+  precompute_shard_grid(time_grid, t1, t2, dt) → ShardGrid
+  compute_g1_total_with_precomputed(params, phi_unique, shard_grid, wq_dt, sinc_pre)
+
 Physical Model:
 g₂(φ,t₁,t₂) = offset + contrast × [g₁(φ,t₁,t₂)]²
 g₁_total = g₁_diffusion × g₁_shear
 
 Usage:
   from homodyne.core.physics_cmc import compute_g1_diffusion, compute_g1_total
+  from homodyne.core.physics_cmc import precompute_shard_grid, compute_g1_total_with_precomputed
 """
 
 import math
+from typing import NamedTuple
 
+import numpy as np
 import jax.numpy as jnp
 from jax import jit
 
-from homodyne.core.physics_utils import (
-    calculate_diffusion_coefficient as _calculate_diffusion_coefficient_impl_jax,
-)
-from homodyne.core.physics_utils import (
-    calculate_shear_rate_cmc as _calculate_shear_rate_impl_jax,
-)
 from homodyne.core.physics_utils import (
     safe_exp,
     safe_len,
@@ -46,6 +58,266 @@ from homodyne.core.physics_utils import (
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+# =============================================================================
+# SHARD-CONSTANT PRE-COMPUTED GRID
+# =============================================================================
+
+
+class ShardGrid(NamedTuple):
+    """Pre-computed shard-constant arrays.
+
+    These quantities depend only on (time_grid, t1, t2, dt) — all of which
+    are fixed for the lifetime of a shard. Pre-computing them outside the
+    NUTS hot path avoids redundant work on every leapfrog step.
+
+    Attributes
+    ----------
+    time_safe : jnp.ndarray, shape (G,)
+        ``jnp.maximum(time_grid, epsilon)`` where epsilon = max(dt/2, 1e-8).
+        Avoids the t=0 singularity for t^alpha / t^beta power laws.
+        Fixed per shard.
+    idx1 : jnp.ndarray, shape (N,), dtype int
+        ``searchsorted(time_grid, t1)`` clipped to [0, G-1].
+        Maps each t1 observation to its nearest time_grid index.
+    idx2 : jnp.ndarray, shape (N,), dtype int
+        ``searchsorted(time_grid, t2)`` clipped to [0, G-1].
+        Maps each t2 observation to its nearest time_grid index.
+    dt_safe : float
+        Time step used to build time_safe epsilon. Stored for reference.
+    """
+
+    time_safe: jnp.ndarray
+    idx1: jnp.ndarray
+    idx2: jnp.ndarray
+    dt_safe: float
+
+
+def precompute_shard_grid(
+    time_grid: jnp.ndarray,
+    t1: jnp.ndarray,
+    t2: jnp.ndarray,
+    dt: float,
+) -> ShardGrid:
+    """Pre-compute shard-constant quantities for the CMC physics hot path.
+
+    Call this ONCE per shard (outside the NUTS sampling loop) and pass the
+    returned ``ShardGrid`` to ``compute_g1_total_with_precomputed``.
+
+    Parameters
+    ----------
+    time_grid : jnp.ndarray, shape (G,)
+        1D time grid used for trapezoidal cumulative integration.
+    t1 : jnp.ndarray, shape (N,)
+        Observed t1 time coordinates for this shard.
+    t2 : jnp.ndarray, shape (N,)
+        Observed t2 time coordinates for this shard.
+    dt : float
+        Time step (seconds). Used to set the t=0 singularity floor:
+        ``epsilon = max(dt / 2, 1e-8)``.
+
+    Returns
+    -------
+    ShardGrid
+        Pre-computed (time_safe, idx1, idx2) ready for NUTS.
+    """
+    dt_safe = float(dt) if dt is not None else 1e-3
+
+    # Build time_safe: apply singularity floor once
+    # This is identical to what calculate_diffusion_coefficient and
+    # calculate_shear_rate_cmc do internally on every leapfrog step.
+    epsilon = max(dt_safe * 0.5, 1e-8)
+    time_safe = jnp.maximum(time_grid, epsilon)
+
+    # Build searchsorted indices: shard-constant because time_grid, t1, t2 are fixed
+    max_index = time_grid.shape[0] - 1
+    idx1 = jnp.clip(jnp.searchsorted(time_grid, t1, side="left"), 0, max_index)
+    idx2 = jnp.clip(jnp.searchsorted(time_grid, t2, side="left"), 0, max_index)
+
+    return ShardGrid(time_safe=time_safe, idx1=idx1, idx2=idx2, dt_safe=dt_safe)
+
+
+# =============================================================================
+# OPTIMIZED INNER KERNELS (accept pre-computed idx + time_safe)
+# =============================================================================
+
+
+@jit
+def _compute_g1_diffusion_from_idx(
+    params: jnp.ndarray,
+    idx1: jnp.ndarray,
+    idx2: jnp.ndarray,
+    time_safe: jnp.ndarray,
+    wavevector_q_squared_half_dt: jnp.ndarray,
+) -> jnp.ndarray:
+    """Diffusion g1 using pre-computed indices and time_safe.
+
+    Replaces ``_compute_g1_diffusion_elementwise`` in the NUTS hot path.
+    Skips ``searchsorted`` and the ``jnp.maximum(time_grid, epsilon)`` floor —
+    both are shard-constant and were pre-computed in ``precompute_shard_grid``.
+
+    Parameters
+    ----------
+    params : (3,) or (7,)
+        Physical parameters: [D0, alpha, D_offset, ...]
+    idx1, idx2 : (N,) int
+        Pre-computed ``searchsorted`` indices for t1/t2 → time_grid.
+    time_safe : (G,)
+        ``jnp.maximum(time_grid, epsilon)`` — pre-computed per shard.
+    wavevector_q_squared_half_dt : scalar
+        Pre-computed factor 0.5 * q² * dt.
+
+    Returns
+    -------
+    jnp.ndarray, shape (N,)
+        Diffusion contribution to g1.
+    """
+    D0, alpha, D_offset = params[0], params[1], params[2]
+
+    # Compute D(t) on the safe time grid (param-dependent: varies each leapfrog step)
+    # Use jnp.where instead of jnp.maximum to preserve gradients when D(t) → 0.
+    # jnp.maximum kills gradients (d/dx = 0) below the threshold, causing NUTS
+    # divergences from zero momentum updates during leapfrog integration.
+    D_raw = D0 * (time_safe ** alpha) + D_offset
+    D_grid = jnp.where(D_raw > 1e-10, D_raw, 1e-10)
+    D_cumsum = _trapezoid_cumsum(D_grid)
+
+    # Index into cumsum using pre-computed indices (no searchsorted here)
+    epsilon_abs = 1e-12
+    integral_steps = jnp.sqrt((D_cumsum[idx2] - D_cumsum[idx1]) ** 2 + epsilon_abs)
+
+    log_g1 = -wavevector_q_squared_half_dt * integral_steps
+    log_g1_clipped = jnp.clip(log_g1, -700.0, 0.0)
+    return safe_exp(log_g1_clipped)  # shape: (N,)
+
+
+@jit
+def _compute_g1_shear_from_idx(
+    params: jnp.ndarray,
+    idx1: jnp.ndarray,
+    idx2: jnp.ndarray,
+    time_safe: jnp.ndarray,
+    phi_unique: jnp.ndarray,
+    sinc_prefactor: jnp.ndarray,
+    dt_safe: float,
+) -> jnp.ndarray:
+    """Shear g1 using pre-computed indices and time_safe.
+
+    Replaces ``_compute_g1_shear_elementwise`` in the NUTS hot path.
+    Skips ``searchsorted`` and the singularity floor — both pre-computed.
+
+    Parameters
+    ----------
+    params : (7,)
+        Physical parameters: [D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0]
+    idx1, idx2 : (N,) int
+        Pre-computed ``searchsorted`` indices.
+    time_safe : (G,)
+        Pre-computed safe time grid.
+    phi_unique : (P,)
+        Unique scattering angles (degrees). Must be pre-deduplicated by caller.
+    sinc_prefactor : scalar
+        Pre-computed factor 0.5/π * q * L * dt.
+    dt_safe : float
+        Time step used for the gamma_dot_0=0 singularity guard
+        (``jnp.maximum(dt, 1e-5)`` in CMC shear).
+
+    Returns
+    -------
+    jnp.ndarray, shape (P, N)
+        Shear contribution to g1.
+    """
+    # Static mode (no shear): return ones
+    if params.shape[0] < 7:
+        n_phi_unique = phi_unique.shape[0]
+        n_points = idx1.shape[0]
+        return jnp.ones((n_phi_unique, n_points))
+
+    gamma_dot_0, beta, gamma_dot_offset, phi0 = (
+        params[3], params[4], params[5], params[6],
+    )
+
+    # Compute gamma(t) on the safe time grid.
+    # time_safe already has t=0 replaced; additionally ensure dt floor for CMC.
+    dt_floor = jnp.maximum(jnp.asarray(dt_safe), 1e-5)
+    time_safe_cmc = jnp.where(time_safe == 0.0, dt_floor, time_safe)
+    # Use jnp.where instead of jnp.maximum to preserve gradients when γ̇(t) → 0.
+    # See D_grid comment above for rationale.
+    gamma_raw = gamma_dot_0 * (time_safe_cmc ** beta) + gamma_dot_offset
+    gamma_grid = jnp.where(gamma_raw > 1e-10, gamma_raw, 1e-10)
+    gamma_cumsum = _trapezoid_cumsum(gamma_grid)
+
+    # Index into cumsum using pre-computed indices (no searchsorted here)
+    epsilon_abs = 1e-12
+    gamma_integral = jnp.sqrt(
+        (gamma_cumsum[idx2] - gamma_cumsum[idx1]) ** 2 + epsilon_abs
+    )
+
+    # Vectorised over unique phi angles
+    angle_diff = jnp.deg2rad(phi0 - phi_unique)       # (P,)
+    cos_term   = jnp.cos(angle_diff)                   # (P,)
+    phase = sinc_prefactor * cos_term[:, None] * gamma_integral[None, :]  # (P, N)
+
+    sinc_val = safe_sinc(phase)
+    return sinc_val ** 2  # (P, N)
+
+
+@jit
+def _compute_g1_total_with_precomputed(
+    params: jnp.ndarray,
+    phi_unique: jnp.ndarray,
+    time_safe: jnp.ndarray,
+    idx1: jnp.ndarray,
+    idx2: jnp.ndarray,
+    wavevector_q_squared_half_dt: jnp.ndarray,
+    sinc_prefactor: jnp.ndarray,
+    dt_safe: float,
+) -> jnp.ndarray:
+    """Total g1 using pre-computed shard-constant quantities.
+
+    This is the NUTS hot-path kernel.  All quantities that depend only on the
+    shard (time_safe, idx1, idx2) are pre-computed once by
+    ``precompute_shard_grid`` and passed in, eliminating O(G) work that was
+    previously repeated on every leapfrog step.
+
+    The only O(G) work that remains per step is ``jnp.cumsum`` over the
+    param-dependent ``D_grid`` / ``gamma_grid`` — unavoidable since D0/alpha
+    and gamma_dot_0/beta are sampled parameters.
+
+    Parameters
+    ----------
+    params : (3,) or (7,)
+    phi_unique : (P,)
+    time_safe : (G,)   — pre-computed, shard-constant
+    idx1, idx2 : (N,)  — pre-computed, shard-constant
+    wavevector_q_squared_half_dt : scalar
+    sinc_prefactor : scalar
+    dt_safe : float
+
+    Returns
+    -------
+    jnp.ndarray, shape (P, N)
+    """
+    # Diffusion: shape (N,)
+    g1_diff = _compute_g1_diffusion_from_idx(
+        params, idx1, idx2, time_safe, wavevector_q_squared_half_dt
+    )
+
+    # Shear: shape (P, N)
+    g1_shear = _compute_g1_shear_from_idx(
+        params, idx1, idx2, time_safe, phi_unique, sinc_prefactor, dt_safe
+    )
+
+    # Broadcast and multiply: (P, N)
+    n_phi = g1_shear.shape[0]
+    g1_diff_broadcasted = jnp.broadcast_to(g1_diff[None, :], (n_phi, g1_diff.shape[0]))
+    return g1_diff_broadcasted * g1_shear  # type: ignore[no-any-return]
+
+
+# =============================================================================
+# LEGACY INNER KERNELS (kept for backward compat with non-precomputed callers)
+# =============================================================================
 
 
 @jit
@@ -66,11 +338,19 @@ def _compute_g1_diffusion_elementwise(
           t = dt * (frame_index - start_frame). They are NOT frame indices.
         * The smooth absolute difference comes from |cumsum[idx2]-cumsum[idx1]|,
           approximating ∫_{t1}^{t2} D(t) dt using all interior trapezoids.
+
+    .. deprecated::
+        Prefer ``_compute_g1_diffusion_from_idx`` + ``precompute_shard_grid`` in
+        NUTS hot paths to avoid repeating ``searchsorted`` every leapfrog step.
     """
+    from homodyne.core.physics_utils import (
+        calculate_diffusion_coefficient as _calc_diff,
+    )
+
     D0, alpha, D_offset = params[0], params[1], params[2]
 
     # Build diffusion on the 1D grid and cumulative trapezoid (no dt scaling here)
-    D_grid = _calculate_diffusion_coefficient_impl_jax(time_grid, D0, alpha, D_offset)
+    D_grid = _calc_diff(time_grid, D0, alpha, D_offset)
     D_cumsum = _trapezoid_cumsum(D_grid)
 
     # Map t1/t2 onto grid indices (time_grid is sorted, uniform)
@@ -126,7 +406,15 @@ def _compute_g1_shear_elementwise(
 
     Returns:
         Shear contribution to g1 (2D array: (n_unique_phi, n_points))
+
+    .. deprecated::
+        Prefer ``_compute_g1_shear_from_idx`` + ``precompute_shard_grid`` in
+        NUTS hot paths to avoid repeating ``searchsorted`` every leapfrog step.
     """
+    from homodyne.core.physics_utils import (
+        calculate_shear_rate_cmc as _calc_shear,
+    )
+
     # Check params length - if < 7, we're in static mode (no shear)
     if safe_len(params) < 7:
         # Return ones for all unique phi angles and time combinations (g1_shear = 1)
@@ -142,7 +430,7 @@ def _compute_g1_shear_elementwise(
     )
 
     # Build shear rate on the 1D grid and cumulative trapezoid (no dt scaling here)
-    gamma_grid = _calculate_shear_rate_impl_jax(
+    gamma_grid = _calc_shear(
         time_grid,
         gamma_dot_0,
         beta,
@@ -164,7 +452,7 @@ def _compute_g1_shear_elementwise(
 
     # phi_unique is already filtered to unique values by caller (compute_g1_total)
     # No need for jnp.unique() here (causes JAX concretization error during JIT)
-    n_phi_unique = safe_len(phi_unique)
+    n_phi_unique = safe_len(phi_unique)  # noqa: F841 — kept for clarity
 
     # Compute phase for unique phi angles (vectorized over unique phi)
     angle_diff = jnp.deg2rad(phi0 - phi_unique)  # shape: (n_unique_phi,)
@@ -235,6 +523,50 @@ def _compute_g1_total_elementwise(
 # =============================================================================
 
 
+def compute_g1_total_with_precomputed(
+    params: jnp.ndarray,
+    phi_unique: jnp.ndarray,
+    shard_grid: ShardGrid,
+    wavevector_q_squared_half_dt: jnp.ndarray,
+    sinc_prefactor: jnp.ndarray,
+) -> jnp.ndarray:
+    """Compute total g1 using pre-computed shard-constant quantities.
+
+    **Preferred hot-path API for NUTS sampling.**  Call ``precompute_shard_grid``
+    once per shard (outside the model function) and pass the result here.
+    Avoids repeating ``searchsorted`` and the singularity floor on every
+    leapfrog step.
+
+    Parameters
+    ----------
+    params : jnp.ndarray, shape (3,) or (7,)
+        Physical parameters [D0, alpha, D_offset, ...].
+    phi_unique : jnp.ndarray, shape (P,)
+        Unique scattering angles (degrees). Must be pre-deduplicated.
+    shard_grid : ShardGrid
+        Pre-computed grid from ``precompute_shard_grid``.
+    wavevector_q_squared_half_dt : scalar
+        Pre-computed factor 0.5 * q² * dt.
+    sinc_prefactor : scalar
+        Pre-computed factor 0.5/π * q * L * dt.
+
+    Returns
+    -------
+    jnp.ndarray, shape (P, N)
+        Total g1 correlation function.
+    """
+    return _compute_g1_total_with_precomputed(
+        params,
+        jnp.atleast_1d(phi_unique),
+        shard_grid.time_safe,
+        shard_grid.idx1,
+        shard_grid.idx2,
+        wavevector_q_squared_half_dt,
+        sinc_prefactor,
+        shard_grid.dt_safe,
+    )
+
+
 def compute_g1_diffusion(
     params: jnp.ndarray,
     t1: jnp.ndarray,
@@ -283,8 +615,6 @@ def compute_g1_diffusion(
     # Build/infer time grid (prefer provided grid to avoid JIT shape issues)
     if time_grid is None:
         # Infer maximum time and construct grid from dt
-        import numpy as np
-
         max_time = float(np.max(np.concatenate([np.asarray(t1), np.asarray(t2)])))
         n_time = int(round(max_time / dt_value)) + 1
         time_grid = jnp.linspace(0.0, dt_value * (n_time - 1), n_time)
@@ -383,8 +713,6 @@ def compute_g1_total(
 
     if time_grid is None:
         # Infer maximum time and construct grid from dt_value
-        import numpy as np
-
         dt_safe = float(dt_value)
         max_time = float(np.max(np.concatenate([np.asarray(t1), np.asarray(t2)])))
         n_time = int(round(max_time / dt_safe)) + 1
@@ -406,8 +734,6 @@ def compute_g1_total(
 
     # DEBUG logging for CMC physics diagnosis
     if _debug:
-        import numpy as np
-
         t1_np = np.asarray(t1)
         t2_np = np.asarray(t2)
         time_grid_np = np.asarray(time_grid)

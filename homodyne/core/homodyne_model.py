@@ -209,27 +209,20 @@ class HomodyneModel:
         # Extract pre-computed factors
         q_factor, sinc_factor = self.physics_factors.to_tuple()
 
-        # Compute for all angles
-        c2_results = []
-        for phi in phi_angles_jax:
-            phi_array = jnp.array([phi])
-
-            # Call JIT-compiled functional core with pre-computed factors
-            c2_phi = compute_g2_scaled_with_factors(
-                params_jax,
-                self.t1_grid,
-                self.t2_grid,
-                phi_array,
-                q_factor,  # Pre-computed at init
-                sinc_factor,  # Pre-computed at init
-                contrast,
-                offset,
-                self.dt,  # Time step from experimental configuration
-            )
-
-            c2_results.append(c2_phi[0])
-
-        result = jnp.stack(c2_results)
+        # Single vectorized call: pass all phi angles at once.
+        # _compute_g1_shear_core handles phi arrays in matrix mode via vmap,
+        # returning shape (n_phi, n_times, n_times) — no Python loop needed.
+        result = compute_g2_scaled_with_factors(
+            params_jax,
+            self.t1_grid,
+            self.t2_grid,
+            phi_angles_jax,
+            q_factor,    # Pre-computed at init
+            sinc_factor, # Pre-computed at init
+            contrast,
+            offset,
+            self.dt,     # Time step from experimental configuration
+        )
 
         logger.debug(
             f"Computed C2 for {len(phi_angles)} angles, "

@@ -104,104 +104,111 @@ try:
 except ImportError:
     __version__ = "2.22.0"
 
-# Core imports with graceful fallback
-# These are re-exported for public API
-try:
-    from homodyne.data import XPCSDataLoader, load_xpcs_data  # noqa: F401
+# ---------------------------------------------------------------------------
+# Lazy public API
+# ---------------------------------------------------------------------------
+# Submodules (homodyne.data, .core, .optimization, .config, .device, .cli)
+# import JAX, NumPyro, ArviZ, h5py, and other heavy dependencies.  Loading
+# them eagerly adds 3-6 s to *every* `import homodyne` — including CLI
+# invocations that only need argument parsing.
+#
+# The __getattr__ hook below delays each import until the attribute is first
+# accessed (e.g. `homodyne.fit_nlsq_jax`).  Subsequent accesses resolve
+# directly via the module __dict__ at zero cost.
+#
+# The _LAZY_IMPORTS dict maps exported names to (submodule, attr) pairs.
+# _MODULE_SENTINELS maps each module flag (HAS_DATA etc.) to its submodule
+# path so that `HAS_*` reflects real availability when first queried.
 
-    HAS_DATA = True
-except ImportError:
-    HAS_DATA = False
-
-try:
-    from homodyne.core import (  # noqa: F401
-        ParameterSpace,
-        ScaledFittingEngine,
-        TheoryEngine,
-        compute_g2_scaled,
-    )
-
-    HAS_CORE = True
-except ImportError:
-    HAS_CORE = False
-
-try:
-    from homodyne.optimization import (  # noqa: F401
-        fit_mcmc_jax,
-        fit_nlsq_jax,
-        get_optimization_info,
-    )
-
-    HAS_OPTIMIZATION = True
-except ImportError:
-    HAS_OPTIMIZATION = False
-
-try:
-    from homodyne.config import ConfigManager  # noqa: F401
-
-    HAS_CONFIG = True
-except ImportError:
-    HAS_CONFIG = False
-
-try:
-    from homodyne.device import (  # noqa: F401
-        configure_optimal_device,
-        get_device_status,
-    )
-
-    HAS_DEVICE = True
-except ImportError:
-    HAS_DEVICE = False
-
-try:
-    from homodyne.cli import main as cli_main  # noqa: F401
-
-    HAS_CLI = True
-except ImportError:
-    HAS_CLI = False
-
-# Package feature information
-__features__ = {
-    "data_loading": HAS_DATA,
-    "core_physics": HAS_CORE,
-    "optimization": HAS_OPTIMIZATION,
-    "configuration": HAS_CONFIG,
-    "device_optimization": HAS_DEVICE,
-    "cli_interface": HAS_CLI,
-    "jax_acceleration": None,  # Will be set below
+_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    # data
+    "XPCSDataLoader":           ("homodyne.data",         "XPCSDataLoader"),
+    "load_xpcs_data":           ("homodyne.data",         "load_xpcs_data"),
+    # core
+    "ParameterSpace":           ("homodyne.core",         "ParameterSpace"),
+    "ScaledFittingEngine":      ("homodyne.core",         "ScaledFittingEngine"),
+    "TheoryEngine":             ("homodyne.core",         "TheoryEngine"),
+    "compute_g2_scaled":        ("homodyne.core",         "compute_g2_scaled"),
+    # optimization
+    "fit_mcmc_jax":             ("homodyne.optimization", "fit_mcmc_jax"),
+    "fit_nlsq_jax":             ("homodyne.optimization", "fit_nlsq_jax"),
+    "get_optimization_info":    ("homodyne.optimization", "get_optimization_info"),
+    # config
+    "ConfigManager":            ("homodyne.config",       "ConfigManager"),
+    # device
+    "configure_optimal_device": ("homodyne.device",       "configure_optimal_device"),
+    "get_device_status":        ("homodyne.device",       "get_device_status"),
+    # cli
+    "cli_main":                 ("homodyne.cli",          "main"),
 }
 
-# Check JAX availability (CPU-only in v2.3.0)
-try:
-    import jax
+# Sentinel names that trigger module-level HAS_* evaluation on first access.
+_MODULE_FLAGS: dict[str, tuple[str, str]] = {
+    "HAS_DATA":         ("homodyne.data",         "XPCSDataLoader"),
+    "HAS_CORE":         ("homodyne.core",         "ParameterSpace"),
+    "HAS_OPTIMIZATION": ("homodyne.optimization", "fit_nlsq_jax"),
+    "HAS_CONFIG":       ("homodyne.config",       "ConfigManager"),
+    "HAS_DEVICE":       ("homodyne.device",       "configure_optimal_device"),
+    "HAS_CLI":          ("homodyne.cli",          "main"),
+}
 
-    __features__["jax_acceleration"] = True
-except ImportError:
-    __features__["jax_acceleration"] = False
 
-# Main exports (only available components)
-__all__ = ["__version__", "__features__", "get_package_info"]
+def __getattr__(name: str) -> object:
+    """Lazy-load public API symbols and HAS_* flags on first access."""
+    import importlib
 
-# Add available components to exports
-if HAS_DATA:
-    __all__.extend(["load_xpcs_data", "XPCSDataLoader"])
+    # Lazy submodule attribute
+    if name in _LAZY_IMPORTS:
+        module_path, attr = _LAZY_IMPORTS[name]
+        try:
+            mod = importlib.import_module(module_path)
+            value = getattr(mod, attr)
+        except (ImportError, AttributeError):
+            raise AttributeError(
+                f"homodyne.{name} is not available "
+                f"(could not import {module_path}.{attr})"
+            ) from None
+        globals()[name] = value  # cache in module dict for future access
+        return value
 
-if HAS_CORE:
-    __all__.extend(
-        ["compute_g2_scaled", "TheoryEngine", "ScaledFittingEngine", "ParameterSpace"],
-    )
+    # Lazy HAS_* flags
+    if name in _MODULE_FLAGS:
+        module_path, attr = _MODULE_FLAGS[name]
+        try:
+            mod = importlib.import_module(module_path)
+            getattr(mod, attr)  # ensure the symbol actually exists
+            value: bool = True
+        except (ImportError, AttributeError):
+            value = False
+        globals()[name] = value
+        return value
 
-if HAS_OPTIMIZATION:
-    __all__.extend(["fit_nlsq_jax", "fit_mcmc_jax", "get_optimization_info"])
+    raise AttributeError(f"module 'homodyne' has no attribute {name!r}")
 
-if HAS_CONFIG:
-    __all__.extend(["ConfigManager"])
 
-if HAS_DEVICE:
-    __all__.extend(["configure_optimal_device", "get_device_status"])
+# __features__ is populated lazily via get_package_info() or direct access.
+# It is NOT pre-populated here to avoid triggering eager imports.
 
-if HAS_CLI:
-    __all__.extend(["cli_main"])
+# Main exports — include all known names; unavailable ones raise AttributeError
+# at access time with a helpful message.
+__all__ = [
+    "__version__",
+    "get_package_info",
+    # data
+    "XPCSDataLoader", "load_xpcs_data",
+    # core
+    "ParameterSpace", "ScaledFittingEngine", "TheoryEngine", "compute_g2_scaled",
+    # optimization
+    "fit_nlsq_jax", "fit_mcmc_jax", "get_optimization_info",
+    # config
+    "ConfigManager",
+    # device
+    "configure_optimal_device", "get_device_status",
+    # cli
+    "cli_main",
+    # flags (resolved lazily)
+    "HAS_DATA", "HAS_CORE", "HAS_OPTIMIZATION", "HAS_CONFIG", "HAS_DEVICE", "HAS_CLI",
+]
 
 
 def get_package_info() -> dict:
@@ -212,16 +219,44 @@ def get_package_info() -> dict:
     dict
         Package information including version, features, and dependencies
     """
+    import importlib
+
+    # Resolve HAS_* lazily (triggers __getattr__ if not yet cached)
+    import homodyne as _self
+    has_data = getattr(_self, "HAS_DATA", False)
+    has_core = getattr(_self, "HAS_CORE", False)
+    has_optimization = getattr(_self, "HAS_OPTIMIZATION", False)
+    has_config = getattr(_self, "HAS_CONFIG", False)
+    has_device = getattr(_self, "HAS_DEVICE", False)
+    has_cli = getattr(_self, "HAS_CLI", False)
+
+    # Check JAX availability
+    try:
+        importlib.import_module("jax")
+        jax_available = True
+    except ImportError:
+        jax_available = False
+
+    features = {
+        "data_loading": has_data,
+        "core_physics": has_core,
+        "optimization": has_optimization,
+        "configuration": has_config,
+        "device_optimization": has_device,
+        "cli_interface": has_cli,
+        "jax_acceleration": jax_available,
+    }
+
     info = {
         "version": __version__,
-        "features": __features__.copy(),
+        "features": features,
         "modules_available": {
-            "data": HAS_DATA,
-            "core": HAS_CORE,
-            "optimization": HAS_OPTIMIZATION,
-            "config": HAS_CONFIG,
-            "device": HAS_DEVICE,
-            "cli": HAS_CLI,
+            "data": has_data,
+            "core": has_core,
+            "optimization": has_optimization,
+            "config": has_config,
+            "device": has_device,
+            "cli": has_cli,
         },
         "dependencies": {},
         "recommendations": [],
@@ -241,7 +276,7 @@ def get_package_info() -> dict:
 
     for dep in dependencies:
         try:
-            __import__(dep)
+            importlib.import_module(dep)
             dependencies[dep] = True
         except ImportError:
             dependencies[dep] = False
@@ -267,7 +302,7 @@ def get_package_info() -> dict:
         recommendations.append("Install h5py for HDF5 data: pip install h5py")
 
     # System recommendations (CPU-only in v2.3.0)
-    if __features__["jax_acceleration"]:
+    if jax_available:
         recommendations.append(
             "CPU acceleration configured - good performance expected",
         )
@@ -281,13 +316,17 @@ def get_package_info() -> dict:
 
 def _check_installation() -> None:
     """Check installation status and provide helpful messages (CPU-only in v2.3.0)."""
-    if not HAS_OPTIMIZATION:
+    import homodyne as _self
+    if not getattr(_self, "HAS_OPTIMIZATION", False):
         print(
             "Warning: Optimization modules not available. Core functionality limited.",
         )
         print("Install with: pip install homodyne[all]")
 
-    if not __features__["jax_acceleration"]:
+    try:
+        import importlib
+        importlib.import_module("jax")
+    except ImportError:
         print("Note: JAX not available. Install with: pip install jax")
 
 

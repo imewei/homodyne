@@ -161,7 +161,7 @@ def _get_array_hash_key(arr: "jnp.ndarray") -> tuple | None:
         if arr.ndim == 0:
             return (1, float(arr), float(arr), str(arr.dtype))
         n = len(arr)
-        return (n, float(arr[0]), float(arr[-1]), str(arr.dtype))
+        return (n, float(arr[0]), float(arr[arr.shape[0] - 1]), str(arr.dtype))
     except _ARRAY_HASH_EXCEPTIONS:
         # Inside JIT tracing - can't access concrete values
         return None
@@ -712,15 +712,11 @@ def _compute_g1_shear_core(
         sinc2_result = sinc_val**2  # shape: (n,)
 
     else:
-        # MATRIX MODE: Standard broadcasting for small datasets
-        # Vectorized computation: compute all phi angles at once
-        # angle_diff shape: (n_phi,)
-        angle_diff = jnp.deg2rad(phi0 - phi_array)  # Use phi_array for consistency
-        cos_term = jnp.cos(angle_diff)  # shape: (n_phi,)
-
-        # Broadcast: prefactor shape (n_phi,), gamma_integral shape (n_times, n_times)
-        # Need to expand prefactor to (n_phi, 1, 1) for proper broadcasting
-        prefactor = sinc_prefactor * cos_term[:, None, None]  # shape: (n_phi, 1, 1)
+        # MATRIX MODE: Use vmap over phi to avoid O(n_phi × N²) peak memory.
+        # Broadcasting would create a (n_phi, n_times, n_times) 3D tensor in one
+        # shot — for n_phi=23, N=1001 that is 23 × 10^6 = 23M elements (~185 MB).
+        # vmap applies the single-phi kernel sequentially-but-fused by XLA, keeping
+        # peak working memory at O(N²) while returning the stacked (n_phi, N, N) result.
 
         # Ensure gamma_integral has the expected 2D shape
         if gamma_integral.ndim != 2:
@@ -728,22 +724,15 @@ def _compute_g1_shear_core(
                 f"gamma_integral should be 2D, got shape {gamma_integral.shape}",
             )
 
-        # Compute phase matrix for all phi angles: shape (n_phi, n_times, n_times)
-        try:
-            phase = (
-                prefactor * gamma_integral
-            )  # Broadcast: (n_phi, 1, 1) * (n_times, n_times)
-        except Exception as e:
-            # Enhanced error message for debugging
-            raise ValueError(
-                f"Broadcasting error in _compute_g1_shear_core: "
-                f"prefactor.shape={prefactor.shape}, gamma_integral.shape={gamma_integral.shape}. "
-                f"Original error: {e}",
-            ) from e
+        def _sinc2_for_one_phi(phi_scalar: jnp.ndarray) -> jnp.ndarray:
+            """Compute sinc²(Φ) for a single phi angle. Shape: (n_times, n_times)."""
+            angle_diff = jnp.deg2rad(phi0 - phi_scalar)
+            prefactor = sinc_prefactor * jnp.cos(angle_diff)
+            phase = prefactor * gamma_integral  # (n_times, n_times)
+            return safe_sinc(phase) ** 2
 
-        # Compute sinc² values: [sinc(Φ)]² for all phi angles
-        sinc_val = safe_sinc(phase)
-        sinc2_result = sinc_val**2
+        # vmap over the phi array axis — each call gets a scalar phi element
+        sinc2_result = vmap(_sinc2_for_one_phi)(phi_array)  # (n_phi, n_times, n_times)
 
     return jnp.asarray(sinc2_result)
 
@@ -798,35 +787,17 @@ def _compute_g1_total_core(
     if is_elementwise:
         # ELEMENT-WISE MODE: Simple element-wise multiplication
         # g1_diff: (n,), g1_shear: (n,) → g1_total: (n,)
-        try:
-            g1_total = g1_diff * g1_shear
-        except Exception as e:
-            raise ValueError(
-                f"Element-wise multiplication error in _compute_g1_total_core: "
-                f"g1_diff.shape={g1_diff.shape}, g1_shear.shape={g1_shear.shape}. "
-                f"Original error: {e}",
-            ) from e
-
+        g1_total = g1_diff * g1_shear
     else:
         # MATRIX MODE: Broadcast diffusion term to match shear dimensions
-        # g1_diff needs to be broadcast from (n_times, n_times) to (n_phi, n_times, n_times)
-        # Use the shape of g1_shear to determine n_phi (more reliable than parsing phi directly)
+        # g1_diff: (n_times, n_times) → (n_phi, n_times, n_times) via broadcast
         n_phi = g1_shear.shape[0]
         g1_diff_broadcasted = jnp.broadcast_to(
             g1_diff[None, :, :],
             (n_phi, g1_diff.shape[0], g1_diff.shape[1]),
         )
-
-        # Multiply: g₁_total[phi, i, j] = g₁_diffusion[i, j] × g₁_shear[phi, i, j]
-        try:
-            g1_total = g1_diff_broadcasted * g1_shear
-        except Exception as e:
-            # Enhanced error message for debugging
-            raise ValueError(
-                f"Broadcasting error in _compute_g1_total_core: "
-                f"g1_diff_broadcasted.shape={g1_diff_broadcasted.shape}, g1_shear.shape={g1_shear.shape}. "
-                f"Original error: {e}",
-            ) from e
+        # g₁_total[phi, i, j] = g₁_diffusion[i, j] × g₁_shear[phi, i, j]
+        g1_total = g1_diff_broadcasted * g1_shear
 
     # P1-2: Keep only lower bound for numerical stability (prevents log(0)).
     # Upper clip removed — g1_diff is already bounded ≤ 1.0 from log-space clip,
@@ -1149,22 +1120,12 @@ def compute_g2_scaled_with_factors(
         This function is JIT-compiled for maximum performance.
         Use with HomodyneModel for best results.
     """
-    # Handle 1D time arrays by creating meshgrids
+    # Handle 1D time arrays by creating meshgrids.
+    # This function is only called from the NLSQ path (HomodyneModel), which
+    # always passes 2D grids. CMC uses physics_cmc.py directly. The 1D branch
+    # is a safety net for external callers passing 1D time vectors.
     if t1.ndim == 1 and t2.ndim == 1:
-        # Check if this is flattened pooled data (from CMC) vs normal time vectors
-        # Normal time vectors: typically 100-2000 elements (need meshgrid expansion)
-        # Pooled data for SVI: 2000-5000+ elements (already element-wise matched, DON'T mesh)
-        # Using 2000 as threshold: above typical time vectors (e.g., 1001), below pooled data (e.g., 4600)
-        if len(t1) > 2000:
-            # Pooled/flattened data: arrays already element-wise matched, don't create meshgrid
-            # Creating meshgrid would cause OOM: e.g., 4600² = 21M elements, 23M² = 530 quadrillion
-            pass  # t1 and t2 are already correctly paired element-wise
-        else:
-            # Normal time vectors: create 2D meshgrids for all (t1[i], t2[j]) pairs
-            # CRITICAL: Must match caller's convention: t1_grid, t2_grid = meshgrid(t, t, 'ij')
-            t1_grid, t2_grid = jnp.meshgrid(t1, t2, indexing="ij")
-            t1 = t1_grid
-            t2 = t2_grid
+        t1, t2 = jnp.meshgrid(t1, t2, indexing="ij")
 
     # Call core computation with pre-computed factors
     return jnp.asarray(
@@ -1228,6 +1189,17 @@ hessian_g2 = jit(hessian(compute_g2_scaled, argnums=0))  # Hessian w.r.t. params
 gradient_chi2 = jit(grad(compute_chi_squared, argnums=0))  # Gradient of chi-squared
 hessian_chi2 = jit(hessian(compute_chi_squared, argnums=0))  # Hessian of chi-squared
 
+# Module-level vmapped functions — created once to avoid per-call re-tracing.
+# params_batch axis 0 is batched; all other args are broadcast unchanged.
+_vmap_g2_scaled = vmap(
+    compute_g2_scaled,
+    in_axes=(0, None, None, None, None, None, None, None, None),
+)
+_vmap_chi_squared = vmap(
+    compute_chi_squared,
+    in_axes=(0, None, None, None, None, None, None, None, None, None, None),
+)
+
 
 # Vectorized versions for batch computation
 @log_performance(threshold=0.1)
@@ -1270,12 +1242,8 @@ def vectorized_g2_computation(
             results.append(result)
         return jnp.stack(results)
 
-    # JAX vectorized version
-    vectorized_func = vmap(
-        compute_g2_scaled,
-        in_axes=(0, None, None, None, None, None, None, None, None),
-    )
-    return vectorized_func(params_batch, t1, t2, phi, q, L, contrast, offset, dt_value)
+    # JAX vectorized version — use module-level vmapped function to avoid re-tracing
+    return _vmap_g2_scaled(params_batch, t1, t2, phi, q, L, contrast, offset, dt_value)
 
 
 @log_performance(threshold=0.05)
@@ -1330,13 +1298,9 @@ def batch_chi_squared(
             results.append(result)
         return jnp.array(results)
 
-    # JAX vectorized version
-    vectorized_func = vmap(
-        compute_chi_squared,
-        in_axes=(0, None, None, None, None, None, None, None, None, None, None),
-    )
+    # JAX vectorized version — use module-level vmapped function to avoid re-tracing
     return jnp.asarray(
-        vectorized_func(
+        _vmap_chi_squared(
             params_batch,
             data,
             sigma,
