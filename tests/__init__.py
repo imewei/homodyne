@@ -23,4 +23,4 @@ Requirements:
 - NumPy >= 1.25.0
 """
 
-__version__ = "2.22.0"
+__version__ = "2.22.1"

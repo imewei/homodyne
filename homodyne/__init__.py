@@ -71,6 +71,11 @@ _DEFAULT_XLA_FLAGS = [
     "--xla_disable_hlo_passes=constant_folding",
 ]
 
+# P2-A: Set JAX_ENABLE_X64 explicitly rather than relying on nlsq import side-effect.
+# JAX must be in float64 for parameters spanning 6+ orders of magnitude (D0~1e4, gamma~1e-3).
+# This env var must be set BEFORE the first JAX import (any import that triggers jax init).
+os.environ.setdefault("JAX_ENABLE_X64", "1")
+
 if "XLA_FLAGS" not in os.environ:
     # No existing XLA_FLAGS, set defaults
     os.environ["XLA_FLAGS"] = " ".join(_DEFAULT_XLA_FLAGS)
@@ -102,7 +107,7 @@ logging.getLogger("jax._src.compiler").setLevel(logging.ERROR)
 try:
     from homodyne._version import __version__
 except ImportError:
-    __version__ = "2.22.0"
+    __version__ = "2.22.1"
 
 # ---------------------------------------------------------------------------
 # Lazy public API

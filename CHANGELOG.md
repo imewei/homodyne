@@ -13,6 +13,71 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
+## [2.22.1] - 2026-02-19
+
+### Numerical Correctness and Gradient Safety
+
+Bug-fix release addressing gradient-killing numerical floors, configuration access errors,
+and documentation accuracy. All fixes target the NLSQ Jacobian and NUTS leapfrog hot paths.
+
+#### Fixed
+
+**Gradient-safe numerical floors (P1-C, P1-D, P2-C):**
+
+- **fix(physics)**: Replace `jnp.maximum(x, eps)` with `jnp.where(x > eps, x, eps)` in
+  `calculate_diffusion_coefficient`, `calculate_shear_rate`, and `calculate_shear_rate_cmc`
+  (`physics_utils.py`). `jnp.maximum` zeros the gradient below the floor, stalling both
+  NLSQ Jacobian computation and NUTS leapfrog integration.
+
+- **fix(cmc)**: Replace `jnp.maximum(1 - D_offset_frac, 1e-10)` with `jnp.where` in
+  `xpcs_model_reparameterized` D_offset back-transform (`model.py`)
+
+**Configuration and validation (P1-A, P1-B, P1-E, P2-A, P2-B, P2-D):**
+
+- **fix(cmc)**: Fix `require_warmstart` attribute access in `fit_mcmc_jax` — was calling
+  `getattr(cmc_config, ...)` on a raw dict (always returned `False`); now reads
+  `config.require_nlsq_warmstart` (`core.py`)
+
+- **fix(nlsq)**: Remove hardcoded `dtype=jnp.float64` inside `@jit` shear meshgrid;
+  now uses `jnp.result_type(phi)` to preserve caller dtype (`physics_nlsq.py`)
+
+- **fix(cli)**: Read `stator_rotor_gap` from config instead of hardcoded `L=2000000.0`
+  in CMC-only CLI path (`commands.py`)
+
+- **fix(init)**: Set `JAX_ENABLE_X64=1` explicitly in `__init__.py` and `cli/main.py`
+  before any JAX import, rather than relying on NLSQ import side-effect
+
+- **fix(cmc)**: Change `CMCConfig.from_dict` sharding default from `"stratified"` to
+  `"random"` to match the dataclass field default (`config.py`)
+
+- **fix(cmc)**: Add `min_points_per_param` to `CMCConfig.from_dict` — was not
+  configurable from YAML despite being a dataclass field (`config.py`)
+
+- **fix(nlsq)**: Align `hybrid_normalization_strategy` default in
+  `NLSQConfig.from_dict` to `"auto"` — was `"bounds"`, mismatching the
+  dataclass default and `NLSQWrapper` internal default (`nlsq/config.py`)
+
+**Code quality (P2-F):**
+
+- **refactor(cmc)**: Move `_calc_diff` and `_calc_shear` imports from inside deprecated
+  `@jit` functions to module level in `physics_cmc.py`
+
+- **fix(multiprocessing)**: Correct misleading comment about JAX_ENABLE_X64 propagation
+  in worker spawn (`multiprocessing.py`)
+
+#### Changed
+
+- **docs(api)**: Update `cmc.rst` YAML reference — fix stale `strategy: "stratified"`
+  default, add `min_points_per_param` field
+- **docs(api)**: Add gradient-safe numerical floors admonition and shear rate functions
+  to `core.rst` physics_utils section
+- **docs(api)**: Expand XLA configuration documentation in `cmc_backends.rst` to cover
+  parent-process `JAX_ENABLE_X64` setup
+- **docs(claude)**: Add Critical Rules 7 (gradient-safe floors) and 8 (float64 before
+  JAX import) to `CLAUDE.md`
+
+______________________________________________________________________
+
 ## [2.22.0] - 2026-02-02
 
 ### CMC Adaptive Sampling and Performance Profiling
