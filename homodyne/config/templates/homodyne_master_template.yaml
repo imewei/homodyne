@@ -18,8 +18,8 @@
 #   - homodyne_static.yaml: 3-parameter equilibrium diffusion
 #   - homodyne_laminar_flow.yaml: 7-parameter shear flow
 #
-# VERSION: 2.18.0
-# UPDATED: 2026-01-18
+# VERSION: 2.22.1
+# UPDATED: 2026-02-19
 # ==============================================================================
 
 # ==============================================================================
@@ -28,7 +28,7 @@
 # Template metadata for documentation and validation.
 # The config_version should match the homodyne package version.
 metadata:
-  config_version: "2.18.0"
+  config_version: "2.22.1"
   description: "Master template - comprehensive reference with all configuration options"
   analysis_mode: "laminar_flow"
 
@@ -423,6 +423,21 @@ optimization:
   #
   nlsq:
     # -------------------------------------------------------------------------
+    # WORKFLOW AND OPTIMIZATION GOAL (v2.11.0+)
+    # -------------------------------------------------------------------------
+    # Internal workflow selection. Homodyne uses its own memory-aware strategy
+    # selector (select_nlsq_strategy), so this is for internal reference only.
+    #
+    # workflow: "auto" lets homodyne decide based on dataset size and memory
+    # goal: Controls tolerance/quality tradeoff in NLSQ solver
+    #   "quality"          - Strictest tolerances, best results (default)
+    #   "robust"           - Balanced quality and convergence
+    #   "fast"             - Relaxed tolerances, faster convergence
+    #   "memory_efficient" - Optimized for low-memory environments
+    workflow: "auto"
+    goal: "quality"
+
+    # -------------------------------------------------------------------------
     # MEMORY CONFIGURATION
     # -------------------------------------------------------------------------
     # Choose ONE of:
@@ -656,7 +671,7 @@ optimization:
       #     Results in physical-only optimization (7 params).
       #
       #   "fourier": Fourier basis for smooth angle variation (NLSQ only).
-      #     Configured via fourier.order and fourier.min_phi_for_fourier.
+      #     Configured via fourier_order and fourier_auto_threshold.
       #
       #   "individual": Independent per-angle params, optimized during fitting.
       #     Prone to absorption with many angles. Use with caution.
@@ -674,14 +689,9 @@ optimization:
         # CONSTRAINT: >= 1
 
       # Fourier reparameterization (Layer 1 - legacy, rarely needed)
-      fourier:
-        order:
-          2 # Number of Fourier harmonics
-          # CONSTRAINT: >= 1
-        min_phi_for_fourier:
-          6 # Min angles for Fourier mode
-          # CONSTRAINT: >= 1
-        regularize_high_order: false # Regularize high-order Fourier terms
+      # NOTE: These are flat keys at anti_degeneracy level, not nested.
+      fourier_order: 2         # Number of Fourier harmonics (CONSTRAINT: >= 1)
+      fourier_auto_threshold: 6 # Min angles for Fourier mode (CONSTRAINT: >= 1)
 
       # Hierarchical Optimization (Layer 2)
       # Alternates between physical and per-angle params
@@ -862,6 +872,11 @@ optimization:
         1000.0 # Scale ratio threshold for auto-selection
         # CONSTRAINT: > 0
 
+      # CMA-ES Parameter Normalization (v2.16.0)
+      # Normalizes parameters to [0,1] based on bounds for better scale handling
+      normalize: true            # Enable bounds-based normalization (recommended)
+      normalization_epsilon: 1.0e-12  # Prevent division by zero for tiny ranges
+
       # Post-CMA-ES NLSQ TRF refinement
       refine_with_nlsq: true # Refine CMA-ES solution with L-M
       refinement_workflow: "auto" # "auto" | "standard" | "streaming"
@@ -880,6 +895,20 @@ optimization:
       refinement_loss:
         "linear" # Loss for refinement
         # Options: "linear", "soft_l1", "huber", etc.
+
+    # -------------------------------------------------------------------------
+    # FIT QUALITY VALIDATION (v2.16.0+)
+    # -------------------------------------------------------------------------
+    # Post-optimization quality checks with configurable thresholds.
+    # Logs warnings for potential issues but does not raise exceptions.
+    #
+    quality_validation:
+      enable: true                          # Enable post-fit quality checks
+      reduced_chi_squared_threshold: 10.0   # Warn if χ²_red > threshold
+      warn_on_max_restarts: true            # Warn if CMA-ES didn't converge
+      warn_on_bounds_hit: true              # Warn if physical params at bounds
+      warn_on_convergence_failure: true     # Warn if optimization failed
+      bounds_tolerance: 1.0e-9              # Tolerance for "at bounds" detection
 
   # ===========================================================================
   # STREAMING CHECKPOINT/RESUME (>100M points)
@@ -1044,6 +1073,13 @@ optimization:
       3 # Use constant when n_phi >= this
       # CONSTRAINT: >= 1
 
+    # Prior tempering (Feb 2026 / v2.22.1)
+    # Scales priors by 1/K per shard to prevent prior double-counting.
+    # Without tempering, K shards each apply the full prior → combined = prior^K × likelihood.
+    # With tempering, each shard uses prior^(1/K) → combined = prior × likelihood (correct).
+    # For Normal(μ,σ): prior^(1/K) ∝ Normal(μ, σ√K), i.e., widen std by √num_shards.
+    prior_tempering: true # Enable prior tempering for multi-shard CMC
+
     # Computational backend
     backend: "jax" # "jax" | "numpy"
 
@@ -1052,21 +1088,25 @@ optimization:
       name: "auto" # "auto" | "multiprocessing" | "pjit" | "pbs" | "slurm"
       enable_checkpoints: true # Enable checkpoints
       checkpoint_frequency: 1 # Checkpoint every N shards
-      checkpoint_dir: "./cmc_checkpoints"
+      checkpoint_dir: "./checkpoints/cmc"
       keep_last_checkpoints: 3 # Keep N recent checkpoints
       resume_from_checkpoint: true # Auto-resume
 
     # Data sharding
     sharding:
-      strategy: "stratified" # "stratified" | "random" | "contiguous"
+      strategy: "random" # "random" | "stratified" | "contiguous"
       num_shards: "auto" # "auto" uses n_phi for stratified
       max_points_per_shard:
         "auto" # "auto" → dynamic based on dataset size (v2.20.0)
         # laminar_flow: 12K-21K after angle scaling
         # static: 50K-100K
       min_points_per_shard:
-        "auto" # "auto" → 10K (laminar) or 5K (static) (v2.20.0)
-        # Prevents data-starved shards
+        10000 # Enforced minimum for laminar_flow (CONSTRAINT: >= 1000)
+        # Prevents data-starved shards with insufficient posterior information
+      min_points_per_param:
+        1500 # Minimum points per parameter per shard
+        # Ensures each parameter has enough data for convergence
+        # For 9-param laminar_flow: min shard = 1500 × 9 = 13,500 points
       seed_base: 0 # Shard seed = seed_base + shard_id
 
     # Per-shard timeout (seconds)
@@ -1075,24 +1115,24 @@ optimization:
     # ---------------
     # | Dataset Size | Shard Size | Recommended Timeout |
     # |--------------|------------|---------------------|
-    # | < 2M points  | 20K auto   | 7200s (2 hours)     |
-    # | 2M - 10M     | 10K auto   | 7200s (2 hours)     |
-    # | 10M - 50M    | 10K auto   | 10800s (3 hours)    |
-    # | > 50M        | 5K-10K     | 14400s (4 hours)    |
+    # | < 2M points  | 20K auto   | 3600s (1 hour)      |
+    # | 2M - 10M     | 10K auto   | 3600s (1 hour)      |
+    # | 10M - 50M    | 10K auto   | 7200s (2 hours)     |
+    # | > 50M        | 5K-10K     | 10800s (3 hours)    |
     #
-    per_shard_timeout: 7200 # CONSTRAINT: > 60
+    per_shard_timeout: 3600 # 1 hour per shard (CONSTRAINT: > 60)
     heartbeat_timeout:
-      1200 # Terminate unresponsive workers
+      600 # 10 min - terminate unresponsive workers
       # CONSTRAINT: > 60
 
     # Subposterior combination
     combination:
       method:
-        "consensus_mc" # "consensus_mc" | "robust_consensus_mc" | "weighted_gaussian" | "simple_average"
-        # consensus_mc: Precision-weighted combination (default)
-        # robust_consensus_mc: MAD-based outlier detection (v2.20.0)
+        "robust_consensus_mc" # "consensus_mc" | "robust_consensus_mc" | "weighted_gaussian" | "simple_average"
+        # robust_consensus_mc: MAD-based outlier detection (default since v2.22.1)
         #   - Excludes outlier shards before combination
-        #   - Auto-enabled if heterogeneity_abort=false and CV > threshold
+        #   - Recommended for production use
+        # consensus_mc: Classic precision-weighted combination (no outlier filtering)
       validate_results: true # Validate quality
       min_success_rate:
         0.90 # Require 90% shard convergence
@@ -1105,7 +1145,7 @@ optimization:
     per_shard_mcmc:
       num_warmup: 500 # CONSTRAINT: > 0
       num_samples: 1500 # CONSTRAINT: > 0
-      num_chains: 2 # CONSTRAINT: > 0
+      num_chains: 4 # ≥2 for R-hat diagnostics; 4 recommended (CONSTRAINT: > 0)
       target_accept_prob: 0.85 # CONSTRAINT: (0, 1)
 
       # -----------------------------------------------------------------------
@@ -1210,6 +1250,18 @@ optimization:
       require_nlsq_warmstart:
         false # Set true to REQUIRE nlsq_result in API calls
         # When true, fit_mcmc_jax() raises ValueError without it
+
+      # NLSQ-informed priors (Feb 2026 / v2.22.1)
+      # When NLSQ warm-start is available, build tighter TruncatedNormal priors
+      # centered on NLSQ estimates instead of using the wide default priors.
+      # This dramatically improves NUTS sampling efficiency and reduces divergences.
+      use_nlsq_informed_priors:
+        true # Build TruncatedNormal priors from NLSQ estimates
+      nlsq_prior_width_factor:
+        2.0 # Width = NLSQ_std × factor (~95.4% coverage)
+        # CONSTRAINT: [1.0, 10.0]
+        # Lower = tighter priors (faster convergence, risk of bias)
+        # Higher = wider priors (slower convergence, less informative)
 
       # Heterogeneity detection and abort (v2.20.0)
       max_parameter_cv:

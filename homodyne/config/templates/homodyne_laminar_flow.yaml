@@ -12,15 +12,15 @@
 # For comprehensive documentation of all parameters, see:
 #   homodyne_master_template.yaml
 #
-# VERSION: 2.18.0
-# UPDATED: 2026-01-18
+# VERSION: 2.22.1
+# UPDATED: 2026-02-19
 # ==============================================================================
 
 # ==============================================================================
 # METADATA
 # ==============================================================================
 metadata:
-  config_version: "2.18.0"
+  config_version: "2.22.1"
   description: "Laminar flow analysis - 7-parameter model"
   analysis_mode: "laminar_flow"
   parameter_count: 7
@@ -267,6 +267,9 @@ optimization:
   # NLSQ - Trust-Region Nonlinear Least Squares
   # ===========================================================================
   nlsq:
+    workflow: "auto"
+    goal: "quality"
+
     # Memory configuration
     memory_fraction: 0.75 # Use 75% of available RAM
     # memory_threshold_gb: 48.0       # OR: explicit threshold
@@ -360,7 +363,7 @@ optimization:
       #     Results in physical-only optimization (7 params).
       #
       #   "fourier": Fourier basis for smooth angle variation (NLSQ only).
-      #     Configured via fourier.order and fourier.min_phi_for_fourier.
+      #     Configured via fourier_order and fourier_auto_threshold.
       #
       #   "individual": Independent per-angle params, optimized during fitting.
       #     Prone to absorption with many angles. Use with caution.
@@ -369,10 +372,9 @@ optimization:
       per_angle_mode: "auto"
       constant_scaling_threshold: 3 # Use constant when n_phi >= this
 
-      fourier:
-        order: 2
-        min_phi_for_fourier: 6
-        regularize_high_order: false
+      # Fourier reparameterization (flat keys at anti_degeneracy level)
+      fourier_order: 2         # Number of Fourier harmonics
+      fourier_auto_threshold: 6 # Min angles for Fourier mode
 
       # REQUIRED for shear_weighting
       hierarchical:
@@ -444,6 +446,10 @@ optimization:
       auto_select: true
       scale_threshold: 1000.0
 
+      # CMA-ES Parameter Normalization (v2.16.0)
+      normalize: true            # Enable bounds-based normalization
+      normalization_epsilon: 1.0e-12  # Prevent division by zero
+
       # Post-CMA-ES refinement
       refine_with_nlsq: true
       refinement_workflow: "auto"
@@ -452,6 +458,17 @@ optimization:
       refinement_gtol: 1.0e-10
       refinement_max_nfev: 500
       refinement_loss: "linear"
+
+    # -------------------------------------------------------------------------
+    # FIT QUALITY VALIDATION (v2.16.0+)
+    # -------------------------------------------------------------------------
+    quality_validation:
+      enable: true
+      reduced_chi_squared_threshold: 10.0
+      warn_on_max_restarts: true
+      warn_on_bounds_hit: true
+      warn_on_convergence_failure: true
+      bounds_tolerance: 1.0e-9
 
   # ===========================================================================
   # STREAMING (>100M points)
@@ -552,26 +569,30 @@ optimization:
     per_angle_mode: "auto"
     constant_scaling_threshold: 3 # Use constant when n_phi >= this
 
+    # Prior tempering (v2.22.1): Scales priors by 1/K per shard
+    prior_tempering: true
+
     backend_config:
       name: "auto"
       enable_checkpoints: true
       checkpoint_frequency: 1
-      checkpoint_dir: "./cmc_checkpoints"
+      checkpoint_dir: "./checkpoints/cmc"
       keep_last_checkpoints: 3
       resume_from_checkpoint: true
 
     sharding:
-      strategy: "stratified"
+      strategy: "random"
       num_shards: "auto"
       max_points_per_shard: "auto" # Dynamic: 12K-21K after angle scaling (v2.20.0)
       min_points_per_shard: 10000 # CRITICAL: Prevents data-starved shards
       seed_base: 0
+      min_points_per_param: 1500 # Minimum points per parameter per shard
 
-    per_shard_timeout: 7200
+    per_shard_timeout: 3600
     heartbeat_timeout: 600
 
     combination:
-      method: "consensus_mc" # Use robust_consensus_mc if heterogeneity detected
+      method: "robust_consensus_mc" # MAD-based outlier detection (default since v2.22.1)
       validate_results: true
       min_success_rate: 0.80 # Lower for complex 7-param model
       min_success_rate_warning: 0.70
@@ -579,7 +600,7 @@ optimization:
     per_shard_mcmc:
       num_warmup: 500
       num_samples: 1500
-      num_chains: 2
+      num_chains: 4
       target_accept_prob: 0.85
 
       # -----------------------------------------------------------------------
@@ -619,6 +640,10 @@ optimization:
       # Disable with: --no-nlsq-warmstart (NOT recommended for laminar_flow)
       max_divergence_rate: 0.10 # Filter shards with >10% divergences
       require_nlsq_warmstart: false # Set true to enforce in API calls
+
+      # NLSQ-informed priors (v2.22.1)
+      use_nlsq_informed_priors: true
+      nlsq_prior_width_factor: 2.0
       max_parameter_cv: 1.0 # Heterogeneity threshold
       heterogeneity_abort: false # Abort with guidance if CV exceeded
 

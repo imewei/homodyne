@@ -10,15 +10,15 @@
 # For comprehensive documentation of all parameters, see:
 #   homodyne_master_template.yaml
 #
-# VERSION: 2.18.0
-# UPDATED: 2026-01-18
+# VERSION: 2.22.1
+# UPDATED: 2026-02-19
 # ==============================================================================
 
 # ==============================================================================
 # METADATA
 # ==============================================================================
 metadata:
-  config_version: "2.18.0"
+  config_version: "2.22.1"
   description: "Static diffusion analysis - 3-parameter model"
   analysis_mode: "static"
   parameter_count: 3
@@ -222,6 +222,9 @@ optimization:
   # NLSQ - Trust-Region Nonlinear Least Squares
   # ===========================================================================
   nlsq:
+    workflow: "auto"
+    goal: "quality"
+
     # Memory configuration
     memory_fraction: 0.75 # Use 75% of available RAM
     # memory_threshold_gb: 48.0       # OR: explicit threshold
@@ -350,6 +353,10 @@ optimization:
       auto_select: false # Disabled for static (similar scales)
       scale_threshold: 1000.0
 
+      # CMA-ES Parameter Normalization (v2.16.0)
+      normalize: true            # Enable bounds-based normalization
+      normalization_epsilon: 1.0e-12  # Prevent division by zero
+
       # Post-CMA-ES refinement
       refine_with_nlsq: true
       refinement_workflow: "auto"
@@ -358,6 +365,17 @@ optimization:
       refinement_gtol: 1.0e-10
       refinement_max_nfev: 500
       refinement_loss: "linear"
+
+    # -------------------------------------------------------------------------
+    # FIT QUALITY VALIDATION (v2.16.0+)
+    # -------------------------------------------------------------------------
+    quality_validation:
+      enable: true
+      reduced_chi_squared_threshold: 10.0
+      warn_on_max_restarts: true
+      warn_on_bounds_hit: true
+      warn_on_convergence_failure: true
+      bounds_tolerance: 1.0e-9
 
   # ===========================================================================
   # STREAMING (>100M points)
@@ -453,26 +471,30 @@ optimization:
     per_angle_mode: "auto"
     constant_scaling_threshold: 3 # Use constant when n_phi >= this
 
+    # Prior tempering (v2.22.1): Scales priors by 1/K per shard
+    prior_tempering: true
+
     backend_config:
       name: "auto"
       enable_checkpoints: true
       checkpoint_frequency: 1
-      checkpoint_dir: "./cmc_checkpoints"
+      checkpoint_dir: "./checkpoints/cmc"
       keep_last_checkpoints: 3
       resume_from_checkpoint: true
 
     sharding:
-      strategy: "stratified"
+      strategy: "random"
       num_shards: "auto"
       max_points_per_shard: "auto" # 50K-100K for static (10x larger than laminar)
-      min_points_per_shard: 5000 # Lower minimum OK for 3-param model
+      min_points_per_shard: 10000 # Minimum shard size
       seed_base: 0
+      min_points_per_param: 1500 # Minimum points per parameter per shard
 
-    per_shard_timeout: 7200 # 2 hours (static converges faster)
+    per_shard_timeout: 3600 # 1 hour (static converges faster)
     heartbeat_timeout: 600
 
     combination:
-      method: "consensus_mc"
+      method: "robust_consensus_mc" # MAD-based outlier detection (default since v2.22.1)
       validate_results: true
       min_success_rate: 0.90 # Higher for simpler model
       min_success_rate_warning: 0.80
@@ -480,7 +502,7 @@ optimization:
     per_shard_mcmc:
       num_warmup: 500
       num_samples: 1500
-      num_chains: 2
+      num_chains: 4
       target_accept_prob: 0.85
 
       # -----------------------------------------------------------------------
@@ -519,6 +541,10 @@ optimization:
       # NOTE: CLI automatically runs NLSQ before CMC (homodyne --method cmc)
       max_divergence_rate: 0.10 # Filter shards with >10% divergences
       require_nlsq_warmstart: false # Optional for static (simpler model)
+
+      # NLSQ-informed priors (v2.22.1)
+      use_nlsq_informed_priors: true
+      nlsq_prior_width_factor: 2.0
       max_parameter_cv: 1.5 # Higher threshold OK for static
       heterogeneity_abort: true # Abort with guidance if CV exceeded
 
