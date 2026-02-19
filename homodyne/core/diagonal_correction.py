@@ -242,12 +242,12 @@ if HAS_JAX:
         """Core JAX implementation of basic diagonal correction (JIT-compiled).
 
         Algorithm:
-        1. Extract side band: elements at (i, i+1) for i=0..N-2
+        1. Extract side band: elements at (i, i+1) for i=0..N-2 (symmetrized)
         2. Compute diagonal values as average of adjacent off-diagonals:
-           - diag[0] = side_band[0] (edge case)
+           - diag[0] = side_band[0] (edge: one neighbor)
            - diag[i] = (side_band[i-1] + side_band[i]) / 2 for i=1..N-2
-           - diag[N-1] = side_band[N-2] (edge case)
-        3. Replace diagonal with computed values
+           - diag[N-1] = side_band[N-2] (edge: one neighbor)
+        3. Replace diagonal via a single scatter .at[diag_indices].set()
         """
         size = c2_mat.shape[0]
 
@@ -256,17 +256,16 @@ if HAS_JAX:
         indices_j = jnp.arange(1, size)
         side_band = 0.5 * (c2_mat[indices_i, indices_j] + c2_mat[indices_j, indices_i])
 
-        # Compute diagonal values as average of adjacent off-diagonal elements
-        diag_val = jnp.zeros(size, dtype=c2_mat.dtype)
-        diag_val = diag_val.at[:-1].add(side_band)  # Add left neighbors
-        diag_val = diag_val.at[1:].add(side_band)  # Add right neighbors
+        # Compute diagonal values directly from side_band slices (no scatter ops):
+        # edges get one neighbor, interior points get average of two neighbors.
+        # This replaces 2 scatter-add ops + 1 division on a zeros array.
+        diag_val = jnp.concatenate([
+            side_band[:1],
+            (side_band[:-1] + side_band[1:]) * 0.5,
+            side_band[-1:],
+        ])
 
-        # Normalize by number of neighbors (1 for edges, 2 for middle)
-        norm = jnp.ones(size, dtype=c2_mat.dtype)
-        norm = norm.at[1:-1].set(2.0)
-        diag_val = diag_val / norm
-
-        # Replace diagonal with computed values
+        # Replace diagonal with computed values (single scatter write)
         diag_indices = jnp.diag_indices(size)
         return c2_mat.at[diag_indices].set(diag_val)
 
