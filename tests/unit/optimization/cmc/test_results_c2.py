@@ -51,8 +51,9 @@ def test_compute_fitted_c2_uses_unique_phi(monkeypatch):
         params, t1, t2, phi_unique, q, L, dt, time_grid=None, _debug=False
     ):
         captured["phi_unique"] = np.array(phi_unique)
-        # return ones to keep shapes simple
-        return np.ones_like(t1)
+        # Return shape (n_phi, n_points) to match the real compute_g1_total contract.
+        n_phi_unique = len(np.array(phi_unique))
+        return np.ones((n_phi_unique, len(np.array(t1))))
 
     monkeypatch.setattr(
         "homodyne.core.physics_cmc.compute_g1_total", fake_compute_g1_total

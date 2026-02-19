@@ -23,7 +23,8 @@ from numpyro.infer.util import log_density
 
 from homodyne.config.manager import ConfigManager
 from homodyne.config.parameter_space import ParameterSpace
-from homodyne.optimization.cmc.model import xpcs_model
+from homodyne.optimization.cmc.model import xpcs_model_scaled
+from homodyne.optimization.cmc.scaling import compute_scaling_factors
 
 
 def load_shard(cache_path: Path, angle_ranges: list) -> dict:
@@ -89,14 +90,23 @@ def build_init_dict(
     contrast: float,
     offset: float,
     param_space: ParameterSpace,
+    scalings: dict,
 ) -> dict[str, float]:
-    """Fill missing init values with midpoint of bounds."""
+    """Fill missing init values with midpoint of bounds, converted to z-space.
+
+    xpcs_model_scaled samples in z-space: z ~ N(0, 1), then transforms
+    P = center + scale * z. We invert: z = (P - center) / scale.
+    """
 
     def mid(name: str) -> float:
         lo, hi = param_space.get_bounds(name)
         return (lo + hi) / 2.0
 
-    init = {
+    def to_z(name: str, value: float) -> float:
+        s = scalings[name]
+        return (value - s.center) / s.scale
+
+    physical = {
         "contrast_0": contrast,
         "contrast_1": contrast,
         "contrast_2": contrast,
@@ -112,8 +122,10 @@ def build_init_dict(
             base_init.get("gamma_dot_t_offset", mid("gamma_dot_t_offset"))
         ),
         "phi0": float(base_init.get("phi0", mid("phi0"))),
-        "sigma": 0.0662,
     }
+    # Convert to z-space for xpcs_model_scaled
+    init = {f"{name}_z": to_z(name, val) for name, val in physical.items()}
+    init["sigma"] = 0.0662
     return init
 
 
@@ -129,19 +141,24 @@ def main(args: argparse.Namespace) -> None:
 
     shard = load_shard(Path(args.cache), angle_ranges)
 
+    scalings = compute_scaling_factors(ps, shard["n_phi"], "laminar_flow")
+
     init_cfg = config.get("optimization", {}).get("mcmc", {}).get("initial_values", {})
     contrast = float(init_cfg.get("contrast", 0.5))
     offset = float(init_cfg.get("offset", 1.0))
 
-    init_a = build_init_dict(init_cfg, contrast, offset, ps)
+    init_a = build_init_dict(init_cfg, contrast, offset, ps, scalings)
     init_b = init_a.copy()
-    init_b["D0"] = args.tamed_d0
-    init_b["alpha"] = args.tamed_alpha
+    # Override in z-space: z = (physical - center) / scale
+    s_d0 = scalings["D0"]
+    s_alpha = scalings["alpha"]
+    init_b["D0_z"] = (args.tamed_d0 - s_d0.center) / s_d0.scale
+    init_b["alpha_z"] = (args.tamed_alpha - s_alpha.center) / s_alpha.scale
 
     for label, init in [("config", init_a), ("tamed", init_b)]:
         try:
             logp, _ = log_density(
-                xpcs_model,
+                xpcs_model_scaled,
                 model_args=(),
                 model_kwargs={**shard, "parameter_space": ps},
                 params=init,

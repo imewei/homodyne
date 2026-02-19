@@ -1,7 +1,7 @@
 """Tests for CMC NumPyro model module.
 
 Comprehensive tests for:
-- xpcs_model: Main NumPyro probabilistic model
+- xpcs_model_scaled: NumPyro probabilistic model with z-space parameterization
 - validate_model_output: Physics validation
 - get_model_param_count: Parameter counting
 """
@@ -19,7 +19,7 @@ pytest.importorskip("arviz", reason="ArviZ required for CMC unit tests")
 from homodyne.optimization.cmc.model import (  # noqa: E402
     get_model_param_count,
     validate_model_output,
-    xpcs_model,
+    xpcs_model_scaled,
 )
 
 # =============================================================================
@@ -263,20 +263,25 @@ class TestValidateModelOutput:
 
 
 # =============================================================================
-# Tests for xpcs_model - Trace only (no sampling)
+# Tests for xpcs_model_scaled - Trace only (no sampling)
 # =============================================================================
 
 
 class TestXPCSModelStructure:
-    """Structural tests for xpcs_model without running MCMC."""
+    """Structural tests for xpcs_model_scaled without running MCMC.
+
+    xpcs_model_scaled uses z-space parameterization: parameters are sampled
+    as ``{name}_z`` (type="sample") and transformed values are registered
+    as ``{name}`` (type="deterministic").
+    """
 
     def test_model_callable(self, mock_parameter_space_static, synthetic_pooled_data):
-        """Test that xpcs_model is callable with correct arguments."""
+        """Test that xpcs_model_scaled is callable with correct arguments."""
         import numpyro
 
         with numpyro.handlers.seed(rng_seed=42):
             with numpyro.handlers.trace() as trace:
-                xpcs_model(
+                xpcs_model_scaled(
                     data=synthetic_pooled_data["data"],
                     t1=synthetic_pooled_data["t1"],
                     t2=synthetic_pooled_data["t2"],
@@ -291,14 +296,21 @@ class TestXPCSModelStructure:
                     noise_scale=0.1,
                 )
 
-        # Check trace contains expected parameters
+        # z-space samples
         sampled_params = [k for k, v in trace.items() if v.get("type") == "sample"]
-        assert "D0" in sampled_params
-        assert "alpha" in sampled_params
-        assert "D_offset" in sampled_params
+        assert "D0_z" in sampled_params
+        assert "alpha_z" in sampled_params
+        assert "D_offset_z" in sampled_params
         assert "sigma" in sampled_params
-        assert "contrast_0" in sampled_params
-        assert "offset_0" in sampled_params
+        assert "contrast_0_z" in sampled_params
+        assert "offset_0_z" in sampled_params
+
+        # Transformed deterministics
+        deterministic_params = [
+            k for k, v in trace.items() if v.get("type") == "deterministic"
+        ]
+        assert "D0" in deterministic_params
+        assert "contrast_0" in deterministic_params
 
     def test_model_laminar_flow_params(
         self, mock_parameter_space_laminar, synthetic_pooled_data
@@ -308,7 +320,7 @@ class TestXPCSModelStructure:
 
         with numpyro.handlers.seed(rng_seed=42):
             with numpyro.handlers.trace() as trace:
-                xpcs_model(
+                xpcs_model_scaled(
                     data=synthetic_pooled_data["data"],
                     t1=synthetic_pooled_data["t1"],
                     t2=synthetic_pooled_data["t2"],
@@ -325,11 +337,11 @@ class TestXPCSModelStructure:
 
         sampled_params = [k for k, v in trace.items() if v.get("type") == "sample"]
 
-        # Check laminar-specific parameters
-        assert "gamma_dot_t0" in sampled_params
-        assert "beta" in sampled_params
-        assert "gamma_dot_t_offset" in sampled_params
-        assert "phi0" in sampled_params
+        # Check laminar-specific z-space parameters
+        assert "gamma_dot_t0_z" in sampled_params
+        assert "beta_z" in sampled_params
+        assert "gamma_dot_t_offset_z" in sampled_params
+        assert "phi0_z" in sampled_params
 
     def test_parameter_ordering(
         self, mock_parameter_space_static, synthetic_pooled_data
@@ -349,7 +361,7 @@ class TestXPCSModelStructure:
 
         with numpyro.handlers.seed(rng_seed=42):
             with OrderTracker():
-                xpcs_model(
+                xpcs_model_scaled(
                     data=synthetic_pooled_data["data"],
                     t1=synthetic_pooled_data["t1"],
                     t2=synthetic_pooled_data["t2"],
@@ -364,15 +376,14 @@ class TestXPCSModelStructure:
                     noise_scale=0.1,
                 )
 
-        # Verify ordering: contrast_*, offset_*, physical, sigma
-        # Find indices
+        # Verify ordering: contrast_*_z, offset_*_z, physical_z, sigma
         contrast_indices = [
             i for i, n in enumerate(sampled_order) if n.startswith("contrast_")
         ]
         offset_indices = [
             i for i, n in enumerate(sampled_order) if n.startswith("offset_")
         ]
-        d0_index = sampled_order.index("D0")
+        d0_z_index = sampled_order.index("D0_z")
 
         # All contrast before all offset
         assert max(contrast_indices) < min(offset_indices), (
@@ -380,8 +391,8 @@ class TestXPCSModelStructure:
         )
 
         # All offset before physical params
-        assert max(offset_indices) < d0_index, (
-            f"Offset indices {offset_indices} should all come before D0 at {d0_index}"
+        assert max(offset_indices) < d0_z_index, (
+            f"Offset indices {offset_indices} should all come before D0_z at {d0_z_index}"
         )
 
 
@@ -402,7 +413,7 @@ class TestModelPhysics:
         # Get the theoretical C2 from a model trace
         with numpyro.handlers.seed(rng_seed=42):
             with numpyro.handlers.trace() as trace:
-                xpcs_model(
+                xpcs_model_scaled(
                     data=synthetic_pooled_data["data"],
                     t1=synthetic_pooled_data["t1"],
                     t2=synthetic_pooled_data["t2"],
@@ -435,7 +446,7 @@ class TestModelPhysics:
 
         with numpyro.handlers.seed(rng_seed=0):
             with numpyro.handlers.trace() as trace:
-                xpcs_model(
+                xpcs_model_scaled(
                     data=synthetic_pooled_data["data"],
                     t1=synthetic_pooled_data["t1"],
                     t2=synthetic_pooled_data["t2"],
@@ -463,7 +474,7 @@ class TestModelPhysics:
 
         with numpyro.handlers.seed(rng_seed=42):
             with numpyro.handlers.trace() as trace:
-                xpcs_model(
+                xpcs_model_scaled(
                     data=synthetic_pooled_data["data"],
                     t1=synthetic_pooled_data["t1"],
                     t2=synthetic_pooled_data["t2"],
