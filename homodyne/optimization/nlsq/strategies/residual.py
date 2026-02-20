@@ -55,8 +55,10 @@ class StratifiedResidualFunction:
         """
         self.chunks = stratified_data.chunks
         sigma_array = np.asarray(stratified_data.sigma, dtype=np.float64)
-        self.sigma = sigma_array  # Keep numpy view for legacy paths
+        # M2: Only keep JAX array; numpy copy was labelled "for legacy paths"
+        # but self.sigma is never referenced outside __init__.
         self._sigma_jax = jnp.asarray(sigma_array)
+        del sigma_array  # Allow GC of the intermediate numpy copy
         self.per_angle_scaling = per_angle_scaling
         self.physical_param_names = physical_param_names
         self.logger = logger or get_logger(__name__)
@@ -333,6 +335,16 @@ class StratifiedResidualFunction:
 
         # Build stable vmap functions now that chunk metadata is available
         self._setup_vmap_functions()
+
+        # M1: Free intermediate per-chunk data now that everything is
+        # concatenated into device-side arrays (g2_all, flat_indices_all, etc.).
+        # The hot path (_call_jax_vectorized) uses only the concatenated arrays.
+        # Per-chunk lists were only needed by the dead _call_jax_chunked fallback.
+        # For a 10M-point dataset this frees ~160+ MB of duplicate JAX arrays.
+        del self._precomputed_flat_indices
+        del self._precomputed_t1_indices
+        del self._precomputed_t2_indices
+        del self.chunks_jax
 
     def _setup_vmap_functions(self) -> None:
         """Create vmap-wrapped g2 computation functions once during init.
@@ -613,40 +625,15 @@ class StratifiedResidualFunction:
         return residuals
 
     def _call_jax_chunked(self, params: jnp.ndarray) -> jnp.ndarray:
-        """Original chunk-based residual computation (kept for reference/fallback).
+        """Original chunk-based residual computation — REMOVED.
 
-        This is the original loop-based implementation that iterates over chunks.
-        Kept as fallback in case vectorized version has issues.
-
-        Performance Note: This method computes the full g2 theory grid
-        redundantly for each chunk. Use _call_jax_vectorized instead.
+        Per-chunk data was freed after concatenation (M1 memory optimization).
+        The vectorized path (_call_jax_vectorized) is used exclusively.
         """
-        params_jax = jnp.asarray(params)
-        sigma_full = self._sigma_jax
-        residuals = []
-        for i, chunk_jax in enumerate(self.chunks_jax):
-            metadata = self.chunk_metadata[i]
-            flat_indices = self._precomputed_flat_indices[i]
-            t1_indices = self._precomputed_t1_indices[i]
-            t2_indices = self._precomputed_t2_indices[i]
-
-            # Use pre-converted JAX arrays and pre-computed indices
-            chunk_residuals = self.compute_chunk_jit(
-                g2_obs=chunk_jax["g2"],
-                sigma_full=sigma_full,
-                params_all=params_jax,
-                phi_unique=metadata["phi_unique"],
-                t1_unique=metadata["t1_unique"],
-                t2_unique=metadata["t2_unique"],
-                flat_indices=flat_indices,
-                t1_indices=t1_indices,
-                t2_indices=t2_indices,
-                q=chunk_jax["q"],
-                L=chunk_jax["L"],
-                dt=chunk_jax["dt"],
-            )
-            residuals.append(chunk_residuals)
-        return jnp.concatenate(residuals, axis=0)
+        raise RuntimeError(
+            "_call_jax_chunked is unavailable: per-chunk data was freed "
+            "after concatenation. Use _call_jax_vectorized instead."
+        )
 
     def jax_residual(self, params: jnp.ndarray) -> jnp.ndarray:
         return self._call_jax(params)
