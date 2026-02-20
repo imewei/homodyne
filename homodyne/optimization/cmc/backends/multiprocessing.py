@@ -7,6 +7,12 @@ Optimizations (v2.9.1):
 - Batch PRNG key generation: Pre-generate all shard keys in single JAX call
 - Adaptive polling: Adjust poll interval based on shard activity
 - Event.wait heartbeat: Efficient heartbeat using Event.wait(timeout)
+
+Optimizations (v2.23.0):
+- LPT scheduling: Dispatch highest-cost shards first (size + noise weighted)
+- Per-shard shared memory: Shard arrays stored in shared memory (avoids pickle overhead)
+- deque for pending shards: O(1) popleft instead of O(n) list.pop(0)
+- JIT cache fix: Enable persistent compilation cache via jax.config.update (env var alone insufficient in JAX 0.8+, min_compile_time lowered to 0)
 """
 
 from __future__ import annotations
@@ -19,8 +25,9 @@ import queue
 import tempfile
 import threading
 import time
-from pathlib import Path
+from collections import deque
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -45,6 +52,10 @@ if TYPE_CHECKING:
     from homodyne.optimization.cmc.sampler import MCMCSamples
 
 logger = get_logger(__name__)
+
+# Keys for per-shard numpy arrays stored in shared memory.
+# Used by SharedDataManager.create_shared_shard_arrays() and _load_shared_shard_data().
+_SHARD_ARRAY_KEYS = ("data", "t1", "t2", "phi_unique", "phi_indices")
 
 
 class SharedDataManager:
@@ -99,6 +110,52 @@ class SharedDataManager:
 
         return self.create_shared_bytes(name, _pkl.dumps(d))
 
+    def create_shared_shard_arrays(
+        self, shard_data_list: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Place per-shard numpy arrays into shared memory.
+
+        Instead of pickling per-shard arrays through spawn (which serializes
+        each array per-process), this stores them in shared memory once.
+        Workers reconstruct arrays from shared memory references.
+
+        Parameters
+        ----------
+        shard_data_list : list[dict[str, Any]]
+            List of shard data dicts, each containing numpy arrays
+            (data, t1, t2, phi_unique, phi_indices) and a scalar noise_scale.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            List of lightweight shard references (shm names + metadata).
+            Each ref dict is small enough to pickle cheaply through spawn.
+        """
+        shard_refs: list[dict[str, Any]] = []
+
+        for _i, shard_data in enumerate(shard_data_list):
+            ref: dict[str, Any] = {"noise_scale": shard_data["noise_scale"]}
+            for key in _SHARD_ARRAY_KEYS:
+                arr = shard_data[key]
+                if not isinstance(arr, np.ndarray):
+                    arr = np.asarray(arr)
+                # Ensure contiguous for shared memory copy
+                arr = np.ascontiguousarray(arr)
+                shm = mp.shared_memory.SharedMemory(
+                    create=True, size=max(1, arr.nbytes)
+                )
+                shared_arr = np.ndarray(arr.shape, dtype=arr.dtype, buffer=shm.buf)
+                shared_arr[:] = arr
+                self._shared_blocks.append(shm)
+                ref[key] = {
+                    "shm_name": shm.name,
+                    "shape": arr.shape,
+                    "dtype": str(arr.dtype),
+                }
+            shard_refs.append(ref)
+
+        return shard_refs
+
     def cleanup(self) -> None:
         """Release all shared memory blocks. Must be called in a finally block."""
         for shm in self._shared_blocks:
@@ -148,6 +205,41 @@ def _load_shared_array(ref: dict[str, Any]) -> np.ndarray:
     finally:
         shm.close()
     return arr
+
+
+def _load_shared_shard_data(shard_ref: dict[str, Any]) -> dict[str, Any]:
+    """Reconstruct per-shard data arrays from shared memory references.
+
+    Parameters
+    ----------
+    shard_ref : dict[str, Any]
+        Lightweight shard reference created by
+        ``SharedDataManager.create_shared_shard_arrays``.
+
+    Returns
+    -------
+    dict[str, Any]
+        Shard data dict with numpy arrays (copied from shared memory)
+        and scalar noise_scale.
+    """
+    shard_data: dict[str, Any] = {"noise_scale": shard_ref["noise_scale"]}
+
+    for key in _SHARD_ARRAY_KEYS:
+        arr_ref = shard_ref[key]
+        shm = mp.shared_memory.SharedMemory(
+            name=arr_ref["shm_name"], create=False
+        )
+        try:
+            arr = np.ndarray(
+                arr_ref["shape"],
+                dtype=np.dtype(arr_ref["dtype"]),
+                buffer=shm.buf,
+            ).copy()  # Copy so we don't hold reference to shared buffer
+        finally:
+            shm.close()
+        shard_data[key] = arr
+
+    return shard_data
 
 
 def _generate_shard_keys(n_shards: int, seed: int = 42) -> list[tuple[int, int]]:
@@ -207,6 +299,44 @@ def _get_physical_cores() -> int:
     return max(1, (os.cpu_count() or 1) // 2)
 
 
+def _compute_lpt_schedule(
+    shard_data_list: list[dict[str, Any]],
+) -> deque[int]:
+    """Order shard indices by descending estimated cost (LPT heuristic).
+
+    Cost = n_points * (1 + normalized_noise), where noise is linearly
+    scaled to [0, 1] across shards.  Dispatching the most expensive
+    shards first minimizes tail latency on identical parallel workers.
+
+    Parameters
+    ----------
+    shard_data_list : list[dict[str, Any]]
+        Shard dicts with ``"data"`` (array) and ``"noise_scale"`` (float).
+
+    Returns
+    -------
+    deque[int]
+        Shard indices sorted by descending cost.
+    """
+    n_shards = len(shard_data_list)
+    sizes = [len(shard_data_list[i]["data"]) for i in range(n_shards)]
+    noises = [shard_data_list[i]["noise_scale"] for i in range(n_shards)]
+
+    max_noise = max(noises) if noises else 1.0
+    min_noise = min(noises) if noises else 1.0
+    noise_range = max_noise - min_noise
+
+    if noise_range > 0:
+        costs = [
+            sizes[i] * (1.0 + (noises[i] - min_noise) / noise_range)
+            for i in range(n_shards)
+        ]
+    else:
+        costs = [float(s) for s in sizes]
+
+    return deque(sorted(range(n_shards), key=lambda i: costs[i], reverse=True))
+
+
 def _compute_threads_per_worker(total_threads: int, workers: int) -> int:
     """Derive a conservative thread budget per worker to avoid oversubscription.
 
@@ -223,7 +353,7 @@ def _compute_threads_per_worker(total_threads: int, workers: int) -> int:
 
 def _run_shard_worker_with_queue(
     shard_idx: int,
-    shard_data: dict[str, Any],
+    shard_ref: dict[str, Any],
     model_fn: Callable,
     config_ref: dict[str, Any],
     initial_values_ref: dict[str, Any] | None,
@@ -246,6 +376,9 @@ def _run_shard_worker_with_queue(
     are captured and reported back to the parent via the result queue.
     """
     try:
+        # Reconstruct per-shard arrays from shared memory (avoids pickle overhead)
+        shard_data = _load_shared_shard_data(shard_ref)
+
         # Reconstruct shared data from shared memory
         config_dict = _load_shared_dict(config_ref)
         parameter_space_dict = _load_shared_dict(ps_ref)
@@ -385,6 +518,19 @@ def _run_shard_worker(
     import jax
 
     jax.config.update("jax_enable_x64", True)
+
+    # C3: Enable persistent compilation cache so subsequent workers reuse
+    # compiled XLA programs from the first worker.  The env var alone is
+    # insufficient in JAX 0.8+ — we must also call jax.config.update().
+    # Additionally, CMC functions compile in 0.07-0.15s, below the default
+    # 1.0s min_compile_time threshold, so we lower it to 0.
+    _cache_dir = os.environ.get(
+        "JAX_COMPILATION_CACHE_DIR",
+        str(Path(tempfile.gettempdir()) / "homodyne_jax_cache"),
+    )
+    jax.config.update("jax_compilation_cache_dir", _cache_dir)
+    jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+
     import jax.numpy as jnp
 
     from homodyne.config.parameter_space import ParameterSpace
@@ -472,6 +618,12 @@ def _run_shard_worker(
     if shard_data.get("t_ref") is not None:
         model_kwargs["t_ref"] = shard_data["t_ref"]
 
+    # M1-worker: Free the numpy shard_data dict now that all values have been
+    # extracted into model_kwargs (as JAX arrays) or as scalars.  This releases
+    # the numpy copies of data/t1/t2/phi_indices/time_grid, which otherwise
+    # stay alive for the entire sampling duration alongside their JAX twins.
+    del shard_data
+
     # D2: Pre-compute shard-constant quantities (time_safe + searchsorted indices)
     # once before NUTS starts.  Eliminates redundant work on every leapfrog step.
     try:
@@ -533,6 +685,13 @@ def _run_shard_worker(
         )
 
         duration = time.perf_counter() - start_time
+
+        # M1-worker: Free shard input arrays now that sampling is done.
+        # model_kwargs holds data/t1/t2/phi_indices/time_grid/shard_grid as
+        # JAX arrays that are no longer needed.  Free them before serializing
+        # the result, so peak memory during serialization is lower.
+        model_kwargs.clear()
+
         # T045: Log shard completion with elapsed time, acceptance rate, divergence count
         divergence_str = (
             f", divergences: {stats.num_divergent}" if stats.num_divergent > 0 else ""
@@ -859,6 +1018,9 @@ class MultiprocessingBackend(CMCBackend):
                 }
             )
 
+        # shard_data_list is kept for LPT scheduling (size lookup).
+        # Actual worker data will be served from shared memory (see below).
+
         # Serialize config and parameter_space
         config_dict = config.to_dict()
 
@@ -890,6 +1052,14 @@ class MultiprocessingBackend(CMCBackend):
                 shared_iv_ref = shared_mgr.create_shared_dict(
                     "init_vals", initial_values
                 )
+
+            # Place per-shard arrays in shared memory to avoid per-process
+            # serialization overhead through spawn.  Each shard's 5 arrays
+            # (data, t1, t2, phi_unique, phi_indices) are stored once;
+            # workers reconstruct them via _load_shared_shard_data().
+            shared_shard_refs = shared_mgr.create_shared_shard_arrays(
+                shard_data_list
+            )
         except Exception:
             shared_mgr.cleanup()
             raise
@@ -933,7 +1103,22 @@ class MultiprocessingBackend(CMCBackend):
 
         # Track active processes: {shard_idx: (process, start_time)}
         active_processes: dict[int, tuple[mp.Process, float]] = {}
-        pending_shards = list(range(n_shards))
+
+        # LPT scheduling: dispatch highest-cost shards first to minimize
+        # tail latency.  See _compute_lpt_schedule() for cost model.
+        pending_shards = _compute_lpt_schedule(shard_data_list)
+        if n_shards > 1:
+            sizes = [len(sd["data"]) for sd in shard_data_list]
+            noises = [sd["noise_scale"] for sd in shard_data_list]
+            run_logger.debug(
+                f"LPT scheduling: shard sizes range "
+                f"[{min(sizes):,}, {max(sizes):,}], "
+                f"noise range [{min(noises):.4g}, {max(noises):.4g}], "
+                f"dispatching highest-cost first"
+            )
+        # M1-parent: Free per-shard numpy arrays now that they have been
+        # copied into shared memory (via create_shared_shard_arrays above).
+        del shard_data_list
         results = []
         completed_count = 0
         recorded_shards: set[int] = set()
@@ -1065,14 +1250,13 @@ class MultiprocessingBackend(CMCBackend):
 
                 # Launch new processes up to max workers
                 while len(active_processes) < actual_workers and pending_shards:
-                    shard_idx = pending_shards.pop(0)
-                    shard_data = shard_data_list[shard_idx]
+                    shard_idx = pending_shards.popleft()
 
                     process = ctx.Process(
                         target=_run_shard_worker_with_queue,
                         args=(
                             shard_idx,
-                            shard_data,
+                            shared_shard_refs[shard_idx],
                             model,
                             shared_config_ref,
                             shared_iv_ref,
