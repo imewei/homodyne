@@ -229,7 +229,9 @@ def _compute_g1_shear_meshgrid(
     # Need to expand prefactor to (n_phi, 1, 1) for proper broadcasting
     prefactor = sinc_prefactor * cos_term[:, None, None]  # shape: (n_phi, 1, 1)
 
-    # Ensure gamma_integral has the expected 2D shape
+    # Ensure gamma_integral has the expected 2D shape.
+    # Note: evaluated at JIT trace time only (ndim is concrete during tracing).
+    # Will not trigger at runtime for traced arrays with unexpected shapes.
     if gamma_integral.ndim != 2:
         raise ValueError(
             f"gamma_integral should be 2D, got shape {gamma_integral.shape}",
@@ -264,12 +266,12 @@ def _compute_g1_total_meshgrid(
 
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
-        t1: Time meshgrid (2D) or 1D time array (FRAME INDICES)
-        t2: Time meshgrid (2D) or 1D time array (FRAME INDICES)
+        t1: Time meshgrid (2D) or 1D time array (PHYSICAL TIME in seconds)
+        t2: Time meshgrid (2D) or 1D time array (PHYSICAL TIME in seconds)
         phi: Scattering angles
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt
-        dt: Time step per frame [seconds] - for frame→time conversion
+        dt: Time step [seconds]
 
     Returns:
         Total g1 correlation function (3D array: (n_phi, n_times, n_times))
@@ -328,13 +330,13 @@ def _compute_g2_scaled_meshgrid(
 
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
-        t1, t2: Time points for correlation calculation (FRAME INDICES)
+        t1, t2: Time points for correlation calculation (PHYSICAL TIME in seconds)
         phi: Scattering angles
         wavevector_q_squared_half_dt: Pre-computed factor 0.5 * q² * dt
         sinc_prefactor: Pre-computed factor 0.5/π * q * L * dt
         contrast: Contrast parameter (β in literature) - typically [0, 1]
         offset: Baseline level (includes the "1" from physics) - typically ~1.0
-        dt: Time step per frame [seconds] - for frame→time conversion
+        dt: Time step [seconds]
 
     Returns:
         g2 correlation function with scaled fitting and physical bounds applied

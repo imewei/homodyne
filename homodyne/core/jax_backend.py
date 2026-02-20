@@ -1048,8 +1048,13 @@ def compute_g2_scaled(
     # The residual function validates dt before JIT compilation.
     # If dt validation is needed here, it must be done before the function is traced.
 
-    # Handle 1D time arrays by creating meshgrids (cached for performance)
+    # Handle 1D time arrays by creating meshgrids (cached for performance).
+    # get_cached_meshgrid may skip meshgrid for large 1D arrays (>2000 elements,
+    # assumed to be element-wise matched pooled data). For the public API we
+    # always need 2D matrix output, so fall back to explicit meshgrid.
     t1, t2 = get_cached_meshgrid(t1, t2)
+    if t1.ndim == 1 and t2.ndim == 1:
+        t1, t2 = jnp.meshgrid(t1, t2, indexing="ij")
 
     # Compute the physics factors using configuration dt
     # IMPORTANT: Config dt value will OVERRIDE this default
@@ -1068,7 +1073,7 @@ def compute_g2_scaled(
             sinc_prefactor,
             contrast,
             offset,
-            dt,
+            dt_value,
         )
     )
 
