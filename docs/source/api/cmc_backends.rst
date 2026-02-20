@@ -36,8 +36,11 @@ The recommended backend for CPU-based systems. Key architecture:
 1. **Worker spawn** — ``N = max(1, physical_cores // 2 − 1)`` worker processes
    are spawned using the ``spawn`` start method (required for JAX safety).
 2. **Shared memory** — ``SharedDataManager`` shares config, parameter space,
-   and time grids across workers via ``multiprocessing.shared_memory``,
-   avoiding per-shard pickling overhead.
+   time grids, and per-shard data arrays across workers via
+   ``multiprocessing.shared_memory``. The ``create_shared_shard_arrays()``
+   method places each shard's numpy arrays (data, t1, t2, phi_unique,
+   phi_indices) in shared memory, eliminating per-process serialization
+   overhead through the spawn mechanism.
 3. **XLA configuration** — the parent process sets ``JAX_ENABLE_X64=1`` in
    ``homodyne/__init__.py`` and ``cli/main.py`` before any JAX import. Each
    spawned worker also sets ``JAX_ENABLE_X64`` and configures ``XLA_FLAGS``
@@ -52,6 +55,14 @@ The recommended backend for CPU-based systems. Key architecture:
    based on shard activity, reducing CPU spin.
 6. **Batch PRNG** — all shard random keys are pre-generated in a single JAX
    call before spawning, avoiding repeated JAX initialisation.
+7. **LPT scheduling** — shards are dispatched using noise-weighted Longest
+   Processing Time first ordering. Cost is estimated as
+   ``n_points × (1 + normalized_noise)``, dispatching the most expensive
+   shards first to minimize tail latency.
+8. **JIT compilation cache** — workers configure ``jax.config.update()`` to
+   enable the persistent compilation cache with ``min_compile_time_secs=0``.
+   The first worker compiles all JIT functions; subsequent workers load from
+   the disk cache (2.3× worker startup speedup).
 
 .. autoclass:: homodyne.optimization.cmc.backends.multiprocessing.MultiprocessingBackend
    :members:
@@ -119,7 +130,19 @@ Each worker configures XLA before importing JAX:
 
 This gives each worker 4 virtual devices for ``parallel`` chain execution.
 The parent process restores its original environment after all workers have
-been spawned.
+been spawned. After importing JAX, each worker also enables the persistent
+JIT compilation cache:
+
+.. code-block:: python
+
+   import jax
+   jax.config.update("jax_compilation_cache_dir", cache_dir)
+   jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+
+.. warning::
+
+   In JAX 0.8+, ``os.environ["JAX_COMPILATION_CACHE_DIR"]`` alone does NOT
+   enable the persistent cache. The ``jax.config.update()`` call is required.
 
 .. code-block:: yaml
 

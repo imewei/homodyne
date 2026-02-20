@@ -171,16 +171,26 @@ JAX Compilation Caching
 ------------------------
 
 JAX JIT compilation can dominate execution time for small datasets. Cache
-compiled functions between runs:
+compiled functions between runs.
 
-.. code-block:: bash
+.. warning::
 
-   # Enable XLA compilation cache
-   export XLA_CACHE_DIR="$HOME/.cache/xla_compilations"
-   mkdir -p "$XLA_CACHE_DIR"
+   In JAX 0.8+, setting the ``JAX_COMPILATION_CACHE_DIR`` environment variable
+   alone does **NOT** enable the persistent cache. You must use
+   ``jax.config.update()`` after importing JAX. The CMC multiprocessing backend
+   handles this automatically for worker processes.
 
-With caching, the first run compiles; subsequent runs load from cache.
-This reduces startup time from ~30–60 s to ~2–5 s.
+.. code-block:: python
+
+   import jax
+   jax.config.update("jax_compilation_cache_dir", "/path/to/cache")
+   jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+
+The ``min_compile_time_secs`` default of 1.0 s is too high for CMC physics
+functions (which compile in 0.07–0.15 s). Setting it to 0 ensures all JIT
+compilations are cached. With proper caching, the first CMC worker compiles
+all functions; subsequent workers load from the disk cache, saving ~10 s
+per run across workers.
 
 ---
 
@@ -253,8 +263,15 @@ Before running a long analysis:
 - [ ] Use ``per_angle_mode: "auto"`` not ``individual`` for large n_phi
 - [ ] Set ``chain_method: "parallel"`` in CMC config
 - [ ] Use ``homodyne-config-xla`` to set XLA flags
-- [ ] Enable XLA compilation cache for repeated runs
+- [ ] Ensure JIT cache uses ``jax.config.update()`` (not just env var) for JAX 0.8+
 - [ ] Consider ``numactl`` for multi-socket systems
+
+.. note::
+
+   CMC shards are dispatched using noise-weighted LPT (Longest Processing Time
+   first) scheduling. The most expensive shards run first to minimize tail
+   latency. Per-shard data is placed in shared memory to avoid serialization
+   overhead. These optimizations are automatic and require no configuration.
 
 ---
 
