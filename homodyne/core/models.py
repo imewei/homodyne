@@ -52,8 +52,8 @@ from homodyne.core.jax_backend import (
     compute_g2_scaled,
     jax_available,
     jnp,
-    safe_len,
 )
+from homodyne.core.physics_utils import safe_len
 from homodyne.core.model_mixins import (
     BenchmarkingMixin,
     GradientCapabilityMixin,

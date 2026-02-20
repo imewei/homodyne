@@ -198,7 +198,6 @@ def compute_consistent_per_angle_init(
     from homodyne.core.physics_utils import (
         calculate_diffusion_coefficient,
         calculate_shear_rate,
-        safe_exp,
         safe_sinc,
         trapezoid_cumsum,
     )
@@ -298,7 +297,7 @@ def compute_consistent_per_angle_init(
             D_diff = D_cumsum[t1_idx] - D_cumsum[t2_idx]
             D_integral_batch = np.abs(D_diff)
             log_g1_diff = -wavevector_q_squared_half_dt * D_integral_batch
-            g1_diffusion = safe_exp(np.clip(log_g1_diff, -700.0, 0.0))
+            g1_diffusion = np.exp(np.clip(log_g1_diff, -700.0, 0.0))
 
             if is_laminar_flow:
                 # Shear term

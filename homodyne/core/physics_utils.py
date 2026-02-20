@@ -338,15 +338,13 @@ def trapezoid_cumsum(values: jnp.ndarray) -> jnp.ndarray:
     Returns:
         Cumulative trapezoidal sums
     """
-    # Use .shape[0] directly (always a concrete static int in JAX) rather than
-    # safe_len(), which adds unnecessary Python dispatch overhead.
-    # The Python `if` on a static shape is fine — it only causes JIT retracing
-    # when the array length changes across calls with the same JIT key.
-    if values.shape[0] > 1:
-        trap_avg = 0.5 * (values[:-1] + values[1:])
-        cumsum_trap = jnp.cumsum(trap_avg)
-        return jnp.concatenate([jnp.array([0.0], dtype=values.dtype), cumsum_trap])
-    return jnp.cumsum(values)
+    # Unconditional trapezoidal path — avoids JIT retracing when array size
+    # changes. For n==1, values[:-1] and values[1:] are both empty, so
+    # cumsum_trap is empty and the result is [0.0], which is the correct
+    # cumulative integral (no intervals to sum).
+    trap_avg = 0.5 * (values[:-1] + values[1:])
+    cumsum_trap = jnp.cumsum(trap_avg)
+    return jnp.concatenate([jnp.array([0.0], dtype=values.dtype), cumsum_trap])
 
 
 # =============================================================================

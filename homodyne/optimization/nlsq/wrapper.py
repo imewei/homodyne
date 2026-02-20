@@ -6625,7 +6625,6 @@ class NLSQWrapper(NLSQAdapterBase):
             PI,
             calculate_diffusion_coefficient,
             calculate_shear_rate,
-            safe_exp,
             safe_sinc,
             trapezoid_cumsum,
         )
@@ -6703,7 +6702,7 @@ class NLSQWrapper(NLSQAdapterBase):
 
             log_g1_diff = -wavevector_q_squared_half_dt * D_integral_batch
             log_g1_diff_bounded = jnp.clip(log_g1_diff, -700.0, 0.0)
-            g1_diffusion = safe_exp(log_g1_diff_bounded)
+            g1_diffusion = jnp.exp(log_g1_diff_bounded)
 
             if is_laminar_flow:
                 # Shear parameters
@@ -7035,7 +7034,7 @@ class NLSQWrapper(NLSQAdapterBase):
 
                 log_g1_diff = -wavevector_q_squared_half_dt * D_integral_batch
                 log_g1_diff_bounded = jnp.clip(log_g1_diff, -700.0, 0.0)
-                g1_diffusion = safe_exp(log_g1_diff_bounded)
+                g1_diffusion = jnp.exp(log_g1_diff_bounded)
 
                 if is_laminar_flow:
                     # Shear parameters

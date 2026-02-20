@@ -50,8 +50,6 @@ from jax import jit
 from homodyne.core.physics_utils import (
     calculate_diffusion_coefficient as _calc_diff,
     calculate_shear_rate_cmc as _calc_shear,
-    safe_exp,
-    safe_len,
     safe_sinc,
 )
 from homodyne.core.physics_utils import (
@@ -191,7 +189,8 @@ def _compute_g1_diffusion_from_idx(
 
     log_g1 = -wavevector_q_squared_half_dt * integral_steps
     log_g1_clipped = jnp.clip(log_g1, -700.0, 0.0)
-    return safe_exp(log_g1_clipped)  # shape: (N,)
+    # log_g1_clipped is already in [-700, 0] — jnp.exp is safe (no overflow risk).
+    return jnp.exp(log_g1_clipped)  # shape: (N,)
 
 
 @jit
@@ -371,7 +370,8 @@ def _compute_g1_diffusion_elementwise(
     # - exp(-700) ≈ 10^-304 is near machine epsilon but still differentiable
     log_g1 = -wavevector_q_squared_half_dt * integral_steps
     log_g1_clipped = jnp.clip(log_g1, -700.0, 0.0)
-    g1_diffusion = safe_exp(log_g1_clipped)
+    # log_g1_clipped is already in [-700, 0] — jnp.exp is safe (no overflow risk).
+    g1_diffusion = jnp.exp(log_g1_clipped)
 
     # P1-2: Removed jnp.minimum(g1_diffusion, 1.0) — the log-space clip above
     # (jnp.clip(log_g1, -700, 0)) already guarantees g1 = exp(log_g1) ≤ 1.0.
@@ -410,10 +410,10 @@ def _compute_g1_shear_elementwise(
         NUTS hot paths to avoid repeating ``searchsorted`` every leapfrog step.
     """
     # Check params length - if < 7, we're in static mode (no shear)
-    if safe_len(params) < 7:
+    if params.shape[0] < 7:
         # Return ones for all unique phi angles and time combinations (g1_shear = 1)
-        n_phi_unique = safe_len(phi_unique)
-        n_points = safe_len(t1)
+        n_phi_unique = phi_unique.shape[0]
+        n_points = t1.shape[0]
         return jnp.ones((n_phi_unique, n_points))
 
     gamma_dot_0, beta, gamma_dot_offset, phi0 = (
@@ -444,9 +444,8 @@ def _compute_g1_shear_elementwise(
         (gamma_cumsum[idx2] - gamma_cumsum[idx1]) ** 2 + epsilon_abs
     )
 
-    # phi_unique is already filtered to unique values by caller (compute_g1_total)
-    # No need for jnp.unique() here (causes JAX concretization error during JIT)
-    n_phi_unique = safe_len(phi_unique)  # noqa: F841 — kept for clarity
+    # phi_unique is already filtered to unique values by caller (compute_g1_total).
+    # No jnp.unique() here — causes JAX concretization error during JIT.
 
     # Compute phase for unique phi angles (vectorized over unique phi)
     angle_diff = jnp.deg2rad(phi0 - phi_unique)  # shape: (n_unique_phi,)
@@ -601,7 +600,7 @@ def compute_g1_diffusion(
         # FALLBACK: Estimate from time array (NOT RECOMMENDED)
         time_array = t1
         dt_value = (
-            float(time_array[1] - time_array[0]) if safe_len(time_array) > 1 else 1.0
+            float(time_array[1] - time_array[0]) if time_array.shape[0] > 1 else 1.0
         )
     else:
         dt_value = dt

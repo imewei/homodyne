@@ -92,8 +92,6 @@ from typing import Any, cast
 from homodyne.core.physics_utils import (
     EPS,
     PI,
-    safe_exp,
-    safe_len,
     safe_sinc,
 )
 from homodyne.core.physics_utils import (
@@ -480,7 +478,7 @@ def _compute_g1_diffusion_core(
             grid_indices = jnp.arange(_FALLBACK_GRID_SIZE, dtype=jnp.result_type(dt))
             time_grid_used = grid_indices * dt
 
-        grid_size = safe_len(time_grid_used)
+        grid_size = time_grid_used.shape[0]
 
         # Compute D(t) on grid and build cumulative trapezoid
         D_grid = _calculate_diffusion_coefficient_impl_jax(
@@ -538,8 +536,9 @@ def _compute_g1_diffusion_core(
     # 0 → exp(0) = 1.0 (maximum physical value)
     log_g1_bounded = jnp.clip(log_g1, -700.0, 0.0)
 
-    # Compute exponential with safeguards (safe_exp handles edge cases)
-    g1_result = safe_exp(log_g1_bounded)
+    # Compute exponential — log_g1_bounded is already clipped to [-700, 0],
+    # so jnp.exp is safe (no overflow risk).
+    g1_result = jnp.exp(log_g1_bounded)
 
     # P1-2: Removed jnp.minimum(g1_result, 1.0) — the log-space clip above
     # (jnp.clip(log_g1, -700, 0)) already guarantees g1 = exp(log_g1) ≤ 1.0.
@@ -595,7 +594,7 @@ def _compute_g1_shear_core(
         else:
             # Matrix mode: return (n_phi, n_times, n_times) to broadcast with g1_diff
             phi_array = jnp.atleast_1d(phi)
-            n_phi = safe_len(phi_array)
+            n_phi = phi_array.shape[0]
             n_times = t1.shape[0]
             return jnp.ones((n_phi, n_times, n_times))
 
@@ -624,7 +623,7 @@ def _compute_g1_shear_core(
             grid_indices = jnp.arange(_FALLBACK_GRID_SIZE, dtype=jnp.result_type(dt))
             time_grid_used = grid_indices * dt
 
-        grid_size = safe_len(time_grid_used)
+        grid_size = time_grid_used.shape[0]
 
         # Compute γ̇(t) on grid and build cumulative trapezoid
         gamma_grid = _calculate_shear_rate_impl_jax(
@@ -647,7 +646,7 @@ def _compute_g1_shear_core(
         gamma_integral = jnp.sqrt(
             (gamma_cumsum[idx2] - gamma_cumsum[idx1]) ** 2 + epsilon_abs
         )
-        n_times = safe_len(t1_arr)
+        n_times = t1_arr.shape[0]
 
     else:
         # MATRIX MODE: Standard approach for small datasets or meshgrids
@@ -676,30 +675,13 @@ def _compute_g1_shear_core(
         # This gives matrix[i,j] = |cumsum[i] - cumsum[j]| ≈ |∫γ̇(t)dt from i to j|
         # Create shear integral matrix using cumulative sums
         gamma_integral = _create_time_integral_matrix_impl_jax(gamma_t)
-        n_times = safe_len(time_array)
+        n_times = time_array.shape[0]
 
-    # Fix phi shape if it has extra dimensions
-    # Handle case where phi might be (1, 1, 1, 23) instead of (23,) or other malformed shapes
-    # T3-1: Use jnp.result_type to infer dtype from context instead of
-    # hardcoding float64, which silently downcasts without JAX_ENABLE_X64.
-    phi = jnp.asarray(phi, dtype=jnp.result_type(phi))
-
-    # Remove all leading singleton dimensions and flatten to 1D
-    while phi.ndim > 1:
-        if phi.ndim == 4 and phi.shape[:3] == (1, 1, 1):
-            # Handle specific case (1, 1, 1, N) -> (N,)
-            phi = jnp.squeeze(phi, axis=(0, 1, 2))
-        elif phi.ndim > 1:
-            # Handle any other multi-dimensional case by squeezing all singleton dims
-            phi = jnp.squeeze(phi)
-            # If squeezing didn't reduce dimensions, flatten
-            if phi.ndim > 1:
-                phi = phi.flatten()
-                break
-
-    # Step 4: Compute sinc² for each phi angle using pre-computed factor (vectorized)
-    phi_array = jnp.atleast_1d(phi)
-    n_phi = safe_len(phi_array)
+    # Ensure phi is a 1D array regardless of input shape.
+    # Handles (1, 1, 1, 23), (23,), scalar, etc. uniformly.
+    # reshape(-1) avoids a Python while loop that would cause JIT retracing.
+    phi_array = jnp.asarray(phi, dtype=jnp.result_type(phi)).reshape(-1)
+    n_phi = phi_array.shape[0]
 
     if is_elementwise:
         # ELEMENT-WISE MODE: phi, gamma_integral are all 1D arrays (n,)
@@ -739,7 +721,7 @@ def _compute_g1_shear_core(
         # vmap over the phi array axis — each call gets a scalar phi element
         sinc2_result = vmap(_sinc2_for_one_phi)(phi_array)  # (n_phi, n_times, n_times)
 
-    return jnp.asarray(sinc2_result)
+    return sinc2_result
 
 
 @jit
@@ -812,7 +794,7 @@ def _compute_g1_total_core(
     epsilon = 1e-10
     g1_bounded = jnp.where(g1_total > epsilon, g1_total, epsilon)
 
-    return jnp.asarray(g1_bounded)
+    return g1_bounded
 
 
 @jit
@@ -916,7 +898,7 @@ def compute_g1_diffusion(
         else:
             time_array = t1
         dt_value = (
-            float(time_array[1] - time_array[0]) if safe_len(time_array) > 1 else 1.0
+            float(time_array[1] - time_array[0]) if time_array.shape[0] > 1 else 1.0
         )
     else:
         dt_value = dt

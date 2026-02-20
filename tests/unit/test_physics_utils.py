@@ -505,10 +505,12 @@ class TestTrapezoidCumsum:
         assert_allclose(result, expected, rtol=1e-10)
 
     def test_single_element(self):
-        """Test with single element (uses direct cumsum)."""
+        """Test with single element: no intervals, so cumulative integral is [0.0]."""
         values = jnp.array([5.0])
         result = trapezoid_cumsum(values)
-        assert_allclose(result, jnp.array([5.0]), rtol=1e-10)
+        # For a single point there are no intervals; trapezoidal cumsum = [0.0].
+        # Callers use cumsum[idx2] - cumsum[idx1], which is 0 for single-point shards.
+        assert_allclose(result, jnp.array([0.0]), rtol=1e-10)
 
     def test_preserves_dtype(self):
         """Test that dtype is preserved."""

@@ -31,8 +31,6 @@ from jax import jit
 
 from homodyne.core.physics_utils import (
     PI,
-    safe_exp,
-    safe_len,
     safe_sinc,
 )
 from homodyne.core.physics_utils import (
@@ -126,8 +124,9 @@ def _compute_g1_diffusion_meshgrid(
     # 0 → exp(0) = 1.0 (maximum physical value)
     log_g1_bounded = jnp.clip(log_g1, -700.0, 0.0)
 
-    # Compute exponential with safeguards (safe_exp handles edge cases)
-    g1_result = safe_exp(log_g1_bounded)
+    # Compute exponential — log_g1_bounded is already clipped to [-700, 0],
+    # so jnp.exp is safe (no overflow risk).
+    g1_result = jnp.exp(log_g1_bounded)
 
     # P1-2: Removed jnp.minimum(g1_result, 1.0) — the log-space clip above
     # (jnp.clip(log_g1, -700, 0)) already guarantees g1 = exp(log_g1) ≤ 1.0.
@@ -168,12 +167,12 @@ def _compute_g1_shear_meshgrid(
     if params.shape[0] < 7:
         # Return ones for all phi angles and time combinations (g1_shear = 1)
         phi_array = jnp.atleast_1d(phi)
-        n_phi = safe_len(phi_array)
+        n_phi = phi_array.shape[0]
         if t1.ndim == 2:
             n_times = t1.shape[0]
             return jnp.ones((n_phi, n_times, n_times))
         else:
-            n_times = safe_len(t1)
+            n_times = t1.shape[0]
             return jnp.ones((n_phi, n_times, n_times))
 
     gamma_dot_0, beta, gamma_dot_offset, phi0 = (
@@ -214,27 +213,12 @@ def _compute_g1_shear_meshgrid(
     # Create shear integral matrix using cumulative sums
     gamma_integral = _create_time_integral_matrix_impl_jax(gamma_t)
 
-    # Fix phi shape if it has extra dimensions
-    # Handle case where phi might be (1, 1, 1, 23) instead of (23,) or other malformed shapes
-    phi = jnp.asarray(phi, dtype=jnp.result_type(phi))  # Preserve caller dtype (no forced float64)
-
-    # Remove all leading singleton dimensions and flatten to 1D
-    while phi.ndim > 1:
-        if phi.ndim == 4 and phi.shape[:3] == (1, 1, 1):
-            # Handle specific case (1, 1, 1, N) -> (N,)
-            phi = jnp.squeeze(phi, axis=(0, 1, 2))
-        elif phi.ndim > 1:
-            # Handle any other multi-dimensional case by squeezing all singleton dims
-            phi = jnp.squeeze(phi)
-            # If squeezing didn't reduce dimensions, flatten
-            if phi.ndim > 1:
-                phi = phi.flatten()
-                break
-
-    # Compute sinc² for each phi angle using pre-computed factor (vectorized)
-    phi_array = jnp.atleast_1d(phi)
-    n_phi = safe_len(phi_array)
-    n_times = safe_len(time_array)
+    # Ensure phi is a 1D array regardless of input shape.
+    # Handles (1, 1, 1, 23), (23,), scalar, etc. uniformly.
+    # reshape(-1) avoids a Python while loop that would cause JIT retracing.
+    phi_array = jnp.asarray(phi, dtype=jnp.result_type(phi)).reshape(-1)
+    n_phi = phi_array.shape[0]
+    n_times = time_array.shape[0]
 
     # Vectorized computation: compute all phi angles at once
     # angle_diff shape: (n_phi,)

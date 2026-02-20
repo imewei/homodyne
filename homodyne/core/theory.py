@@ -27,8 +27,8 @@ try:
         batch_chi_squared,
         jax_available,
         jnp,
-        safe_len,
     )
+    from homodyne.core.physics_utils import safe_len
 except ImportError:
     jax_available = False
     logger = get_logger(__name__)

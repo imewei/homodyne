@@ -29,8 +29,8 @@ from homodyne.core.jax_backend import (
     compute_g1_diffusion,
     compute_g1_shear,
     compute_g2_scaled,
-    safe_len,
 )
+from homodyne.core.physics_utils import safe_len
 from homodyne.core.jax_backend import jax_available as BACKEND_JAX_AVAILABLE
 
 # =============================================================================
