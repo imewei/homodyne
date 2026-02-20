@@ -491,7 +491,7 @@ class NLSQConfig:
             hybrid_normalization_strategy=hybrid_streaming.get(
                 "normalization_strategy", "auto"
             ),
-            hybrid_warmup_iterations=hybrid_streaming.get("warmup_iterations", 100),
+            hybrid_warmup_iterations=hybrid_streaming.get("warmup_iterations", 200),
             hybrid_max_warmup_iterations=hybrid_streaming.get(
                 "max_warmup_iterations", 500
             ),
@@ -499,12 +499,12 @@ class NLSQConfig:
                 hybrid_streaming.get("warmup_learning_rate", 0.001)
             ),
             hybrid_gauss_newton_max_iterations=hybrid_streaming.get(
-                "gauss_newton_max_iterations", 50
+                "gauss_newton_max_iterations", 100
             ),
             hybrid_gauss_newton_tol=float(
                 hybrid_streaming.get("gauss_newton_tol", 1e-8)
             ),
-            hybrid_chunk_size=hybrid_streaming.get("chunk_size", 50000),
+            hybrid_chunk_size=hybrid_streaming.get("chunk_size", 10000),
             hybrid_trust_region_initial=float(
                 hybrid_streaming.get("trust_region_initial", 1.0)
             ),

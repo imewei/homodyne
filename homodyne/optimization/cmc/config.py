@@ -16,12 +16,12 @@ Example aligned config::
       mcmc:
         num_warmup: 500
         num_samples: 1500
-        num_chains: 2
+        num_chains: 4
       cmc:
         per_shard_mcmc:
           num_warmup: 500
           num_samples: 1500
-          num_chains: 2
+          num_chains: 4
 """
 
 from __future__ import annotations
@@ -830,8 +830,9 @@ class CMCConfig:
                 "num_shards": self.num_shards,
                 "max_points_per_shard": self.max_points_per_shard,
                 "min_points_per_shard": self.min_points_per_shard,
+                "min_points_per_param": self.min_points_per_param,
             },
-            "backend": {
+            "backend_config": {
                 "name": self.backend_name,
                 "enable_checkpoints": self.enable_checkpoints,
                 "checkpoint_dir": self.checkpoint_dir,
