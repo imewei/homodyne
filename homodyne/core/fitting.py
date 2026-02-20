@@ -369,8 +369,9 @@ if JAX_AVAILABLE:
         contrast = jnp.where(valid_det, contrast, 1.0)
         offset = jnp.where(valid_det, offset, 0.0)
 
-        # Ensure contrast is positive (physical constraint)
-        contrast = jnp.maximum(contrast, 1e-6)
+        # Ensure contrast is positive (physical constraint).
+        # P1: Use jnp.where for gradient safety (jnp.maximum zeros gradient below floor).
+        contrast = jnp.where(contrast > 1e-6, contrast, 1e-6)
 
         return contrast, offset
 
@@ -777,7 +778,8 @@ if JAX_AVAILABLE:
         # Apply constraints
         contrast = jnp.where(valid_det, contrast, 1.0)
         offset = jnp.where(valid_det, offset, 0.0)
-        contrast = jnp.maximum(contrast, 1e-6)
+        # P1: Use jnp.where for gradient safety (jnp.maximum zeros gradient below floor).
+        contrast = jnp.where(contrast > 1e-6, contrast, 1e-6)
 
         return contrast, offset
 

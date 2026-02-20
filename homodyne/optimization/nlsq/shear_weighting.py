@@ -100,8 +100,10 @@ def _compute_weights_jax(
     phi_rad = jnp.radians(phi_angles)
 
     # Compute shear sensitivity: |cos(phi0 - phi)|
-    # Performance Optimization (Spec 001 - FR-008, T016): Underflow protection
-    cos_factor = jnp.maximum(jnp.abs(jnp.cos(phi0_rad - phi_rad)), 1e-10)
+    # Underflow protection: use jnp.where (gradient-safe) instead of jnp.maximum.
+    # phi0 is a traced parameter; jnp.maximum zeros its gradient when cos_factor ≤ 1e-10.
+    _cos_abs = jnp.abs(jnp.cos(phi0_rad - phi_rad))
+    cos_factor = jnp.where(_cos_abs > 1e-10, _cos_abs, 1e-10)
 
     # Apply exponent and scale
     # w(phi) = w_min + (1 - w_min) * |cos(phi0 - phi)|^alpha

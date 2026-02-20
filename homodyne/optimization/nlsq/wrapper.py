@@ -3241,9 +3241,8 @@ class NLSQWrapper(NLSQAdapterBase):
             ) as exc:  # pragma: no cover - logging safeguard
                 logger.debug(f"Sequential bounds dtype logging failed: {exc}")
 
-        # Create residual function using physics kernels (local shim)
-        from homodyne.core.diagonal_correction import apply_diagonal_correction
-        from homodyne.core.physics_nlsq import compute_g2_scaled
+        # Create residual function using physics kernels
+        # (apply_diagonal_correction and compute_g2_scaled imported at module level)
 
         phi_unique_all = np.unique(np.round(phi_flat, decimals=6))
         t1_unique_all = np.unique(np.asarray(t1))
@@ -6698,7 +6697,8 @@ class NLSQWrapper(NLSQAdapterBase):
             D_t = calculate_diffusion_coefficient(t1_unique_jax, D0, alpha, D_offset)
             D_cumsum = trapezoid_cumsum(D_t)
             D_diff = D_cumsum[t1_idx] - D_cumsum[t2_idx]
-            D_integral_batch = jnp.sqrt(D_diff**2 + 1e-20)
+            # P0-2: epsilon_abs=1e-12 (was 1e-20, below float32 precision)
+            D_integral_batch = jnp.sqrt(D_diff**2 + 1e-12)
 
             log_g1_diff = -wavevector_q_squared_half_dt * D_integral_batch
             log_g1_diff_bounded = jnp.clip(log_g1_diff, -700.0, 0.0)
@@ -6717,7 +6717,8 @@ class NLSQWrapper(NLSQAdapterBase):
                 )
                 gamma_cumsum = trapezoid_cumsum(gamma_t)
                 gamma_diff = gamma_cumsum[t1_idx] - gamma_cumsum[t2_idx]
-                gamma_integral_batch = jnp.sqrt(gamma_diff**2 + 1e-20)
+                # P0-2: epsilon_abs=1e-12 (was 1e-20, below float32 precision)
+                gamma_integral_batch = jnp.sqrt(gamma_diff**2 + 1e-12)
 
                 # Shear contribution with angle dependence
                 # Formula: g₁_shear = [sinc(Φ)]² where Φ = sinc_prefactor * cos(φ₀-φ) * ∫γ̇
@@ -6730,17 +6731,21 @@ class NLSQWrapper(NLSQAdapterBase):
                 g1_shear = sinc_val**2  # CRITICAL: g1_shear = sinc²(Φ)
 
                 g1_total = g1_diffusion * g1_shear
-                # Clip for numerical stability (same as existing streaming optimizer)
-                g1 = jnp.clip(g1_total, 1e-10, 2.0)
+                # P0-3: Use jnp.where (gradient-safe) instead of jnp.clip.
+                # log-space clip above guarantees g1 ≤ 1.0; lower floor prevents log(0).
+                epsilon = 1e-10
+                g1 = jnp.where(g1_total > epsilon, g1_total, epsilon)
             else:
-                g1 = jnp.clip(g1_diffusion, 1e-10, 2.0)
+                epsilon = 1e-10
+                g1 = jnp.where(g1_diffusion > epsilon, g1_diffusion, epsilon)
 
             # Compute g2 with per-angle scaling
             contrast = contrast_all[phi_idx]
             offset = offset_all[phi_idx]
             g2_theory = offset + contrast * g1**2
-            # Clip g2 for numerical stability
-            g2 = jnp.clip(g2_theory, 0.5, 2.5)
+            # P0-3: Removed jnp.clip(g2, 0.5, 2.5) — kills gradients at boundaries.
+            # Bounds enforced via parameter bounds in optimizer, not g2 clipping.
+            g2 = g2_theory
 
             # Squeeze output to match input dimensionality
             # Returns 0D scalar for single point, 1D array for batch
@@ -7030,7 +7035,8 @@ class NLSQWrapper(NLSQAdapterBase):
                 )
                 D_cumsum = trapezoid_cumsum(D_t)
                 D_diff = D_cumsum[t1_idx] - D_cumsum[t2_idx]
-                D_integral_batch = jnp.sqrt(D_diff**2 + 1e-20)
+                # P0-2: epsilon_abs=1e-12 (was 1e-20, below float32 precision)
+                D_integral_batch = jnp.sqrt(D_diff**2 + 1e-12)
 
                 log_g1_diff = -wavevector_q_squared_half_dt * D_integral_batch
                 log_g1_diff_bounded = jnp.clip(log_g1_diff, -700.0, 0.0)
@@ -7049,7 +7055,8 @@ class NLSQWrapper(NLSQAdapterBase):
                     )
                     gamma_cumsum = trapezoid_cumsum(gamma_t)
                     gamma_diff = gamma_cumsum[t1_idx] - gamma_cumsum[t2_idx]
-                    gamma_integral_batch = jnp.sqrt(gamma_diff**2 + 1e-20)
+                    # P0-2: epsilon_abs=1e-12 (was 1e-20, below float32 precision)
+                    gamma_integral_batch = jnp.sqrt(gamma_diff**2 + 1e-12)
 
                     # Shear contribution with angle dependence
                     phi_values = phi_unique_jax[phi_idx]
@@ -7061,15 +7068,21 @@ class NLSQWrapper(NLSQAdapterBase):
                     g1_shear = sinc_val**2
 
                     g1_total = g1_diffusion * g1_shear
-                    g1 = jnp.clip(g1_total, 1e-10, 2.0)
+                    # P0-3: Use jnp.where (gradient-safe) instead of jnp.clip.
+                    # log-space clip above guarantees g1 ≤ 1.0; lower floor prevents log(0).
+                    epsilon = 1e-10
+                    g1 = jnp.where(g1_total > epsilon, g1_total, epsilon)
                 else:
-                    g1 = jnp.clip(g1_diffusion, 1e-10, 2.0)
+                    epsilon = 1e-10
+                    g1 = jnp.where(g1_diffusion > epsilon, g1_diffusion, epsilon)
 
                 # Compute g2 with per-angle scaling (from Fourier-derived values)
                 contrast = contrast_all[phi_idx]
                 offset = offset_all[phi_idx]
                 g2_theory = offset + contrast * g1**2
-                g2 = jnp.clip(g2_theory, 0.5, 2.5)
+                # P0-3: Removed jnp.clip(g2, 0.5, 2.5) — kills gradients at boundaries.
+                # Bounds enforced via parameter bounds in optimizer, not g2 clipping.
+                g2 = g2_theory
 
                 return g2.squeeze()
 
