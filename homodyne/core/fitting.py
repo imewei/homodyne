@@ -683,7 +683,13 @@ if JAX_AVAILABLE:
 
         # Check condition number for method selection
         eigenvalues = jnp.linalg.eigvalsh(gram_matrix_reg)
-        condition_number = eigenvalues[-1] / (eigenvalues[0] + 1e-15)
+        # Use jnp.where for safe division — avoids fragile +1e-15 offset
+        # that could misroute near-singular systems to Cholesky.
+        condition_number = jnp.where(
+            eigenvalues[0] > 0,
+            eigenvalues[-1] / eigenvalues[0],
+            jnp.inf,
+        )
 
         # Use appropriate solver based on conditioning
         def cholesky_solve() -> Any:

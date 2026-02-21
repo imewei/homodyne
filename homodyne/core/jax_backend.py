@@ -991,9 +991,8 @@ def compute_g1_total(
     # Handle 1D time arrays by creating meshgrids (cached for performance)
     t1, t2 = get_cached_meshgrid(t1, t2)
 
-    # Compute the physics factors using configuration dt
-    # IMPORTANT: Config dt value will OVERRIDE this default
-    # Default dt = 0.001s if not in config (APS-U standard XPCS frame rate: 1ms)
+    # Compute physics factors using configuration dt.
+    # Fallback 0.001s = APS-U standard XPCS frame rate (1 kHz).
     dt_value = dt if dt is not None else 0.001
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
     sinc_prefactor = 0.5 / PI * q * L * dt_value
@@ -1056,9 +1055,8 @@ def compute_g2_scaled(
     if t1.ndim == 1 and t2.ndim == 1:
         t1, t2 = jnp.meshgrid(t1, t2, indexing="ij")
 
-    # Compute the physics factors using configuration dt
-    # IMPORTANT: Config dt value will OVERRIDE this default
-    # Default dt = 0.001s if not in config (APS-U standard XPCS frame rate: 1ms)
+    # Compute physics factors using configuration dt.
+    # Fallback 0.001s = APS-U standard XPCS frame rate (1 kHz).
     dt_value = dt if dt is not None else 0.001
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
     sinc_prefactor = 0.5 / PI * q * L * dt_value

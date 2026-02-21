@@ -410,10 +410,9 @@ def compute_g2_scaled(
         t1 = t1_grid
         t2 = t2_grid
 
-    # Compute the physics factors using configuration dt
-    # IMPORTANT: Config dt value will OVERRIDE this default
-    # Default dt = 0.001s if not in config (APS-U standard XPCS frame rate: 1ms)
-    dt_value = dt if dt is not None else 0.001
+    # Compute the physics factors using configuration dt.
+    # dt is required (callers must validate before calling; None is not accepted).
+    dt_value = dt
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
     sinc_prefactor = 0.5 / PI * q * L * dt_value
 
@@ -451,7 +450,7 @@ def compute_g2_scaled_with_factors(
 
     Args:
         params: Physical parameters [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
-        t1, t2: Time grids for correlation calculation (FRAME INDICES)
+        t1, t2: Time grids for correlation calculation (PHYSICAL TIME in seconds)
         phi: Scattering angles [degrees]
         wavevector_q_squared_half_dt: Pre-computed factor (0.5 * q² * dt) [STATIC - dataset-invariant]
         sinc_prefactor: Pre-computed factor (q * L * dt / 2π) [STATIC - dataset-invariant]
