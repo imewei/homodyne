@@ -697,7 +697,7 @@ def create_angle_stratified_data(
     # Single angle: no stratification needed
     if stats.n_angles == 1:
         logger.info("Single phi angle detected, no stratification needed")
-        return phi, t1, t2, g2_exp, None
+        return phi, t1, t2, g2_exp, [n_points]
 
     logger.info(
         f"Stratifying {n_points:,} points across {stats.n_angles} angles "

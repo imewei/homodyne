@@ -418,8 +418,8 @@ class TestAngleStratifiedData:
             phi_jax, t1_jax, t2_jax, g2_jax
         )
 
-        # Should return original (no stratification needed)
-        assert chunk_sizes is None
+        # Single angle: one chunk containing all points
+        assert chunk_sizes == [len(phi)]
         np.testing.assert_array_equal(np.asarray(phi_s), np.asarray(phi_jax))
 
 

@@ -254,14 +254,14 @@ def test_validate_chunk_structure_missing_angles():
             self.chunks = chunks
             self.sigma = sigma
 
-    residual_fn = StratifiedResidualFunction(
-        stratified_data=MockData([chunk1, chunk2], sigma),
-        per_angle_scaling=True,
-        physical_param_names=["D0", "alpha", "D_offset"],
-    )
-
+    # Validation now runs inline during __init__ (before del self.chunks),
+    # so the ValueError is raised by the constructor itself.
     with pytest.raises(ValueError, match="Chunk .* has inconsistent angles"):
-        residual_fn.validate_chunk_structure()
+        StratifiedResidualFunction(
+            stratified_data=MockData([chunk1, chunk2], sigma),
+            per_angle_scaling=True,
+            physical_param_names=["D0", "alpha", "D_offset"],
+        )
 
 
 # Test 3: Residual Computation
@@ -411,9 +411,11 @@ def test_jit_compilation_works(mock_stratified_data_small, physical_param_names_
         physical_param_names=physical_param_names_static,
     )
 
-    # Check that JIT function exists
+    # compute_chunk_jit is intentionally None: the hot path is now
+    # _call_jax_vectorized via _setup_vmap_functions, not the old per-chunk JIT.
+    # Keeping the attribute avoids AttributeError in any code that checks for it.
     assert hasattr(residual_fn, "compute_chunk_jit")
-    assert callable(residual_fn.compute_chunk_jit)
+    assert residual_fn.compute_chunk_jit is None
 
 
 def test_multiple_calls_consistent(

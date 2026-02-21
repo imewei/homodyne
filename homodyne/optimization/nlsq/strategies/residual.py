@@ -240,14 +240,10 @@ class StratifiedResidualFunction:
         This method sets up JIT-compiled versions of the residual computation
         to maximize performance during optimization.
         """
-        # T034: Add log_phase for JIT compilation timing
-        with log_phase(
-            "jax_jit_compilation", logger=self.logger, track_memory=True
-        ) as phase:
-            self.compute_chunk_jit = jax.jit(self._compute_chunk_residuals_raw)
-        self.logger.debug(
-            f"JAX functions JIT-compiled successfully in {phase.duration:.3f}s"
-        )
+        # Note: _compute_chunk_residuals_raw is no longer used — the hot path
+        # is _call_jax_vectorized via _setup_vmap_functions.  Skip dead JIT
+        # compilation to save ~0.2-0.5s at init.
+        self.compute_chunk_jit = None
 
     def _preconvert_chunk_arrays(self) -> None:
         """
@@ -345,6 +341,67 @@ class StratifiedResidualFunction:
         del self._precomputed_t1_indices
         del self._precomputed_t2_indices
         del self.chunks_jax
+
+        # Cache diagnostics before freeing original numpy chunks (~320 MB for 10M pts).
+        # validate_chunk_structure() and get_diagnostics() use these cached values
+        # after chunks are freed; callers no longer need chunks to exist.
+        self._cached_n_chunks = self.n_chunks
+        self._cached_chunk_sizes = [len(c.g2) for c in self.chunks]
+        self._cached_chunk_angle_counts = [
+            len(np.unique(c.phi)) for c in self.chunks
+        ]
+        self._cached_n_angles = self.n_phi
+
+        # Run structural validation inline while chunks are still available.
+        # This preserves the validation guarantee — after del self.chunks the
+        # window is closed and validate_chunk_structure() returns the cached result.
+        self._validate_chunk_structure_inline()
+
+        del self.chunks
+
+    def _validate_chunk_structure_inline(self) -> None:
+        """Run chunk-structure validation while self.chunks is still available.
+
+        Called from _concatenate_chunk_data() immediately before del self.chunks.
+        Raises ValueError on failure so the constructor fails fast rather than
+        producing a silently corrupt residual function.  On success, records the
+        result in self._chunk_structure_valid so validate_chunk_structure() can
+        return the cached outcome after chunks have been freed.
+        """
+        expected_angles = set(np.unique(np.round(self.chunks[0].phi, decimals=6)))
+        n_expected = len(expected_angles)
+
+        self.logger.debug(
+            f"Inline chunk structure validation: {self.n_chunks} chunks, "
+            f"{n_expected} expected angles per chunk"
+        )
+
+        for i, chunk in enumerate(self.chunks):
+            chunk_angles = set(np.unique(np.round(chunk.phi, decimals=6)))
+
+            if chunk_angles != expected_angles:
+                missing = expected_angles - chunk_angles
+                extra = chunk_angles - expected_angles
+                error_msg = f"Chunk {i} has inconsistent angles:\n"
+                if missing:
+                    error_msg += f"  Missing: {missing}\n"
+                if extra:
+                    error_msg += f"  Extra: {extra}\n"
+                raise ValueError(error_msg)
+
+            if len(chunk.g2) == 0:
+                raise ValueError(f"Chunk {i} has no data points")
+
+            n_points = len(chunk.g2)
+            if not (len(chunk.phi) == len(chunk.t1) == len(chunk.t2) == n_points):
+                raise ValueError(
+                    f"Chunk {i} has inconsistent array shapes: "
+                    f"phi={len(chunk.phi)}, t1={len(chunk.t1)}, "
+                    f"t2={len(chunk.t2)}, g2={len(chunk.g2)}"
+                )
+
+        self._chunk_structure_valid = True
+        self.logger.debug("Inline chunk structure validation passed")
 
     def _setup_vmap_functions(self) -> None:
         """Create vmap-wrapped g2 computation functions once during init.
@@ -528,9 +585,15 @@ class StratifiedResidualFunction:
         sigma_flat = sigma_full.flatten()
         sigma_chunk = sigma_flat[flat_indices]
 
-        # Compute weighted residuals
+        # Compute weighted residuals — mask out zero-sigma points entirely
+        # (sigma=0 indicates invalid/excluded data; adding EPS would inflate
+        # such points to dominate the cost function).
         EPS = 1e-10
-        residuals = (g2_obs - g2_theory_chunk) / (sigma_chunk + EPS)
+        valid_sigma = sigma_chunk > EPS
+        safe_sigma = jnp.where(valid_sigma, sigma_chunk, 1.0)
+        residuals = jnp.where(
+            valid_sigma, (g2_obs - g2_theory_chunk) / safe_sigma, 0.0
+        )
 
         # v2.14.2+: Mask diagonal points (t1 == t2) to zero
         # Diagonal points are autocorrelation artifacts, not physics
@@ -612,9 +675,13 @@ class StratifiedResidualFunction:
         sigma_flat = sigma_full.reshape(-1)
         sigma_all = sigma_flat[self.flat_indices_all]
 
-        # Compute ALL residuals in single vectorized operation
+        # Compute ALL residuals — mask out zero-sigma points entirely
         EPS = 1e-10
-        residuals = (self.g2_all - g2_theory_all) / (sigma_all + EPS)
+        valid_sigma = sigma_all > EPS
+        safe_sigma = jnp.where(valid_sigma, sigma_all, 1.0)
+        residuals = jnp.where(
+            valid_sigma, (self.g2_all - g2_theory_all) / safe_sigma, 0.0
+        )
 
         # v2.14.2+: Mask diagonal points (t1 == t2) to zero
         # Diagonal points are autocorrelation artifacts, not physics
@@ -657,9 +724,16 @@ class StratifiedResidualFunction:
         Raises:
             ValueError: If any chunk is missing angles or has inconsistent structure
         """
-        if not self.chunks:
-            raise ValueError("No chunks to validate")
+        if not hasattr(self, "chunks"):
+            # Chunks were freed by _concatenate_chunk_data() after inline validation
+            # (_validate_chunk_structure_inline) already ran during __init__.
+            # Return the cached result — True means construction succeeded.
+            self.logger.info(
+                "✓ Chunk structure validation passed (cached — validated during build)"
+            )
+            return getattr(self, "_chunk_structure_valid", True)
 
+        # Chunks still live (unusual path, e.g. external test bypass): validate now.
         # Get expected angles from first chunk
         expected_angles = set(np.unique(np.round(self.chunks[0].phi, decimals=6)))
         n_expected = len(expected_angles)
@@ -717,13 +791,23 @@ class StratifiedResidualFunction:
                 - max_chunk_size: Maximum chunk size
                 - mean_chunk_size: Mean chunk size
         """
-        chunk_sizes = [len(chunk.g2) for chunk in self.chunks]
-        chunk_angle_counts = [len(np.unique(chunk.phi)) for chunk in self.chunks]
+        # Use cached arrays when chunks have been freed (normal post-init path).
+        # _cached_chunk_sizes and _cached_chunk_angle_counts are set in
+        # _concatenate_chunk_data() immediately before del self.chunks.
+        if hasattr(self, "_cached_chunk_sizes"):
+            chunk_sizes = self._cached_chunk_sizes
+            chunk_angle_counts = self._cached_chunk_angle_counts
+            n_angles = self._cached_n_angles
+        else:
+            # Chunks still live — compute directly (unusual path)
+            chunk_sizes = [len(chunk.g2) for chunk in self.chunks]
+            chunk_angle_counts = [len(np.unique(chunk.phi)) for chunk in self.chunks]
+            n_angles = len(np.unique(self.chunks[0].phi))
 
         diagnostics = {
             "n_chunks": self.n_chunks,
             "n_total_points": self.n_total_points,
-            "n_angles": len(np.unique(self.chunks[0].phi)),
+            "n_angles": n_angles,
             "per_angle_scaling": self.per_angle_scaling,
             "chunk_sizes": chunk_sizes,
             "chunk_angle_counts": chunk_angle_counts,

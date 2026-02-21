@@ -334,7 +334,7 @@ class StratifiedResidualFunctionJIT:
             def compute_for_angle_scalar(phi_val: float) -> jnp.ndarray:
                 # We use cast(float, ...) here to satisfy mypy, but at runtime these are JAX tracers
                 # which compute_g2_scaled handles correctly despite the float type hint.
-                from typing import cast
+                from typing import cast  # noqa: F811 — intentional re-import in closure
 
                 return jnp.squeeze(
                     compute_g2_scaled(
@@ -363,7 +363,7 @@ class StratifiedResidualFunctionJIT:
         g2_theory_flat = g2_theory_grid.flatten()
 
         # Find indices of (phi, t1, t2) in the full grid
-        _n_phi = len(self.phi_unique)  # noqa: F841 - Dimensions for grid validation
+        # n_phi dimension used implicitly for grid shape: (n_phi, n_t1, n_t2)
         n_t1 = len(self.t1_unique)
         n_t2 = len(self.t2_unique)
 
@@ -385,9 +385,13 @@ class StratifiedResidualFunctionJIT:
         sigma_flat = self.sigma_jax.flatten()
         sigma_chunk = sigma_flat[flat_indices]
 
-        # Compute weighted residuals
+        # Compute weighted residuals — mask out zero-sigma points entirely
         EPS = 1e-10
-        residuals_raw = (g2_obs_chunk - g2_theory_chunk) / (sigma_chunk + EPS)
+        valid_sigma = sigma_chunk > EPS
+        safe_sigma = jnp.where(valid_sigma, sigma_chunk, 1.0)
+        residuals_raw = jnp.where(
+            valid_sigma, (g2_obs_chunk - g2_theory_chunk) / safe_sigma, 0.0
+        )
 
         # v2.14.2+: Mask out both padded values AND diagonal values (t1 == t2)
         # Diagonal points are autocorrelation artifacts, not physics

@@ -257,8 +257,8 @@ class TestStratificationEdgeCases:
         np.testing.assert_array_equal(np.asarray(t2_out), t2)
         np.testing.assert_array_equal(np.asarray(g2_out), g2)
 
-        # No chunk info needed for single angle
-        assert chunk_sizes is None
+        # Single angle: one chunk containing all points
+        assert chunk_sizes == [1000]
 
     def test_small_target_chunk_size(self):
         """Test stratification with very small target chunk size."""
