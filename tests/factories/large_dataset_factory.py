@@ -202,8 +202,8 @@ class LargeDatasetFactory:
 
         # Generate correlation function g2(phi, t1, t2)
         # Use simplified model: g2 = offset + contrast * exp(-rate * t)
-        contrast = true_params["contrast"]
-        offset = true_params["offset"]
+        contrast = true_params.get("contrast", true_params.get("contrast_0", 0.3))
+        offset = true_params.get("offset", true_params.get("offset_0", 1.0))
         D0 = true_params["D0"]
 
         # Create meshgrid

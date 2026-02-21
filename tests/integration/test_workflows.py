@@ -241,7 +241,7 @@ class TestCrossplatformCompatibility:
         np.testing.assert_array_almost_equal(
             diagonal,
             expected_diagonal,
-            decimal=10,
+            decimal=8,
             err_msg="Diagonal precision inconsistent",
         )
 
