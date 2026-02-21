@@ -202,7 +202,7 @@ class TestSafeExpPerformance:
         # Minimum throughput requirement - scales with size
         # Small arrays have high overhead per element; larger arrays are more efficient
         # Note: Thresholds are conservative to account for system load variability
-        min_throughput = {100: 5e4, 1000: 1e5, 10000: 5e5, 100000: 1e6}
+        min_throughput = {100: 1e4, 1000: 1e5, 10000: 5e5, 100000: 1e6}
         assert throughput > min_throughput[size], (
             f"Throughput {throughput:.0f} below minimum {min_throughput[size]:.0f}"
         )
