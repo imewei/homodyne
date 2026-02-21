@@ -748,7 +748,7 @@ class ConfigManager:
         logger.debug("Applying default CMC configuration values")
         return {
             "enable": "auto",
-            "min_points_for_cmc": 500000,
+            "min_points_for_cmc": 100000,
             "sharding": {
                 "strategy": "stratified",
                 "num_shards": "auto",
@@ -775,7 +775,7 @@ class ConfigManager:
             "per_shard_mcmc": {
                 "num_warmup": 500,
                 "num_samples": 1500,
-                "num_chains": 2,
+                "num_chains": 4,
                 "target_accept_prob": 0.85,
                 "subsample_size": "auto",
             },
@@ -903,8 +903,8 @@ class ConfigManager:
 
         # Validate combination
         combination = cmc_config.get("combination", {})
-        comb_method = combination.get("method", "consensus_mc")
-        valid_methods = ["consensus_mc", "weighted_gaussian", "simple_average", "auto"]
+        comb_method = combination.get("method", "robust_consensus_mc")
+        valid_methods = ["consensus_mc", "robust_consensus_mc", "weighted_gaussian", "simple_average", "auto"]
         if comb_method not in valid_methods:
             raise ValueError(
                 f"Combination method must be one of {valid_methods}, got: {comb_method}"

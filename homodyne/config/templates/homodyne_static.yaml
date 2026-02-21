@@ -452,7 +452,7 @@ optimization:
   #
   cmc:
     enable: "auto"
-    min_points_for_cmc: 500000 # Higher threshold for simpler model
+    min_points_for_cmc: 100000 # Threshold for auto-enable
     run_id: null
     backend: "jax"
 

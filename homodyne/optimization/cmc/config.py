@@ -103,7 +103,7 @@ class CMCConfig:
 
     # Enable settings
     enable: bool | str = "auto"
-    min_points_for_cmc: int = 500000
+    min_points_for_cmc: int = 100000
 
     # Anti-degeneracy: Per-angle scaling mode (v2.18.0+)
     per_angle_mode: str = "auto"
@@ -312,7 +312,7 @@ class CMCConfig:
         config = cls(
             # Enable settings
             enable=config_dict.get("enable", "auto"),
-            min_points_for_cmc=config_dict.get("min_points_for_cmc", 500000),
+            min_points_for_cmc=config_dict.get("min_points_for_cmc", 100000),
             # Anti-degeneracy: Per-angle scaling mode (v2.18.0+)
             per_angle_mode=config_dict.get("per_angle_mode", "auto"),
             constant_scaling_threshold=config_dict.get("constant_scaling_threshold", 3),
@@ -583,15 +583,14 @@ class CMCConfig:
     def should_enable_cmc(
         self, n_points: int, analysis_mode: str | None = None
     ) -> bool:
-        """Determine if CMC should be enabled for given data size and mode.
+        """Determine if CMC should be enabled for given data size.
 
         Parameters
         ----------
         n_points : int
             Number of data points.
         analysis_mode : str | None
-            Analysis mode ("static" or "laminar_flow"). If provided, uses
-            mode-specific thresholds when min_points_for_cmc is at default.
+            Deprecated — ignored. Kept for backward compatibility.
 
         Returns
         -------
@@ -600,26 +599,15 @@ class CMCConfig:
 
         Notes
         -----
-        Mode-specific default thresholds (when min_points_for_cmc=500000):
-        - laminar_flow: 100,000 (7-param model benefits from earlier sharding)
-        - static: 500,000 (3-param model handles larger single-shard runs)
-
-        If min_points_for_cmc is explicitly set to non-default value, that
-        value is used regardless of analysis_mode.
+        Threshold is ``min_points_for_cmc`` (default 100,000) for all modes.
         """
         if self.enable is True:
             return True
         if self.enable is False:
             return False
 
-        # "auto" mode - apply mode-specific thresholds
-        threshold = self.min_points_for_cmc
-
-        # Apply mode-specific threshold if using default value
-        if self.min_points_for_cmc == 500000 and analysis_mode == "laminar_flow":
-            threshold = 100000  # Lower threshold for complex 7-param model
-
-        return n_points >= threshold
+        # "auto" mode
+        return n_points >= self.min_points_for_cmc
 
     def get_num_shards(self, n_points: int, n_phi: int, n_params: int = 7) -> int:
         """Calculate number of shards with param-aware sizing.

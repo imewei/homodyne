@@ -15,7 +15,7 @@ class TestCMCConfig:
         config = CMCConfig()
 
         assert config.enable == "auto"
-        assert config.min_points_for_cmc == 500000
+        assert config.min_points_for_cmc == 100000
         assert config.num_warmup == 500
         assert config.num_samples == 1500
         assert config.num_chains == 4  # Increased from 2 for better R-hat diagnostics
@@ -117,15 +117,15 @@ class TestCMCConfig:
 
     def test_should_enable_cmc_auto_small_data(self):
         """Test auto mode with small dataset returns False."""
-        config = CMCConfig(enable="auto", min_points_for_cmc=500000)
+        config = CMCConfig(enable="auto", min_points_for_cmc=100000)
 
-        assert config.should_enable_cmc(n_points=100000) is False
+        assert config.should_enable_cmc(n_points=50000) is False
 
     def test_should_enable_cmc_auto_large_data(self):
         """Test auto mode with large dataset returns True."""
-        config = CMCConfig(enable="auto", min_points_for_cmc=500000)
+        config = CMCConfig(enable="auto", min_points_for_cmc=100000)
 
-        assert config.should_enable_cmc(n_points=1000000) is True
+        assert config.should_enable_cmc(n_points=358202) is True
 
     def test_should_enable_cmc_explicit_true(self):
         """Test explicit True enables CMC regardless of data size."""

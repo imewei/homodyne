@@ -1032,13 +1032,11 @@ optimization:
   # AUTO-ACTIVATION:
   #   CMC used when: enable="auto" AND dataset ≥ min_points_for_cmc
   #
-  # MODE-SPECIFIC THRESHOLDS (when min_points_for_cmc=500000):
-  #   - laminar_flow: 100,000 (7-param model benefits from earlier sharding)
-  #   - static: 500,000 (3-param model handles larger single-shard runs)
+  # AUTO-ENABLE THRESHOLD: 100,000 data points (all modes)
   #
   cmc:
     enable: "auto" # true | false | "auto"
-    min_points_for_cmc: 500000 # Threshold for auto-enable
+    min_points_for_cmc: 100000 # Threshold for auto-enable
     run_id: null # Optional run tag
 
     # -------------------------------------------------------------------------
