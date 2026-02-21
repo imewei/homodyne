@@ -181,10 +181,20 @@ def validate_fit_quality(
         report.checks_performed["reduced_chi_squared"] = passed
 
         if not passed:
-            warning = (
-                f"Reduced chi-squared ({reduced_chi_squared:.4g}) exceeds threshold "
-                f"({config.reduced_chi_squared_threshold}). Consider reviewing fit quality."
-            )
+            sigma_is_default = getattr(result, "sigma_is_default", False)
+            if sigma_is_default:
+                warning = (
+                    f"Reduced chi-squared ({reduced_chi_squared:.4g}) exceeds threshold "
+                    f"({config.reduced_chi_squared_threshold}), but sigma was not provided "
+                    f"(using default 0.01). Chi-squared is not physically meaningful "
+                    f"without experimental uncertainties. Fit quality should be assessed "
+                    f"by inspecting residuals directly."
+                )
+            else:
+                warning = (
+                    f"Reduced chi-squared ({reduced_chi_squared:.4g}) exceeds threshold "
+                    f"({config.reduced_chi_squared_threshold}). Consider reviewing fit quality."
+                )
             report.warnings.append(warning)
             logger.warning(f"[FitQuality] {warning}")
             report.passed = False

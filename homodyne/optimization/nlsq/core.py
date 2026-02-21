@@ -334,6 +334,9 @@ def fit_nlsq_jax(
     logger.info("NLSQ OPTIMIZATION")
     logger.info("=" * 60)
 
+    # Track whether sigma was provided or auto-generated (affects chi-squared interpretation)
+    _sigma_is_default = isinstance(data, dict) and "sigma" not in data
+
     # ==========================================================================
     # Global Optimization Selection (v2.15.0+)
     # Priority: CMA-ES > Multi-Start > Local Optimization
@@ -350,12 +353,14 @@ def fit_nlsq_jax(
         if cmaes_dict.get("enable", False):
             if HAS_CMAES:
                 logger.info("CMA-ES enabled, delegating to fit_nlsq_cmaes")
-                return fit_nlsq_cmaes(
+                cmaes_result = fit_nlsq_cmaes(
                     data=data,
                     config=config,
                     initial_params=initial_params,
                     per_angle_scaling=per_angle_scaling,
                 )
+                cmaes_result.sigma_is_default = _sigma_is_default
+                return cmaes_result
             else:
                 logger.warning(
                     "[CMA-ES] Enabled in config but not available (evosax not installed). "
@@ -374,7 +379,9 @@ def fit_nlsq_jax(
                     initial_params=initial_params,
                     per_angle_scaling=per_angle_scaling,
                 )
-                return multistart_result.to_optimization_result()
+                ms_result = multistart_result.to_optimization_result()
+                ms_result.sigma_is_default = _sigma_is_default
+                return ms_result
             else:
                 logger.warning(
                     "[Multi-Start] Enabled in config but not available. "
@@ -578,6 +585,7 @@ def fit_nlsq_jax(
                 quality_flag="poor",
             )
 
+    result.sigma_is_default = _sigma_is_default
     _log_optimization_results(result, analysis_mode, per_angle_scaling, logger)
 
     return result
@@ -705,7 +713,10 @@ def _normalize_data_to_object(data: Any, config: Any, logger: Any) -> Any:
         if not hasattr(data_obj, "sigma") and hasattr(data_obj, "g2"):
             g2_array = np.asarray(data_obj.g2)  # type: ignore[attr-defined]
             data_obj.sigma = 0.01 * np.ones_like(g2_array)  # type: ignore[attr-defined]
+            data_obj.sigma_is_default = True  # type: ignore[attr-defined]
             logger.debug(f"Generated default sigma: shape {data_obj.sigma.shape}")  # type: ignore[attr-defined]
+        else:
+            data_obj.sigma_is_default = False  # type: ignore[attr-defined]
         _ensure_positive_sigma(data_obj)
 
         # Extract 1D time vectors from 2D meshgrids if needed

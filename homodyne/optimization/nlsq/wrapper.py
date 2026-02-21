@@ -502,6 +502,7 @@ class OptimizationResult:
         None  # v2.2.1: Stratification diagnostics
     )
     nlsq_diagnostics: dict[str, Any] | None = None
+    sigma_is_default: bool = False  # True when sigma=0.01*ones (no experimental uncertainties)
 
     # Backward compatibility attributes (FR-002)
     @property

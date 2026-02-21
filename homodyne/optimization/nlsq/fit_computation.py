@@ -488,6 +488,11 @@ def compute_theoretical_fits(
         f"Batch lstsq - contrasts: mean={np.mean(contrasts_lstsq):.4f}, "
         f"offsets: mean={np.mean(offsets_lstsq):.4f}"
     )
+    logger.info(
+        "Note: lstsq contrast/offset values may differ from NLSQ-optimized values. "
+        "lstsq re-fits scaling to raw theory (contrast=1, offset=1) post-hoc; "
+        "NLSQ values are authoritative as they are jointly optimized with physical parameters."
+    )
 
     residuals = c2_exp - c2_theoretical_fitted
 
