@@ -17,44 +17,44 @@ class TestResearchStructure:
     @staticmethod
     def get_docs_path() -> Path:
         """Get path to docs directory."""
-        return Path(__file__).parent.parent.parent / "docs"
+        return Path(__file__).parent.parent.parent / "docs" / "source"
 
     def test_research_index_exists(self):
-        """Test that research/index.rst exists."""
+        """Test that theory/index.rst exists."""
         docs_path = self.get_docs_path()
-        research_index = docs_path / "research" / "index.rst"
-        assert research_index.exists(), "research/index.rst not found"
+        research_index = docs_path / "theory" / "index.rst"
+        assert research_index.exists(), "theory/index.rst not found"
 
     def test_research_index_has_toctree(self):
-        """Test that research/index.rst has toctree directive."""
+        """Test that theory/index.rst has toctree directive."""
         docs_path = self.get_docs_path()
-        research_index = docs_path / "research" / "index.rst"
+        research_index = docs_path / "theory" / "index.rst"
         content = research_index.read_text()
-        assert ".. toctree::" in content, "research/index.rst missing toctree directive"
+        assert ".. toctree::" in content, "theory/index.rst missing toctree directive"
 
     def test_theoretical_framework_exists(self):
-        """Test that research/theoretical_framework.rst exists."""
+        """Test that theory/theoretical_framework.rst exists."""
         docs_path = self.get_docs_path()
-        theoretical = docs_path / "research" / "theoretical_framework.rst"
-        assert theoretical.exists(), "research/theoretical_framework.rst not found"
+        theoretical = docs_path / "theory" / "theoretical_framework.rst"
+        assert theoretical.exists(), "theory/theoretical_framework.rst not found"
 
     def test_analysis_modes_exists(self):
-        """Test that research/analysis_modes.rst exists."""
+        """Test that theory/analysis_modes.rst exists."""
         docs_path = self.get_docs_path()
-        modes = docs_path / "research" / "analysis_modes.rst"
-        assert modes.exists(), "research/analysis_modes.rst not found"
+        modes = docs_path / "theory" / "analysis_modes.rst"
+        assert modes.exists(), "theory/analysis_modes.rst not found"
 
     def test_computational_methods_exists(self):
-        """Test that research/computational_methods.rst exists."""
+        """Test that theory/computational_methods.rst exists."""
         docs_path = self.get_docs_path()
-        methods = docs_path / "research" / "computational_methods.rst"
-        assert methods.exists(), "research/computational_methods.rst not found"
+        methods = docs_path / "theory" / "computational_methods.rst"
+        assert methods.exists(), "theory/computational_methods.rst not found"
 
     def test_citations_exists(self):
-        """Test that research/citations.rst exists."""
+        """Test that theory/citations.rst exists."""
         docs_path = self.get_docs_path()
-        citations = docs_path / "research" / "citations.rst"
-        assert citations.exists(), "research/citations.rst not found"
+        citations = docs_path / "theory" / "citations.rst"
+        assert citations.exists(), "theory/citations.rst not found"
 
 
 class TestLatexEquations:
@@ -63,12 +63,12 @@ class TestLatexEquations:
     @staticmethod
     def get_docs_path() -> Path:
         """Get path to docs directory."""
-        return Path(__file__).parent.parent.parent / "docs"
+        return Path(__file__).parent.parent.parent / "docs" / "source"
 
     def test_theoretical_framework_has_equations(self):
         """Test that theoretical_framework.rst contains LaTeX equations."""
         docs_path = self.get_docs_path()
-        theoretical = docs_path / "research" / "theoretical_framework.rst"
+        theoretical = docs_path / "theory" / "theoretical_framework.rst"
         content = theoretical.read_text()
 
         # Check for math directive
@@ -79,7 +79,7 @@ class TestLatexEquations:
     def test_core_equation_present(self):
         """Test that the core equation c2 = 1 + contrast * [c1]^2 is documented."""
         docs_path = self.get_docs_path()
-        theoretical = docs_path / "research" / "theoretical_framework.rst"
+        theoretical = docs_path / "theory" / "theoretical_framework.rst"
         content = theoretical.read_text()
 
         # Check for core equation elements
@@ -97,7 +97,7 @@ class TestLatexEquations:
     def test_transport_coefficient_equations(self):
         """Test that transport coefficient equations are documented."""
         docs_path = self.get_docs_path()
-        theoretical = docs_path / "research" / "theoretical_framework.rst"
+        theoretical = docs_path / "theory" / "theoretical_framework.rst"
         content = theoretical.read_text()
 
         # Check for D(t) = D0 * t^alpha + D_offset equation components
@@ -115,7 +115,7 @@ class TestLatexEquations:
     def test_shear_rate_equations(self):
         """Test that shear rate equations are documented."""
         docs_path = self.get_docs_path()
-        theoretical = docs_path / "research" / "theoretical_framework.rst"
+        theoretical = docs_path / "theory" / "theoretical_framework.rst"
         content = theoretical.read_text()
 
         # Check for gamma_dot(t) = gamma_dot_0 * t^beta + gamma_dot_offset components
@@ -136,12 +136,12 @@ class TestCitationContent:
     @staticmethod
     def get_docs_path() -> Path:
         """Get path to docs directory."""
-        return Path(__file__).parent.parent.parent / "docs"
+        return Path(__file__).parent.parent.parent / "docs" / "source"
 
     def test_he_pnas_citation_present(self):
         """Test that He et al. PNAS 2024 citation is present."""
         docs_path = self.get_docs_path()
-        citations = docs_path / "research" / "citations.rst"
+        citations = docs_path / "theory" / "citations.rst"
         content = citations.read_text()
 
         # Check for citation elements
@@ -158,7 +158,7 @@ class TestCitationContent:
     def test_bibtex_entry_present(self):
         """Test that BibTeX entry is present and valid."""
         docs_path = self.get_docs_path()
-        citations = docs_path / "research" / "citations.rst"
+        citations = docs_path / "theory" / "citations.rst"
         content = citations.read_text()
 
         # Check for BibTeX block
@@ -179,7 +179,7 @@ class TestCitationContent:
     def test_doi_link_format(self):
         """Test that DOI is properly formatted as a link."""
         docs_path = self.get_docs_path()
-        citations = docs_path / "research" / "citations.rst"
+        citations = docs_path / "theory" / "citations.rst"
         content = citations.read_text()
 
         # Check for DOI link
@@ -193,12 +193,12 @@ class TestAnalysisModes:
     @staticmethod
     def get_docs_path() -> Path:
         """Get path to docs directory."""
-        return Path(__file__).parent.parent.parent / "docs"
+        return Path(__file__).parent.parent.parent / "docs" / "source"
 
     def test_static_mode_documented(self):
         """Test that static mode (3 params) is documented."""
         docs_path = self.get_docs_path()
-        modes = docs_path / "research" / "analysis_modes.rst"
+        modes = docs_path / "theory" / "analysis_modes.rst"
         content = modes.read_text()
 
         # Check for static mode parameters
@@ -217,7 +217,7 @@ class TestAnalysisModes:
     def test_laminar_flow_mode_documented(self):
         """Test that laminar flow mode (7 params) is documented."""
         docs_path = self.get_docs_path()
-        modes = docs_path / "research" / "analysis_modes.rst"
+        modes = docs_path / "theory" / "analysis_modes.rst"
         content = modes.read_text()
 
         # Check for laminar flow parameters
@@ -245,7 +245,7 @@ class TestAnalysisModes:
     def test_no_deprecated_modes(self):
         """Test that deprecated modes are NOT documented."""
         docs_path = self.get_docs_path()
-        modes = docs_path / "research" / "analysis_modes.rst"
+        modes = docs_path / "theory" / "analysis_modes.rst"
         content = modes.read_text()
 
         # These deprecated modes should NOT be present
@@ -258,7 +258,7 @@ class TestAnalysisModes:
     def test_per_angle_scaling_documented(self):
         """Test that per-angle scaling is documented."""
         docs_path = self.get_docs_path()
-        modes = docs_path / "research" / "analysis_modes.rst"
+        modes = docs_path / "theory" / "analysis_modes.rst"
         content = modes.read_text()
 
         # Check for per-angle scaling mention
@@ -273,12 +273,12 @@ class TestJAXFirstArchitecture:
     @staticmethod
     def get_docs_path() -> Path:
         """Get path to docs directory."""
-        return Path(__file__).parent.parent.parent / "docs"
+        return Path(__file__).parent.parent.parent / "docs" / "source"
 
     def test_computational_methods_uses_jax(self):
         """Test that computational_methods.rst mentions JAX."""
         docs_path = self.get_docs_path()
-        methods = docs_path / "research" / "computational_methods.rst"
+        methods = docs_path / "theory" / "computational_methods.rst"
         content = methods.read_text()
 
         # Check for JAX mentions
@@ -290,7 +290,7 @@ class TestJAXFirstArchitecture:
     def test_no_numba_references(self):
         """Test that documentation does not reference Numba."""
         docs_path = self.get_docs_path()
-        methods = docs_path / "research" / "computational_methods.rst"
+        methods = docs_path / "theory" / "computational_methods.rst"
         content = methods.read_text()
 
         # Check that Numba is NOT mentioned (JAX-first architecture)
@@ -301,7 +301,7 @@ class TestJAXFirstArchitecture:
     def test_theoretical_framework_no_numba(self):
         """Test that theoretical_framework.rst does not reference Numba."""
         docs_path = self.get_docs_path()
-        theoretical = docs_path / "research" / "theoretical_framework.rst"
+        theoretical = docs_path / "theory" / "theoretical_framework.rst"
         content = theoretical.read_text()
 
         # Check that Numba is NOT mentioned
