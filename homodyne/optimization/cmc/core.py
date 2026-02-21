@@ -916,7 +916,10 @@ def fit_mcmc_jax(
         )
         sharding_mode = "random"
 
-    if sharding_mode == "stratified":
+    # Safety constant: NUTS is O(n) per leapfrog step — never run 100K+ points.
+    _SINGLE_SHARD_HARD_LIMIT = 100_000  # CLAUDE.md: "Never use 100K+"
+
+    if sharding_mode == "stratified" and use_cmc:
         # Shard by phi angle (stratified) - Only valid for disjoint models (no global params)
         # or single-angle data (where n_phi=1, handled above)
         num_shards = (
@@ -947,22 +950,18 @@ def fit_mcmc_jax(
         # Sharding strategy selection (Jan 2026 enhancement):
         # - Multi-angle (n_phi > 1): Use angle-balanced sharding for consistent posteriors
         # - Single-angle: Use random sharding (i.i.d. statistically correct for Consensus MC)
+        #
+        # Dynamic max_shards based on analysis mode and data size.
+        # laminar_flow needs more shards (smaller size) due to O(n) NUTS cost
+        # with 7 physical params vs 3 for static.
+        if analysis_mode == "laminar_flow":
+            max_shards_for_mode = 1000
+        else:
+            max_shards_for_mode = 500
+
         if prepared.n_phi > 1:
             # Angle-balanced sharding ensures each shard has proportional angle coverage
             # This prevents heterogeneous posteriors (e.g., D_offset CV=1.58)
-            #
-            # Jan 2026 FIX: Dynamic max_shards based on analysis mode and data size
-            # laminar_flow needs more shards (smaller size) due to O(n) NUTS cost
-            # with 7 physical params vs 3 for static. Target ~5000 pts/shard for
-            # laminar_flow to keep per-shard runtime under 15 min.
-            if analysis_mode == "laminar_flow":
-                # Allow up to 1000 shards for laminar_flow (memory ~60GB for combination)
-                # This enables 3K-5K pts/shard for datasets up to 5M points
-                max_shards_for_mode = 1000
-            else:
-                # Static mode can handle larger shards
-                max_shards_for_mode = 500
-
             shards = shard_data_angle_balanced(
                 prepared,
                 num_shards=requested_shards,  # Honor explicit shards when provided
@@ -977,7 +976,7 @@ def fit_mcmc_jax(
                 prepared,
                 num_shards=requested_shards,  # Honor explicit shards when provided
                 max_points_per_shard=max_per_shard,
-                max_shards=100,  # Same cap as stratified
+                max_shards=max_shards_for_mode,  # Dynamic cap matching multi-angle path
             )
             sharding_desc = "random"
         total_shard_points = sum(s.n_total for s in shards)
@@ -998,7 +997,57 @@ def fit_mcmc_jax(
     else:
         shards = None
         estimated_runtime = 0.0  # No estimate for single-shard
-        run_logger.info("Using single-shard MCMC (no CMC sharding)")
+
+        # Non-CMC single-shard: check dataset size
+        if prepared.n_total > _SINGLE_SHARD_HARD_LIMIT:
+            run_logger.warning(
+                f"Single-shard MCMC requested but dataset ({prepared.n_total:,} pts) "
+                f"exceeds hard limit ({_SINGLE_SHARD_HARD_LIMIT:,}). "
+                f"Forcing CMC sharding with max_points_per_shard={max_per_shard:,}."
+            )
+            shards = shard_data_random(
+                prepared,
+                num_shards=requested_shards,
+                max_points_per_shard=max_per_shard,
+                max_shards=500,
+            )
+            total_shard_points = sum(s.n_total for s in shards)
+            run_logger.info(
+                f"Safety-fallback: Using CMC with {len(shards)} shards (random), "
+                f"{total_shard_points:,} total points"
+            )
+            estimated_runtime = _log_runtime_estimate(
+                run_logger,
+                n_shards=len(shards),
+                n_chains=config.num_chains,
+                n_warmup=config.num_warmup,
+                n_samples=config.num_samples,
+                avg_points_per_shard=total_shard_points // len(shards),
+                analysis_mode=analysis_mode,
+                per_shard_timeout=suggested_timeout,
+            )
+        else:
+            run_logger.info(
+                f"Using single-shard MCMC ({prepared.n_total:,} pts, no CMC sharding)"
+            )
+
+    # P1-7: Safety guard for forced single-shard CMC on large datasets.
+    # If user set num_shards=1 explicitly, the sharding path creates 1 shard,
+    # but the single shard runs NUTS on all points — O(n) per leapfrog step.
+    if shards is not None and len(shards) == 1:
+        shard_size = shards[0].n_total
+        if shard_size > _SINGLE_SHARD_HARD_LIMIT:
+            run_logger.warning(
+                f"Forced single-shard CMC but shard ({shard_size:,} pts) exceeds "
+                f"hard limit ({_SINGLE_SHARD_HARD_LIMIT:,}). Re-sharding with "
+                f"max_points_per_shard={max_per_shard:,}."
+            )
+            shards = shard_data_random(
+                prepared,
+                num_shards=None,
+                max_points_per_shard=max_per_shard,
+                max_shards=500,
+            )
 
     # =========================================================================
     # 4. Build model function
@@ -1116,19 +1165,24 @@ def fit_mcmc_jax(
         "noise_scale": prepared.noise_scale,
     }
 
-    # D2: Pre-compute shard-constant grid quantities for single-shard path.
-    # (Multi-shard path: each worker builds its own ShardGrid in _run_shard_worker.)
-    try:
-        from homodyne.core.physics_cmc import precompute_shard_grid
+    # D2: Pre-compute shard-constant grid quantities for single-shard path only.
+    # Multi-shard: each worker builds its own ShardGrid in _run_shard_worker.
+    if shards is None or len(shards) <= 1:
+        try:
+            from homodyne.core.physics_cmc import precompute_shard_grid
 
-        model_kwargs["shard_grid"] = precompute_shard_grid(
-            time_grid,
-            model_kwargs["t1"],
-            model_kwargs["t2"],
-            dt_used,
-        )
-    except Exception:
-        pass  # Non-fatal: model functions fall back to legacy compute_g1_total
+            model_kwargs["shard_grid"] = precompute_shard_grid(
+                time_grid,
+                model_kwargs["t1"],
+                model_kwargs["t2"],
+                dt_used,
+            )
+        except ImportError as exc:
+            run_logger.debug(f"precompute_shard_grid not available: {exc}")
+        except (ValueError, RuntimeError) as exc:
+            run_logger.warning(
+                f"precompute_shard_grid failed (non-fatal, using legacy path): {exc}"
+            )
 
     # Add fixed scaling arrays for constant/constant_averaged mode (v2.18.0+)
     if (
@@ -1168,11 +1222,11 @@ def fit_mcmc_jax(
         model_kwargs["t_ref"] = t_ref
 
     # DEBUG: Log model_kwargs for diagnosis
-    run_logger.info(
+    run_logger.debug(
         f"[CMC DEBUG] model_kwargs: q={q:.6g}, L={L:.6g}, dt={dt_used:.6g}, "
         f"n_phi={prepared.n_phi}, noise_scale={prepared.noise_scale:.6g}"
     )
-    run_logger.info(f"[CMC DEBUG] phi_unique: {prepared.phi_unique}")
+    run_logger.debug(f"[CMC DEBUG] phi_unique: {prepared.phi_unique}")
 
     # DEBUG: Compute and log D values at sample times to verify physics
     if initial_values:
@@ -1183,14 +1237,14 @@ def fit_mcmc_jax(
         t_samples = np.array([0.0, 1.0, 10.0, 50.0])
         t_safe = t_samples + 1e-10
         D_samples = D0_init * (t_safe**alpha_init) + D_offset_init
-        run_logger.info(
+        run_logger.debug(
             f"[CMC DEBUG] D(t) at sample times with initial params:\n"
             f"  D0={D0_init:.4g}, alpha={alpha_init:.4g}, D_offset={D_offset_init:.4g}\n"
             f"  t=[0, 1, 10, 50] → D={D_samples}"
         )
         # Compute expected prefactor
         wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_used
-        run_logger.info(
+        run_logger.debug(
             f"[CMC DEBUG] Physics prefactor: 0.5*q²*dt = 0.5*{q}²*{dt_used} = {wavevector_q_squared_half_dt:.6g}"
         )
 
@@ -1328,10 +1382,7 @@ def fit_mcmc_jax(
     # 8. Precision analysis (Jan 2026): Compare CMC posteriors to NLSQ
     # =========================================================================
     if nlsq_result is not None:
-        from homodyne.optimization.cmc.priors import extract_nlsq_values_for_cmc
-
-        nlsq_values, nlsq_uncertainties = extract_nlsq_values_for_cmc(nlsq_result)
-
+        # nlsq_values, nlsq_uncertainties already extracted in step 2e above
         precision_analysis = compute_precision_analysis(
             cmc_result=stats_dict,
             nlsq_result=nlsq_values,

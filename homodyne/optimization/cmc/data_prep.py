@@ -155,9 +155,15 @@ def extract_phi_info(phi: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
             np.abs(phi[:, None] - phi_unique[None, :]), axis=1
         ).astype(np.int32)
     else:
-        # Fallback for extremely many angles: searchsorted + validate
-        phi_indices = np.clip(np.searchsorted(phi_unique, phi), 0, n_phi - 1)
-        phi_indices = phi_indices.astype(np.int32)
+        # Fallback for extremely many angles: searchsorted + nearest-neighbor
+        # searchsorted returns insertion point; check both neighbors to find
+        # the closest match (handles float precision differences).
+        idx = np.searchsorted(phi_unique, phi)
+        idx = np.clip(idx, 0, n_phi - 1)
+        # Check if the left neighbor (idx-1) is closer
+        left = np.clip(idx - 1, 0, n_phi - 1)
+        use_left = np.abs(phi - phi_unique[left]) < np.abs(phi - phi_unique[idx])
+        phi_indices = np.where(use_left, left, idx).astype(np.int32)
 
     logger.debug(f"Extracted {n_phi} unique phi angles: {phi_unique}")
 
