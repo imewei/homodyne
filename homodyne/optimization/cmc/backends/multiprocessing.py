@@ -242,7 +242,7 @@ def _load_shared_shard_data(shard_ref: dict[str, Any]) -> dict[str, Any]:
     return shard_data
 
 
-def _generate_shard_keys(n_shards: int, seed: int = 42) -> list[tuple[int, int]]:
+def _generate_shard_keys(n_shards: int, seed: int = 42) -> list[tuple[int, ...]]:
     """Pre-generate all shard PRNG keys in a single JAX call.
 
     This is more efficient than generating keys one-at-a-time in each worker,
@@ -270,12 +270,13 @@ def _generate_shard_keys(n_shards: int, seed: int = 42) -> list[tuple[int, int]]
     all_keys = jax.random.split(base_key, n_shards + 1)
     shard_keys = all_keys[1:]  # Skip the first key
 
-    # Convert to serializable format (tuples of ints)
-    # JAX keys are uint32[2] arrays
+    # Convert to serializable format (tuples of ints).
+    # JAX ≤0.4.30 uses uint32[2]; JAX 0.4.31+ uses typed keys (key<fry>[]).
+    # Flatten to raw uint32 array to handle both formats.
     key_tuples = []
     for key in shard_keys:
-        key_array = jnp.array(key, dtype=jnp.uint32)
-        key_tuples.append((int(key_array[0]), int(key_array[1])))
+        raw = jax.random.key_data(key).flatten().astype(jnp.uint32)
+        key_tuples.append(tuple(int(x) for x in raw))
 
     return key_tuples
 
@@ -364,7 +365,7 @@ def _run_shard_worker_with_queue(
     analysis_mode: str,
     threads_per_worker: int,
     result_queue: mp.Queue,
-    rng_key_tuple: tuple[int, int] | None = None,
+    rng_key_tuple: tuple[int, ...] | None = None,
 ) -> None:
     """Worker function that puts result in a queue for proper timeout handling.
 
@@ -445,7 +446,7 @@ def _run_shard_worker(
     analysis_mode: str,
     threads_per_worker: int = 2,
     result_queue: mp.Queue | None = None,
-    rng_key_tuple: tuple[int, int] | None = None,
+    rng_key_tuple: tuple[int, ...] | None = None,
 ) -> dict[str, Any]:
     """Worker function for processing a single shard.
 
@@ -471,8 +472,8 @@ def _run_shard_worker(
         Analysis mode.
     threads_per_worker : int
         Number of threads for JAX/XLA in this worker process.
-    rng_key_tuple : tuple[int, int] | None
-        Pre-generated PRNG key as (high, low) tuple. If None, generates
+    rng_key_tuple : tuple[int, ...] | None
+        Pre-generated PRNG key as raw uint32 tuple. If None, generates
         a key based on shard_idx (legacy behavior).
 
     Returns
@@ -506,14 +507,14 @@ def _run_shard_worker(
         os.environ["JAX_COMPILATION_CACHE_DIR"] = str(
             Path(tempfile.gettempdir()) / "homodyne_jax_cache"
         )
-    if (
-        "XLA_FLAGS" not in os.environ
-        or "xla_force_host_platform_device_count" not in os.environ.get("XLA_FLAGS", "")
-    ):
-        os.environ["XLA_FLAGS"] = (
-            os.environ.get("XLA_FLAGS", "")
-            + " --xla_force_host_platform_device_count=4"
-        )
+    # Unconditionally ensure device_count=4, stripping any stale value first.
+    import re as _re
+
+    _xla_flags = os.environ.get("XLA_FLAGS", "")
+    _xla_flags = _re.sub(r"--xla_force_host_platform_device_count=\d+", "", _xla_flags)
+    os.environ["XLA_FLAGS"] = (
+        _xla_flags.strip() + " --xla_force_host_platform_device_count=4"
+    )
 
     import jax
 
@@ -562,8 +563,11 @@ def _run_shard_worker(
     # Create RNG key for this shard
     # Use pre-generated key if available (batch optimization), else generate locally
     if rng_key_tuple is not None:
-        # Reconstruct JAX PRNG key from tuple
-        rng_key = jnp.array(rng_key_tuple, dtype=jnp.uint32)
+        # Reconstruct JAX PRNG key from raw uint32 data (handles both
+        # legacy uint32[2] and typed-key formats via key_data round-trip)
+        rng_key = jax.random.wrap_key_data(
+            jnp.array(rng_key_tuple, dtype=jnp.uint32)
+        )
     else:
         # Legacy behavior: generate key based on shard index
         rng_key = jax.random.PRNGKey(42 + shard_idx)
@@ -1064,105 +1068,109 @@ class MultiprocessingBackend(CMCBackend):
             shared_mgr.cleanup()
             raise
 
-        run_logger.debug(
-            f"Shared memory allocated: {len(shared_mgr._shared_blocks)} blocks"
-        )
-
-        # Pre-generate all shard PRNG keys in single JAX call (batch optimization)
-        # This amortizes JAX compilation overhead across all shards
-        run_logger.debug(f"Pre-generating {n_shards} PRNG keys...")
-        key_gen_start = time.time()
-        shard_keys = _generate_shard_keys(n_shards, seed=42)
-        key_gen_time = time.time() - key_gen_start
-        run_logger.debug(f"PRNG key generation completed in {key_gen_time:.3f}s")
-
-        # Use spawn context for clean process isolation
-        ctx = mp.get_context(self.spawn_method)
-        result_queue = ctx.Queue()
-
-        # Temporarily adjust parent environment before spawning workers.
-        # spawn'd children inherit the parent's env at Process.start() time.
-        # configure_optimal_device() sets OMP_PROC_BIND=true and
-        # OMP_NUM_THREADS=<physical_cores> for the parent process, but workers
-        # must NOT inherit these — they cause massive thread oversubscription
-        # (e.g. 9 workers × 14 OMP threads = 126 threads on 14 cores).
+        # Sentinel variables for the finally block — must be defined before
+        # try so that cleanup never hits NameError on early exceptions.
         _saved_env: dict[str, str | None] = {}
-        _worker_env_overrides = {
-            "OMP_NUM_THREADS": str(threads_per_worker),
-            "MKL_NUM_THREADS": str(threads_per_worker),
-            "OPENBLAS_NUM_THREADS": str(threads_per_worker),
-            "VECLIB_MAXIMUM_THREADS": str(threads_per_worker),
-        }
-        _worker_env_clear = ["OMP_PROC_BIND", "OMP_PLACES"]
-
-        for key in _worker_env_clear:
-            _saved_env[key] = os.environ.pop(key, None)
-        for key, val in _worker_env_overrides.items():
-            _saved_env[key] = os.environ.get(key)
-            os.environ[key] = val
-
-        # Track active processes: {shard_idx: (process, start_time)}
         active_processes: dict[int, tuple[mp.Process, float]] = {}
+        pbar = None
 
-        # LPT scheduling: dispatch highest-cost shards first to minimize
-        # tail latency.  See _compute_lpt_schedule() for cost model.
-        pending_shards = _compute_lpt_schedule(shard_data_list)
-        if n_shards > 1:
-            sizes = [len(sd["data"]) for sd in shard_data_list]
-            noises = [sd["noise_scale"] for sd in shard_data_list]
-            run_logger.debug(
-                f"LPT scheduling: shard sizes range "
-                f"[{min(sizes):,}, {max(sizes):,}], "
-                f"noise range [{min(noises):.4g}, {max(noises):.4g}], "
-                f"dispatching highest-cost first"
-            )
-        # M1-parent: Free per-shard numpy arrays now that they have been
-        # copied into shared memory (via create_shared_shard_arrays above).
-        del shard_data_list
-        results = []
-        completed_count = 0
-        recorded_shards: set[int] = set()
-        last_heartbeat: dict[int, float] = {}
-
-        # EARLY ABORT TRACKING (Jan 2026): Monitor failure rate for early termination
-        # If too many shards fail early, abort to save compute time
-        early_abort_threshold = 0.5  # Abort if >50% of first N shards fail
-        early_abort_sample_size = min(10, n_shards)  # Check first 10 shards
-        failure_categories: dict[str, int] = {
-            "timeout": 0,
-            "heartbeat_timeout": 0,
-            "crash": 0,
-            "numerical": 0,
-            "convergence": 0,
-            "sampling": 0,
-            "unknown": 0,
-        }
-        success_count = 0
-        early_abort_triggered = False
-
-        # Progress bar
-        pbar = tqdm(
-            total=n_shards,
-            desc="CMC shards",
-            disable=not progress_bar,
-            unit="shard",
-            position=0,
-            leave=True,
-            dynamic_ncols=True,
-        )
-        pbar.set_postfix_str("starting...")
-        pbar.refresh()
-
-        start_time = time.time()
-        # Adaptive polling: start with faster polling, slow down as shards run longer
-        poll_interval_min = 0.5  # Fast polling during startup
-        poll_interval_max = 5.0  # Slow polling during long-running shards
-        poll_interval = poll_interval_min
-        last_completion_time = start_time  # Track when last shard completed
-        status_log_interval = 300.0  # parent status log every 5 minutes
-        last_status_log = start_time
-
+        # All setup from here through the main loop is wrapped in try/finally
+        # to ensure shared_mgr.cleanup() runs even if _generate_shard_keys(),
+        # ctx.Queue(), or any other pre-loop setup raises.
         try:
+            run_logger.debug(
+                f"Shared memory allocated: {len(shared_mgr._shared_blocks)} blocks"
+            )
+
+            # Pre-generate all shard PRNG keys in single JAX call (batch optimization)
+            # This amortizes JAX compilation overhead across all shards
+            run_logger.debug(f"Pre-generating {n_shards} PRNG keys...")
+            key_gen_start = time.time()
+            shard_keys = _generate_shard_keys(n_shards, seed=42)
+            key_gen_time = time.time() - key_gen_start
+            run_logger.debug(f"PRNG key generation completed in {key_gen_time:.3f}s")
+
+            # Use spawn context for clean process isolation
+            ctx = mp.get_context(self.spawn_method)
+            result_queue = ctx.Queue()
+
+            # Temporarily adjust parent environment before spawning workers.
+            # spawn'd children inherit the parent's env at Process.start() time.
+            # configure_optimal_device() sets OMP_PROC_BIND=true and
+            # OMP_NUM_THREADS=<physical_cores> for the parent process, but workers
+            # must NOT inherit these — they cause massive thread oversubscription
+            # (e.g. 9 workers × 14 OMP threads = 126 threads on 14 cores).
+            _worker_env_overrides = {
+                "OMP_NUM_THREADS": str(threads_per_worker),
+                "MKL_NUM_THREADS": str(threads_per_worker),
+                "OPENBLAS_NUM_THREADS": str(threads_per_worker),
+                "VECLIB_MAXIMUM_THREADS": str(threads_per_worker),
+            }
+            _worker_env_clear = ["OMP_PROC_BIND", "OMP_PLACES"]
+
+            for key in _worker_env_clear:
+                _saved_env[key] = os.environ.pop(key, None)
+            for key, val in _worker_env_overrides.items():
+                _saved_env[key] = os.environ.get(key)
+                os.environ[key] = val
+
+            # LPT scheduling: dispatch highest-cost shards first to minimize
+            # tail latency.  See _compute_lpt_schedule() for cost model.
+            pending_shards = _compute_lpt_schedule(shard_data_list)
+            if n_shards > 1:
+                sizes = [len(sd["data"]) for sd in shard_data_list]
+                noises = [sd["noise_scale"] for sd in shard_data_list]
+                run_logger.debug(
+                    f"LPT scheduling: shard sizes range "
+                    f"[{min(sizes):,}, {max(sizes):,}], "
+                    f"noise range [{min(noises):.4g}, {max(noises):.4g}], "
+                    f"dispatching highest-cost first"
+                )
+            # M1-parent: Free per-shard numpy arrays now that they have been
+            # copied into shared memory (via create_shared_shard_arrays above).
+            del shard_data_list
+            results = []
+            completed_count = 0
+            recorded_shards: set[int] = set()
+            last_heartbeat: dict[int, float] = {}
+
+            # EARLY ABORT TRACKING (Jan 2026): Monitor failure rate for early termination
+            # If too many shards fail early, abort to save compute time
+            early_abort_threshold = 0.5  # Abort if >50% of first N shards fail
+            early_abort_sample_size = min(10, n_shards)  # Check first 10 shards
+            failure_categories: dict[str, int] = {
+                "timeout": 0,
+                "heartbeat_timeout": 0,
+                "crash": 0,
+                "numerical": 0,
+                "convergence": 0,
+                "sampling": 0,
+                "unknown": 0,
+            }
+            success_count = 0
+            early_abort_triggered = False
+
+            # Progress bar
+            pbar = tqdm(
+                total=n_shards,
+                desc="CMC shards",
+                disable=not progress_bar,
+                unit="shard",
+                position=0,
+                leave=True,
+                dynamic_ncols=True,
+            )
+            pbar.set_postfix_str("starting...")
+            pbar.refresh()
+
+            start_time = time.time()
+            # Adaptive polling: start with faster polling, slow down as shards run longer
+            poll_interval_min = 0.5  # Fast polling during startup
+            poll_interval_max = 5.0  # Slow polling during long-running shards
+            poll_interval = poll_interval_min
+            last_completion_time = start_time  # Track when last shard completed
+            status_log_interval = 300.0  # parent status log every 5 minutes
+            last_status_log = start_time
             while completed_count < n_shards:
                 # Drain queue first to capture heartbeats and completed shards
                 while True:
@@ -1181,6 +1189,13 @@ class MultiprocessingBackend(CMCBackend):
                         continue
 
                     if msg_type == "result" or message.get("success") is not None:
+                        # Guard against duplicate results from timed-out shards
+                        # whose results arrive late via the queue.
+                        if shard_idx is not None and shard_idx in recorded_shards:
+                            run_logger.debug(
+                                f"Ignoring duplicate result for shard {shard_idx}"
+                            )
+                            continue
                         results.append(message)
                         if shard_idx is not None:
                             recorded_shards.add(shard_idx)
@@ -1469,7 +1484,8 @@ class MultiprocessingBackend(CMCBackend):
             raise
 
         finally:
-            pbar.close()
+            if pbar is not None:
+                pbar.close()
             # Clean up any remaining active processes
             for shard_idx, (process, _) in list(active_processes.items()):
                 if process.is_alive():
@@ -1685,7 +1701,14 @@ class MultiprocessingBackend(CMCBackend):
                     else:
                         scale = max(mean_val, 1e-10)
                     cv = np.std(means) / scale
-                    if cv > max_parameter_cv:
+                    if not np.isfinite(cv):
+                        # NaN/Inf CV means shard posteriors contain non-finite values
+                        high_cv_params.append((param, float("inf")))
+                        run_logger.warning(
+                            f"    NON-FINITE CV: {param} has nan/inf CV "
+                            f"(likely NaN samples in shard posteriors)"
+                        )
+                    elif cv > max_parameter_cv:
                         high_cv_params.append((param, cv))
                         run_logger.warning(
                             f"    HIGH HETEROGENEITY: {param} has CV={cv:.2f} across shards! "

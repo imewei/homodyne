@@ -261,20 +261,35 @@ def _combine_shard_chunk(
     n_chains = shard_samples[0].n_chains
     n_samples = shard_samples[0].n_samples
 
-    if method == "robust_consensus_mc":
+    if method in ("robust_consensus_mc", "auto"):
         # ROBUST Consensus Monte Carlo (Jan 2026):
         # Uses trimmed statistics to handle heterogeneous shards
+        # "auto" resolves to robust_consensus_mc (the default)
         combined_samples: dict[str, np.ndarray] = {}
         rng = np.random.default_rng(42)
 
         for name in param_names:
             # Compute per-shard posterior mean and variance
+            # P0-1: Skip shards with non-finite samples to prevent NaN propagation
             shard_means = []
             shard_variances = []
             for s in shard_samples:
                 samples = s.samples[name].flatten()
+                if not np.all(np.isfinite(samples)):
+                    n_bad = int(np.sum(~np.isfinite(samples)))
+                    logger.warning(
+                        f"Robust CMC: shard has {n_bad}/{len(samples)} non-finite "
+                        f"samples for '{name}'; excluding shard for this parameter"
+                    )
+                    continue
                 shard_means.append(np.mean(samples))
                 shard_variances.append(np.var(samples))
+
+            if not shard_means:
+                raise ValueError(
+                    f"All shards excluded for parameter '{name}' due to non-finite samples. "
+                    "Cannot combine posteriors — check NUTS divergence diagnostics."
+                )
 
             means_arr = np.array(shard_means)
             vars_arr = np.array(shard_variances)
@@ -305,6 +320,24 @@ def _combine_shard_chunk(
             # Use only inlier shards for combination
             filtered_means = means_arr[inlier_mask]
             filtered_vars = vars_arr[inlier_mask]
+
+            # Detect degenerate shards: near-zero variance indicates a chain
+            # stuck at its init value (step_size→0, 0% divergences but no mixing).
+            # Such shards get precision≈1e10 and silently dominate the combined
+            # posterior.  Exclude them before precision weighting.
+            if len(filtered_vars) >= 3:
+                median_var = np.median(filtered_vars)
+                if median_var > 0:
+                    degenerate_mask = filtered_vars < (median_var * 1e-6)
+                    n_degenerate = int(np.sum(degenerate_mask))
+                    if n_degenerate > 0 and n_degenerate < len(filtered_vars):
+                        logger.warning(
+                            f"Robust CMC: {n_degenerate} degenerate shard(s) "
+                            f"for '{name}' (variance < 1e-6 * median); excluding"
+                        )
+                        keep = ~degenerate_mask
+                        filtered_means = filtered_means[keep]
+                        filtered_vars = filtered_vars[keep]
 
             # Winsorize extreme variances (cap at 5th and 95th percentiles)
             if len(filtered_vars) >= 5:
@@ -347,12 +380,46 @@ def _combine_shard_chunk(
 
         for name in param_names:
             # Compute per-shard posterior mean and variance
+            # P0-1: Skip shards with non-finite samples
             shard_means = []
             shard_variances = []
             for s in shard_samples:
                 samples = s.samples[name].flatten()
+                if not np.all(np.isfinite(samples)):
+                    n_bad = int(np.sum(~np.isfinite(samples)))
+                    logger.warning(
+                        f"Consensus MC: shard has {n_bad}/{len(samples)} non-finite "
+                        f"samples for '{name}'; excluding shard for this parameter"
+                    )
+                    continue
                 shard_means.append(np.mean(samples))
                 shard_variances.append(np.var(samples))
+
+            if not shard_means:
+                raise ValueError(
+                    f"All shards excluded for parameter '{name}' due to non-finite samples. "
+                    "Cannot combine posteriors — check NUTS divergence diagnostics."
+                )
+
+            # Detect degenerate shards: near-zero variance indicates a chain
+            # stuck at its init value — gets precision ~1e10 and dominates.
+            means_arr = np.array(shard_means)
+            vars_arr = np.array(shard_variances)
+            if len(vars_arr) >= 3:
+                median_var = np.median(vars_arr)
+                if median_var > 0:
+                    degenerate_mask = vars_arr < (median_var * 1e-6)
+                    n_degenerate = int(np.sum(degenerate_mask))
+                    if 0 < n_degenerate < len(vars_arr):
+                        logger.warning(
+                            f"Consensus MC: {n_degenerate} degenerate shard(s) "
+                            f"for '{name}' (variance < 1e-6 * median); excluding"
+                        )
+                        keep = ~degenerate_mask
+                        means_arr = means_arr[keep]
+                        vars_arr = vars_arr[keep]
+            shard_means = means_arr.tolist()
+            shard_variances = vars_arr.tolist()
 
             # Precision-weighted combination
             # Combined precision = sum of precisions
