@@ -692,7 +692,7 @@ class NLSQAdapter(NLSQAdapterBase):
 
                 # Extract per-angle scaling parameters if present
                 n_physical = 3 if model_mode == "static" else 7
-                if per_angle_scaling and n_params > n_physical + 2 * n_phi:
+                if per_angle_scaling and n_params >= n_physical + 2 * n_phi:
                     contrast_vals = params_array[:n_phi]
                     offset_vals = params_array[n_phi : 2 * n_phi]
                     physical_params = params_array[2 * n_phi :]
@@ -816,9 +816,10 @@ class NLSQAdapter(NLSQAdapterBase):
         # Build xdata array [t1, t2, phi_idx]
         # Broadcast phi if needed
         if len(phi) != len(t1):
-            # phi needs to be broadcast across time points
-            n_time = len(t1) // n_phi
-            phi_broadcast = np.tile(phi, n_time)
+            # phi has n_phi entries; broadcast to match flattened t1/t2/g2
+            # by repeating each phi value for all time points in that angle
+            n_time_per_angle = len(t1) // n_phi
+            phi_broadcast = np.repeat(phi_unique, n_time_per_angle)
         else:
             phi_broadcast = phi
 
@@ -865,10 +866,15 @@ class NLSQAdapter(NLSQAdapterBase):
             np.sqrt(np.diag(pcov)) if pcov is not None else np.zeros(n_params)
         )
 
-        # Compute chi-squared from info or estimate
-        chi_squared = info.get("cost", info.get("fun", 0.0))
-        if isinstance(chi_squared, np.ndarray):
-            chi_squared = float(np.sum(chi_squared**2))
+        # Compute chi-squared from info.
+        # NLSQ/scipy cost = 0.5 * sum(rho(r²)), so chi² = 2 * cost for linear loss.
+        # If "fun" (raw residuals) is available, prefer computing from those directly.
+        raw_fun = info.get("fun", None)
+        if raw_fun is not None and isinstance(raw_fun, np.ndarray):
+            chi_squared = float(np.sum(raw_fun**2))
+        else:
+            cost = info.get("cost", 0.0)
+            chi_squared = float(cost) * 2.0  # cost = 0.5 * sum(r²)
 
         # Reduced chi-squared
         dof = max(1, n_data - n_params)

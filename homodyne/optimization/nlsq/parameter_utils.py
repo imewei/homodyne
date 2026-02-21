@@ -312,8 +312,8 @@ def compute_consistent_per_angle_init(
             else:
                 g1_model = g1_diffusion
 
-            # Clip for numerical stability
-            g1_model = np.clip(g1_model, 1e-10, 2.0)
+            # Clip for numerical stability (g1 ∈ [0, 1] by physics)
+            g1_model = np.clip(g1_model, 1e-10, 1.0)
             g1_sq = g1_model**2
 
             # Linear regression: g2 = offset + contrast × g1²
@@ -449,10 +449,15 @@ def compute_quantile_per_angle_scaling(
     contrast_per_angle = np.full(n_phi, contrast_mid)
     offset_per_angle = np.full(n_phi, offset_mid)
 
+    # Pre-compute per-point angle indices for exact matching
+    phi_indices = np.searchsorted(phi_unique, phi_flat)
+    phi_indices = np.clip(phi_indices, 0, n_phi - 1)
+
     # Process each angle
     for i, phi in enumerate(phi_unique):
-        # Get mask for this angle
-        mask = np.isclose(phi_flat, phi, atol=0.1)
+        # Get mask for this angle — use exact index matching (not tolerance-based)
+        # to avoid bleeding adjacent phi bins on dense angular grids.
+        mask = phi_indices == i
         n_points = np.sum(mask)
 
         if n_points < 100:

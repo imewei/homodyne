@@ -1080,7 +1080,7 @@ class NLSQConfig:
             "loss": self.loss,
             "trust_region_scale": self.trust_region_scale,
             "max_iterations": self.max_iterations,
-            "ftol": self.ftol,
+            "tolerance": self.ftol,
             "xtol": self.xtol,
             "gtol": self.gtol,
             "x_scale": self.x_scale,
@@ -1195,6 +1195,16 @@ class NLSQConfig:
                 "refinement_gtol": self.cmaes_refinement_gtol,
                 "refinement_max_nfev": self.cmaes_refinement_max_nfev,
                 "refinement_loss": self.cmaes_refinement_loss,
+                "normalize": self.cmaes_normalize,
+                "normalization_epsilon": self.cmaes_normalization_epsilon,
+            },
+            "quality_validation": {
+                "enable": self.enable_quality_validation,
+                "reduced_chi_squared_threshold": self.quality_reduced_chi_squared_threshold,
+                "warn_on_max_restarts": self.quality_warn_on_max_restarts,
+                "warn_on_bounds_hit": self.quality_warn_on_bounds_hit,
+                "warn_on_convergence_failure": self.quality_warn_on_convergence_failure,
+                "bounds_tolerance": self.quality_bounds_tolerance,
             },
         }
 

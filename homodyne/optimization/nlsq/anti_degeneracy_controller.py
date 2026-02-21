@@ -241,7 +241,7 @@ class AntiDegeneracyController:
     monitor: GradientCollapseMonitor | None = None
     shear_weighter: ShearSensitivityWeighting | None = None  # Layer 5
     mapper: ParameterIndexMapper | None = None  # T018: Centralized index mapping
-    per_angle_mode_actual: str = "independent"
+    per_angle_mode_actual: str = "disabled"
     # Fixed per-angle quantile estimates for constant mode (v2.17.0+)
     _fixed_contrast_per_angle: np.ndarray | None = field(default=None, repr=False)
     _fixed_offset_per_angle: np.ndarray | None = field(default=None, repr=False)
@@ -465,7 +465,7 @@ class AntiDegeneracyController:
             logger.info("=" * 60)
 
         # Layer 5: Shear-Sensitivity Weighting
-        if config.shear_weighting_enable and self.n_phi > 3:
+        if config.shear_weighting_enable and self.n_phi >= 3:
             sw_config = ShearWeightingConfig(
                 enable=True,
                 min_weight=config.shear_weighting_min_weight,

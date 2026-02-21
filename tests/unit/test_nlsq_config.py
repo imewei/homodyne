@@ -384,7 +384,7 @@ class TestNLSQConfigToDict:
         assert "loss" in d
         assert "trust_region_scale" in d
         assert "max_iterations" in d
-        assert "ftol" in d
+        assert "tolerance" in d
         assert "xtol" in d
         assert "gtol" in d
         assert "x_scale" in d
@@ -454,10 +454,7 @@ class TestNLSQConfigToDict:
         )
         d = original.to_dict()
 
-        # Adjust for YAML config naming convention
-        # (to_dict uses 'ftol', from_dict expects 'tolerance')
-        d["tolerance"] = d.pop("ftol")
-
+        # to_dict now uses 'tolerance' which matches from_dict
         restored = NLSQConfig.from_dict(d)
 
         assert restored.loss == original.loss

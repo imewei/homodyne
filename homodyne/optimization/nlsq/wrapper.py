@@ -888,12 +888,12 @@ class NLSQWrapper(NLSQAdapterBase):
             trust_region_scale = 1.0
         x_scale_override = nlsq_settings.get("x_scale")
         x_scale_value = (
-            x_scale_override if x_scale_override is not None else trust_region_scale
+            x_scale_override if x_scale_override is not None else "jac"
         )
         x_scale_map_config = normalize_x_scale_map(nlsq_settings.get("x_scale_map"))
         diagnostics_cfg = nlsq_settings.get("diagnostics", {})
         diagnostics_enabled = diagnostics_enabled or bool(
-            diagnostics_cfg.get("enabled", False),
+            diagnostics_cfg.get("enable", False),
         )
         diagnostics_sample_size = int(diagnostics_cfg.get("sample_size", 2048))
         diagnostics_payload = (
@@ -1039,13 +1039,6 @@ class NLSQWrapper(NLSQAdapterBase):
             and hasattr(stratified_data, "g2_flat")
             and len(stratified_data.g2_flat) >= 1_000_000
         )
-        # use_stratified_least_squares = (
-        #     hasattr(stratified_data, "phi_flat")
-        #     and per_angle_scaling
-        #     and hasattr(stratified_data, "g2_flat")
-        #     and len(stratified_data.g2_flat) >= 1_000_000
-        # )
-
         if use_stratified_least_squares:
             logger.info("=" * 80)
             logger.info("STRATIFIED LEAST-SQUARES PATH ACTIVATED (v2.2.1)")
@@ -2134,13 +2127,20 @@ class NLSQWrapper(NLSQAdapterBase):
                 corrected_nfev,
             )
 
-        # Compute final residuals using the base function (avoid counter side-effects)
-        final_residuals = base_residual_fn(xdata, *popt)
+        # Compute final residuals using the base function (avoid counter side-effects).
+        # StratifiedResidualFunction/JIT takes (params), not (xdata, *params).
+        if isinstance(
+            base_residual_fn,
+            (StratifiedResidualFunction, StratifiedResidualFunctionJIT),
+        ):
+            final_residuals = base_residual_fn(popt)
+        else:
+            final_residuals = base_residual_fn(xdata, *popt)
 
         reported_iterations = -1
         if isinstance(info, dict):
             reported_iterations = info.get("nit", info.get("nfev", -1))
-        iterations = corrected_nfev
+        iterations = max(0, corrected_nfev)
 
         if reported_iterations == -1:
             logger.debug(
@@ -2461,11 +2461,12 @@ class NLSQWrapper(NLSQAdapterBase):
                         # Retry with different strategy or parameters
                         recovery_actions.append("detected_parameter_stagnation")
                         logger.info("Retrying with perturbed parameters...")
-                        # Perturb parameters by 5% for next attempt
+                        # Perturb parameters by 5% for next attempt (seeded for reproducibility)
+                        _rng = np.random.default_rng(seed=42 + attempt)
                         perturbation = (
                             0.05
                             * current_params
-                            * np.random.uniform(-1, 1, size=len(current_params))
+                            * _rng.uniform(-1, 1, size=len(current_params))
                         )
                         current_params = current_params + perturbation
                         if bounds is not None:
@@ -3844,7 +3845,7 @@ class NLSQWrapper(NLSQAdapterBase):
         q = float(data.q)
         L = float(data.L)
 
-        # Get dt from data if available, otherwise use None
+        # Get dt from data — required for compute_g2_scaled (float, not Optional).
         dt = getattr(data, "dt", None)
         if dt is not None:
             dt = float(dt)
@@ -3853,6 +3854,20 @@ class NLSQWrapper(NLSQAdapterBase):
                 raise ValueError(f"dt must be positive, got {dt}")
             if not np.isfinite(dt):
                 raise ValueError(f"dt must be finite, got {dt}")
+        else:
+            # Fallback: derive from t1 minimum spacing
+            t1_arr = np.asarray(data.t1)
+            t1_unique = np.unique(t1_arr)
+            if len(t1_unique) > 1:
+                dt = float(np.min(np.diff(t1_unique)))
+            else:
+                dt = 0.001
+            import warnings
+
+            warnings.warn(
+                f"data.dt missing; derived dt={dt:.6g} from t1 spacing",
+                stacklevel=2,
+            )
 
         # Pre-compute phi_unique for per-angle parameter mapping
         phi_unique = jnp.asarray(np.unique(np.asarray(phi)))
@@ -4789,15 +4804,18 @@ class NLSQWrapper(NLSQAdapterBase):
                 f"mean={float(np.mean(residuals_0)):.6e}"
             )
 
-            # Perturb first physical parameter by 1%
+            # Perturb a physical parameter by 1% (not contrast/offset scaling).
+            # In auto_averaged mode, params = [contrast, offset, D0, ...], so
+            # the first physical param is at index 2.  In other modes, index 0.
+            phys_idx = 2 if effective_per_angle_scaling and len(initial_params) > 2 else 0
             params_test = np.array(initial_params, copy=True)
-            params_test[0] *= 1.01  # 1% perturbation
+            params_test[phys_idx] *= 1.01  # 1% perturbation
             residuals_1 = residual_fn(params_test)
 
             # Estimate gradient magnitude
             gradient_estimate = float(np.abs(np.sum(residuals_1 - residuals_0)))
             logger.info(
-                f"Gradient estimate (1% perturbation of param[0]): {gradient_estimate:.6e}"
+                f"Gradient estimate (1% perturbation of param[{phys_idx}]): {gradient_estimate:.6e}"
             )
 
             # Check if gradient is suspiciously small

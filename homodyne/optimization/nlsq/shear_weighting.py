@@ -46,6 +46,7 @@ shear_weighting:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING
 
 import jax
@@ -64,7 +65,9 @@ logger = get_logger(__name__)
 
 
 # Performance Optimization (Spec 001 - FR-001, T014): JIT-compiled weight computation
-@jax.jit
+# static_argnums=(4,): `normalize` is a config bool — never traced, prevents spurious
+# retrace when the bool's concrete value changes between calls.
+@partial(jax.jit, static_argnums=(4,))
 def _compute_weights_jax(
     phi_angles: jnp.ndarray,
     phi0: float,
