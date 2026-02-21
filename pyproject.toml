@@ -293,6 +293,7 @@ markers = [
     "validation: marks tests as CMC accuracy validation tests",
     "arviz: marks tests as ArviZ integration tests",
     "visualization: marks tests as visualization tests",
+    "regression: marks tests as regression tests",
 ]
 filterwarnings = [
     # JAX warnings
@@ -313,6 +314,11 @@ filterwarnings = [
     "ignore:invalid escape sequence:SyntaxWarning",
     # NumPyro uses deprecated JAX internals (xla_pmap_p) - awaiting upstream fix
     "ignore:jax.interpreters.pxla.xla_pmap_p is deprecated:DeprecationWarning",
+    # Multiprocessing fork warnings (Python 3.13 + JAX multithreaded)
+    "ignore:os.fork\\(\\) was called.*:RuntimeWarning",
+    "ignore:This process.*is multi-threaded, use of fork\\(\\).*:DeprecationWarning",
+    # NLSQ wrapper dt derivation warning (expected with synthetic test data)
+    "ignore:data\\.dt missing.*:UserWarning",
 ]
 # Logging
 log_cli = false
