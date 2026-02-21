@@ -353,7 +353,12 @@ def xpcs_model_constant(
     global_phi_unique = kwargs.get("global_phi_unique", None)
     if global_phi_unique is not None and phi_unique is not None:
         # Map each shard-local phi_unique entry to its global index
-        global_indices = jnp.searchsorted(global_phi_unique, phi_unique)
+        # Use nearest-neighbor argmin instead of searchsorted to handle float
+        # precision differences between shard-local and global phi values
+        # (consistent with extract_phi_info which uses argmin for n_phi <= 256).
+        global_indices = jnp.argmin(
+            jnp.abs(phi_unique[:, None] - global_phi_unique[None, :]), axis=1
+        )
         contrast_arr = fixed_contrast[global_indices]  # shape: (shard_n_phi,)
         offset_arr = fixed_offset[global_indices]  # shape: (shard_n_phi,)
     else:
@@ -543,7 +548,7 @@ def xpcs_model_averaged(
             # data-driven (not a vague base prior), so tempering by sqrt(K) would
             # make the prior effectively uniform for large shard counts, defeating
             # the warm-start. Only non-NLSQ z-space priors should be tempered.
-            base_width = nlsq_prior_config.get("width_factor", 3.0)
+            base_width = nlsq_prior_config.get("width_factor", 2.0)
 
             prior = build_nlsq_informed_prior(
                 param_name=name,
@@ -693,9 +698,25 @@ def xpcs_model_constant_averaged(
             "These should be estimated from quantile analysis before calling."
         )
 
-    # Average the per-angle values and broadcast to all angles
-    avg_contrast = jnp.mean(fixed_contrast)
-    avg_offset = jnp.mean(fixed_offset)
+    # P0-3: Remap fixed arrays from global to shard-local angles before averaging.
+    # Without this, shards with a subset of angles would average over absent angles,
+    # biasing the scaling toward irrelevant angle contrasts.
+    global_phi_unique = kwargs.get("global_phi_unique", None)
+    if global_phi_unique is not None and phi_unique is not None:
+        # Use nearest-neighbor argmin instead of searchsorted to handle float
+        # precision differences (consistent with xpcs_model_constant).
+        global_indices = jnp.argmin(
+            jnp.abs(phi_unique[:, None] - global_phi_unique[None, :]), axis=1
+        )
+        shard_contrast = fixed_contrast[global_indices]
+        shard_offset = fixed_offset[global_indices]
+    else:
+        shard_contrast = fixed_contrast
+        shard_offset = fixed_offset
+
+    # Average the shard-local per-angle values and broadcast to all angles
+    avg_contrast = jnp.mean(shard_contrast)
+    avg_offset = jnp.mean(shard_offset)
     contrast_arr = jnp.full(n_phi, avg_contrast)
     offset_arr = jnp.full(n_phi, avg_offset)
 
@@ -722,7 +743,7 @@ def xpcs_model_constant_averaged(
         ):
             from homodyne.optimization.cmc.priors import build_nlsq_informed_prior
 
-            base_width = nlsq_prior_config.get("width_factor", 3.0)
+            base_width = nlsq_prior_config.get("width_factor", 2.0)
 
             prior = build_nlsq_informed_prior(
                 param_name=name,
@@ -928,10 +949,15 @@ def xpcs_model_reparameterized(
         # D_offset_frac in [0, 0.5]
         frac_loc = reparam_vals.get("D_offset_frac", 0.05)
         frac_scale = reparam_uncs.get("D_offset_frac", 0.1)
+        # P0-2: Cap tempered scale at half the support width [0, 0.5].
+        # Unbounded priors (Normal) benefit from sqrt(K) tempering, but for a
+        # TruncatedNormal with tight bounds, an over-wide scale makes the prior
+        # nearly uniform, losing NLSQ warm-start information.
+        frac_scale_tempered = jnp.minimum(frac_scale * prior_scale, 0.24)
         D_offset_frac = numpyro.sample(
             "D_offset_frac",
             dist.TruncatedNormal(
-                loc=frac_loc, scale=frac_scale * prior_scale, low=0.0, high=0.5
+                loc=frac_loc, scale=frac_scale_tempered, low=0.0, high=0.5
             ),
         )
 

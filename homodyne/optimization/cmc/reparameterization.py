@@ -111,7 +111,10 @@ def transform_nlsq_to_reparam_space(
         if D_offset is not None:
             denom = D_ref + D_offset
             if denom > 0:
-                reparam_values["D_offset_frac"] = D_offset / denom
+                # Clip to [0, 0.5] to match the TruncatedNormal prior high=0.5 in model.py.
+                # If NLSQ produced a large D_offset, an unclipped frac_loc > 0.5 would
+                # place the prior mean outside the prior's support, degrading NUTS exploration.
+                reparam_values["D_offset_frac"] = min(D_offset / denom, 0.5)
             else:
                 reparam_values["D_offset_frac"] = 0.05  # Safe default
 
@@ -148,6 +151,12 @@ def transform_nlsq_to_reparam_space(
 
     if gamma_dot_t0 is not None and beta is not None:
         # gamma_ref = gamma_dot_t0 * t_ref^beta
+        if gamma_dot_t0 <= 0:
+            logger.warning(
+                f"gamma_dot_t0={gamma_dot_t0:.4g} is non-positive. "
+                "NLSQ may have converged to a physically invalid value. "
+                "log_gamma_ref will be floored at log(1e-20)."
+            )
         gamma_ref = gamma_dot_t0 * (t_ref**beta)
         gamma_ref = max(gamma_ref, 1e-20)  # Prevent log(0)
         log_gamma_ref = math.log(gamma_ref)
@@ -233,8 +242,9 @@ def transform_to_sampling_space(
         log_D_ref = np.log(D_ref)
 
         # D_offset_frac = D_offset / (D_ref + D_offset)
+        # Clip to [0, 0.5] to match the TruncatedNormal prior high=0.5 in model.py.
         denom = D_ref + D_offset
-        D_offset_frac = D_offset / denom if denom > 0 else 0.0
+        D_offset_frac = min(D_offset / denom, 0.5) if denom > 0 else 0.0
 
         result["log_D_ref"] = float(log_D_ref)
         result["D_offset_frac"] = float(D_offset_frac)
@@ -287,7 +297,7 @@ def transform_to_physics_space(
         # P1-2: Clip D_offset_frac to prevent D_offset → ∞ when frac → 1.0.
         # The sampling prior caps at 0.5 via TruncatedNormal, but posterior
         # samples may exceed this during post-processing back-transform.
-        D_offset_frac_safe = np.clip(D_offset_frac, 0.0, 1.0 - 1e-6)
+        D_offset_frac_safe = np.clip(D_offset_frac, 0.0, 0.5)
         result["D_offset"] = D_ref * D_offset_frac_safe / (1 - D_offset_frac_safe)
         del result["log_D_ref"]
         del result["D_offset_frac"]

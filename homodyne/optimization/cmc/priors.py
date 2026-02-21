@@ -770,7 +770,7 @@ def build_init_values_dict(
 
     if clipped_params:
         logger.warning(
-            f"⚠️ {len(clipped_params)} initial values were outside bounds and clipped: "
+            f"{len(clipped_params)} initial values were outside bounds and clipped: "
             f"{clipped_params}. This may indicate NLSQ fit issues or mismatched bounds."
         )
 
@@ -897,7 +897,7 @@ def build_nlsq_informed_prior(
     nlsq_value: float,
     nlsq_std: float | None,
     bounds: tuple[float, float],
-    width_factor: float = 3.0,
+    width_factor: float = 2.0,
 ) -> dist.Distribution:
     """Build a TruncatedNormal prior centered on NLSQ estimate.
 
@@ -919,8 +919,8 @@ def build_nlsq_informed_prior(
     bounds : tuple[float, float]
         Parameter bounds (low, high).
     width_factor : float
-        Multiplier for NLSQ std to get prior width. Default 3.0 gives
-        ~99.7% coverage assuming Gaussian posterior.
+        Multiplier for NLSQ std to get prior width. Default 2.0 gives
+        ~95% coverage assuming Gaussian posterior.
 
     Returns
     -------
@@ -962,7 +962,7 @@ def build_nlsq_informed_priors(
     parameter_space: ParameterSpace,
     analysis_mode: str,
     n_phi: int,
-    width_factor: float = 3.0,
+    width_factor: float = 2.0,
 ) -> dict[str, dist.Distribution]:
     """Build informative priors for all physical parameters from NLSQ results.
 
@@ -979,7 +979,7 @@ def build_nlsq_informed_priors(
     n_phi : int
         Number of phi angles (for per-angle parameters if needed).
     width_factor : float
-        Width multiplier for priors. Default 3.0.
+        Width multiplier for priors. Default 2.0.
 
     Returns
     -------
