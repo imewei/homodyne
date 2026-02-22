@@ -43,13 +43,17 @@ Usage:
 import math
 from typing import NamedTuple
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
 from jax import jit
 
 from homodyne.core.physics_utils import (
     calculate_diffusion_coefficient as _calc_diff,
+)
+from homodyne.core.physics_utils import (
     calculate_shear_rate_cmc as _calc_shear,
+)
+from homodyne.core.physics_utils import (
     safe_sinc,
 )
 from homodyne.core.physics_utils import (
@@ -261,7 +265,8 @@ def _compute_g1_shear_from_idx(
     phase = sinc_prefactor * cos_term[:, None] * gamma_integral[None, :]  # (P, N)
 
     sinc_val = safe_sinc(phase)
-    return sinc_val ** 2  # (P, N)
+    result: jnp.ndarray = sinc_val ** 2  # (P, N)
+    return result
 
 
 @jit
@@ -376,7 +381,8 @@ def _compute_g1_diffusion_elementwise(
     # P1-2: Removed jnp.minimum(g1_diffusion, 1.0) — the log-space clip above
     # (jnp.clip(log_g1, -700, 0)) already guarantees g1 = exp(log_g1) ≤ 1.0.
     # The hard min killed gradients at g1=1.0 (diagonal elements), harming NUTS.
-    return g1_diffusion  # type: ignore[no-any-return]  # Shape: (n_points,)
+    result: jnp.ndarray = g1_diffusion  # Shape: (n_points,)
+    return result
 
 
 @jit
@@ -548,7 +554,7 @@ def compute_g1_total_with_precomputed(
     jnp.ndarray, shape (P, N)
         Total g1 correlation function.
     """
-    return _compute_g1_total_with_precomputed(
+    result: jnp.ndarray = _compute_g1_total_with_precomputed(
         params,
         jnp.atleast_1d(phi_unique),
         shard_grid.time_safe,
@@ -558,6 +564,7 @@ def compute_g1_total_with_precomputed(
         sinc_prefactor,
         shard_grid.dt_safe,
     )
+    return result
 
 
 def compute_g1_diffusion(

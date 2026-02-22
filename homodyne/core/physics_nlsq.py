@@ -300,7 +300,7 @@ def _compute_g1_total_meshgrid(
     # already bounded ≤ 1.0 from log-space clip, and g1_shear (sinc²) is naturally
     # bounded ≤ 1.0. Hard clips kill gradients at boundaries, harming NLSQ Jacobians.
     epsilon = 1e-10
-    g1_bounded = jnp.where(g1_total > epsilon, g1_total, epsilon)
+    g1_bounded: jnp.ndarray = jnp.where(g1_total > epsilon, g1_total, epsilon)
 
     return g1_bounded
 
@@ -363,7 +363,8 @@ def _compute_g2_scaled_meshgrid(
     # P0-3: Removed hard jnp.clip(g2, 0.5, 2.5) — it kills gradients at boundaries.
     # For NLSQ (TRF optimizer), the bounds are enforced via parameter bounds, not g2 clipping.
     # Physical range (0.5-2.5) is enforced through parameter priors instead.
-    return g2
+    result: jnp.ndarray = g2
+    return result
 
 
 # =============================================================================

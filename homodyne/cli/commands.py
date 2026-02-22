@@ -2816,7 +2816,7 @@ def save_mcmc_results(
             save_dict["acceptance_rate"] = np.array([result.acceptance_rate])
 
         if save_dict:  # Only save if we have data
-            np.savez_compressed(str(samples_file), **save_dict)  # type: ignore[arg-type]
+            np.savez_compressed(str(samples_file), **save_dict)
             # T058b: Log file size after write completion
             samples_size_mb = samples_file.stat().st_size / (1024 * 1024)
             logger.debug(

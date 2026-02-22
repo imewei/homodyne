@@ -149,7 +149,7 @@ def detect_hardware() -> HardwareConfig:
             backend = jax_backend.get_backend()
         except (ImportError, AttributeError):
             # Legacy API for JAX < 0.8.0
-            from jax.lib import xla_bridge  # type: ignore[attr-defined]
+            from jax.lib import xla_bridge
 
             backend = xla_bridge.get_backend()
 

@@ -538,12 +538,12 @@ def _compute_g1_diffusion_core(
 
     # Compute exponential — log_g1_bounded is already clipped to [-700, 0],
     # so jnp.exp is safe (no overflow risk).
-    g1_result = jnp.exp(log_g1_bounded)
+    g1_result: jnp.ndarray = jnp.exp(log_g1_bounded)
 
     # P1-2: Removed jnp.minimum(g1_result, 1.0) — the log-space clip above
     # (jnp.clip(log_g1, -700, 0)) already guarantees g1 = exp(log_g1) ≤ 1.0.
     # The hard min killed gradients at g1=1.0 (diagonal elements), harming NUTS.
-    return g1_result  # type: ignore[no-any-return]
+    return g1_result
 
 
 @jit
@@ -696,7 +696,7 @@ def _compute_g1_shear_core(
 
         # Compute sinc² values: [sinc(Φ)]² for all elements
         sinc_val = safe_sinc(phase)
-        sinc2_result = sinc_val**2  # shape: (n,)
+        sinc2_result: jnp.ndarray = sinc_val**2  # shape: (n,)
 
     else:
         # MATRIX MODE: Use vmap over phi to avoid O(n_phi × N²) peak memory.
@@ -716,7 +716,8 @@ def _compute_g1_shear_core(
             angle_diff = jnp.deg2rad(phi0 - phi_scalar)
             prefactor = sinc_prefactor * jnp.cos(angle_diff)
             phase = prefactor * gamma_integral  # (n_times, n_times)
-            return safe_sinc(phase) ** 2
+            result: jnp.ndarray = safe_sinc(phase) ** 2
+            return result
 
         # vmap over the phi array axis — each call gets a scalar phi element
         sinc2_result = vmap(_sinc2_for_one_phi)(phi_array)  # (n_phi, n_times, n_times)
@@ -792,7 +793,7 @@ def _compute_g1_total_core(
     # gradients at the boundary, harming NUTS exploration.
     # Use jnp.where instead of jnp.maximum for gradient safety at the floor.
     epsilon = 1e-10
-    g1_bounded = jnp.where(g1_total > epsilon, g1_total, epsilon)
+    g1_bounded: jnp.ndarray = jnp.where(g1_total > epsilon, g1_total, epsilon)
 
     return g1_bounded
 

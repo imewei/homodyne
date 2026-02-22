@@ -182,11 +182,11 @@ def __getattr__(name: str) -> object:
         try:
             mod = importlib.import_module(module_path)
             getattr(mod, attr)  # ensure the symbol actually exists
-            value: bool = True
+            flag_value: bool = True
         except (ImportError, AttributeError):
-            value = False
-        globals()[name] = value
-        return value
+            flag_value = False
+        globals()[name] = flag_value
+        return flag_value
 
     raise AttributeError(f"module 'homodyne' has no attribute {name!r}")
 
