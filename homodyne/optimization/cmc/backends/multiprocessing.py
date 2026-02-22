@@ -113,11 +113,12 @@ class SharedDataManager:
     def create_shared_shard_arrays(
         self, shard_data_list: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        """Place per-shard numpy arrays into shared memory.
+        """Place per-shard numpy arrays into shared memory (packed format).
 
-        Instead of pickling per-shard arrays through spawn (which serializes
-        each array per-process), this stores them in shared memory once.
-        Workers reconstruct arrays from shared memory references.
+        Instead of creating one SharedMemory segment per array per shard
+        (n_shards * 5 = thousands of file descriptors), this concatenates
+        all shard arrays for each key into a single shared memory block.
+        Only 5 SharedMemory segments are created regardless of shard count.
 
         Parameters
         ----------
@@ -128,29 +129,57 @@ class SharedDataManager:
         Returns
         -------
         list[dict[str, Any]]
-            List of lightweight shard references (shm names + metadata).
-            Each ref dict is small enough to pickle cheaply through spawn.
+            List of lightweight shard references (shm names + offsets).
+            Each ref dict is small enough to serialize cheaply through spawn.
         """
-        shard_refs: list[dict[str, Any]] = []
+        n_shards = len(shard_data_list)
 
-        for _i, shard_data in enumerate(shard_data_list):
-            ref: dict[str, Any] = {"noise_scale": shard_data["noise_scale"]}
-            for key in _SHARD_ARRAY_KEYS:
-                arr = shard_data[key]
+        # For each array key, concatenate all shards into one block
+        key_meta: dict[str, dict[str, Any]] = {}
+        for key in _SHARD_ARRAY_KEYS:
+            arrays = []
+            sizes = []
+            for sd in shard_data_list:
+                arr = sd[key]
                 if not isinstance(arr, np.ndarray):
                     arr = np.asarray(arr)
-                # Ensure contiguous for shared memory copy
-                arr = np.ascontiguousarray(arr)
-                shm = mp.shared_memory.SharedMemory(
-                    create=True, size=max(1, arr.nbytes)
-                )
-                shared_arr = np.ndarray(arr.shape, dtype=arr.dtype, buffer=shm.buf)
-                shared_arr[:] = arr
-                self._shared_blocks.append(shm)
+                arr = np.ascontiguousarray(arr.ravel())
+                arrays.append(arr)
+                sizes.append(arr.shape[0])
+
+            combined = np.concatenate(arrays)
+            shm = mp.shared_memory.SharedMemory(
+                create=True, size=max(1, combined.nbytes)
+            )
+            shared_arr = np.ndarray(
+                combined.shape, dtype=combined.dtype, buffer=shm.buf
+            )
+            shared_arr[:] = combined
+            self._shared_blocks.append(shm)
+
+            # Compute per-shard offsets via cumulative sum
+            offsets = [0]
+            for s in sizes[:-1]:
+                offsets.append(offsets[-1] + s)
+
+            key_meta[key] = {
+                "shm_name": shm.name,
+                "dtype": str(combined.dtype),
+                "offsets": offsets,
+                "sizes": sizes,
+            }
+
+        # Build per-shard refs that workers can slice from the packed blocks
+        shard_refs: list[dict[str, Any]] = []
+        for i in range(n_shards):
+            ref: dict[str, Any] = {"noise_scale": shard_data_list[i]["noise_scale"]}
+            for key in _SHARD_ARRAY_KEYS:
+                meta = key_meta[key]
                 ref[key] = {
-                    "shm_name": shm.name,
-                    "shape": arr.shape,
-                    "dtype": str(arr.dtype),
+                    "shm_name": meta["shm_name"],
+                    "dtype": meta["dtype"],
+                    "offset": meta["offsets"][i],
+                    "size": meta["sizes"][i],
                 }
             shard_refs.append(ref)
 
@@ -208,7 +237,11 @@ def _load_shared_array(ref: dict[str, Any]) -> np.ndarray:
 
 
 def _load_shared_shard_data(shard_ref: dict[str, Any]) -> dict[str, Any]:
-    """Reconstruct per-shard data arrays from shared memory references.
+    """Reconstruct per-shard data arrays from packed shared memory.
+
+    Each array key maps to a single concatenated SharedMemory block shared
+    across all shards.  The per-shard ref carries ``offset`` (element index)
+    and ``size`` (element count) to slice this shard's portion.
 
     Parameters
     ----------
@@ -230,11 +263,15 @@ def _load_shared_shard_data(shard_ref: dict[str, Any]) -> dict[str, Any]:
             name=arr_ref["shm_name"], create=False
         )
         try:
-            arr = np.ndarray(
-                arr_ref["shape"],
-                dtype=np.dtype(arr_ref["dtype"]),
-                buffer=shm.buf,
-            ).copy()  # Copy so we don't hold reference to shared buffer
+            dtype = np.dtype(arr_ref["dtype"])
+            offset = arr_ref["offset"]
+            size = arr_ref["size"]
+            # Map the full concatenated buffer, then slice this shard's region
+            total_elements = len(shm.buf) // dtype.itemsize
+            full_arr = np.ndarray(
+                (total_elements,), dtype=dtype, buffer=shm.buf
+            )
+            arr = full_arr[offset : offset + size].copy()
         finally:
             shm.close()
         shard_data[key] = arr
