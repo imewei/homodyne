@@ -8,7 +8,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from homodyne.core.physics_nlsq import compute_g2_scaled
-from homodyne.utils.logging import get_logger, log_phase
+from homodyne.utils.logging import get_logger
 
 
 class StratifiedResidualFunction:

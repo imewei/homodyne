@@ -53,13 +53,13 @@ from homodyne.core.jax_backend import (
     jax_available,
     jnp,
 )
-from homodyne.core.physics_utils import safe_len
 from homodyne.core.model_mixins import (
     BenchmarkingMixin,
     GradientCapabilityMixin,
     OptimizationRecommendationMixin,
 )
 from homodyne.core.physics import validate_parameters
+from homodyne.core.physics_utils import safe_len
 from homodyne.utils.logging import get_logger, log_calls
 
 logger = get_logger(__name__)
