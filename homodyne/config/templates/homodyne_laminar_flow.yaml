@@ -12,15 +12,15 @@
 # For comprehensive documentation of all parameters, see:
 #   homodyne_master_template.yaml
 #
-# VERSION: 2.22.1
-# UPDATED: 2026-02-19
+# VERSION: 2.22.2
+# UPDATED: 2026-02-22
 # ==============================================================================
 
 # ==============================================================================
 # METADATA
 # ==============================================================================
 metadata:
-  config_version: "2.22.1"
+  config_version: "2.22.2"
   description: "Laminar flow analysis - 7-parameter model"
   analysis_mode: "laminar_flow"
   parameter_count: 7
@@ -144,7 +144,7 @@ initial_parameters:
   # Example: [1000.0, 0.5, 10.0, 0.01, 0.0, 0.0, 0.0]
 
   # Per-angle scaling (one value per filtered angle)
-  # v2.17.0+: Quantile-based initialization computes robust initial values
+  # Quantile-based initialization computes robust initial values
   # from experimental data using quantile statistics when null
   per_angle_scaling:
     contrast: null # null = quantile-based init, or [0.05, 0.06] for 2 angles
@@ -349,7 +349,7 @@ optimization:
     # CRITICAL: hierarchical.enable MUST be true for shear_weighting to work!
     anti_degeneracy:
       enable: true
-      # Per-angle mode selection (v2.18.0+):
+      # Per-angle mode selection:
       # Controls dimensionality reduction for per-angle contrast/offset.
       # Same logic as CMC per-angle mode (except NLSQ also has "fourier").
       #
@@ -446,7 +446,7 @@ optimization:
       auto_select: true
       scale_threshold: 1000.0
 
-      # CMA-ES Parameter Normalization (v2.16.0)
+      # CMA-ES Parameter Normalization
       normalize: true            # Enable bounds-based normalization
       normalization_epsilon: 1.0e-12  # Prevent division by zero
 
@@ -460,7 +460,7 @@ optimization:
       refinement_loss: "linear"
 
     # -------------------------------------------------------------------------
-    # FIT QUALITY VALIDATION (v2.16.0+)
+    # FIT QUALITY VALIDATION
     # -------------------------------------------------------------------------
     quality_validation:
       enable: true
@@ -539,7 +539,7 @@ optimization:
   # ===========================================================================
   # CMC - Consensus Monte Carlo
   # ===========================================================================
-  # AUTOMATIC NLSQ WARM-START (v2.20.0):
+  # AUTOMATIC NLSQ WARM-START:
   #   CLI: homodyne --method cmc → NLSQ runs first automatically
   #   Reduces divergence rate from ~28% to <5% for laminar_flow
   #   Disable with --no-nlsq-warmstart (NOT recommended for 7-param model)
@@ -550,7 +550,7 @@ optimization:
     run_id: null
     backend: "jax"
 
-    # Anti-degeneracy: Per-angle scaling mode (v2.18.0+)
+    # Anti-degeneracy: Per-angle scaling mode
     # Controls how per-angle contrast/offset are handled in CMC.
     # Same logic as NLSQ per-angle mode (except CMC does not have "fourier").
     #
@@ -569,7 +569,7 @@ optimization:
     per_angle_mode: "auto"
     constant_scaling_threshold: 3 # Use constant when n_phi >= this
 
-    # Prior tempering (v2.22.1): Scales priors by 1/K per shard
+    # Prior tempering: Scales priors by 1/K per shard
     prior_tempering: true
 
     backend_config:
@@ -583,7 +583,7 @@ optimization:
     sharding:
       strategy: "random"
       num_shards: "auto"
-      max_points_per_shard: "auto" # Dynamic: 12K-21K after angle scaling (v2.20.0)
+      max_points_per_shard: "auto" # Dynamic: 12K-21K after angle scaling
       min_points_per_shard: 10000 # CRITICAL: Prevents data-starved shards
       seed_base: 0
       min_points_per_param: 1500 # Minimum points per parameter per shard
@@ -592,7 +592,7 @@ optimization:
     heartbeat_timeout: 600
 
     combination:
-      method: "robust_consensus_mc" # MAD-based outlier detection (default since v2.22.1)
+      method: "robust_consensus_mc" # MAD-based outlier detection
       validate_results: true
       min_success_rate: 0.80 # Lower for complex 7-param model
       min_success_rate_warning: 0.70
@@ -604,7 +604,7 @@ optimization:
       target_accept_prob: 0.85
 
       # -----------------------------------------------------------------------
-      # ADAPTIVE SAMPLING (v2.22.0 / Feb 2026)
+      # ADAPTIVE SAMPLING
       # -----------------------------------------------------------------------
       # Automatically reduces warmup/samples for small datasets to decrease
       # NUTS overhead. Profiling showed 1310s for 50 points with defaults;
@@ -620,7 +620,7 @@ optimization:
       min_samples: 200 # Minimum samples for statistical validity
 
       # -----------------------------------------------------------------------
-      # JAX PROFILING (v2.22.0 / Feb 2026)
+      # JAX PROFILING
       # -----------------------------------------------------------------------
       # py-spy only profiles Python code; XLA runs native code invisible to it.
       # Enable JAX profiling to capture XLA-level performance data.
@@ -635,20 +635,20 @@ optimization:
       max_between_shard_kl: 0.5
       min_success_rate: 0.80
 
-      # NLSQ warm-start & quality control (v2.20.0)
+      # NLSQ warm-start & quality control
       # NOTE: CLI automatically runs NLSQ before CMC (homodyne --method cmc)
       # Disable with: --no-nlsq-warmstart (NOT recommended for laminar_flow)
       max_divergence_rate: 0.10 # Filter shards with >10% divergences
       require_nlsq_warmstart: false # Set true to enforce in API calls
 
-      # NLSQ-informed priors (v2.22.1)
+      # NLSQ-informed priors
       use_nlsq_informed_priors: true
       nlsq_prior_width_factor: 2.0
       max_parameter_cv: 1.0 # Heterogeneity threshold
       heterogeneity_abort: false # Abort with guidance if CV exceeded
 
     # -------------------------------------------------------------------------
-    # REPARAMETERIZATION (v2.21.0 / Jan 2026)
+    # REPARAMETERIZATION
     # -------------------------------------------------------------------------
     # Transforms sampling space to break D0/D_offset degeneracy and improve
     # NUTS sampling for gamma_dot_t0.

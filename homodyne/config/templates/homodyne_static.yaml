@@ -10,15 +10,15 @@
 # For comprehensive documentation of all parameters, see:
 #   homodyne_master_template.yaml
 #
-# VERSION: 2.22.1
-# UPDATED: 2026-02-19
+# VERSION: 2.22.2
+# UPDATED: 2026-02-22
 # ==============================================================================
 
 # ==============================================================================
 # METADATA
 # ==============================================================================
 metadata:
-  config_version: "2.22.1"
+  config_version: "2.22.2"
   description: "Static diffusion analysis - 3-parameter model"
   analysis_mode: "static"
   parameter_count: 3
@@ -136,7 +136,7 @@ initial_parameters:
   # Example: [1000.0, -1.2, 0.0]
 
   # Per-angle scaling (one value per filtered angle)
-  # v2.17.0+: Quantile-based initialization computes robust initial values
+  # Quantile-based initialization computes robust initial values
   # from experimental data using quantile statistics when null
   per_angle_scaling:
     contrast: null # null = quantile-based init, or [0.05, 0.06] for 2 angles
@@ -296,7 +296,7 @@ optimization:
     # Disabled by default; enable only if parameter collapse observed.
     anti_degeneracy:
       enable: false # Not needed for static mode
-      # Per-angle mode selection (v2.18.0+):
+      # Per-angle mode selection:
       # Static mode has only 3 physical parameters with similar scales.
       # Anti-degeneracy is less critical but available if needed.
       # Same logic as CMC per-angle mode (except NLSQ also has "fourier").
@@ -353,7 +353,7 @@ optimization:
       auto_select: false # Disabled for static (similar scales)
       scale_threshold: 1000.0
 
-      # CMA-ES Parameter Normalization (v2.16.0)
+      # CMA-ES Parameter Normalization
       normalize: true            # Enable bounds-based normalization
       normalization_epsilon: 1.0e-12  # Prevent division by zero
 
@@ -367,7 +367,7 @@ optimization:
       refinement_loss: "linear"
 
     # -------------------------------------------------------------------------
-    # FIT QUALITY VALIDATION (v2.16.0+)
+    # FIT QUALITY VALIDATION
     # -------------------------------------------------------------------------
     quality_validation:
       enable: true
@@ -446,7 +446,7 @@ optimization:
   # ===========================================================================
   # CMC - Consensus Monte Carlo
   # ===========================================================================
-  # AUTOMATIC NLSQ WARM-START (v2.20.0):
+  # AUTOMATIC NLSQ WARM-START:
   #   CLI: homodyne --method cmc → NLSQ runs first automatically
   #   Reduces divergence rate; less critical for static (simpler 3-param model)
   #
@@ -456,7 +456,7 @@ optimization:
     run_id: null
     backend: "jax"
 
-    # Anti-degeneracy: Per-angle scaling mode (v2.18.0+)
+    # Anti-degeneracy: Per-angle scaling mode
     # Less critical for static mode (no shear gradient cancellation).
     # Same logic as NLSQ per-angle mode (except CMC does not have "fourier").
     #
@@ -471,7 +471,7 @@ optimization:
     per_angle_mode: "auto"
     constant_scaling_threshold: 3 # Use constant when n_phi >= this
 
-    # Prior tempering (v2.22.1): Scales priors by 1/K per shard
+    # Prior tempering: Scales priors by 1/K per shard
     prior_tempering: true
 
     backend_config:
@@ -494,7 +494,7 @@ optimization:
     heartbeat_timeout: 600
 
     combination:
-      method: "robust_consensus_mc" # MAD-based outlier detection (default since v2.22.1)
+      method: "robust_consensus_mc" # MAD-based outlier detection
       validate_results: true
       min_success_rate: 0.90 # Higher for simpler model
       min_success_rate_warning: 0.80
@@ -506,7 +506,7 @@ optimization:
       target_accept_prob: 0.85
 
       # -----------------------------------------------------------------------
-      # ADAPTIVE SAMPLING (v2.22.0 / Feb 2026)
+      # ADAPTIVE SAMPLING
       # -----------------------------------------------------------------------
       # Automatically reduces warmup/samples for small datasets to decrease
       # NUTS overhead. Profiling showed 1310s for 50 points with defaults;
@@ -522,7 +522,7 @@ optimization:
       min_samples: 200 # Minimum samples for statistical validity
 
       # -----------------------------------------------------------------------
-      # JAX PROFILING (v2.22.0 / Feb 2026)
+      # JAX PROFILING
       # -----------------------------------------------------------------------
       # py-spy only profiles Python code; XLA runs native code invisible to it.
       # Enable JAX profiling to capture XLA-level performance data.
@@ -537,19 +537,19 @@ optimization:
       max_between_shard_kl: 2.0
       min_success_rate: 0.90
 
-      # NLSQ warm-start & quality control (v2.20.0)
+      # NLSQ warm-start & quality control
       # NOTE: CLI automatically runs NLSQ before CMC (homodyne --method cmc)
       max_divergence_rate: 0.10 # Filter shards with >10% divergences
       require_nlsq_warmstart: false # Optional for static (simpler model)
 
-      # NLSQ-informed priors (v2.22.1)
+      # NLSQ-informed priors
       use_nlsq_informed_priors: true
       nlsq_prior_width_factor: 2.0
       max_parameter_cv: 1.5 # Higher threshold OK for static
       heterogeneity_abort: true # Abort with guidance if CV exceeded
 
     # -------------------------------------------------------------------------
-    # REPARAMETERIZATION (v2.21.0 / Jan 2026)
+    # REPARAMETERIZATION
     # -------------------------------------------------------------------------
     # Transforms sampling space to break D0/D_offset degeneracy.
     # Less critical for static mode (no shear parameters) but still beneficial.

@@ -18,8 +18,8 @@
 #   - homodyne_static.yaml: 3-parameter equilibrium diffusion
 #   - homodyne_laminar_flow.yaml: 7-parameter shear flow
 #
-# VERSION: 2.22.1
-# UPDATED: 2026-02-19
+# VERSION: 2.22.2
+# UPDATED: 2026-02-22
 # ==============================================================================
 
 # ==============================================================================
@@ -28,7 +28,7 @@
 # Template metadata for documentation and validation.
 # The config_version should match the homodyne package version.
 metadata:
-  config_version: "2.22.1"
+  config_version: "2.22.2"
   description: "Master template - comprehensive reference with all configuration options"
   analysis_mode: "laminar_flow"
 
@@ -230,7 +230,7 @@ initial_parameters:
   values: null
 
   # Per-angle scaling initialization (one value per filtered angle)
-  # v2.17.0+: When null, uses quantile-based initialization to compute robust
+  # When null, uses quantile-based initialization to compute robust
   # initial values from experimental data using quantile statistics
   # Estimate from data: contrast ≈ (C2_max - C2_min), offset ≈ C2_min
   per_angle_scaling:
@@ -423,7 +423,7 @@ optimization:
   #
   nlsq:
     # -------------------------------------------------------------------------
-    # WORKFLOW AND OPTIMIZATION GOAL (v2.11.0+)
+    # WORKFLOW AND OPTIMIZATION GOAL
     # -------------------------------------------------------------------------
     # Internal workflow selection. Homodyne uses its own memory-aware strategy
     # selector (select_nlsq_strategy), so this is for internal reference only.
@@ -545,7 +545,7 @@ optimization:
       log_jacobian_norms: false # Log Jacobian norm per iteration
 
     # -------------------------------------------------------------------------
-    # HYBRID STREAMING OPTIMIZER (v2.6.0+)
+    # HYBRID STREAMING OPTIMIZER
     # -------------------------------------------------------------------------
     # Four-phase optimizer for large datasets (>10M points):
     #   Phase 0: Parameter normalization setup
@@ -637,7 +637,7 @@ optimization:
         # CONSTRAINT: > 0
 
     # -------------------------------------------------------------------------
-    # ANTI-DEGENERACY DEFENSE SYSTEM (v2.9.0+)
+    # ANTI-DEGENERACY DEFENSE SYSTEM
     # -------------------------------------------------------------------------
     # Comprehensive solution for structural degeneracy in laminar_flow mode
     # with many phi angles.
@@ -655,7 +655,7 @@ optimization:
       enable: true # Master enable
 
       # -----------------------------------------------------------------------
-      # PER-ANGLE SCALING MODE (v2.18.0+)
+      # PER-ANGLE SCALING MODE
       # -----------------------------------------------------------------------
       # Controls dimensionality reduction for per-angle contrast/offset.
       # Same logic as CMC per-angle mode (except NLSQ also has "fourier").
@@ -756,7 +756,7 @@ optimization:
         normalize: true # Normalize weights so mean = 1.0
 
     # -------------------------------------------------------------------------
-    # MULTI-START OPTIMIZATION (v2.6.0+)
+    # MULTI-START OPTIMIZATION
     # -------------------------------------------------------------------------
     # Explores parameter space from multiple starting points using Latin
     # Hypercube Sampling (LHS) to find global optimum and detect degeneracy.
@@ -803,7 +803,7 @@ optimization:
         # CONSTRAINT: (0, 1)
 
     # -------------------------------------------------------------------------
-    # CMA-ES GLOBAL OPTIMIZATION (v2.15.0+ / NLSQ 0.6.4+)
+    # CMA-ES GLOBAL OPTIMIZATION
     # -------------------------------------------------------------------------
     # Covariance Matrix Adaptation Evolution Strategy for global optimization.
     #
@@ -872,7 +872,7 @@ optimization:
         1000.0 # Scale ratio threshold for auto-selection
         # CONSTRAINT: > 0
 
-      # CMA-ES Parameter Normalization (v2.16.0)
+      # CMA-ES Parameter Normalization
       # Normalizes parameters to [0,1] based on bounds for better scale handling
       normalize: true            # Enable bounds-based normalization (recommended)
       normalization_epsilon: 1.0e-12  # Prevent division by zero for tiny ranges
@@ -897,7 +897,7 @@ optimization:
         # Options: "linear", "soft_l1", "huber", etc.
 
     # -------------------------------------------------------------------------
-    # FIT QUALITY VALIDATION (v2.16.0+)
+    # FIT QUALITY VALIDATION
     # -------------------------------------------------------------------------
     # Post-optimization quality checks with configurable thresholds.
     # Logs warnings for potential issues but does not raise exceptions.
@@ -1018,7 +1018,7 @@ optimization:
   # Parallelizes MCMC across data shards using per-shard NUTS sampling.
   # Combines subposteriors via Consensus Monte Carlo (precision-weighted means).
   #
-  # AUTOMATIC NLSQ WARM-START (v2.20.0):
+  # AUTOMATIC NLSQ WARM-START:
   #   When using CLI: homodyne --method cmc --config config.yaml
   #   NLSQ is run AUTOMATICALLY first, and results are used as CMC initial values.
   #   This reduces divergence rate from ~28% to <5%.
@@ -1040,7 +1040,7 @@ optimization:
     run_id: null # Optional run tag
 
     # -------------------------------------------------------------------------
-    # ANTI-DEGENERACY: PER-ANGLE SCALING MODE (v2.18.0+)
+    # ANTI-DEGENERACY: PER-ANGLE SCALING MODE
     # -------------------------------------------------------------------------
     # Controls how per-angle contrast/offset are handled to prevent parameter
     # absorption degeneracy.
@@ -1071,7 +1071,7 @@ optimization:
       3 # Use constant when n_phi >= this
       # CONSTRAINT: >= 1
 
-    # Prior tempering (Feb 2026 / v2.22.1)
+    # Prior tempering
     # Scales priors by 1/K per shard to prevent prior double-counting.
     # Without tempering, K shards each apply the full prior → combined = prior^K × likelihood.
     # With tempering, each shard uses prior^(1/K) → combined = prior × likelihood (correct).
@@ -1095,7 +1095,7 @@ optimization:
       strategy: "random" # "random" | "stratified" | "contiguous"
       num_shards: "auto" # "auto" uses n_phi for stratified
       max_points_per_shard:
-        "auto" # "auto" → dynamic based on dataset size (v2.20.0)
+        "auto" # "auto" → dynamic based on dataset size
         # laminar_flow: 12K-21K after angle scaling
         # static: 50K-100K
       min_points_per_shard:
@@ -1127,7 +1127,7 @@ optimization:
     combination:
       method:
         "robust_consensus_mc" # "consensus_mc" | "robust_consensus_mc" | "weighted_gaussian" | "simple_average"
-        # robust_consensus_mc: MAD-based outlier detection (default since v2.22.1)
+        # robust_consensus_mc: MAD-based outlier detection
         #   - Excludes outlier shards before combination
         #   - Recommended for production use
         # consensus_mc: Classic precision-weighted combination (no outlier filtering)
@@ -1147,7 +1147,7 @@ optimization:
       target_accept_prob: 0.85 # CONSTRAINT: (0, 1)
 
       # -----------------------------------------------------------------------
-      # ADAPTIVE SAMPLING (v2.22.0 / Feb 2026)
+      # ADAPTIVE SAMPLING
       # -----------------------------------------------------------------------
       # Automatically reduces warmup/samples for small datasets to decrease
       # NUTS overhead. Profiling showed 1310s for 50 points with defaults;
@@ -1188,7 +1188,7 @@ optimization:
         # Ensures ESS targets are achievable
 
       # -----------------------------------------------------------------------
-      # JAX PROFILING (v2.22.0 / Feb 2026)
+      # JAX PROFILING
       # -----------------------------------------------------------------------
       # py-spy and similar Python profilers only capture Python frames.
       # When NUTS runs, most computation happens in XLA-compiled native code,
@@ -1222,9 +1222,9 @@ optimization:
       min_success_rate: 0.90 # CONSTRAINT: [0, 1]
 
       # -----------------------------------------------------------------------
-      # NLSQ WARM-START & QUALITY CONTROL (v2.20.0)
+      # NLSQ WARM-START & QUALITY CONTROL
       # -----------------------------------------------------------------------
-      # IMPORTANT: As of v2.20.0, NLSQ warm-start is AUTOMATIC when using CLI:
+      # IMPORTANT: NLSQ warm-start is AUTOMATIC when using CLI:
       #   homodyne --method cmc --config config.yaml
       #
       # The CLI runs NLSQ first, then uses results as CMC initial values.
@@ -1249,7 +1249,7 @@ optimization:
         false # Set true to REQUIRE nlsq_result in API calls
         # When true, fit_mcmc_jax() raises ValueError without it
 
-      # NLSQ-informed priors (Feb 2026 / v2.22.1)
+      # NLSQ-informed priors
       # When NLSQ warm-start is available, build tighter TruncatedNormal priors
       # centered on NLSQ estimates instead of using the wide default priors.
       # This dramatically improves NUTS sampling efficiency and reduces divergences.
@@ -1261,7 +1261,7 @@ optimization:
         # Lower = tighter priors (faster convergence, risk of bias)
         # Higher = wider priors (slower convergence, less informative)
 
-      # Heterogeneity detection and abort (v2.20.0)
+      # Heterogeneity detection and abort
       max_parameter_cv:
         1.0 # Maximum coefficient of variation across shard means
         # CONSTRAINT: > 0
@@ -1274,7 +1274,7 @@ optimization:
         # When false: falls back to robust_consensus_mc
 
     # -------------------------------------------------------------------------
-    # REPARAMETERIZATION (v2.21.0 / Jan 2026)
+    # REPARAMETERIZATION
     # -------------------------------------------------------------------------
     # Transforms sampling space to break parameter degeneracies and improve
     # NUTS sampling efficiency for challenging parameter combinations.
@@ -1349,7 +1349,7 @@ noise_estimation:
 # PERFORMANCE (CPU Only)
 # ==============================================================================
 # Memory management and computation settings.
-# GPU support removed in v2.3.0 (CPU-only).
+# GPU support removed (CPU-only).
 #
 performance:
   strategy_override: null # null | "standard" | "large" | "chunked" | "streaming"

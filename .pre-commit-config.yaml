@@ -1,4 +1,4 @@
-# Pre-commit hooks for Homodyne Analysis Package v2.22.1
+# Pre-commit hooks for Homodyne Analysis Package
 # Install: uv run pre-commit install
 # Run manually: uv run pre-commit run --all-files
 
@@ -24,7 +24,7 @@ repos:
 
   # Python linting and formatting (ruff replaces flake8, isort, black)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.11
+    rev: v0.15.2
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -32,7 +32,7 @@ repos:
 
   # Security scanning
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.9.2
+    rev: 1.9.3
     hooks:
       - id: bandit
         args: [-c, pyproject.toml]
@@ -46,18 +46,18 @@ repos:
       - id: mypy
         args: [--config-file=pyproject.toml]
         additional_dependencies:
-          - types-psutil>=5.9
+          - types-psutil>=7.2
           - types-requests>=2.31
-          - numpy>=2.0
-          - matplotlib>=3.8
+          - numpy>=2.3
+          - matplotlib>=3.10
           - types-Pygments>=2.16
           - types-colorama>=0.4
           - types-decorator>=5.1
           - types-setuptools>=68.0
           - types-pyyaml>=6.0
-          - jax>=0.4
+          - jax>=0.8.2
           - nlsq>=0.6.4
-          - scikit-learn>=1.4
+          - scikit-learn>=1.6
         exclude: ^(tests/|docs/)
 
   # Markdown formatting
@@ -82,7 +82,7 @@ repos:
     hooks:
       - id: nbqa-ruff
         args: [--ignore=E402, --ignore=B905]
-        additional_dependencies: [ruff>=0.14.11]
+        additional_dependencies: [ruff>=0.15.2]
 
 default_language_version:
   python: python3.13

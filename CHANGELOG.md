@@ -13,6 +13,193 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
+## [2.22.2] - 2026-02-22
+
+### Performance, Reliability, and Out-of-Core Routing
+
+Performance optimization release with shared-memory shard transport, LPT scheduling, and
+persistent JIT caching for CMC; plus critical NLSQ out-of-core routing fix and broad
+reliability hardening across both optimization backends.
+
+#### Performance
+
+**CMC shared memory and scheduling:**
+
+- **perf(cmc)**: Place per-shard data arrays in `SharedMemory` via
+  `SharedDataManager.create_shared_shard_arrays()`, eliminating per-process serialization
+  overhead through the spawn mechanism (`multiprocessing.py`)
+
+- **perf(cmc)**: Pack all shard arrays per key into a single `SharedMemory` segment
+  (5 segments total regardless of shard count), preventing `Too many open files` OS limits
+  (`multiprocessing.py`)
+
+- **perf(cmc)**: Add noise-weighted LPT (Longest Processing Time first) shard scheduling —
+  dispatches largest/noisiest shards first to minimize tail latency (`multiprocessing.py`)
+
+- **perf(cmc)**: Enable persistent JIT compilation cache in workers via
+  `jax.config.update()` with `min_compile_time_secs=0` (CMC functions compile in
+  0.07–0.15s, below the default 1.0s threshold). First worker compiles; subsequent workers
+  load from disk cache (`multiprocessing.py`)
+
+**NLSQ memory:**
+
+- **perf(nlsq)**: Free per-chunk precomputed indices and numpy sigma copy after
+  concatenation into device-side arrays; frees ~160+ MB for 10M-point datasets
+  (`residual.py`)
+
+- **perf(nlsq)**: Remove dead `_call_jax_chunked` body (replaced with `RuntimeError`
+  guard); the vectorized path is used exclusively (`residual.py`)
+
+**Core JAX cleanup:**
+
+- **refactor(core)**: Replace `safe_exp()` with direct `jnp.exp`/`np.exp` — all call sites
+  pre-clip to `[-700, 0]`, making the wrapper redundant in JIT hot paths
+
+- **refactor(core)**: Replace `safe_len()` with `.shape[0]` — always concrete in JAX,
+  avoids Python dispatch overhead
+
+- **refactor(core)**: Replace phi while-loop reshape with `.reshape(-1)` to handle all
+  input shapes uniformly without JIT retracing
+
+- **refactor(core)**: Make `trapezoid_cumsum` unconditional — remove if-branch on array
+  size (n==1 naturally produces `[0.0]`), eliminating JIT retracing
+
+#### Fixed
+
+**NLSQ out-of-core routing (critical):**
+
+- **fix(nlsq)**: Base memory routing on effective parameter count instead of expanded
+  count — auto-averaged mode (9 params) was being routed to out-of-core (which lacks
+  anti-degeneracy) because memory was estimated with 53 expanded params (`wrapper.py`)
+
+- **fix(nlsq)**: Replace scale-sensitive norm-based out-of-core convergence
+  (`||step||/||params|| < 1e-4`) with multi-criteria `xtol=1e-6` (per-component max) +
+  `ftol=1e-6` (cost change), both required. Prevents false convergence from large-magnitude
+  parameters like D₀ ~ 19231 (`wrapper.py`)
+
+**Physics and numerical correctness:**
+
+- **fix(physics)**: Replace `jnp.maximum`/`jnp.clip` with `jnp.where` for floor operations
+  on traced parameters (contrast, cos_factor, g1, g2) across NLSQ and NUTS hot paths —
+  `jnp.maximum` zeros the gradient below the floor (`physics_nlsq.py`, `fitting.py`,
+  `shear_weighting.py`)
+
+- **fix(physics)**: Raise `epsilon_abs` from 1e-20 to 1e-12 in `sqrt(diff² + ε)` smooth-abs
+  — 1e-20 is below float32 precision, producing NaN gradients (`wrapper.py`)
+
+- **fix(physics)**: Remove `jnp.clip(g2, 0.5, 2.5)` in per-angle model — kills gradients at
+  boundaries; bounds enforced via optimizer constraints (`wrapper.py`)
+
+- **fix(physics)**: Enforce 2D meshgrid in `compute_g2_scaled` public API when
+  `get_cached_meshgrid` returns 1D arrays for >2000 elements (`jax_backend.py`)
+
+- **fix(physics)**: Use `dt_value` (resolved config dt) instead of bare `dt` in
+  `_compute_g2_scaled_core` call (`jax_backend.py`)
+
+- **fix(core)**: Replace fragile `+1e-15` offset with `jnp.where` for condition number
+  calculation in `solve_gram_system` — near-singular systems now correctly route to SVD
+  instead of Cholesky (`jax_backend.py`)
+
+**NLSQ optimizer:**
+
+- **fix(nlsq)**: Mask zero-sigma points to 0 residual instead of inflating with `+EPS` —
+  prevents invalid/excluded data from dominating the cost function (`residual.py`)
+
+- **fix(nlsq)**: Move chunk structure validation inline into `__init__` (before freeing
+  numpy chunks) so construction fails fast on inconsistent angles (`residual.py`)
+
+- **fix(nlsq)**: Derive dt from t1 minimum spacing when `data.dt` is missing instead of
+  silently using `None` (`wrapper.py`)
+
+- **fix(nlsq)**: Fix gradient estimate perturbation to target physical params (index 2 in
+  auto_averaged mode) instead of always perturbing contrast at `[0]` (`wrapper.py`)
+
+- **fix(nlsq)**: Seed recovery perturbation RNG (`np.random.default_rng(42+attempt)`) for
+  reproducible retry sequences (`wrapper.py`)
+
+- **fix(nlsq)**: Track `sigma_is_default` flag in `OptimizationResult` so fit quality
+  validator can distinguish "bad fit" from "meaningless chi-squared due to uniform sigma"
+  (`wrapper.py`, `results.py`)
+
+**CMC reliability:**
+
+- **fix(cmc)**: Tighten NLSQ-informed prior `width_factor` from 3.0 to 2.0 (~95% coverage)
+  for sharper NUTS initialization (`priors.py`, `model.py`)
+
+- **fix(cmc)**: Cap `D_offset_frac` tempering scale at 0.24 and clip to `[0, 0.5]` in
+  reparameterization transforms to match prior support bounds (`reparameterization.py`)
+
+- **fix(cmc)**: Fix shard-local angle remapping via `argmin` in `xpcs_model_averaged` and
+  `xpcs_model_constant_averaged` to prevent cross-angle bias (`model.py`)
+
+- **fix(cmc)**: Add `_SINGLE_SHARD_HARD_LIMIT = 100K` to prevent NUTS running O(n)
+  leapfrog on excessively large single shards; auto-fallback to random sharding
+  (`core.py`)
+
+- **fix(cmc)**: Harden multiprocessing backend — pre-generate PRNG keys in batch before
+  spawning workers, guard duplicate results from timed-out shards, handle non-finite CV in
+  heterogeneity detection (`multiprocessing.py`)
+
+- **fix(cmc)**: Map NumPyro `potential_energy` field to ArviZ `energy` convention and
+  sanitize `extra_fields` keys (replace dots with underscores) for xarray compatibility
+  (`sampler.py`)
+
+**Configuration:**
+
+- **fix(config)**: Tune NLSQ hybrid streaming defaults — warmup iterations 100→200,
+  Gauss-Newton max iterations 50→100, chunk size 50000→10000 (`nlsq/config.py`)
+
+- **fix(config)**: Fix CMC config serialization — `to_dict()` missing
+  `min_points_per_param`, wrong key `backend` → `backend_config` (`cmc/config.py`)
+
+- **refactor(config)**: Unify CMC auto-enable threshold to 100K for all modes; remove
+  mode-specific threshold logic (`config.py`, templates)
+
+**Shell:**
+
+- **fix(shell)**: Replace `COMPREPLY=($(compgen ...))` with `mapfile -t` pattern to prevent
+  word-splitting and globbing on filenames with spaces (SC2207) (`completion.sh`)
+
+#### Changed
+
+**Code quality:**
+
+- **refactor**: Add explicit `jnp.ndarray` type annotations to JIT return values and remove
+  `type: ignore` suppressions across `jax_backend.py`, `physics_cmc.py`, `physics_nlsq.py`,
+  and CLI modules
+
+- **style**: Sort imports alphabetically and remove unused `log_phase` import in
+  `residual.py`
+
+**Documentation:**
+
+- **docs(cmc)**: Document shared memory architecture, LPT scheduling heuristic, and
+  persistent JIT compilation cache with JAX 0.8+ `config.update()` requirement
+  (`cmc_backends.rst`, `performance_tuning.rst`)
+
+- **docs(physics)**: Correct t1/t2 docstrings from "frame indices" to "physical time in
+  seconds" (`physics_nlsq.py`)
+
+**Dependencies:**
+
+- **chore(deps)**: Bump ruff 0.15.1 → 0.15.2
+- **chore(deps)**: Update pyproject.toml — ruff ≥0.15.2, sphinx ≥9.1.0, myst-parser ≥5.0.0
+- **chore(deps)**: Update pre-commit hooks — ruff-pre-commit v0.15.2, bandit 1.9.3
+- **chore(deps)**: Align mypy additional dependencies with project requirements (jax ≥0.8.2,
+  numpy ≥2.3, matplotlib ≥3.10)
+
+**Tests:**
+
+- **fix(tests)**: Align documentation tests with restructured docs layout (research/ →
+  theory/, user-guide/ → new structure, docs/ → docs/source/)
+- **fix(tests)**: Harden factory param keys with `.get()` fallback for per-angle naming
+- **fix(tests)**: Stabilize performance benchmarks for CI (relax pool startup threshold,
+  measure `.nbytes` instead of RSS)
+- **fix(tests)**: Use ArviZ `energy` field name instead of `potential_energy`
+- **chore(tests)**: Add `regression` pytest marker and suppress fork/dt warnings
+
+______________________________________________________________________
+
 ## [2.22.1] - 2026-02-19
 
 ### Numerical Correctness and Gradient Safety

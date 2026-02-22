@@ -2,7 +2,7 @@
 
 Complete documentation of the CMC (Consensus Monte Carlo) fitting system in homodyne.
 
-**Version:** 2.22.1 **Last Updated:** February 2026
+**Version:** 2.22.2 **Last Updated:** February 2026
 
 ## Table of Contents
 

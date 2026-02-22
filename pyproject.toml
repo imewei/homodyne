@@ -91,17 +91,17 @@ dev = [
     "pytest>=9.0.2",
     "pytest-cov>=7.0",
     "pytest-xdist>=3.8",
-    "ruff>=0.14.11",
+    "ruff>=0.15.2",
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
     "types-pyyaml>=6.0.12.20250915",
 ]
 
 docs = [
-    "sphinx>=8.2.3",
+    "sphinx>=9.1.0",
     "furo>=2025.12.19",
-    "myst-parser>=4.0.1",
-    "sphinx-autodoc-typehints>=3.5.2",
+    "myst-parser>=5.0.0",
+    "sphinx-autodoc-typehints>=3.6.3",
     "sphinx-copybutton>=0.5.2",
 ]
 
@@ -140,7 +140,7 @@ version_scheme = "guess-next-dev"
 local_scheme = "no-local-version"
 
 # Fallback version when git is unavailable (e.g., installing from tarball)
-fallback_version = "2.22.1"
+fallback_version = "2.22.2"
 
 # Only match semantic version tags (v1.2.3 or 1.2.3 format)
 tag_regex = "^(?:v)?(?P<version>\\d+\\.\\d+\\.\\d+)$"
