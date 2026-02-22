@@ -451,10 +451,24 @@ def create_inference_data(mcmc_samples: MCMCSamples) -> az.InferenceData:
             # ArviZ expects (n_chains, n_samples)
             posterior_dict[name] = mcmc_samples.samples[name]
 
+    # Map NumPyro extra_fields to ArviZ sample_stats conventions
+    stats: dict[str, np.ndarray] | None = None
+    if mcmc_samples.extra_fields:
+        stats = {}
+        for key, val in mcmc_samples.extra_fields.items():
+            if key == "potential_energy":
+                # ArviZ plot_energy expects "energy"
+                stats["energy"] = val
+            elif "." in key:
+                # xarray doesn't allow dots in variable names (e.g. adapt_state.step_size)
+                stats[key.replace(".", "_")] = val
+            else:
+                stats[key] = val
+
     # Create InferenceData
     idata = az.from_dict(
         posterior=posterior_dict,
-        sample_stats=mcmc_samples.extra_fields if mcmc_samples.extra_fields else None,
+        sample_stats=stats,
     )
 
     return idata

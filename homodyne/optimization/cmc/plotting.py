@@ -244,12 +244,19 @@ def plot_energy(
     Path
         Path to saved plot.
     """
-    # Energy plot requires sample_stats with energy info
+    # Energy plot requires sample_stats with energy info.
+    # ArviZ expects "energy" in sample_stats; NumPyro stores "potential_energy".
+    # The mapping is handled in create_inference_data, but we add a defensive
+    # fallback here for InferenceData created outside that path.
     has_energy = False
     if hasattr(idata, "sample_stats") and idata.sample_stats is not None:
         if hasattr(idata.sample_stats, "energy"):
             has_energy = True
         elif hasattr(idata.sample_stats, "potential_energy"):
+            # Rename in-place so az.plot_energy can find it
+            idata.sample_stats = idata.sample_stats.rename(
+                {"potential_energy": "energy"}
+            )
             has_energy = True
 
     if not has_energy:
