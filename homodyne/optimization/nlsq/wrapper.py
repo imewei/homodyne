@@ -1139,21 +1139,68 @@ class NLSQWrapper(NLSQAdapterBase):
                 f"✓ Parameter validation passed: {len(validated_params)} parameters"
             )
 
-            # Step: Re-run unified strategy selection with actual parameter count (v2.14.0)
-            # The initial strategy selection (line ~888) may have had n_params=0 if initial_params
-            # was None at that point. Now that we have the actual expanded parameter count,
-            # re-run the decision to ensure correct routing to OUT_OF_CORE when needed.
+            # Step: Re-run unified strategy selection with EFFECTIVE parameter count
+            # (v2.14.0, v2.22.0 fix: anti-degeneracy pre-check)
+            #
+            # The expanded param count (e.g. 53 for 23 angles individual) may be much
+            # larger than the effective count after anti-degeneracy mode selection
+            # (e.g. 9 for auto_averaged). Using the expanded count for memory estimation
+            # can unnecessarily trigger out-of-core routing, which bypasses the
+            # anti-degeneracy defense system entirely — causing parameter absorption
+            # degeneracy and false convergence.
+            #
+            # Fix: Pre-check what anti-degeneracy would select, and use the effective
+            # param count for memory routing. The actual anti-degeneracy transformation
+            # still happens inside _fit_with_stratified_least_squares().
             n_total_points = len(stratified_data.g2_flat)
             actual_n_params = len(validated_params)
-            strategy_recheck = select_nlsq_strategy(n_total_points, actual_n_params)
+            effective_n_params = actual_n_params  # Default: no reduction
+
+            if per_angle_scaling and config is not None and hasattr(config, "config"):
+                nlsq_cfg = config.config.get("optimization", {}).get("nlsq", {})
+                ad_cfg = nlsq_cfg.get("anti_degeneracy", {})
+                ad_per_angle_mode = ad_cfg.get("per_angle_mode", "auto")
+                ad_threshold = ad_cfg.get("constant_scaling_threshold", 3)
+                n_angles_check = len(np.unique(stratified_data.phi_flat))
+
+                if ad_per_angle_mode == "auto" and n_angles_check >= ad_threshold:
+                    # auto_averaged: 2 averaged scaling params replace 2*n_angles
+                    effective_n_params = n_physical + 2
+                    logger.info(
+                        f"Anti-Degeneracy pre-check: auto → auto_averaged "
+                        f"(n_phi={n_angles_check} >= threshold={ad_threshold}). "
+                        f"Effective params: {effective_n_params} "
+                        f"(expanded: {actual_n_params})"
+                    )
+                elif ad_per_angle_mode == "constant":
+                    # constant: scaling fixed, only physical params optimized
+                    effective_n_params = n_physical
+                    logger.info(
+                        f"Anti-Degeneracy pre-check: constant mode. "
+                        f"Effective params: {effective_n_params} "
+                        f"(expanded: {actual_n_params})"
+                    )
+
+            strategy_recheck = select_nlsq_strategy(
+                n_total_points, effective_n_params
+            )
 
             logger.info(
-                f"Strategy re-check (with {actual_n_params} params): "
+                f"Strategy re-check (with {effective_n_params} effective params, "
+                f"{actual_n_params} expanded): "
                 f"{strategy_recheck.strategy.value} ({strategy_recheck.reason})"
             )
 
             # Route to OUT_OF_CORE if peak memory exceeds threshold
             if strategy_recheck.strategy == NLSQStrategy.OUT_OF_CORE:
+                # Safety check: warn if anti-degeneracy would have prevented this
+                if effective_n_params < actual_n_params:
+                    logger.warning(
+                        f"Out-of-core triggered with {actual_n_params} expanded params, "
+                        f"but anti-degeneracy would reduce to {effective_n_params}. "
+                        f"This should not happen — the pre-check should have used "
+                        f"effective params for memory estimation. Check routing logic."
+                    )
                 logger.info("=" * 80)
                 logger.info("OUT-OF-CORE ACCUMULATION MODE (Re-check)")
                 logger.info(
@@ -5423,8 +5470,11 @@ class NLSQWrapper(NLSQAdapterBase):
         )
         max_iter = cfg_dict.get("optimization", {}).get("max_iterations", 50)
 
-        tol = 1e-4
+        # Convergence tolerances (v2.22.0: multi-criteria, matching standard NLSQ)
+        xtol = 1e-6  # Relative parameter change (per-component max, not norm)
+        ftol = 1e-6  # Relative cost function change
         lm_lambda = 0.01  # Initial damping
+        rel_change = float("inf")  # Initialize to prevent NameError at loop exit
 
         # ====================================================================
         # JIT-compiled Chunk Kernel with FULL HOMODYNE PHYSICS (v2.14.1+)
@@ -5724,11 +5774,25 @@ class NLSQWrapper(NLSQAdapterBase):
                         lm_lambda = 1e-7
                     step_accepted = True
 
-                    # Update iteration metrics for outer loop
-                    rel_change = jnp.linalg.norm(step) / (
-                        jnp.linalg.norm(params_curr) + 1e-10
+                    # Multi-criteria convergence (v2.22.0)
+                    # 1. Per-component relative parameter change (scale-invariant)
+                    param_scale = jnp.maximum(jnp.abs(params_curr), 1e-10)
+                    rel_change = float(jnp.max(jnp.abs(step) / param_scale))
+                    # 2. Relative cost function change
+                    cost_change = float(ratio)
+
+                    logger.debug(
+                        f"  Convergence: xtol={rel_change:.2e} "
+                        f"(thresh={xtol:.0e}), "
+                        f"ftol={cost_change:.2e} "
+                        f"(thresh={ftol:.0e})"
                     )
-                    if rel_change < tol:
+
+                    if rel_change < xtol and cost_change < ftol:
+                        logger.info(
+                            f"Out-of-Core converged: xtol={rel_change:.2e}<{xtol:.0e}, "
+                            f"ftol={cost_change:.2e}<{ftol:.0e}"
+                        )
                         return (
                             np.array(params_curr),
                             np.array(total_JtJ),
@@ -5736,7 +5800,7 @@ class NLSQWrapper(NLSQAdapterBase):
                                 "chi_squared": float(chi2_new),
                                 "iterations": i + 1,
                                 "convergence_status": "converged",
-                                "message": "Out-of-Core converged",
+                                "message": "Out-of-Core converged (xtol+ftol)",
                             },
                         )
                     break  # Break inner LM loop, proceed to next accumulation
@@ -5751,10 +5815,12 @@ class NLSQWrapper(NLSQAdapterBase):
                 logger.warning("Could not find better step. Stopping.")
                 break
 
+        # Determine final status (rel_change initialized to inf before loop)
+        converged = rel_change < xtol
         info = {
             "chi_squared": float(total_chi2),
             "iterations": i + 1,
-            "convergence_status": "converged" if rel_change < tol else "max_iter",
+            "convergence_status": "converged" if converged else "max_iter",
             "message": "Out-of-Core accumulation completed",
         }
         return np.array(params_curr), np.array(total_JtJ), info
