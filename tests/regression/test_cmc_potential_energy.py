@@ -63,7 +63,7 @@ def generate_synthetic_data(n_points=1000, n_phi=2):
 @pytest.mark.regression
 @pytest.mark.slow
 def test_cmc_potential_energy_availability():
-    """Verify that potential_energy is present in CMC results."""
+    """Verify that energy (potential_energy) is present in CMC results."""
     # Use fewer points for regression test speed
     p_data = generate_synthetic_data(n_points=2000, n_phi=2)
 
@@ -124,7 +124,8 @@ def test_cmc_potential_energy_availability():
 
         sample_stats = result.inference_data.sample_stats
 
-        # KEY CHECK: potential_energy must be present
-        assert "potential_energy" in sample_stats, (
-            f"'potential_energy' missing. Available vars: {list(sample_stats.data_vars)}"
+        # KEY CHECK: energy must be present (ArviZ convention; NumPyro's
+        # "potential_energy" is mapped to "energy" during InferenceData creation)
+        assert "energy" in sample_stats, (
+            f"'energy' missing. Available vars: {list(sample_stats.data_vars)}"
         )
