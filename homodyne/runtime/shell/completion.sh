@@ -9,19 +9,24 @@ HOMODYNE_COMPLETION_CACHE_FILE="$HOMODYNE_COMPLETION_CACHE_DIR/completion_cache"
 
 # Initialize cache directory
 _homodyne_init_cache() {
-    [[ ! -d "$HOMODYNE_COMPLETION_CACHE_DIR" ]] && mkdir -p -m 700 "$HOMODYNE_COMPLETION_CACHE_DIR"
+    if [[ ! -d "$HOMODYNE_COMPLETION_CACHE_DIR" ]]; then
+        mkdir -p "$HOMODYNE_COMPLETION_CACHE_DIR"
+        chmod 700 "$HOMODYNE_COMPLETION_CACHE_DIR"
+    fi
 }
 
 # Get recent config files (cached for 5 minutes)
 _homodyne_get_recent_configs() {
     local cache_age=300  # 5 minutes
-    local current_time=$(date +%s)
+    local current_time
+    current_time=$(date +%s)
 
     _homodyne_init_cache
 
     # Check if cache exists and is fresh
     if [[ -f "$HOMODYNE_COMPLETION_CACHE_FILE" ]]; then
-        local cache_time=$(stat -c %Y "$HOMODYNE_COMPLETION_CACHE_FILE" 2>/dev/null || stat -f %m "$HOMODYNE_COMPLETION_CACHE_FILE" 2>/dev/null)
+        local cache_time
+        cache_time=$(stat -c %Y "$HOMODYNE_COMPLETION_CACHE_FILE" 2>/dev/null || stat -f %m "$HOMODYNE_COMPLETION_CACHE_FILE" 2>/dev/null)
         if [[ $((current_time - cache_time)) -lt $cache_age ]]; then
             cat "$HOMODYNE_COMPLETION_CACHE_FILE"
             return
@@ -49,7 +54,7 @@ _homodyne_smart_method_completion() {
 
 # Advanced bash completion for homodyne
 _homodyne_advanced_completion() {
-    local cur prev opts
+    local cur prev
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
@@ -84,152 +89,154 @@ _homodyne_advanced_completion() {
                 fi
             done
 
-            local methods=$(_homodyne_smart_method_completion "$config_file")
-            COMPREPLY=($(compgen -W "$methods" -- "$cur"))
+            local methods
+            methods=$(_homodyne_smart_method_completion "$config_file")
+            mapfile -t COMPREPLY < <(compgen -W "$methods" -- "$cur")
             return 0
             ;;
         --config)
             # Use cached recent configs (YAML files)
-            local configs=$(_homodyne_get_recent_configs)
-            COMPREPLY=($(compgen -W "$configs" -- "$cur"))
+            local configs
+            configs=$(_homodyne_get_recent_configs)
+            mapfile -t COMPREPLY < <(compgen -W "$configs" -- "$cur")
             # Also add file completion for YAML files
-            COMPREPLY+=($(compgen -f -X '!*.yaml' -- "$cur"))
-            COMPREPLY+=($(compgen -f -X '!*.yml' -- "$cur"))
+            mapfile -t -O "${#COMPREPLY[@]}" COMPREPLY < <(compgen -f -X '!*.yaml' -- "$cur")
+            mapfile -t -O "${#COMPREPLY[@]}" COMPREPLY < <(compgen -f -X '!*.yml' -- "$cur")
             return 0
             ;;
         --output-dir)
             # Smart directory completion with suggestions
             local common_dirs="./results ./output ./homodyne_results ./analysis"
-            COMPREPLY=($(compgen -W "$common_dirs" -- "$cur"))
-            COMPREPLY+=($(compgen -d -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$common_dirs" -- "$cur")
+            mapfile -t -O "${#COMPREPLY[@]}" COMPREPLY < <(compgen -d -- "$cur")
             return 0
             ;;
         --data-file)
             # HDF5 data file completion
-            COMPREPLY=($(compgen -f -X '!*.hdf' -- "$cur"))
-            COMPREPLY+=($(compgen -f -X '!*.h5' -- "$cur"))
-            COMPREPLY+=($(compgen -f -X '!*.hdf5' -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -f -X '!*.hdf' -- "$cur")
+            mapfile -t -O "${#COMPREPLY[@]}" COMPREPLY < <(compgen -f -X '!*.h5' -- "$cur")
+            mapfile -t -O "${#COMPREPLY[@]}" COMPREPLY < <(compgen -f -X '!*.hdf5' -- "$cur")
             return 0
             ;;
         --phi-angles)
             # Common angle sets
             local angles="0,45,90,135 0,36,72,108,144 0,30,60,90,120,150"
-            COMPREPLY=($(compgen -W "$angles" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$angles" -- "$cur")
             return 0
             ;;
         --contrast)
             # Common contrast values
             local values="0.1 0.2 0.3 0.4 0.5"
-            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$values" -- "$cur")
             return 0
             ;;
         --offset)
             # Common offset values
             local values="0.9 0.95 1.0 1.05 1.1"
-            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$values" -- "$cur")
             return 0
             ;;
         --cmc-num-shards)
             # Common shard counts for CMC
             local counts="4 8 10 16 20 32"
-            COMPREPLY=($(compgen -W "$counts" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$counts" -- "$cur")
             return 0
             ;;
         --cmc-backend)
             # CMC backend options
             local backends="auto pjit multiprocessing pbs"
-            COMPREPLY=($(compgen -W "$backends" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$backends" -- "$cur")
             return 0
             ;;
         --output-format)
             # Output format options
             local formats="yaml json npz"
-            COMPREPLY=($(compgen -W "$formats" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$formats" -- "$cur")
             return 0
             ;;
         --plotting-backend)
             # Plotting backend options
             local backends="auto matplotlib datashader"
-            COMPREPLY=($(compgen -W "$backends" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$backends" -- "$cur")
             return 0
             ;;
         --max-iterations)
             # Common iteration counts
             local counts="1000 5000 10000 50000"
-            COMPREPLY=($(compgen -W "$counts" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$counts" -- "$cur")
             return 0
             ;;
         --tolerance)
             # Common tolerance values
             local values="1e-6 1e-7 1e-8 1e-9 1e-10"
-            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$values" -- "$cur")
             return 0
             ;;
         --n-samples)
             # Common MCMC sample counts
             local counts="500 1000 2000 5000 10000"
-            COMPREPLY=($(compgen -W "$counts" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$counts" -- "$cur")
             return 0
             ;;
         --n-warmup)
             # Common warmup counts
             local counts="250 500 1000 2000"
-            COMPREPLY=($(compgen -W "$counts" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$counts" -- "$cur")
             return 0
             ;;
         --n-chains)
             # Common chain counts
             local counts="2 4 6 8"
-            COMPREPLY=($(compgen -W "$counts" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$counts" -- "$cur")
             return 0
             ;;
         --initial-d0)
             # Common D0 values (nm^2/s)
             local values="100 500 1000 5000 10000"
-            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$values" -- "$cur")
             return 0
             ;;
         --initial-alpha)
             # Common alpha values
             local values="-2.0 -1.5 -1.0 -0.5 0.0"
-            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$values" -- "$cur")
             return 0
             ;;
         --initial-d-offset)
             # Common D_offset values
             local values="0 100 500 1000"
-            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$values" -- "$cur")
             return 0
             ;;
         --initial-gamma-dot-t0)
             # Common gamma_dot values (s^-1)
             local values="0.001 0.01 0.1 1.0"
-            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$values" -- "$cur")
             return 0
             ;;
         --initial-beta)
             # Common beta values
             local values="-2.0 -1.0 0.0 1.0"
-            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$values" -- "$cur")
             return 0
             ;;
         --initial-gamma-dot-offset)
             # Common gamma_dot_offset values
             local values="0 0.001 0.01"
-            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$values" -- "$cur")
             return 0
             ;;
         --initial-phi0)
             # Common phi0 values (radians)
             local values="0.0 0.785 1.571 2.356 3.142"
-            COMPREPLY=($(compgen -W "$values" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$values" -- "$cur")
             return 0
             ;;
         --nlsq-result)
             # Directory completion for pre-computed NLSQ results
             local common_dirs="./homodyne_results ./results ./output"
-            COMPREPLY=($(compgen -W "$common_dirs" -- "$cur"))
-            COMPREPLY+=($(compgen -d -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$common_dirs" -- "$cur")
+            mapfile -t -O "${#COMPREPLY[@]}" COMPREPLY < <(compgen -d -- "$cur")
             return 0
             ;;
     esac
@@ -264,17 +271,17 @@ _homodyne_advanced_completion() {
             all_opts="$all_opts $override_opts"
         fi
 
-        COMPREPLY=($(compgen -W "$all_opts" -- "$cur"))
+        mapfile -t COMPREPLY < <(compgen -W "$all_opts" -- "$cur")
     else
         # Default to config files (YAML)
-        COMPREPLY=($(compgen -f -X '!*.yaml' -- "$cur"))
-        COMPREPLY+=($(compgen -f -X '!*.yml' -- "$cur"))
+        mapfile -t COMPREPLY < <(compgen -f -X '!*.yaml' -- "$cur")
+        mapfile -t -O "${#COMPREPLY[@]}" COMPREPLY < <(compgen -f -X '!*.yml' -- "$cur")
     fi
 }
 
 # Bash completion for homodyne-config
 _homodyne_config_completion() {
-    local cur prev opts
+    local cur prev
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
@@ -286,32 +293,32 @@ _homodyne_config_completion() {
         --mode|-m)
             # Updated modes: static and laminar_flow
             local modes="static laminar_flow"
-            COMPREPLY=($(compgen -W "$modes" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$modes" -- "$cur")
             return 0
             ;;
         --output|-o)
             # Suggest common YAML config file names
             local suggestions="config.yaml homodyne_config.yaml my_config.yaml analysis_config.yaml"
-            COMPREPLY=($(compgen -W "$suggestions" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$suggestions" -- "$cur")
             # Also add general YAML file completion
-            COMPREPLY+=($(compgen -f -X '!*.yaml' -- "$cur"))
-            COMPREPLY+=($(compgen -f -X '!*.yml' -- "$cur"))
+            mapfile -t -O "${#COMPREPLY[@]}" COMPREPLY < <(compgen -f -X '!*.yaml' -- "$cur")
+            mapfile -t -O "${#COMPREPLY[@]}" COMPREPLY < <(compgen -f -X '!*.yml' -- "$cur")
             return 0
             ;;
         --validate|-v)
             # Complete with existing YAML files for validation
-            COMPREPLY=($(compgen -f -X '!*.yaml' -- "$cur"))
-            COMPREPLY+=($(compgen -f -X '!*.yml' -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -f -X '!*.yaml' -- "$cur")
+            mapfile -t -O "${#COMPREPLY[@]}" COMPREPLY < <(compgen -f -X '!*.yml' -- "$cur")
             return 0
             ;;
     esac
 
     if [[ $cur == -* ]]; then
-        COMPREPLY=($(compgen -W "$main_opts" -- "$cur"))
+        mapfile -t COMPREPLY < <(compgen -W "$main_opts" -- "$cur")
     else
         # Default to YAML file completion for output
-        COMPREPLY=($(compgen -f -X '!*.yaml' -- "$cur"))
-        COMPREPLY+=($(compgen -f -X '!*.yml' -- "$cur"))
+        mapfile -t COMPREPLY < <(compgen -f -X '!*.yaml' -- "$cur")
+        mapfile -t -O "${#COMPREPLY[@]}" COMPREPLY < <(compgen -f -X '!*.yml' -- "$cur")
     fi
 }
 
@@ -327,13 +334,13 @@ _homodyne_xla_completion() {
     case $prev in
         --mode)
             local modes="cmc cmc-hpc nlsq auto"
-            COMPREPLY=($(compgen -W "$modes" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$modes" -- "$cur")
             return 0
             ;;
     esac
 
     if [[ $cur == -* ]]; then
-        COMPREPLY=($(compgen -W "$main_opts" -- "$cur"))
+        mapfile -t COMPREPLY < <(compgen -W "$main_opts" -- "$cur")
     fi
 }
 
@@ -349,18 +356,18 @@ _homodyne_post_install_completion() {
     case $prev in
         --shell)
             local shells="bash zsh fish"
-            COMPREPLY=($(compgen -W "$shells" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$shells" -- "$cur")
             return 0
             ;;
         --xla-mode)
             local modes="cmc cmc-hpc nlsq auto"
-            COMPREPLY=($(compgen -W "$modes" -- "$cur"))
+            mapfile -t COMPREPLY < <(compgen -W "$modes" -- "$cur")
             return 0
             ;;
     esac
 
     if [[ $cur == -* ]]; then
-        COMPREPLY=($(compgen -W "$main_opts" -- "$cur"))
+        mapfile -t COMPREPLY < <(compgen -W "$main_opts" -- "$cur")
     fi
 }
 
@@ -374,7 +381,7 @@ _homodyne_cleanup_completion() {
     local main_opts="--help -h --interactive -i --dry-run -n --force -f"
 
     if [[ $cur == -* ]]; then
-        COMPREPLY=($(compgen -W "$main_opts" -- "$cur"))
+        mapfile -t COMPREPLY < <(compgen -W "$main_opts" -- "$cur")
     fi
 }
 
@@ -427,7 +434,7 @@ if [[ -n "$ZSH_VERSION" ]]; then
             '*:config:_files -g "*.yaml" -g "*.yml"'
         )
 
-        _arguments -C $args
+        _arguments -C "${args[@]}"
     }
 
     # Zsh completion for homodyne-config
@@ -443,7 +450,7 @@ if [[ -n "$ZSH_VERSION" ]]; then
             '*:output:_files -g "*.yaml" -g "*.yml"'
         )
 
-        _arguments -C $args
+        _arguments -C "${args[@]}"
     }
 
     # Zsh completion for homodyne-config-xla
@@ -455,7 +462,7 @@ if [[ -n "$ZSH_VERSION" ]]; then
             '--show[Show current XLA configuration]'
         )
 
-        _arguments -C $args
+        _arguments -C "${args[@]}"
     }
 
     # Zsh completion for homodyne-post-install
@@ -470,7 +477,7 @@ if [[ -n "$ZSH_VERSION" ]]; then
             '(--force -f)'{--force,-f}'[Force setup even if not in virtual environment]'
         )
 
-        _arguments -C $args
+        _arguments -C "${args[@]}"
     }
 
     # Zsh completion for homodyne-cleanup
@@ -483,7 +490,7 @@ if [[ -n "$ZSH_VERSION" ]]; then
             '(--force -f)'{--force,-f}'[Skip confirmation and force cleanup]'
         )
 
-        _arguments -C $args
+        _arguments -C "${args[@]}"
     }
 
     # Register completion for all homodyne commands
@@ -581,7 +588,8 @@ homodyne_build() {
 
     # Select method
     PS3="Select analysis method: "
-    select m in "nlsq (primary)" "cmc (uncertainty)" "skip"; do
+    local _menu_choice
+    select _menu_choice in "nlsq (primary)" "cmc (uncertainty)" "skip"; do
         case $REPLY in
             1) run_args+=(--method nlsq); break;;
             2) run_args+=(--method cmc); break;;
