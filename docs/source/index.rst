@@ -119,40 +119,44 @@ Documentation
 .. toctree::
    :maxdepth: 2
    :caption: User Guide
+   :hidden:
 
    user_guide/index
 
 .. toctree::
    :maxdepth: 2
    :caption: Theory & Physics
+   :hidden:
 
    theory/index
 
 .. toctree::
    :maxdepth: 2
    :caption: Configuration
+   :hidden:
 
    configuration/index
 
 .. toctree::
    :maxdepth: 2
    :caption: API Reference
+   :hidden:
 
    api/index
 
 .. toctree::
    :maxdepth: 2
    :caption: Examples
+   :hidden:
 
    examples/index
 
 .. toctree::
    :maxdepth: 2
    :caption: Developer Guide
+   :hidden:
 
    developer/index
-
-----
 
 .. toctree::
    :maxdepth: 1
@@ -162,6 +166,23 @@ Documentation
    installation
    quickstart
    contributing
+
+.. list-table::
+   :widths: 30 70
+   :header-rows: 0
+
+   * - :doc:`user_guide/index`
+     - Installation, CLI workflows, analysis modes, and result interpretation.
+   * - :doc:`theory/index`
+     - Homodyne scattering, correlation functions, transport coefficients, and anti-degeneracy.
+   * - :doc:`configuration/index`
+     - YAML configuration reference for NLSQ, CMC, and data loading.
+   * - :doc:`api/index`
+     - Python API reference (autodoc).
+   * - :doc:`examples/index`
+     - Worked examples for static and laminar flow analyses.
+   * - :doc:`developer/index`
+     - Contributing, architecture, and testing guide.
 
 ----
 
