@@ -152,7 +152,7 @@ Complete template with all available options:
       # Set values from NLSQ results for MCMC
       values: null                      # Example: [1000.0, -1.2, 0.0]
 
-      # Per-angle scaling (v2.4.0 mandatory)
+      # Per-angle scaling (mandatory)
       per_angle_scaling:
         contrast: null                  # Example: [0.05, 0.06, 0.05]
         offset: null                    # Example: [1.0, 0.99, 1.01]
@@ -798,7 +798,7 @@ Recommended workflow for publication-quality results with uncertainty quantifica
 Per-Angle Scaling Details
 --------------------------
 
-Per-angle scaling is **mandatory** in v2.4.0+.
+Per-angle scaling is **mandatory**.
 
 Each scattering angle has unique:
 - Detector sensitivity

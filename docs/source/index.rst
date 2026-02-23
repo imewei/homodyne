@@ -60,7 +60,7 @@ Key Features
 - **Two inference methods** — point-estimate NLSQ (seconds) and full Bayesian
   CMC/NUTS posteriors (minutes), both from the same model.
 - **Anti-degeneracy system** — quantile-based per-angle scaling prevents
-  parameter absorption for laminar flow data (v2.9.0+).
+  parameter absorption for laminar flow data.
 - **Consensus Monte Carlo** — embarrassingly parallel Bayesian inference across
   CPU shards with automatic shard-size selection.
 - **Adaptive sampling** — NUTS warmup/samples scale with dataset size to avoid

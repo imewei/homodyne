@@ -409,7 +409,7 @@ Common JAX Debugging Issues
 
 **Issue**: "RuntimeError: No backend found matching jaxlib_gpu"
 
-**Solution**: CPU-only configuration is correct. JAX v2.3.0+ defaults to CPU.
+**Solution**: CPU-only configuration is correct. JAX defaults to CPU.
 
 **Issue**: Shape mismatches in JIT compiled functions
 

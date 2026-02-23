@@ -48,8 +48,40 @@ Key Differences from NLSQAdapter
      - 3-attempt retry
      - NLSQ native
    * - Per-angle stratification
-     - Angle-stratified chunking (v2.2+)
+     - Angle-stratified chunking
      - Automatic
+
+----
+
+Out-of-Core Routing
+--------------------
+
+When a dataset exceeds the memory threshold (default 75% of RAM), NLSQWrapper
+routes to an out-of-core accumulation solver that processes data in chunks. This
+path has a simplified Levenberg-Marquardt implementation that **lacks**
+anti-degeneracy layers, hierarchical optimization, shear weighting, and adaptive
+regularization.
+
+.. important::
+
+   **Effective parameter count pre-check**: Before memory routing, the wrapper
+   queries the ``per_angle_mode`` and computes the *effective* parameter count.
+   For ``auto`` mode with n_phi ≥ 3, this is 9 (7 physical + 2 averaged scaling)
+   rather than the 53 expanded parameters. This prevents auto_averaged datasets
+   from being unnecessarily routed to the out-of-core path.
+
+   Without this pre-check, memory is overestimated by ~6× (53 vs 9 params),
+   triggering out-of-core for datasets that fit comfortably in RAM.
+
+**Convergence criteria**: The out-of-core solver uses multi-criteria convergence:
+
+- ``xtol = 1e-6``: per-component maximum parameter change
+- ``ftol = 1e-6``: relative cost function change
+
+Both must be satisfied simultaneously. This replaces the previous norm-based
+criterion (``||step||/||params|| < 1e-4``) which was scale-sensitive and produced
+false single-iteration convergence when large-magnitude parameters (e.g.,
+D₀ ~ 19000) dominated the norm.
 
 ----
 

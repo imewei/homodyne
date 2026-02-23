@@ -119,7 +119,7 @@ napoleon_type_aliases = None
 # -- Options for intersphinx extension ---------------------------------------
 _online_intersphinx = {
     "python": ("https://docs.python.org/3", None),
-    "jax": ("https://jax.readthedocs.io/en/latest/", None),
+    "jax": ("https://docs.jax.dev/en/latest/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "numpyro": ("https://num.pyro.ai/en/stable/", None),
     "scipy": ("https://docs.scipy.org/doc/scipy/", None),
@@ -296,6 +296,12 @@ suppress_warnings = [
     "myst.xref_missing",
     "autosummary.import_cycle",
     "toc.not_included",
+]
+
+# -- Options for linkcheck ---------------------------------------------------
+linkcheck_ignore = [
+    r"https://doi\.org/.*",  # DOI redirects block bots (403)
+    r"https://github\.com/imewei/homodyne.*",  # Private repository (404)
 ]
 
 # -- Todo extension ----------------------------------------------------------

@@ -5,7 +5,7 @@ homodyne.optimization.nlsq — Adapter
 ====================================
 
 ``NLSQAdapter`` is the **recommended entry point** for NLSQ optimisation in
-Homodyne v2.11.0+. It wraps the NLSQ package's ``CurveFit`` class with:
+Homodyne. It wraps the NLSQ package's ``CurveFit`` class with:
 
 - Built-in JIT compilation (2–3× speedup for single fits)
 - Model instance caching via ``WeakValueDictionary`` (3–5× speedup for multi-start)

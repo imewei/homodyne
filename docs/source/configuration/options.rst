@@ -261,7 +261,7 @@ Starting values and per-angle scaling:
 - List of floats: Explicit starting values
 - For MCMC: Copy NLSQ results for better convergence
 
-**per_angle_scaling** (mandatory in v2.4.0+):
+**per_angle_scaling** (mandatory):
 
 - contrast: List of scaling factors (one per angle)
 - offset: List of baseline shifts (one per angle)
@@ -490,7 +490,7 @@ Fallback strategy for per-angle optimization:
 - "uniform": Equal weight
 - "n_points": Weight by number of points per angle
 
-Anti-Degeneracy Configuration (v2.17.0)
+Anti-Degeneracy Configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Anti-degeneracy defense for laminar flow fitting with many phi angles:
@@ -655,8 +655,8 @@ Parallel execution backend:
 **name**: Backend for parallel execution
 
 - "auto": Autodetect best available
-- "multiprocessing": Multicore CPU (v2.3.0)
-- "pjit": JAX pjit (for multi-GPU, not available in v2.3.0)
+- "multiprocessing": Multicore CPU
+- "pjit": JAX pjit (multi-GPU)
 - "pbs": PBS HPC submission
 - "slurm": SLURM HPC submission
 
@@ -696,17 +696,17 @@ MCMC settings for each shard:
       num_chains: 2                     # Chains per shard
       subsample_size: "auto"            # Subsampling size
 
-      # Adaptive Sampling (v2.22.0+)
+      # Adaptive Sampling
       adaptive_sampling: true           # Scale warmup/samples by shard size
       max_tree_depth: 10                # NUTS tree depth limit (2^10 = 1024 max leapfrog)
       min_warmup: 100                   # Minimum warmup regardless of scaling
       min_samples: 200                  # Minimum samples regardless of scaling
 
-      # JAX Profiling (v2.22.0+)
+      # JAX Profiling
       enable_jax_profiling: false       # Enable XLA-level profiling
       jax_profile_dir: "./profiles/jax" # Output directory for profiles
 
-Adaptive Sampling (v2.22.0)
+Adaptive Sampling
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Adaptive sampling automatically scales warmup and sample counts based on shard size,
@@ -739,7 +739,7 @@ Scaling formula:
     final_warmup = max(min_warmup_for_params, scaled_warmup)
     final_samples = max(min_samples_for_params, scaled_samples)
 
-JAX Profiling (v2.22.0)
+JAX Profiling
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 XLA-level profiling for diagnosing NUTS performance bottlenecks.
@@ -800,7 +800,7 @@ MCMC convergence diagnostics:
 - KL divergence between shard posteriors
 - Smaller = more consistent subposteriors
 
-Quality Filtering (v2.19.0)
+Quality Filtering
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Shard quality filtering for robust CMC results:

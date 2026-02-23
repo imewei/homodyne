@@ -10,9 +10,9 @@ The :mod:`homodyne.device` module provides CPU device optimization and configura
 Overview
 --------
 
-**CPU-Only Architecture** (v2.3.0+):
+**CPU-Only Architecture**:
 
-GPU support was removed in v2.3.0 to focus on reliable, HPC-optimized CPU execution. The device module provides:
+GPU support was removed to focus on reliable, HPC-optimized CPU execution. The device module provides:
 
 - Automatic CPU device detection and configuration
 - HPC optimization for multi-core CPUs (14-128 cores)
@@ -74,7 +74,7 @@ Configuration Result
 
 The configuration dictionary contains:
 
-- ``device_type``: Always "cpu" (v2.3.0+)
+- ``device_type``: Always "cpu"
 - ``configuration_successful``: Boolean indicating success
 - ``performance_ready``: Boolean indicating HPC optimization
 - ``device_info``: Detailed CPU configuration
@@ -301,39 +301,6 @@ HPC Best Practices
            available_memory_gb=32
        )
 
-Migration from v2.2 (GPU)
--------------------------
-
-**GPU Support Removed** in v2.3.0.
-
-If migrating from v2.2.x with GPU code:
-
-1. **Remove GPU-specific imports**::
-
-       # Old (v2.2)
-       from homodyne.device import configure_gpu
-
-       # New (v2.3)
-       from homodyne.device import configure_optimal_device
-
-2. **Update device configuration**::
-
-       # Old (v2.2)
-       config = configure_gpu()
-
-       # New (v2.3)
-       config = configure_optimal_device()
-
-3. **Remove GPU environment variables**::
-
-       # No longer needed:
-       # CUDA_VISIBLE_DEVICES
-       # JAX_PLATFORMS=gpu
-
-4. **For GPU workloads**: Use homodyne v2.2.1
-
-Refer to the v2.2.x release notes for any additional GPU-related guidance.
-
 Troubleshooting
 ---------------
 
@@ -373,4 +340,4 @@ See Also
 
 - :mod:`homodyne.optimization` - Uses device configuration for optimization
 - :mod:`homodyne.core` - JAX computations on configured device
-- External: `JAX CPU Performance Guide <https://jax.readthedocs.io/en/latest/faq.html#performance>`_
+- External: `JAX CPU Performance FAQ <https://docs.jax.dev/en/latest/faq.html#is-jax-faster-than-numpy>`_

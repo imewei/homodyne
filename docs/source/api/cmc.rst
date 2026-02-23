@@ -41,6 +41,13 @@ strongly recommended.
    Do not set ``max_points_per_shard`` above 100 K. Extremely large shards will
    cause NUTS to time out or exhaust memory.
 
+.. note::
+
+   **Single-shard hard limit**: If a dataset exceeds 100 K points and would run
+   as a single shard (non-CMC path), homodyne automatically falls back to random
+   CMC sharding to prevent NUTS from running :math:`O(n)` leapfrog on the full
+   dataset. This also applies when ``num_shards=1`` is forced.
+
 .. list-table::
    :widths: 25 25 25 25
    :header-rows: 1
@@ -93,6 +100,14 @@ CMCResult
    :undoc-members:
    :show-inheritance:
 
+.. note::
+
+   **ArviZ field mapping**: NumPyro stores NUTS energy as ``potential_energy``
+   but ArviZ ``plot_energy()`` expects ``energy``. The ``CMCResult.inference_data``
+   attribute automatically maps ``potential_energy`` → ``energy`` and replaces dots
+   in ``extra_fields`` keys (e.g., ``adapt_state.step_size`` →
+   ``adapt_state_step_size``) for xarray compatibility.
+
 ----
 
 Per-Angle Mode
@@ -140,7 +155,7 @@ YAML Configuration Reference
          min_points_per_param: 1500       # Minimum data points per parameter
        backend_name: "auto"               # auto | multiprocessing | pjit | pbs
        per_angle_mode: "auto"             # Match NLSQ per_angle_mode
-       combination_method: "consensus_mc" # Recommended
+       combination_method: "robust_consensus_mc"  # Default: MAD-based outlier detection
        min_success_rate: 0.80
        per_shard_mcmc:
          num_warmup: 500

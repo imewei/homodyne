@@ -135,7 +135,7 @@ For non-equilibrium systems under shear:
 Per-Angle Scaling
 ^^^^^^^^^^^^^^^^^
 
-**Mandatory in v2.4.0+**: Each scattering angle has unique optical and detector
+**Mandatory**: Each scattering angle has unique optical and detector
 properties, requiring per-angle scaling parameters.
 
 Total parameters = physical parameters + 2 × number of scattering angles
@@ -171,7 +171,7 @@ NLSQ Configuration:
 - Automatic strategy selection (STANDARD/LARGE/CHUNKED/STREAMING)
 
 CMC Configuration:
-- Consensus Monte Carlo only in v2.4.1+
+- Consensus Monte Carlo
 - Per-shard NUTS sampling
 - Subposterior combination method
 - Convergence diagnostics

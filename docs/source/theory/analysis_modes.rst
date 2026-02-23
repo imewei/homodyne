@@ -264,7 +264,7 @@ Example YAML snippet
 Per-Angle Scaling
 -----------------
 
-Since v2.4.0, per-angle scaling is mandatory for both modes. This accounts for
+Per-angle scaling is mandatory for both modes. This accounts for
 instrumental variations across different detector positions.
 
 Scaling Parameters (Per Angle)
@@ -382,6 +382,6 @@ YAML configuration for laminar flow mode with 3 angles:
        - 0.0       # gamma_dot_t_offset
        - 0.0       # phi0 (degrees)
 
-   # Per-angle scaling is automatically enabled (v2.4.0+)
+   # Per-angle scaling is automatically enabled
 
 See :doc:`../configuration/templates` for complete configuration templates.

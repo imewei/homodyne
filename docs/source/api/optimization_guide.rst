@@ -13,11 +13,11 @@ The :mod:`homodyne.optimization` module provides two complementary optimization 
 Overview
 --------
 
-**Optimization Philosophy** (v2.4.1):
+**Optimization Philosophy**:
 
 - NLSQ as primary method for fast parameter estimation
 - CMC (NumPyro/NUTS) for publication-quality uncertainty quantification
-- CPU-optimized architecture (v2.3.0+)
+- CPU-optimized architecture
 - Dataset size-aware strategy selection
 
 **Method Comparison**:
@@ -85,7 +85,7 @@ Key Features
 
 .. _nlsq-adapter:
 
-NLSQAdapter (v2.11.0+)
+NLSQAdapter
 ~~~~~~~~~~~~~~~~~~~~~~
 
 Modern adapter for NLSQ v0.4+ CurveFit class with model caching and JIT support.
@@ -107,7 +107,7 @@ Key Classes
    homodyne.optimization.nlsq.adapter.ModelCacheKey
    homodyne.optimization.nlsq.adapter.CachedModel
 
-Key Features (v2.11.0)
+Key Features
 ^^^^^^^^^^^^^^^^^^^^^^
 
 **Model Caching (3-5× Multi-Start Speedup)**:
@@ -176,7 +176,7 @@ When to Use Which Adapter
      - Complex workflows, anti-degeneracy
      - Full feature set, streaming support
 
-Memory Management (v2.11.0)
+Memory Management
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Utilities for adaptive memory thresholds and streaming decisions.
@@ -186,7 +186,7 @@ Utilities for adaptive memory thresholds and streaming decisions.
    :undoc-members:
    :show-inheritance:
 
-Parameter Utilities (v2.11.0)
+Parameter Utilities
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Helper functions for parameter handling and per-angle initialization.
@@ -196,7 +196,7 @@ Helper functions for parameter handling and per-angle initialization.
    :undoc-members:
    :show-inheritance:
 
-Parameter Index Mapper (v2.17.0)
+Parameter Index Mapper
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Single source of truth for parameter indices across all anti-degeneracy modes.
@@ -370,7 +370,7 @@ Key Classes
 
    homodyne.optimization.nlsq.strategies.residual_jit.StratifiedResidualFunctionJIT
 
-Key Features (v2.4.0)
+Key Features
 """""""""""""""""""""
 
 - **Static shapes**: Pads chunks to uniform size for JIT compatibility
@@ -409,7 +409,7 @@ Key Classes
 
 .. _nlsq-multistart-optimizer:
 
-Multi-Start Optimization (v2.6.0)
+Multi-Start Optimization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Multi-start optimization explores parameter space from multiple starting points
@@ -597,7 +597,7 @@ CLI Integration
 
 .. _nlsq-cmaes-optimizer:
 
-CMA-ES Global Optimization (v2.15.0)
+CMA-ES Global Optimization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 CMA-ES (Covariance Matrix Adaptation Evolution Strategy) provides robust global
@@ -1213,12 +1213,12 @@ Full YAML configuration for sharding:
          num_samples: 1500
          num_chains: 2
          target_accept_prob: 0.85
-         # Adaptive Sampling (v2.22.0)
+         # Adaptive Sampling
          adaptive_sampling: true           # Scale by shard size
          max_tree_depth: 10                # NUTS tree depth limit
          min_warmup: 100                   # Minimum warmup floor
          min_samples: 200                  # Minimum samples floor
-         # JAX Profiling (v2.22.0)
+         # JAX Profiling
          enable_jax_profiling: false       # XLA-level profiling
          jax_profile_dir: "./profiles/jax"
 
@@ -1227,16 +1227,16 @@ Full YAML configuration for sharding:
          min_per_shard_ess: 100
 
        combination:
-         method: consensus_mc  # Recommended (v2.12.0+)
+         method: robust_consensus_mc  # MAD-based outlier detection (default)
          min_success_rate: 0.90
 
        validation:
          max_per_shard_rhat: 1.1
          min_per_shard_ess: 100
-         max_divergence_rate: 0.10       # Quality filter: exclude shards >10% (v2.19.0)
-         require_nlsq_warmstart: false   # Require NLSQ warm-start (v2.19.0)
+         max_divergence_rate: 0.10       # Quality filter: exclude shards >10%
+         require_nlsq_warmstart: false   # Require NLSQ warm-start
 
-       per_shard_timeout: 3600  # 1 hour max per shard (reduced in v2.19.0)
+       per_shard_timeout: 3600  # 1 hour max per shard (reduced)
        heartbeat_timeout: 600   # 10 min worker heartbeat
 
 **Critical settings for laminar_flow**:
@@ -1246,7 +1246,7 @@ Full YAML configuration for sharding:
 - Keep ``num_warmup`` and ``num_samples`` aligned between ``mcmc`` and ``per_shard_mcmc``
 - Consider ``require_nlsq_warmstart: true`` for production runs (reduces divergences from ~28% to <5%)
 
-**Quality Filtering (v2.19.0)**:
+**Quality Filtering**:
 
 The ``max_divergence_rate`` setting automatically filters out shards with excessive
 divergent transitions before consensus combination:
@@ -1261,7 +1261,7 @@ divergent transitions before consensus combination:
 Shards with divergence rate exceeding this threshold are excluded from the final
 posterior combination, preventing corrupted posteriors from biasing estimates.
 
-**NLSQ Warm-Start Requirement (v2.19.0)**:
+**NLSQ Warm-Start Requirement**:
 
 For laminar_flow mode with 7 parameters spanning 6+ orders of magnitude, cold-start
 CMC runs often show high divergence rates (28%+) and inflated uncertainty. Enable
@@ -1277,7 +1277,7 @@ warm-start requirement for production:
 When enabled, ``fit_mcmc_jax()`` will raise ``ValueError`` if called without
 ``nlsq_result`` or ``initial_values`` for laminar_flow mode
 
-**Adaptive Sampling (v2.22.0)**:
+**Adaptive Sampling**:
 
 Adaptive sampling automatically scales warmup and sample counts based on shard size,
 reducing NUTS overhead by 60-80% for small datasets while maintaining statistical validity.
@@ -1302,7 +1302,7 @@ This optimization was informed by profiling showing that XLA JIT compilation and
 NUTS leapfrog integration dominate runtime (not Python overhead), making sample
 count reduction the most effective optimization.
 
-**JAX Profiling (v2.22.0)**:
+**JAX Profiling**:
 
 XLA-level profiling for diagnosing NUTS performance bottlenecks. Standard Python
 profilers (py-spy, cProfile) cannot see inside JIT-compiled code.
@@ -1363,7 +1363,7 @@ NumPyro model definition for MCMC sampling.
 
 .. _cmc-per-angle-modes:
 
-CMC Per-Angle Modes (v2.18.0)
+CMC Per-Angle Modes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 CMC supports three per-angle modes that control how contrast/offset parameters are handled
@@ -1457,10 +1457,10 @@ Key Functions
 
 .. _cmc-convergence-fixes:
 
-CMC Convergence and Precision Fixes (v2.19.0)
+CMC Convergence and Precision Fixes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-v2.19.0 introduces comprehensive fixes for CMC failures on multi-angle datasets, addressing
+This section documents comprehensive fixes for CMC failures on multi-angle datasets, addressing
 94% shard timeout rates, 28.4% divergence rates, and 33-43x uncertainty inflation observed
 in 3-angle laminar_flow analysis.
 
@@ -1634,7 +1634,7 @@ New functions in ``homodyne.optimization.cmc.diagnostics``:
    )
    # Returns: z_score, uncertainty_ratio, overlap
 
-Configuration Reference (v2.19.0)
+Configuration Reference
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: yaml
@@ -1689,7 +1689,7 @@ Prior Specifications
 - gamma_dot_t_offset: TruncatedNormal(0, 100, low=0)
 - phi0: Uniform(0, 2π)
 
-**Per-Angle Scaling** (mandatory in v2.4.0+):
+**Per-Angle Scaling** (mandatory):
 
 - contrast_i: TruncatedNormal(0.5, 0.3, low=0.1, high=2.0) for each angle i
 - offset_i: TruncatedNormal(1.0, 0.2, low=0.5, high=1.5) for each angle i
@@ -1953,7 +1953,7 @@ PBS Backend
    :undoc-members:
    :show-inheritance:
 
-Anti-Degeneracy Defense System (v2.9.0)
+Anti-Degeneracy Defense System
 ----------------------------------------
 
 The NLSQ module includes a comprehensive anti-degeneracy defense system for laminar flow
@@ -2077,7 +2077,7 @@ Key Classes
    homodyne.optimization.nlsq.anti_degeneracy_controller.AntiDegeneracyConfig
    homodyne.optimization.nlsq.anti_degeneracy_controller.AntiDegeneracyController
 
-NLSQ Configuration (v2.9.0)
+NLSQ Configuration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Configuration dataclasses and utilities for NLSQ optimization.
@@ -2098,7 +2098,7 @@ Key Classes
    homodyne.optimization.nlsq.config.safe_int
    homodyne.optimization.nlsq.config.safe_bool
 
-Configuration Entry Point (v2.14.0)
+Configuration Entry Point
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Use ``NLSQConfig.from_yaml()`` as the single entry point for loading NLSQ configuration:
@@ -2128,7 +2128,7 @@ Configuration Utilities (Deprecated)
 
 .. _nlsq-adapter-base:
 
-NLSQAdapterBase (v2.14.0)
+NLSQAdapterBase
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Abstract base class providing shared functionality for NLSQAdapter and NLSQWrapper.
@@ -2163,7 +2163,7 @@ The ``NLSQAdapterBase`` provides these common methods:
 
 .. _nlsq-validation:
 
-Input and Result Validation (v2.14.0)
+Input and Result Validation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Validation utilities extracted from wrapper.py for independent testing and reuse.
@@ -2207,7 +2207,7 @@ Key Functions
    homodyne.optimization.nlsq.validation.result_validator.validate_covariance
    homodyne.optimization.nlsq.validation.result_validator.validate_result_consistency
 
-Fit Quality Validator (v2.16.0)
+Fit Quality Validator
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Post-optimization quality checks with configurable thresholds.

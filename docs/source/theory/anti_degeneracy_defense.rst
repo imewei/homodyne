@@ -1,8 +1,8 @@
-Anti-Degeneracy Defense System (v2.17.0)
+Anti-Degeneracy Defense System
 ========================================
 
 This section provides comprehensive documentation for the Anti-Degeneracy Defense System
-introduced in Homodyne v2.9.0 and enhanced in v2.17.0 with quantile-based per-angle scaling.
+introduced in Homodyne and enhanced with quantile-based per-angle scaling.
 The system addresses fundamental optimization challenges in laminar flow XPCS analysis
 where structural degeneracy and gradient cancellation prevent accurate parameter estimation.
 
@@ -40,7 +40,7 @@ The Anti-Degeneracy Defense System provides a five-layer solution:
    * - 1
      - Constant/Individual Mode Selection
      - Structural Degeneracy
-     - ENHANCED (v2.17.0)
+     - ENHANCED
      - **High**
    * - 2
      - Hierarchical Optimization
@@ -70,7 +70,7 @@ The Anti-Degeneracy Defense System provides a five-layer solution:
 
 .. note::
 
-   **v2.17.0 Cross-Path Uniformity**: Layer 1 (Constant/Individual Mode) now applies
+   **Cross-Path Uniformity**: Layer 1 (Constant/Individual Mode) now applies
    uniformly across all optimization paths: local NLSQ, multi-start, and CMA-ES.
    Layers 2-5 are specific to local NLSQ where gradient-based optimizations benefit
    from hierarchical alternation, regularization, and gradient monitoring.
@@ -209,7 +209,7 @@ This is the **most important configuration choice** for laminar flow fitting wit
    * - Mode
      - Description
    * - ``auto``
-     - **DEFAULT (v2.17.0+)** For n_phi >= 3: quantile-estimated per-angle scaling is averaged and **optimized** as 9 parameters (7 physical + 2 averaged scaling). For n_phi < 3: falls back to ``individual``. Most robust against degeneracy.
+     - **DEFAULT** For n_phi >= 3: quantile-estimated per-angle scaling is averaged and **optimized** as 9 parameters (7 physical + 2 averaged scaling). For n_phi < 3: falls back to ``individual``. Most robust against degeneracy.
    * - ``constant``
      - Per-angle scaling computed from quantile estimation and **fixed** (not optimized). Result: 7 physical parameters only. Fastest convergence but no scaling optimization.
    * - ``individual``
@@ -219,7 +219,7 @@ This is the **most important configuration choice** for laminar flow fitting wit
 
 .. note::
 
-   **v2.17.0+ Change**: The default ``per_angle_mode`` is ``"auto"``, which for
+   The default ``per_angle_mode`` is ``"auto"``, which for
    datasets with 3+ phi angles uses averaged scaling (``auto_averaged`` internally):
    quantile-estimated contrast/offset are averaged and optimized alongside 7 physical
    parameters (9 total). Explicit ``"constant"`` mode (``fixed_constant`` internally)
@@ -374,7 +374,7 @@ The different modes provide varying degrees of parameter reduction:
 | Constant (fixed): Scaling fixed from quantile estimation, NOT optimized (7 params)
 | Auto averaged: 2 averaged scaling params (contrast + offset) ARE optimized (9 params)
 
-Quantile-Based Scaling Estimation (v2.17.0+)
+Quantile-Based Scaling Estimation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Both ``auto`` and ``constant`` modes use quantile-based estimation to compute per-angle
@@ -424,7 +424,7 @@ For each phi angle independently:
    offset = clip(offset, offset_bounds)
    contrast = clip(contrast, contrast_bounds)
 
-   Step 5: AVERAGE across all phi angles (v2.17.0+)
+   Step 5: AVERAGE across all phi angles
    avg_contrast = mean(contrast_per_angle)
    avg_offset = mean(offset_per_angle)
 
@@ -456,11 +456,11 @@ For each phi angle independently:
      - 0.90
      - 90th percentile for robust ceiling
 
-**9-Parameter Optimization (v2.17.0+)**:
+**9-Parameter Optimization**:
 
 .. code-block:: text
 
-   AUTO (AVERAGED) MODE 9-PARAMETER OPTIMIZATION (v2.17.0+)
+   AUTO (AVERAGED) MODE 9-PARAMETER OPTIMIZATION
    =========================================================
 
    Before optimization:
@@ -484,7 +484,7 @@ For each phi angle independently:
        Expand for output: [contrast..., offset..., physical_opt]
                           (2*n_phi + 7 values for backward compatibility)
 
-   CONSTANT (FIXED) MODE 7-PARAMETER OPTIMIZATION (v2.18.0+)
+   CONSTANT (FIXED) MODE 7-PARAMETER OPTIMIZATION
    ==========================================================
 
    Before optimization:
@@ -563,11 +563,11 @@ Auto/constant modes make multi-start and CMA-ES optimization tractable for many-
 
 .. note::
 
-   **Uniform Anti-Degeneracy (v2.17.0+)**: Both local NLSQ and global optimization
+   **Uniform Anti-Degeneracy**: Both local NLSQ and global optimization
    (CMA-ES, multi-start) now use the same 9-parameter constant mode. This ensures
    consistent behavior across all optimization paths.
 
-Why Constant Mode Works Best (v2.17.0)
+Why Constant Mode Works Best
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 1. **Significant Parameter Reduction**: Only 9 parameters (7 physical + 2 averaged scaling)
@@ -583,7 +583,7 @@ Why Constant Mode Works Best (v2.17.0)
    than least-squares or min/max approaches.
 
 5. **Uniform Across Paths**: Both local NLSQ, multi-start, and CMA-ES global optimization
-   use the same 9-parameter constant mode (v2.17.0+).
+   use the same 9-parameter constant mode.
 
 Why Fourier Mode is Still Useful
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1171,7 +1171,7 @@ Implementation
        print(f"n_weights: {len(weights)}")
        print(f"Weight range: [{min(weights):.3f}, {max(weights):.3f}]")
 
-Cross-Path Uniformity (v2.17.0)
+Cross-Path Uniformity
 -------------------------------
 
 The Anti-Degeneracy System applies across three optimization paths with different
@@ -1251,10 +1251,10 @@ Complete YAML configuration for the Anti-Degeneracy Defense System:
      nlsq:
        # ... existing settings ...
 
-       # Anti-Degeneracy Defense System (v2.17.0+)
+       # Anti-Degeneracy Defense System
        anti_degeneracy:
 
-         # Layer 1: Per-Angle Mode Selection (v2.17.0 defaults)
+         # Layer 1: Per-Angle Mode Selection (defaults)
          per_angle_mode: "auto"            # DEFAULT: selects constant (N>=3) or individual (N<3)
          # per_angle_mode: "constant"      # Explicit: 9-param optimization (2 averaged + 7 physical)
          # per_angle_mode: "fourier"       # Explicit: Fourier reparameterization
@@ -1274,7 +1274,7 @@ Complete YAML configuration for the Anti-Degeneracy Defense System:
          # Layer 3: Adaptive Relative Regularization
          regularization:
            mode: "relative"            # "absolute", "relative", "auto"
-           lambda: 1.0                 # Base lambda (100x higher than v2.8)
+           lambda: 1.0                 # Base lambda (100x higher than previous)
            target_cv: 0.10             # 10% variation target
            target_contribution: 0.10   # 10% of MSE contribution
            max_cv: 0.20                # Hard limit: 20% max variation
@@ -1287,7 +1287,7 @@ Complete YAML configuration for the Anti-Degeneracy Defense System:
            consecutive_triggers: 5     # Must trigger N times
            response: "hierarchical"    # "warn", "hierarchical", "reset", "abort"
 
-         # Layer 5: Shear-Sensitivity Weighting (v2.9.1+)
+         # Layer 5: Shear-Sensitivity Weighting
          shear_weighting:
            enable: true              # Enable angle-dependent loss weighting
            min_weight: 0.3           # Minimum weight for perpendicular angles
@@ -1298,7 +1298,7 @@ Complete YAML configuration for the Anti-Degeneracy Defense System:
 Configuration Options Summary
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. list-table:: Layer 1 Configuration (v2.17.0)
+.. list-table:: Layer 1 Configuration
    :header-rows: 1
    :widths: 25 15 60
 
@@ -1307,7 +1307,7 @@ Configuration Options Summary
      - Description
    * - ``per_angle_mode``
      - "auto"
-     - **DEFAULT CHANGED v2.17.0**: "auto" selects constant (N>=3) or individual (N<3). Options: "auto", "constant", "fourier", "individual"
+     - **DEFAULT**: "auto" selects constant (N>=3) or individual (N<3). Options: "auto", "constant", "fourier", "individual"
    * - ``constant_scaling_threshold``
      - 3
      - Threshold for auto mode: N >= threshold selects constant mode
@@ -1316,7 +1316,7 @@ Configuration Options Summary
      - Number of Fourier harmonics (K) for fourier mode
    * - ``fourier_auto_threshold``
      - 6
-     - Legacy: only used if auto mode selected fourier (pre-v2.17.0 behavior)
+     - Legacy: only used if auto mode selected fourier
 
 .. list-table:: Layer 2 Configuration
    :header-rows: 1
@@ -1347,7 +1347,7 @@ Configuration Options Summary
      - Regularization type: "absolute", "relative", "auto"
    * - ``regularization.lambda``
      - 1.0
-     - Base regularization strength (100× v2.8)
+     - Base regularization strength (100× previous default)
    * - ``regularization.target_cv``
      - 0.10
      - Target coefficient of variation (10%)
@@ -1528,80 +1528,10 @@ The anti-degeneracy system can be disabled for:
          gradient_monitoring:
            enable: false
 
-Migration Guide
----------------
-
-From v2.16.x to v2.17.0
-~~~~~~~~~~~~~~~~~~~~~~~
-
-**Default Behavior Changes**:
-
-1. ``per_angle_mode`` default is now ``"auto"`` (selects constant or individual based on n_phi)
-2. ``"auto"`` mode logic changed: selects ``constant`` (N >= 3) or ``individual`` (N < 3)
-3. ``constant`` mode now optimizes **9 parameters** (7 physical + 2 averaged scaling)
-4. Uniform anti-degeneracy across local NLSQ, multi-start, and CMA-ES paths
-
-**What This Means for Your Fits**:
-
-- Per-angle contrast/offset are computed from data quantiles, **averaged**, then optimized
-- Total of 9 parameters for laminar_flow with n_phi >= 3 (vs 53 previously)
-- Both local and global optimization use the same 9-parameter constant mode
-
-**To Use Full Per-Angle Flexibility** (if needed):
-
-.. code-block:: yaml
-
-   optimization:
-     nlsq:
-       anti_degeneracy:
-         per_angle_mode: "individual"  # Full per-angle optimization (53 params for 23 angles)
-
-**To Use Fourier Mode** (smooth angular variation):
-
-.. code-block:: yaml
-
-   optimization:
-     nlsq:
-       anti_degeneracy:
-         per_angle_mode: "fourier"
-         fourier_order: 2              # 17 params for 23 angles
-
-From v2.8.x to v2.9.0
-~~~~~~~~~~~~~~~~~~~~~
-
-**Default Behavior Changes**:
-
-1. ``group_variance_lambda`` default: 0.01 → 1.0 (100× stronger)
-2. ``per_angle_mode`` default: "independent" → "auto"
-3. ``hierarchical.enable`` default: false → true
-4. New gradient monitoring (enabled by default)
-
-**To Preserve Old Behavior**:
-
-.. code-block:: yaml
-
-   optimization:
-     nlsq:
-       anti_degeneracy:
-         per_angle_mode: "independent"
-         hierarchical:
-           enable: false
-         regularization:
-           lambda: 0.01            # Old default
-         gradient_monitoring:
-           enable: false
-
-**Recommended Migration Path**:
-
-1. Start with v2.17.0 defaults (most robust)
-2. If per-angle variation is physically important, try ``per_angle_mode: "fourier"``
-3. Only use ``per_angle_mode: "individual"`` for n_phi ≤ 3 or special cases
-4. Monitor diagnostics for convergence and parameter recovery
-
 API Reference
 -------------
 
-Parameter Utilities (v2.17.0)
+Parameter Utilities
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. automodule:: homodyne.optimization.nlsq.parameter_utils
