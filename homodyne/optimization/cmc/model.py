@@ -928,9 +928,7 @@ def xpcs_model_reparameterized(
         nlsq_prior_config.get("reparam_values", {}) if nlsq_prior_config else {}
     )
     reparam_uncs = (
-        nlsq_prior_config.get("reparam_uncertainties", {})
-        if nlsq_prior_config
-        else {}
+        nlsq_prior_config.get("reparam_uncertainties", {}) if nlsq_prior_config else {}
     )
 
     if reparam_config.enable_d_ref:

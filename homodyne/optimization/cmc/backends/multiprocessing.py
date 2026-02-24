@@ -259,18 +259,14 @@ def _load_shared_shard_data(shard_ref: dict[str, Any]) -> dict[str, Any]:
 
     for key in _SHARD_ARRAY_KEYS:
         arr_ref = shard_ref[key]
-        shm = mp.shared_memory.SharedMemory(
-            name=arr_ref["shm_name"], create=False
-        )
+        shm = mp.shared_memory.SharedMemory(name=arr_ref["shm_name"], create=False)
         try:
             dtype = np.dtype(arr_ref["dtype"])
             offset = arr_ref["offset"]
             size = arr_ref["size"]
             # Map the full concatenated buffer, then slice this shard's region
             total_elements = len(shm.buf) // dtype.itemsize
-            full_arr = np.ndarray(
-                (total_elements,), dtype=dtype, buffer=shm.buf
-            )
+            full_arr = np.ndarray((total_elements,), dtype=dtype, buffer=shm.buf)
             arr = full_arr[offset : offset + size].copy()
         finally:
             shm.close()
@@ -602,9 +598,7 @@ def _run_shard_worker(
     if rng_key_tuple is not None:
         # Reconstruct JAX PRNG key from raw uint32 data (handles both
         # legacy uint32[2] and typed-key formats via key_data round-trip)
-        rng_key = jax.random.wrap_key_data(
-            jnp.array(rng_key_tuple, dtype=jnp.uint32)
-        )
+        rng_key = jax.random.wrap_key_data(jnp.array(rng_key_tuple, dtype=jnp.uint32))
     else:
         # Legacy behavior: generate key based on shard index
         rng_key = jax.random.PRNGKey(42 + shard_idx)
@@ -1098,9 +1092,7 @@ class MultiprocessingBackend(CMCBackend):
             # serialization overhead through spawn.  Each shard's 5 arrays
             # (data, t1, t2, phi_unique, phi_indices) are stored once;
             # workers reconstruct them via _load_shared_shard_data().
-            shared_shard_refs = shared_mgr.create_shared_shard_arrays(
-                shard_data_list
-            )
+            shared_shard_refs = shared_mgr.create_shared_shard_arrays(shard_data_list)
         except Exception:
             shared_mgr.cleanup()
             raise
@@ -1208,6 +1200,7 @@ class MultiprocessingBackend(CMCBackend):
             last_completion_time = start_time  # Track when last shard completed
             status_log_interval = 300.0  # parent status log every 5 minutes
             last_status_log = start_time
+            shards_launched = 0
             while completed_count < n_shards:
                 # Drain queue first to capture heartbeats and completed shards
                 while True:
@@ -1298,7 +1291,9 @@ class MultiprocessingBackend(CMCBackend):
                         continue
 
                     if run_logger.isEnabledFor(logging.DEBUG):
-                        run_logger.debug(f"Ignoring unexpected queue message: {message}")
+                        run_logger.debug(
+                            f"Ignoring unexpected queue message: {message}"
+                        )
 
                 # Launch new processes up to max workers
                 while len(active_processes) < actual_workers and pending_shards:
@@ -1326,7 +1321,7 @@ class MultiprocessingBackend(CMCBackend):
                     now = time.time()
                     active_processes[shard_idx] = (process, now)
                     last_heartbeat[shard_idx] = now
-                    run_logger.debug(f"Started shard {shard_idx} (pid={process.pid})")
+                    shards_launched += 1
 
                 # Check for completed or timed-out processes
                 for shard_idx, (process, proc_start_time) in list(
@@ -1468,13 +1463,16 @@ class MultiprocessingBackend(CMCBackend):
 
                     _now = time.time()
                     if _now - last_status_log >= status_log_interval:
-                        heartbeat_snapshot = {
-                            k: f"{_now - v:.0f}s"
-                            for k, v in last_heartbeat.items()
+                        # Only show heartbeats for active processes
+                        active_heartbeats = {
+                            k: f"{_now - last_heartbeat.get(k, _now):.0f}s"
+                            for k in active_processes
                         }
                         run_logger.info(
                             f"CMC status: {completed_count}/{n_shards} complete; "
-                            f"active={len(active_processes)}; last_heartbeats={heartbeat_snapshot}"
+                            f"active={len(active_processes)}; "
+                            f"launched={shards_launched}; "
+                            f"heartbeats={active_heartbeats}"
                         )
                         last_status_log = _now
 
@@ -1614,9 +1612,13 @@ class MultiprocessingBackend(CMCBackend):
                 f"{config.min_success_rate_warning:.1%} - consider investigating failed shards"
             )
 
-        for shard_idx, duration in shard_timings:
-            if shard_idx is not None and duration is not None:
-                run_logger.debug(f"Shard {shard_idx} completed in {duration:.2f}s")
+        valid_durations = [d for _, d in shard_timings if d is not None]
+        if valid_durations:
+            run_logger.debug(
+                f"Shard timing summary: n={len(valid_durations)}, "
+                f"min={min(valid_durations):.1f}s, max={max(valid_durations):.1f}s, "
+                f"median={sorted(valid_durations)[len(valid_durations) // 2]:.1f}s"
+            )
 
         # ──────────────────────────────────────────────────────────────────────
         # Jan 2026 FIX: Divergence-based shard quality filter

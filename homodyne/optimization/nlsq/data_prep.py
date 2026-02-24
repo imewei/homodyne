@@ -227,7 +227,7 @@ def validate_initial_params(
         return params
 
     lower, upper = bounds
-    clipped = np.clip(params, lower, upper)
+    clipped: np.ndarray = np.clip(params, lower, upper)
 
     if not np.allclose(params, clipped):
         n_clipped = np.sum(~np.isclose(params, clipped))

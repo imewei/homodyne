@@ -181,9 +181,7 @@ class TestOutOfCoreConvergence:
         cost_change = 0.193  # 19.3% decrease
         ftol = 1e-6
 
-        assert cost_change > ftol, (
-            "19.3% cost improvement should not satisfy ftol"
-        )
+        assert cost_change > ftol, "19.3% cost improvement should not satisfy ftol"
 
     def test_both_criteria_required(self):
         """T090i: Convergence requires BOTH xtol AND ftol."""

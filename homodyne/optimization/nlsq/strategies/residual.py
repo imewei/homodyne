@@ -347,9 +347,7 @@ class StratifiedResidualFunction:
         # after chunks are freed; callers no longer need chunks to exist.
         self._cached_n_chunks = self.n_chunks
         self._cached_chunk_sizes = [len(c.g2) for c in self.chunks]
-        self._cached_chunk_angle_counts = [
-            len(np.unique(c.phi)) for c in self.chunks
-        ]
+        self._cached_chunk_angle_counts = [len(np.unique(c.phi)) for c in self.chunks]
         self._cached_n_angles = self.n_phi
 
         # Run structural validation inline while chunks are still available.
@@ -434,9 +432,7 @@ class StratifiedResidualFunction:
                 axis=0,
             )
 
-        self._vmap_g2_per_angle = jax.vmap(
-            _g2_per_angle, in_axes=(None, 0, 0, 0)
-        )
+        self._vmap_g2_per_angle = jax.vmap(_g2_per_angle, in_axes=(None, 0, 0, 0))
 
         # Scalar scaling: contrast/offset are scalars, only phi varies
         def _g2_scalar(
@@ -460,9 +456,7 @@ class StratifiedResidualFunction:
                 axis=0,
             )
 
-        self._vmap_g2_scalar = jax.vmap(
-            _g2_scalar, in_axes=(None, None, None, 0)
-        )
+        self._vmap_g2_scalar = jax.vmap(_g2_scalar, in_axes=(None, None, None, 0))
 
     def _compute_chunk_residuals_raw(
         self,
@@ -591,9 +585,7 @@ class StratifiedResidualFunction:
         EPS = 1e-10
         valid_sigma = sigma_chunk > EPS
         safe_sigma = jnp.where(valid_sigma, sigma_chunk, 1.0)
-        residuals = jnp.where(
-            valid_sigma, (g2_obs - g2_theory_chunk) / safe_sigma, 0.0
-        )
+        residuals = jnp.where(valid_sigma, (g2_obs - g2_theory_chunk) / safe_sigma, 0.0)
 
         # v2.14.2+: Mask diagonal points (t1 == t2) to zero
         # Diagonal points are autocorrelation artifacts, not physics

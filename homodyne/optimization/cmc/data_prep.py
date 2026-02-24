@@ -165,8 +165,6 @@ def extract_phi_info(phi: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         use_left = np.abs(phi - phi_unique[left]) < np.abs(phi - phi_unique[idx])
         phi_indices = np.where(use_left, left, idx).astype(np.int32)
 
-    logger.debug(f"Extracted {n_phi} unique phi angles: {phi_unique}")
-
     return phi_unique, phi_indices
 
 
@@ -196,8 +194,6 @@ def estimate_noise_scale(data: np.ndarray) -> float:
 
     # Ensure reasonable minimum
     noise_scale = max(noise_scale, 0.001)
-
-    logger.debug(f"Estimated noise scale: {noise_scale:.4f} (median={median:.4f})")
 
     return noise_scale
 
@@ -589,7 +585,10 @@ def shard_data_random(
             )
         )
 
-        logger.debug(f"Shard {i}: {len(shard_data):,} points (random split)")
+    logger.debug(
+        f"Random sharding complete: {num_shards} shards, "
+        f"~{points_per_shard:,} points each"
+    )
 
     return shards
 
@@ -767,11 +766,6 @@ def shard_data_angle_balanced(
                 f"Shard {shard_num}: {len(shard_data):,} points, "
                 f"angle coverage {coverage:.1%} < {min_angle_coverage:.1%} threshold "
                 f"({shard_n_phi}/{n_phi} angles)"
-            )
-        else:
-            logger.debug(
-                f"Shard {shard_num}: {len(shard_data):,} points, "
-                f"angle coverage {coverage:.1%} ({shard_n_phi}/{n_phi} angles)"
             )
 
     # Log summary statistics

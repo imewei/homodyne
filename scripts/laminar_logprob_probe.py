@@ -104,7 +104,7 @@ def build_init_dict(
 
     def to_z(name: str, value: float) -> float:
         s = scalings[name]
-        return (value - s.center) / s.scale
+        return float((value - s.center) / s.scale)
 
     physical = {
         "contrast_0": contrast,

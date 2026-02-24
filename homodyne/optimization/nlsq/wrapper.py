@@ -502,7 +502,9 @@ class OptimizationResult:
         None  # v2.2.1: Stratification diagnostics
     )
     nlsq_diagnostics: dict[str, Any] | None = None
-    sigma_is_default: bool = False  # True when sigma=0.01*ones (no experimental uncertainties)
+    sigma_is_default: bool = (
+        False  # True when sigma=0.01*ones (no experimental uncertainties)
+    )
 
     # Backward compatibility attributes (FR-002)
     @property
@@ -888,9 +890,7 @@ class NLSQWrapper(NLSQAdapterBase):
         if trust_region_scale <= 0:
             trust_region_scale = 1.0
         x_scale_override = nlsq_settings.get("x_scale")
-        x_scale_value = (
-            x_scale_override if x_scale_override is not None else "jac"
-        )
+        x_scale_value = x_scale_override if x_scale_override is not None else "jac"
         x_scale_map_config = normalize_x_scale_map(nlsq_settings.get("x_scale_map"))
         diagnostics_cfg = nlsq_settings.get("diagnostics", {})
         diagnostics_enabled = diagnostics_enabled or bool(
@@ -1181,9 +1181,7 @@ class NLSQWrapper(NLSQAdapterBase):
                         f"(expanded: {actual_n_params})"
                     )
 
-            strategy_recheck = select_nlsq_strategy(
-                n_total_points, effective_n_params
-            )
+            strategy_recheck = select_nlsq_strategy(n_total_points, effective_n_params)
 
             logger.info(
                 f"Strategy re-check (with {effective_n_params} effective params, "
@@ -4855,7 +4853,9 @@ class NLSQWrapper(NLSQAdapterBase):
             # Perturb a physical parameter by 1% (not contrast/offset scaling).
             # In auto_averaged mode, params = [contrast, offset, D0, ...], so
             # the first physical param is at index 2.  In other modes, index 0.
-            phys_idx = 2 if effective_per_angle_scaling and len(initial_params) > 2 else 0
+            phys_idx = (
+                2 if effective_per_angle_scaling and len(initial_params) > 2 else 0
+            )
             params_test = np.array(initial_params, copy=True)
             params_test[phys_idx] *= 1.01  # 1% perturbation
             residuals_1 = residual_fn(params_test)

@@ -259,11 +259,13 @@ if HAS_JAX:
         # Compute diagonal values directly from side_band slices (no scatter ops):
         # edges get one neighbor, interior points get average of two neighbors.
         # This replaces 2 scatter-add ops + 1 division on a zeros array.
-        diag_val = jnp.concatenate([
-            side_band[:1],
-            (side_band[:-1] + side_band[1:]) * 0.5,
-            side_band[-1:],
-        ])
+        diag_val = jnp.concatenate(
+            [
+                side_band[:1],
+                (side_band[:-1] + side_band[1:]) * 0.5,
+                side_band[-1:],
+            ]
+        )
 
         # Replace diagonal with computed values (single scatter write)
         diag_indices = jnp.diag_indices(size)

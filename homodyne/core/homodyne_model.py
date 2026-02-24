@@ -217,11 +217,11 @@ class HomodyneModel:
             self.t1_grid,
             self.t2_grid,
             phi_angles_jax,
-            q_factor,    # Pre-computed at init
-            sinc_factor, # Pre-computed at init
+            q_factor,  # Pre-computed at init
+            sinc_factor,  # Pre-computed at init
             contrast,
             offset,
-            self.dt,     # Time step from experimental configuration
+            self.dt,  # Time step from experimental configuration
         )
 
         logger.debug(

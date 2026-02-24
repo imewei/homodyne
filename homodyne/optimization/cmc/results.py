@@ -267,7 +267,9 @@ class CMCResult:
             _max_cov_samples = 10_000
             if all_samples.shape[0] > _max_cov_samples:
                 rng = np.random.default_rng(seed=0)
-                idx = rng.choice(all_samples.shape[0], size=_max_cov_samples, replace=False)
+                idx = rng.choice(
+                    all_samples.shape[0], size=_max_cov_samples, replace=False
+                )
                 covariance = np.cov(all_samples[idx], rowvar=False)
             else:
                 covariance = np.cov(all_samples, rowvar=False)
@@ -591,7 +593,10 @@ def compute_fitted_c2(
     batched_params = np.stack(
         [
             np.array(
-                [result.samples[name][chain_indices[i], within_chain_indices[i]] for name in param_names]
+                [
+                    result.samples[name][chain_indices[i], within_chain_indices[i]]
+                    for name in param_names
+                ]
             )
             for i in range(n_posterior_samples)
         ]
@@ -600,7 +605,12 @@ def compute_fitted_c2(
     batched_contrasts = np.stack(
         [
             np.array(
-                [result.samples[f"contrast_{j}"][chain_indices[i], within_chain_indices[i]] for j in range(n_phi)]
+                [
+                    result.samples[f"contrast_{j}"][
+                        chain_indices[i], within_chain_indices[i]
+                    ]
+                    for j in range(n_phi)
+                ]
             )
             for i in range(n_posterior_samples)
         ]
@@ -609,7 +619,12 @@ def compute_fitted_c2(
     batched_offsets = np.stack(
         [
             np.array(
-                [result.samples[f"offset_{j}"][chain_indices[i], within_chain_indices[i]] for j in range(n_phi)]
+                [
+                    result.samples[f"offset_{j}"][
+                        chain_indices[i], within_chain_indices[i]
+                    ]
+                    for j in range(n_phi)
+                ]
             )
             for i in range(n_posterior_samples)
         ]
@@ -629,7 +644,7 @@ def compute_fitted_c2(
     # Apply per-angle contrast/offset scaling for each sample.
     # batched_contrasts[:, phi_indices] -> (n_posterior_samples, n_points)
     sample_contrasts_mapped = batched_contrasts[:, phi_indices]  # (S, N)
-    sample_offsets_mapped = batched_offsets[:, phi_indices]      # (S, N)
+    sample_offsets_mapped = batched_offsets[:, phi_indices]  # (S, N)
 
     # Gather the right phi row per data point.
     # phi_indices is (n_points,); combine with a point index to select from dim-2.
@@ -638,7 +653,8 @@ def compute_fitted_c2(
     # shape: (n_posterior_samples, n_points)
 
     c2_samples_arr = np.array(
-        sample_contrasts_mapped * np.array(batched_g1_at_phi) ** 2 + sample_offsets_mapped
+        sample_contrasts_mapped * np.array(batched_g1_at_phi) ** 2
+        + sample_offsets_mapped
     )  # (n_posterior_samples, n_points)
     c2_fitted_std = np.std(c2_samples_arr, axis=0)
 

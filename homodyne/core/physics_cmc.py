@@ -183,7 +183,7 @@ def _compute_g1_diffusion_from_idx(
     # Use jnp.where instead of jnp.maximum to preserve gradients when D(t) → 0.
     # jnp.maximum kills gradients (d/dx = 0) below the threshold, causing NUTS
     # divergences from zero momentum updates during leapfrog integration.
-    D_raw = D0 * (time_safe ** alpha) + D_offset
+    D_raw = D0 * (time_safe**alpha) + D_offset
     D_grid = jnp.where(D_raw > 1e-10, D_raw, 1e-10)
     D_cumsum = _trapezoid_cumsum(D_grid)
 
@@ -240,7 +240,10 @@ def _compute_g1_shear_from_idx(
         return jnp.ones((n_phi_unique, n_points))
 
     gamma_dot_0, beta, gamma_dot_offset, phi0 = (
-        params[3], params[4], params[5], params[6],
+        params[3],
+        params[4],
+        params[5],
+        params[6],
     )
 
     # Compute gamma(t) on the safe time grid.
@@ -249,7 +252,7 @@ def _compute_g1_shear_from_idx(
     time_safe_cmc = jnp.where(time_safe == 0.0, dt_floor, time_safe)
     # Use jnp.where instead of jnp.maximum to preserve gradients when γ̇(t) → 0.
     # See D_grid comment above for rationale.
-    gamma_raw = gamma_dot_0 * (time_safe_cmc ** beta) + gamma_dot_offset
+    gamma_raw = gamma_dot_0 * (time_safe_cmc**beta) + gamma_dot_offset
     gamma_grid = jnp.where(gamma_raw > 1e-10, gamma_raw, 1e-10)
     gamma_cumsum = _trapezoid_cumsum(gamma_grid)
 
@@ -260,12 +263,12 @@ def _compute_g1_shear_from_idx(
     )
 
     # Vectorised over unique phi angles
-    angle_diff = jnp.deg2rad(phi0 - phi_unique)       # (P,)
-    cos_term   = jnp.cos(angle_diff)                   # (P,)
+    angle_diff = jnp.deg2rad(phi0 - phi_unique)  # (P,)
+    cos_term = jnp.cos(angle_diff)  # (P,)
     phase = sinc_prefactor * cos_term[:, None] * gamma_integral[None, :]  # (P, N)
 
     sinc_val = safe_sinc(phase)
-    result: jnp.ndarray = sinc_val ** 2  # (P, N)
+    result: jnp.ndarray = sinc_val**2  # (P, N)
     return result
 
 

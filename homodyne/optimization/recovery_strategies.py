@@ -153,7 +153,8 @@ class RecoveryStrategyApplicator:
                 range_width = (upper - lower) * strategy_param
                 new_lower = center - range_width / 2
                 new_upper = center + range_width / 2
-                return np.clip(params, new_lower, new_upper)
+                result: np.ndarray = np.clip(params, new_lower, new_upper)
+                return result
             return params.copy()
 
         elif strategy_name == "rescale_data":
