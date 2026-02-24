@@ -9,118 +9,16 @@ ______________________________________________________________________
 
 ## [Unreleased]
 
-### CI/CD Modernization and Code Quality
-
-Modernizes all GitHub Actions workflows to match the current codebase (uv, Python 3.13,
-ruff-only formatting, CPU-only architecture) and applies strict typing fixes across
-multiple modules.
-
-#### Changed
-
-**CI/CD workflows (continued hardening):**
-
-- **ci(ci.yml)**: Integrate shellcheck into lint job for `completion.sh` validation; add
-  regression and API compatibility test steps to the test matrix; increase test timeout
-  to 30 minutes; drop Windows from CI matrix (Linux + macOS only)
-
-- **ci(quality.yml)**: Add shellcheck job for shell script linting; include shellcheck
-  result in quality summary dashboard; remove code complexity job (radon/xenon)
-
-- **fix(ci)**: Resolve CI failures from hardcoded paths in `test_cli_core.py` and
-  `_version.py` formatting edge case in `pyproject.toml`; make memory routing test
-  CI-portable with fixed threshold instead of machine-dependent value
-
-**CI/CD workflows (`.github/workflows/`):**
-
-- **ci(workflows)**: Migrate all four workflows from `pip` to `uv` with
-  `astral-sh/setup-uv@v6` and `uv sync`/`uv run` for dependency management and command
-  execution
-
-- **ci(ci.yml)**: Expand test matrix to Python 3.12 + 3.13 (matching pyproject.toml
-  classifiers); add `defaults: run: shell: bash` on test job to fix Windows runner
-  compatibility (PowerShell doesn't support `\` line continuations); remove `develop`
-  branch trigger; remove GPU test job (CPU-only project); remove duplicate docs job
-  (handled by `docs.yml`); replace `black` with `ruff format`; update `ruff` to
-  `>=0.15.2`; set `JAX_ENABLE_X64=1` env; bump `codecov-action` to v5; add explicit
-  `permissions: contents: read`; fix build job wheel smoke test to create isolated venv
-  via `uv venv .venv-test` + `VIRTUAL_ENV=` (was failing with "No virtual environment
-  found" since no `uv sync` runs in the build job)
-
-- **ci(quality.yml)**: Use `mypy --config-file=pyproject.toml` instead of
-  `--ignore-missing-imports`; use `uvx bandit` instead of installing bandit separately
-  (was not in dev deps — would fail); use `uvx` for pip-audit, radon, xenon (avoids
-  unpinned pip installs); add explicit `permissions: contents: read`; fix
-  `uvx pip-audit` to audit actual project dependencies via
-  `uv export | uvx pip-audit -r` (was scanning ephemeral env with only 28 self-deps);
-  remove `continue-on-error` from mypy step so type-check failures show in quality
-  summary dashboard; remove `|| true` from xenon so complexity gate (`--max-absolute B`)
-  actually enforces thresholds
-
-- **ci(docs.yml)**: Fix artifact paths from `docs/_build/` to `docs/build/` (matching
-  Makefile `BUILDDIR = build`); replace `pip install -r docs/requirements.txt` with
-  `uv sync --extra docs`; add `timeout-minutes: 10`; upgrade from `ubuntu-22.04` to
-  `ubuntu-latest`; remove Surge preview deployment and `pylint`/`pydocstyle` lint job
-  (not project dependencies); split into `build` + `comment` jobs to confine
-  `pull-requests: write` to the comment job only (build job runs third-party Sphinx
-  extensions under read-only permissions); PR comment now runs with `always()` so build
-  failures are reported instead of silently skipped
-
-- **ci(release.yml)**: Move permissions from workflow-level to per-job declarations
-  (least-privilege: only `publish-pypi` gets `id-token: write`, only `github-release`
-  gets `contents: write`); use random heredoc delimiter for `GITHUB_OUTPUT` changelog;
-  fix PREVIOUS_TAG to use `git tag --sort=-v:refname` instead of fragile `HEAD^`; remove
-  malformed single-ref compare URL; bump `softprops/action-gh-release` from v1 to v2;
-  pass `github.ref_name`/`inputs.version` via `env:` for injection safety; replace
-  `uv run pip install` with `uvx`; restrict version regex to `vX.Y.Z` only (no
-  pre-release) to match `setuptools_scm` `tag_regex` — prevents silent version
-  corruption where a pre-release tag publishes a `devN` wheel; SHA-pin
-  `pypa/gh-action-pypi-publish` and `softprops/action-gh-release` to specific commit
-  digests for supply-chain safety; move `CURRENT_TAG` to `env:` block for
-  defense-in-depth consistency
-
-**Code quality:**
-
-- **refactor(typing)**: Add explicit `np.ndarray` type annotations for `np.clip` return
-  values to satisfy mypy strict mode (`nlsq/data_prep.py`, `recovery_strategies.py`)
-
-- **refactor(typing)**: Type `save_dict` as `dict[str, Any]` to prevent mypy overload
-  conflict with numpy's `savez_compressed` signature (`cli/commands.py`)
-
-- **refactor(typing)**: Use `importlib.import_module` for legacy `jax.lib.xla_bridge`
-  fallback to avoid static attribute check across different mypy environments
-  (`device/config.py`)
-
-- **refactor(typing)**: Wrap arithmetic return in `float()` to resolve `Any` return type
-  from untyped dict values (`scripts/laminar_logprob_probe.py`)
-
-- **style**: Enforce strict ruff formatting and typing across homodyne modules, config
-  templates, and test files
-
-**Documentation:**
-
-- **docs**: Restructure index.rst with `hidden` toctree directive and `list-table`
-  layout
-
-- **docs**: Remove deprecated version tags from Sphinx config and fix broken linkcheck
-  targets
-
-**Package:**
-
-- **chore**: Export `HAS_DATA` from `homodyne.__init__` for optional data availability
-  checks
-
-- **chore(config)**: Reformat YAML templates and refine config validation parameter
-  lists
-
 ______________________________________________________________________
 
-## [2.22.2] - 2026-02-22
+## [2.22.2] - 2026-02-24
 
-### Performance, Reliability, and Out-of-Core Routing
+### Performance, Reliability, Out-of-Core Routing, and CI/CD Modernization
 
 Performance optimization release with shared-memory shard transport, LPT scheduling, and
-persistent JIT caching for CMC; plus critical NLSQ out-of-core routing fix and broad
-reliability hardening across both optimization backends.
+persistent JIT caching for CMC; critical NLSQ out-of-core routing fix and broad
+reliability hardening across both optimization backends; plus comprehensive CI/CD
+modernization (uv, Python 3.13, ruff-only formatting) and strict typing fixes.
 
 #### Performance
 
@@ -301,6 +199,101 @@ reliability hardening across both optimization backends.
   measure `.nbytes` instead of RSS)
 - **fix(tests)**: Use ArviZ `energy` field name instead of `potential_energy`
 - **chore(tests)**: Add `regression` pytest marker and suppress fork/dt warnings
+
+**CI/CD workflows (continued hardening):**
+
+- **ci(ci.yml)**: Integrate shellcheck into lint job for `completion.sh` validation; add
+  regression and API compatibility test steps to the test matrix; increase test timeout
+  to 30 minutes; drop Windows from CI matrix (Linux + macOS only)
+
+- **ci(quality.yml)**: Add shellcheck job for shell script linting; include shellcheck
+  result in quality summary dashboard; remove code complexity job (radon/xenon)
+
+- **fix(ci)**: Resolve CI failures from hardcoded paths in `test_cli_core.py` and
+  `_version.py` formatting edge case in `pyproject.toml`; make memory routing test
+  CI-portable with fixed threshold instead of machine-dependent value
+
+**CI/CD workflows (`.github/workflows/`):**
+
+- **ci(workflows)**: Migrate all four workflows from `pip` to `uv` with
+  `astral-sh/setup-uv@v6` and `uv sync`/`uv run` for dependency management and command
+  execution
+
+- **ci(ci.yml)**: Expand test matrix to Python 3.12 + 3.13 (matching pyproject.toml
+  classifiers); add `defaults: run: shell: bash` on test job to fix Windows runner
+  compatibility (PowerShell doesn't support `\` line continuations); remove `develop`
+  branch trigger; remove GPU test job (CPU-only project); remove duplicate docs job
+  (handled by `docs.yml`); replace `black` with `ruff format`; update `ruff` to
+  `>=0.15.2`; set `JAX_ENABLE_X64=1` env; bump `codecov-action` to v5; add explicit
+  `permissions: contents: read`; fix build job wheel smoke test to create isolated venv
+  via `uv venv .venv-test` + `VIRTUAL_ENV=` (was failing with "No virtual environment
+  found" since no `uv sync` runs in the build job)
+
+- **ci(quality.yml)**: Use `mypy --config-file=pyproject.toml` instead of
+  `--ignore-missing-imports`; use `uvx bandit` instead of installing bandit separately
+  (was not in dev deps — would fail); use `uvx` for pip-audit, radon, xenon (avoids
+  unpinned pip installs); add explicit `permissions: contents: read`; fix
+  `uvx pip-audit` to audit actual project dependencies via
+  `uv export | uvx pip-audit -r` (was scanning ephemeral env with only 28 self-deps);
+  remove `continue-on-error` from mypy step so type-check failures show in quality
+  summary dashboard; remove `|| true` from xenon so complexity gate (`--max-absolute B`)
+  actually enforces thresholds
+
+- **ci(docs.yml)**: Fix artifact paths from `docs/_build/` to `docs/build/` (matching
+  Makefile `BUILDDIR = build`); replace `pip install -r docs/requirements.txt` with
+  `uv sync --extra docs`; add `timeout-minutes: 10`; upgrade from `ubuntu-22.04` to
+  `ubuntu-latest`; remove Surge preview deployment and `pylint`/`pydocstyle` lint job
+  (not project dependencies); split into `build` + `comment` jobs to confine
+  `pull-requests: write` to the comment job only (build job runs third-party Sphinx
+  extensions under read-only permissions); PR comment now runs with `always()` so build
+  failures are reported instead of silently skipped
+
+- **ci(release.yml)**: Move permissions from workflow-level to per-job declarations
+  (least-privilege: only `publish-pypi` gets `id-token: write`, only `github-release`
+  gets `contents: write`); use random heredoc delimiter for `GITHUB_OUTPUT` changelog;
+  fix PREVIOUS_TAG to use `git tag --sort=-v:refname` instead of fragile `HEAD^`; remove
+  malformed single-ref compare URL; bump `softprops/action-gh-release` from v1 to v2;
+  pass `github.ref_name`/`inputs.version` via `env:` for injection safety; replace
+  `uv run pip install` with `uvx`; restrict version regex to `vX.Y.Z` only (no
+  pre-release) to match `setuptools_scm` `tag_regex` — prevents silent version
+  corruption where a pre-release tag publishes a `devN` wheel; SHA-pin
+  `pypa/gh-action-pypi-publish` and `softprops/action-gh-release` to specific commit
+  digests for supply-chain safety; move `CURRENT_TAG` to `env:` block for
+  defense-in-depth consistency
+
+**Typing and code quality:**
+
+- **refactor(typing)**: Add explicit `np.ndarray` type annotations for `np.clip` return
+  values to satisfy mypy strict mode (`nlsq/data_prep.py`, `recovery_strategies.py`)
+
+- **refactor(typing)**: Type `save_dict` as `dict[str, Any]` to prevent mypy overload
+  conflict with numpy's `savez_compressed` signature (`cli/commands.py`)
+
+- **refactor(typing)**: Use `importlib.import_module` for legacy `jax.lib.xla_bridge`
+  fallback to avoid static attribute check across different mypy environments
+  (`device/config.py`)
+
+- **refactor(typing)**: Wrap arithmetic return in `float()` to resolve `Any` return type
+  from untyped dict values (`scripts/laminar_logprob_probe.py`)
+
+- **style**: Enforce strict ruff formatting and typing across homodyne modules, config
+  templates, and test files
+
+**Documentation (additional):**
+
+- **docs**: Restructure index.rst with `hidden` toctree directive and `list-table`
+  layout
+
+- **docs**: Remove deprecated version tags from Sphinx config and fix broken linkcheck
+  targets
+
+**Package:**
+
+- **chore**: Export `HAS_DATA` from `homodyne.__init__` for optional data availability
+  checks
+
+- **chore(config)**: Reformat YAML templates and refine config validation parameter
+  lists
 
 ______________________________________________________________________
 
