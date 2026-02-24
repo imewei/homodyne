@@ -1,677 +1,66 @@
-# Homodyne 2.22: CPU-Optimized JAX-First XPCS Analysis
+# Homodyne
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-2.22.2-green.svg)](#)
 [![Documentation](https://img.shields.io/badge/docs-sphinx-blue.svg)](https://homodyne.readthedocs.io)
 [![ReadTheDocs](https://readthedocs.org/projects/homodyne/badge/?version=latest)](https://homodyne.readthedocs.io/en/latest/)
-[![GitHub Actions](https://github.com/imewei/homodyne/actions/workflows/docs.yml/badge.svg)](https://github.com/imewei/homodyne/actions/workflows/docs.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.1073/pnas.2401162121.svg)](https://doi.org/10.1073/pnas.2401162121)
 
-## 🚀 **What's New in v2.22.2**
-
-### Performance, Reliability, and Out-of-Core Routing
-
-**Performance and reliability release** with shared-memory shard transport, LPT scheduling,
-persistent JIT caching for CMC, and a critical NLSQ out-of-core routing fix.
-
-**Key Changes:**
-
-- **fix(nlsq)**: Out-of-core routing now bases memory estimation on effective parameter
-  count (9 for auto_averaged) instead of expanded count (53), preventing unnecessary
-  bypass of anti-degeneracy defenses
-- **perf(cmc)**: Shared-memory shard transport eliminates per-process serialization;
-  packed into 5 segments regardless of shard count
-- **perf(cmc)**: Noise-weighted LPT scheduling dispatches expensive shards first,
-  minimizing tail latency
-- **perf(cmc)**: Persistent JIT compilation cache via `jax.config.update()` — first
-  worker compiles, subsequent workers load from disk (~10s saved per CMC run)
-- **perf(nlsq)**: Free per-chunk data after concatenation (~160+ MB for 10M datasets)
-- **fix(nlsq)**: Multi-criteria convergence (xtol + ftol) replaces scale-sensitive
-  norm-based check in out-of-core solver
-- **fix(physics)**: Gradient-safe `jnp.where` floors across NLSQ/NUTS hot paths
-
-See [CHANGELOG](CHANGELOG.md#2222---2026-02-22) for complete details.
-
-______________________________________________________________________
-
-## 🚀 **What's New in v2.19.0**
-
-### CMC Convergence and Precision Fixes
-
-**Major release addressing catastrophic CMC failures** on multi-angle datasets.
-Previously, 3-angle laminar_flow analysis showed 94% shard timeout, 28.4% divergence
-rate, and 33-43x uncertainty inflation compared to NLSQ.
-
-**Key Fixes:**
-
-- **Angle-aware shard sizing**: Automatic scaling based on n_phi (30% for n_phi≤3, up to
-  100%)
-- **Angle-balanced sharding**: Ensures proportional angle coverage per shard (80%
-  minimum)
-- **NLSQ warm-start priors**: TruncatedNormal priors centered on NLSQ estimates
-- **Early abort mechanism**: Terminates if >50% of first 10 shards fail
-- **NUTS convergence**: Elevated target_accept_prob to 0.9 for laminar_flow
-
-**Performance Impact:**
-
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| Shard success rate | 6% | >90% | 15x |
-| Divergence rate | 28.4% | \<5% | 5.7x |
-| Uncertainty ratio vs NLSQ | 33-43x | \<5x | 7-9x |
-
-**Configuration:**
-
-```yaml
-optimization:
-  cmc:
-    sharding:
-      max_points_per_shard: "auto"  # Angle-aware scaling
-      strategy: "angle_balanced"    # Ensure coverage per shard
-    sampler:
-      target_accept_prob: 0.9       # Higher for multi-scale
-    per_angle_mode: "auto"               # Match NLSQ "auto" mode
-```
-
-**NLSQ Warm-Start Usage:**
-
-```python
-from homodyne.optimization.nlsq import fit_nlsq_jax
-from homodyne.optimization.cmc import fit_mcmc_jax
-
-# Step 1: Run NLSQ
-nlsq_result = fit_nlsq_jax(data, config)
-
-# Step 2: Run CMC with NLSQ warm-start
-cmc_result = fit_mcmc_jax(data, config, nlsq_result=nlsq_result)
-```
-
-See [CHANGELOG](CHANGELOG.md#2190---2026-01-23) for complete details.
-
-______________________________________________________________________
-
-## 🚀 **What's New in v2.18.0**
-
-### CMC Per-Angle Mode Parity with NLSQ
-
-**Unified anti-degeneracy system** across NLSQ and CMC optimization backends.
-
-**Key Features:**
-
-- **CMC per-angle modes**: `auto`, `constant`, and `individual` modes matching NLSQ
-  anti-degeneracy
-- **85% parameter reduction**: For n_phi=23 laminar_flow (54 → 8 or 10 params)
-- **Shared scaling utilities**: New `homodyne.core.scaling_utils` module for unified
-  quantile-based estimation
-- **NLSQ mode refinement**: `auto` → `auto_averaged` (9 params) vs explicit `constant` →
-  `fixed_constant` (7 params)
-
-**Mode Semantics:**
-
-| Mode | CMC Params (laminar_flow) | Scaling Handling |
-|------|---------------------------|------------------|
-| `auto` (n_phi ≥ 3) | 10 (2 averaged + 7 physical + σ) | Sampled single contrast/offset |
-| `constant` | 8 (7 physical + σ) | Fixed per-angle from quantiles |
-| `individual` | 54 (46 per-angle + 7 physical + σ) | Sampled per-angle |
-
-**Configuration:**
-
-```yaml
-optimization:
-  cmc:
-    per_angle_mode: "auto"           # "auto", "constant", "individual"
-    constant_scaling_threshold: 3    # Auto uses constant when n_phi >= threshold
-```
-
-See
-[CMC Per-Angle Modes Documentation](docs/source/api/optimization_guide.rst#cmc-per-angle-modes)
-for details.
-
-______________________________________________________________________
-
-## 🚀 **What's New in v2.17.0**
-
-### Quantile-Based Per-Angle Scaling
-
-**Improved parameter initialization** for robust NLSQ optimization in laminar flow mode.
-
-**Key Features:**
-
-- **Quantile-based initialization**: Per-angle contrast/offset computed using robust
-  quantile statistics
-- **Constant mode integration**: Anti-degeneracy constant mode now fully integrated with
-  CMA-ES
-- **Parameter bounds fix**: Proper handling of per-angle parameter names in bounds
-  lookup
-- **Import fixes**: Resolved broken internal module imports
-
-**Configuration:**
-
-```yaml
-optimization:
-  nlsq:
-    anti_degeneracy:
-      per_angle_mode: "auto"       # Default: averaged scaling, 9 params (N≥3)
-      # per_angle_mode: "constant" # Fixed scaling from quantiles, 7 params
-```
-
-See [Anti-Degeneracy Defense Documentation](docs/source/theory/anti_degeneracy_defense.rst)
-for details.
-
-______________________________________________________________________
-
-## 🚀 **What's New in v2.16.0**
-
-### CMA-ES Configuration Enhancements and Visualization Fixes
-
-**Key Features:**
-
-- **CMA-ES popsize configuration**: `cmaes_popsize` field now wires through to override
-  auto-computed value
-- **Adaptive color scaling**: Combined data range for C2 heatmaps eliminates block
-  artifacts
-- **Analysis mode fix**: `AnalysisSummaryLogger` now correctly shows configured analysis
-  mode
-
-See [CHANGELOG](CHANGELOG.md#2160---2026-01-15) for complete details.
-
-______________________________________________________________________
-
-## 🚀 **What's New in v2.14.0**
-
-### Architecture Refactoring and Config Consolidation
-
-**Improved code organization** and **streamlined configuration** for better
-maintainability.
-
-**Key Features:**
-
-- **NLSQAdapterBase**: Abstract base class providing shared functionality for
-  NLSQAdapter and NLSQWrapper
-- **Validation Utilities**: Extracted `InputValidator` and `ResultValidator` for
-  reusable validation
-- **Config Consolidation**: `NLSQConfig.from_yaml()` as single entry point for
-  configuration
-- **Safe Type Utilities**: `safe_float`, `safe_int`, `safe_bool` in config.py with
-  deprecation warnings for config_utils.py
-
-**Quick Usage:**
-
-```python
-from homodyne.optimization.nlsq.config import NLSQConfig
-
-# Single entry point for YAML config
-config = NLSQConfig.from_yaml("config.yaml")
-
-# Access typed configuration
-print(f"Tolerance: {config.tolerance}")
-print(f"Max iterations: {config.max_iterations}")
-```
-
-**New Modules:**
-
-- `homodyne.optimization.nlsq.adapter_base` - Abstract base class
-- `homodyne.optimization.nlsq.validation` - Input/result validators
-
-See [API Reference](docs/source/api/optimization_guide.rst#nlsq-adapter-base) for details.
-
-______________________________________________________________________
-
-## 🚀 **What's New in v2.11.0**
-
-### NLSQAdapter with Model Caching & Performance Optimization
-
-**3-5× speedup for multi-start optimization** through intelligent model caching.
-
-**Key Features:**
-
-- **Model Caching**: Avoid redundant model creation during multi-start optimization
-- **LRU Eviction**: 64-entry cache with automatic eviction of oldest entries
-- **Automatic Fallback**: NLSQAdapter → NLSQWrapper on failure
-- **Meshgrid Cache**: Increased from 16 to 64 entries for 23-angle datasets
-- **Cache Monitoring**: `get_cache_stats()` and `clear_model_cache()` utilities
-
-**Quick Usage:**
-
-```python
-from homodyne.optimization.nlsq import fit_nlsq_jax, get_cache_stats
-
-# v2.11.0+: use_adapter=True is the new default
-result = fit_nlsq_jax(data, config)
-
-# Check cache performance
-stats = get_cache_stats()
-print(f"Cache hit rate: {stats['hits'] / (stats['hits'] + stats['misses']):.1%}")
-```
-
-**Configuration:**
-
-```python
-from homodyne.optimization.nlsq import AdapterConfig, NLSQAdapter
-
-config = AdapterConfig(
-    enable_cache=True,      # Model caching (default: True)
-    enable_jit=True,        # JIT compilation flag (default: True)
-    enable_recovery=True,   # NLSQ recovery system
-    goal="quality",         # Optimization goal
-)
-
-adapter = NLSQAdapter(config)
-```
-
-See [NLSQAdapter Documentation](docs/source/api/optimization_guide.rst#nlsq-adapter) for
-details.
-
-______________________________________________________________________
-
-## ⚠️ **Previous Breaking Changes**
-
-### v2.9.0 - Anti-Degeneracy Defense System
-
-**Comprehensive solution for parameter collapse** in laminar flow mode with many phi
-angles.
-
-**Key Features:**
-
-- **Layer 1 - Fourier Reparameterization**: Reduces 46 per-angle params to 10 Fourier
-  coefficients (78% reduction for 23 angles)
-- **Layer 2 - Hierarchical Optimization**: Alternates physical/per-angle stages to break
-  gradient cancellation
-- **Layer 3 - Adaptive CV Regularization**: Auto-tuned lambda (100× stronger than v2.8)
-- **Layer 4 - Gradient Collapse Detection**: Runtime monitoring with automatic response
-
-**Configuration:**
-
-```yaml
-optimization:
-  nlsq:
-    anti_degeneracy:
-      per_angle_mode: "auto"        # "independent", "fourier", "auto"
-      hierarchical:
-        enable: true
-      regularization:
-        mode: "relative"
-        lambda: 1.0                 # 100× stronger than v2.8
-        target_cv: 0.10
-```
-
-See [Anti-Degeneracy Defense Documentation](docs/source/theory/anti_degeneracy_defense.rst)
-for details.
-
-### v2.5.0 - Streaming Optimizer for Large Datasets
-
-**NLSQ now supports streaming optimization** for memory-constrained large datasets.
-
-**Key Changes:**
-
-- **Streaming mode**: Mini-batch gradient descent for datasets >10M points
-- **Automatic selection**: Switches based on estimated memory vs available RAM
-- **Memory bounded**: ~2 GB usage vs 30+ GB for standard Jacobian computation
-- **Configuration**: New `streaming` section in YAML for batch size, epochs, learning
-  rate
-
-### v2.4.3 - NLSQ Element-wise Integration Fix
-
-**NLSQ element-wise mode now uses cumulative trapezoid integration** matching CMC
-physics.
-
-**Key Changes:**
-
-- **Fixed**: Up to 3.4% C₂ error in dynamic transitions (α ≠ 0 or β ≠ 0) eliminated
-- **Unified physics**: NLSQ and CMC now produce identical results for same parameters
-- **No action required**: Fix is automatic, no configuration changes needed
-
-### v2.4.1 - CMC-Only MCMC Architecture
-
-**MCMC now always uses Consensus Monte Carlo (CMC)** - NUTS auto-selection removed.
-
-**Key Changes:**
-
-- **CMC mandatory**: All MCMC runs use CMC; single-shard runs still use NUTS internally
-- **Removed CLI flags**: `--min-samples-cmc`, `--memory-threshold-pct` (deprecated)
-- **Per-phi initialization**: Initial values derived from config or per-phi percentiles
-- **Architecture guide**: See [CMC Fitting Architecture](docs/architecture/cmc-fitting-architecture.md)
-
-### v2.4.0 - Per-Angle Scaling Mandatory
-
-**Per-angle scaling is now mandatory** - Legacy scalar `per_angle_scaling=False`
-removed.
-
-**Key Changes:**
-
-- **Breaking**: Remove `per_angle_scaling` parameter or set to `True`
-- **Impact**: 3 angles: 5 params → 9 params `[c₀,c₁,c₂, o₀,o₁,o₂, D0,α,D_offset]`
-- **Rationale**: Per-angle mode is physically correct for heterogeneous samples
-
-### v2.3.0 - GPU Support Removed
-
-**v2.3.0 transitions to CPU-only architecture** - All GPU acceleration support has been
-removed.
-
-**Key Changes:**
-
-- **Rationale**: Simplify maintenance, focus on reliable HPC CPU optimization
-- **Impact**: Removed 9 GPU API functions, GPU-specific CLI flags, GPU examples
-- **For GPU users**: Stay on **v2.2.1** (last GPU-supporting version, available on PyPI)
-- **Impact**: Removed 9 GPU API functions, GPU-specific CLI flags, GPU examples
-
-## 🎉 v2.2.1 Critical Fix
-
-**Parameter Expansion for Per-Angle Scaling** - Resolves silent NLSQ optimization
-failures
-
-Key fixes:
-
-- **Automatic parameter expansion**: 9 → 13 parameters for 3 angles (7 physical + 3×2
-  scaling)
-- **Gradient sanity check**: Pre-optimization validation detects zero-gradient issues
-- **Stratified least-squares**: Direct NLSQ integration with StratifiedResidualFunction
-- **Performance**: 93.15% cost reduction, 113 function evaluations (vs 0 before fix)
-
-## 🎉 v2.2.0 Feature Release
-
-**Angle-Stratified Chunking** - Automatic fix for per-angle scaling on large datasets
-
-Key improvements:
-
-- **Automatic activation**: No configuration required - activates when
-  `per_angle_scaling=True` AND `n_points>=100k`
-- **Zero regressions**: 100% backward compatible with existing configurations
-- **Performance**: \<1% overhead (0.15s for 3M points), sub-linear O(n^1.01) scaling
-- **Reliability**: Fixes silent optimization failures caused by arbitrary chunking
-- **Fallbacks**: Sequential per-angle optimization for extreme angle imbalance (>5.0
-  ratio)
-
-See [CHANGELOG](CHANGELOG.md) for complete details.
-
-**High-performance JAX-first package for X-ray Photon Correlation Spectroscopy (XPCS)
-analysis**, implementing the theoretical framework from
-[He et al. PNAS 2024](https://doi.org/10.1073/pnas.2401162121) for characterizing
-transport properties in flowing soft matter systems through time-dependent intensity
-correlation functions.
-
-📚 **[Read the Full Documentation](https://homodyne.readthedocs.io)** |
-**[Quick Start Guide](https://homodyne.readthedocs.io/en/latest/user-guide/quickstart.html)**
-|
-**[API Reference](https://homodyne.readthedocs.io/en/latest/api-reference/index.html)**
-
-A completely rebuilt homodyne package with JAX-first architecture, optimized for HPC and
-supercomputer environments.
-
-## Homodyne Correlation Model
+CPU-optimized JAX package for X-ray Photon Correlation Spectroscopy (XPCS) analysis,
+implementing the theoretical framework from
+[He et al. PNAS 2024](https://doi.org/10.1073/pnas.2401162121) and
+[He et al. PNAS 2025](https://doi.org/10.1073/pnas.2514216122) for characterizing
+transport properties in flowing soft matter systems.
+
+## Correlation Model
 
 ```
-c2(φ, t1, t2) = offset + contrast * [c1(φ, t1, t2)]^2
-c1(φ, t1, t2) = c1_diff(t1, t2) * c1_shear(φ, t1, t2)
+c2(phi, t1, t2) = offset + contrast * [c1(phi, t1, t2)]^2
+c1(phi, t1, t2) = c1_diff(t1, t2) * c1_shear(phi, t1, t2)
 
-c1_diff(t1, t2) = exp[-(q^2 / 2) * ∫|t2 - t1| D(t') dt']
-c1_shear(φ, t1, t2) = [sinc(Φ(φ, t1, t2))]^2
-Φ(φ, t1, t2) = (1 / 2π) * q * L * cos(φ0 - φ) * ∫|t2 - t1| γ̇(t') dt'
+c1_diff(t1, t2)        = exp[-(q^2 / 2) * integral D(t') dt']
+c1_shear(phi, t1, t2)  = [sinc(Phi(phi, t1, t2))]^2
+Phi(phi, t1, t2)       = (1/2pi) * q * L * cos(phi0 - phi) * integral gamma_dot(t') dt'
 
-D(t) = D0 * t^α + D_offset
-γ̇(t) = γ̇0 * t^β + γ̇_offset
+D(t)          = D0 * t^alpha + D_offset
+gamma_dot(t)  = gamma_dot_0 * t^beta + gamma_dot_offset
 ```
 
-Parameter sets:
+| Mode | Parameters | Count |
+|------|------------|-------|
+| **static** | D0, alpha, D_offset | 3 |
+| **laminar_flow** | D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0 | 7 |
 
-- Static (3): D0, α, D_offset (shear terms ignored, φ0 = 0)
-- Laminar flow (7): D0, α, D_offset, γ̇0, β, γ̇_offset, φ0
-
-Experimental parameters: q (Å⁻¹), L (Å), φ (deg), dt (s/frame); contrast/offset are
-per-angle.
-
-## Architecture Overview
-
-This rebuild achieves **~70% complexity reduction** while maintaining **100% API
-compatibility** for all validated components:
-
-### Preserved Components
-
-- **`data/`** - Complete XPCS data loading infrastructure (11 files preserved)
-- **`core/`** - Validated physics models and JAX backend (11 files including shared
-  utilities)
-
-### New Components
-
-- **`optimization/`** - JAX-first optimization with **NLSQ trust-region solver** +
-  NumPyro/BlackJAX MCMC
-  - ✅ **Scientifically validated** (7/7 validation tests passed)
-  - ✅ **Production-ready** with intelligent error recovery
-- **`device/`** - HPC CPU optimization for multi-core systems
-- **`config/`** - Streamlined YAML-only configuration system with parameter management
-- **`utils/`** - Minimal logging with preserved API signatures
-- **`cli/`** - Essential command-line interface
-
-## Key Features
-
-### JAX-First Computational Engine
-
-- **Primary**: NLSQ trust-region nonlinear least squares (JAX-native optimizer)
-- **Secondary**: NumPyro/BlackJAX NUTS sampling for uncertainty quantification
-- **Core Equation**: `c₂(φ,t₁,t₂) = 1 + contrast × [c₁(φ,t₁,t₂)]²`
-
-### HPC CPU Optimization (v2.3.0+)
-
-- **CPU-only architecture** for 36/128-core HPC nodes
-- Intelligent thread allocation and NUMA-aware configuration
-- Memory-efficient processing for large datasets
-- Optimized for multi-core personal computers and CPU clusters
-
-### Intelligent Resource Allocation
-
-- **CPU processing** for all operations (optimization, data loading, plotting)
-- **Parallel CPU workers** for efficient batch processing
-- **Memory management** optimized for large datasets without GPU constraints
-
-### Consensus Monte Carlo (CMC) for Large-Scale Bayesian Inference
-
-**v2.4.1+**: CMC-only architecture - all MCMC runs use Consensus Monte Carlo.
-
-**CMC-Only Architecture** (v2.4.1 - December 2025):
-
-- **CMC mandatory**: All MCMC runs use CMC with automatic sharding
-- **Single-shard NUTS**: Small datasets run as single-shard CMC (NUTS internally)
-- **Per-phi initialization**: Initial values from config or per-phi percentiles
-- **Simplified CLI**: Only `--method cmc` needed (CMC always used)
-
-**Key Features:**
-
-- **Z-space gradient balancing**: Non-centered parameterization for stable MCMC sampling
-- **Data-driven initialization**: Automatic contrast/offset estimation from C2 data
-- **Hardware-adaptive**: Automatic backend selection (pjit/multiprocessing/PBS/Slurm)
-- **Linear speedup**: Perfect parallelization across CPU cores or cluster nodes
-- **Memory efficient**: Each shard fits in available memory with 40% safety margin
-- **Production-ready**: Comprehensive validation, fault tolerance, and convergence
-  diagnostics
-
-**Quick Example:**
-
-```python
-from homodyne.optimization.nlsq import fit_nlsq_jax
-from homodyne.optimization.cmc import fit_mcmc_jax
-
-# Step 1: Run NLSQ for warm-start
-nlsq_result = fit_nlsq_jax(data, config)
-
-# Step 2: CMC with NLSQ warm-start (v2.4.1+: CMC always used)
-cmc_result = fit_mcmc_jax(data, config, nlsq_result=nlsq_result)
-
-print(f"CMC used with {cmc_result.num_shards} shards")
-```
-
-**Performance:**
-
-| Scenario | Shards | Data Size | Runtime | Speedup |
-|----------|--------|-----------|---------|---------|
-| Multi-core CPU (14 cores) | 4 | 50M | ~40 min | 1.4x |
-| HPC CPU (36 cores) | 8 | 200M | ~2 hours | 1.5x |
-| Single-shard (small data) | 1 | 5M | ~10 min | baseline |
-
-**Documentation:**
-
-- Architecture Guide:
-  [`docs/architecture/cmc-fitting-architecture.md`](docs/architecture/cmc-fitting-architecture.md)
-- NLSQ Architecture:
-  [`docs/architecture/nlsq-fitting-architecture.md`](docs/architecture/nlsq-fitting-architecture.md)
-
-### Result Artifacts & Diagnostics (v2.3.1)
-
-- `fitted_data.npz` now stores both the **solver-evaluated** surface
-  (`c2_solver_scaled`) and the legacy **post-hoc** surface, plus the original per-angle
-  contrast/offset pairs (`per_angle_scaling_solver`). Existing consumers that rely on
-  `c2_theoretical_scaled` continue to work unchanged.
-- Plotting defaults to the solver surface and supports adaptive color scaling via
-  `output.plots.color_scale` (`mode: legacy|adaptive`, optional percentiles/fixed
-  ranges). Set `output.plots.fit_surface` to `"posthoc"` to retain the previous behavior
-  or pin `[1.0, 1.5]` via `pin_legacy_range: true`.
-- Use `scripts/nlsq/overlay_solver_vs_posthoc.py` (or the helper in
-  `homodyne.viz.diagnostics`) to print baseline oscillation stats and overlay
-  solver/post-hoc diagonals for any saved `fitted_data.npz`.
-
-## Platform Support
-
-### CPU-Only Architecture (All Platforms) ✅
-
-**v2.3.0+**: GPU support removed - CPU-optimized for all platforms
-
-- **Linux**: Full support (HPC clusters recommended)
-- **macOS**: Full support
-- **Windows**: Supported (not actively tested in CI)
-- **Python**: 3.12+ (tested on 3.12 and 3.13)
-
-**For GPU users**: Use Homodyne v2.2.1 (last GPU-supporting version)
+Per-angle contrast and offset are added automatically based on the number of azimuthal angles.
 
 ## Installation
 
-### Quick Install (All Platforms)
-
 ```bash
-# CPU-only installation (v2.3.0+)
-# Works on Linux, macOS, Windows
 pip install homodyne
 ```
 
-This installs Homodyne with CPU-optimized JAX (≥0.8.2), suitable for:
-
-- Development and prototyping
-- Datasets up to 100M points on multi-core CPUs
-- HPC clusters with 36-128 CPU cores
-
-### Migration from GPU to CPU-Only
-
-**If upgrading from v2.2.x (GPU version):**
+For development:
 
 ```bash
-# Uninstall GPU JAX
-pip uninstall -y jax jaxlib
-
-# Install CPU-only Homodyne v2.3.0+
-pip install homodyne
-
-# Verify CPU devices
-python -c "import jax; print('Devices:', jax.devices())"
-# Expected: [CpuDevice(id=0)]
-```
-
-### For GPU Users
-
-**GPU support removed in v2.3.0.** If you need GPU acceleration:
-
-1. **Stay on v2.2.1** (last GPU-supporting version):
-
-   ```bash
-   pip install homodyne==2.2.1
-   ```
-
-1. **See migration guide**:
-   [`docs/migration/v2.2-to-v2.3-gpu-removal.md`](docs/migration/v2.2-to-v2.3-gpu-removal.md)
-
-### System Validation
-
-After installation, verify your system:
-
-```bash
-python -m homodyne.runtime.utils.system_validator --quick
-```
-
-Expected output: 9 tests passing (90-100% health score)
-
-### Development Installation
-
-```bash
-# Using uv (recommended)
 git clone https://github.com/imewei/homodyne.git
 cd homodyne
-uv sync --extra dev    # Install with dev dependencies
-
-# Or using pip
-pip install homodyne[dev]
-
-# Or editable install from source
-pip install -e ".[dev]"
+make dev    # or: uv sync --extra dev
 ```
 
-### HPC Environment Setup
-
-For HPC clusters with multi-core CPUs:
-
-```bash
-# Load Python module (site-specific)
-module load python/3.12
-
-# Create virtual environment
-python -m venv homodyne-env
-source homodyne-env/bin/activate
-
-# Install homodyne
-pip install homodyne[dev]
-
-# Configure CPU threads for your HPC node
-export OMP_NUM_THREADS=34  # Reserve 2 cores for OS on 36-core node
-```
-
-### Makefile Shortcuts (Development)
-
-```bash
-make dev               # Install dev environment (CPU-only)
-make test              # Run core test suite
-make quality           # Format, lint, type-check
-```
+**Requirements:** Python 3.12+, CPU-only (no GPU). Runs on Linux, macOS, and Windows.
 
 ## Quick Start
 
-### Command Line Interface
+### CLI
 
 ```bash
-# NLSQ optimization (default method)
+# Generate a config template
+homodyne-config --mode static --output config.yaml
+
+# Run NLSQ optimization
 homodyne --method nlsq --config config.yaml
 
-# CMC sampling for uncertainty quantification (v2.4.1+: CMC-only architecture)
-homodyne --method cmc --config config.yaml
-
-# Custom output directory
-homodyne --method nlsq --output-dir ./results
-```
-
-### Manual NLSQ → CMC Workflow
-
-**Step-by-step process:**
-
-```bash
-# 1. Run NLSQ first
-homodyne --method nlsq --config config.yaml
-
-# 2. Copy best-fit results from output:
-#    D0: 1234.5 ± 45.6
-#    alpha: 0.567 ± 0.012
-#    D_offset: 12.34 ± 1.23
-
-# 3. Update config.yaml:
-#    initial_parameters:
-#      values: [1234.5, 0.567, 12.34]
-
-# 4. Run CMC with initialized parameters
+# Run Consensus Monte Carlo for uncertainty quantification
 homodyne --method cmc --config config.yaml
 ```
 
@@ -680,732 +69,126 @@ homodyne --method cmc --config config.yaml
 ```python
 from homodyne.optimization import fit_nlsq_jax, fit_mcmc_jax
 from homodyne.data import load_xpcs_data
-from homodyne.config import ConfigManager, ParameterSpace
+from homodyne.config import ConfigManager
 
-# Load data and configuration
 data = load_xpcs_data("config.yaml")
 config = ConfigManager("config.yaml")
 
-# Primary: NLSQ optimization (JAX-native trust-region solver)
-result = fit_nlsq_jax(data, config)
-print(f"Parameters: {result.parameters}")
-print(f"Chi-squared: {result.chi_squared:.4f}")
-print(f"Convergence: {result.convergence_status}")
+# NLSQ trust-region optimization
+nlsq_result = fit_nlsq_jax(data, config)
 
-# Secondary: CMC sampling for uncertainty quantification (v2.4.1+: CMC-only)
-cmc_result = fit_mcmc_jax(data, config, nlsq_result=result)
-print(f"Posterior means: {cmc_result.mean_params}")
+# CMC with NLSQ warm-start for Bayesian uncertainty
+cmc_result = fit_mcmc_jax(data, config, nlsq_result=nlsq_result)
 ```
 
-### Device Configuration
+### Data Flow
 
-```python
-from homodyne.device import configure_optimal_device
-
-# Auto-detect and configure optimal device
-device_config = configure_optimal_device()
-
-# Configure CPU-only device (v2.3.0+)
-cpu_config = configure_optimal_device()
+```
+YAML config --> XPCSDataLoader(HDF5) --> HomodyneModel --> NLSQ or CMC --> Results (JSON + NPZ)
 ```
 
-### Interactive Example
-
-For a complete interactive tutorial, see the
-[NLSQ Optimization Example Notebook](scripts/notebooks/nlsq_optimization_example.ipynb):
-
-```bash
-# Launch Jupyter and open the example notebook
-jupyter notebook scripts/notebooks/nlsq_optimization_example.ipynb
-```
-
-The notebook covers:
-
-- Synthetic XPCS data generation with ground truth parameters
-- NLSQ optimization workflow with parameter recovery
-- Fit quality visualization and residual analysis
-- Parameter uncertainty quantification
-- Error recovery demonstration
-
-## Shell Completion & CLI Tools
-
-Homodyne provides five CLI commands and intelligent shell completion for faster
-workflows.
-
-### Available Commands
-
-- **`homodyne`** - Run XPCS analysis (NLSQ/CMC)
-- **`homodyne-config`** - Generate and validate configuration files
-- **`homodyne-config-xla`** - Configure XLA device settings
-- **`homodyne-post-install`** - Install shell completion (bash/zsh/fish)
-- **`homodyne-cleanup`** - Remove shell completion scripts
-
-### Quick Shell Completion Setup
-
-Install intelligent tab completion with aliases:
-
-```bash
-# Interactive setup (recommended)
-homodyne-post-install --interactive
-
-# Or quick one-liner
-homodyne-post-install --shell $(basename $SHELL)
-```
-
-**Conda/Mamba users:** Completion auto-activates with your environment - no extra setup
-needed!
-
-**uv/venv/virtualenv users:** Add activation to your shell RC file:
-
-```bash
-# Add to ~/.bashrc or ~/.zshrc
-echo 'source $VIRTUAL_ENV/bin/homodyne-activate' >> ~/.bashrc
-source ~/.bashrc
-```
-
-**Supported shells:** bash, zsh, fish (PowerShell not supported)
-
-### Convenient Aliases
-
-After installing completion, use short aliases:
-
-```bash
-hm-nlsq --config config.yaml           # homodyne --method nlsq
-hm-cmc --config config.yaml            # homodyne --method cmc
-
-hc-stat --output static.yaml           # homodyne-config --mode static
-hc-flow --output flow.yaml             # homodyne-config --mode laminar_flow
-
-hconfig --validate my_config.yaml      # homodyne-config --validate
-```
-
-**Smart completion examples:**
-
-```bash
-homodyne --config <TAB>        # Shows *.yaml files
-homodyne --method <TAB>        # Shows: nlsq, cmc
-hm-nlsq --<TAB>                # Shows all available options
-```
-
-**See documentation:**
-[Shell Completion Guide](https://homodyne.readthedocs.io/en/latest/user-guide/shell-completion.html)
-
-## XLA Configuration
-
-Homodyne includes automatic XLA_FLAGS configuration that optimizes JAX CPU device
-allocation for MCMC and NLSQ workflows.
-
-### Quick Setup
-
-```bash
-# Interactive setup (recommended)
-homodyne-post-install --interactive
-
-# Or quick one-liner
-homodyne-post-install --xla-mode auto  # Auto-detect optimal device count
-homodyne-post-install --xla-mode mcmc  # Configure for MCMC (4 devices)
-```
-
-### Configuration Modes
-
-| Mode | Devices | Best For | Hardware |
-|------|---------|----------|----------|
-| **mcmc** | 4 | Multi-core workstations, parallel MCMC chains | 8-15 CPU cores |
-| **mcmc-hpc** | 8 | HPC clusters with many CPU cores | 36+ CPU cores |
-| **nlsq** | 1 | NLSQ-only workflows, memory-constrained systems | Any CPU |
-| **auto** | 2-8 | Automatic detection based on CPU core count | Auto-adaptive |
-
-**Auto mode detection logic:**
-
-```text
-CPU Cores    →    Devices
-≤ 7 cores    →    2 devices  (small workstations)
-8-15 cores   →    4 devices  (medium workstations)
-16-35 cores  →    6 devices  (large workstations)
-36+ cores    →    8 devices  (HPC nodes)
-```
-
-### Managing XLA Configuration
-
-```bash
-# Set XLA mode
-homodyne-config-xla --mode auto
-
-# Show current configuration
-homodyne-config-xla --show
-
-# Example output:
-#   Current XLA Configuration:
-#     Mode: auto
-#     XLA_FLAGS: --xla_force_host_platform_device_count=6
-#     JAX devices: 6 (cpu)
-```
-
-### How It Works
-
-1. **Configuration Storage**: Your selected mode is saved to `~/.homodyne_xla_mode`
-1. **Automatic Activation**: XLA_FLAGS is set automatically when you activate your
-   virtual environment
-1. **JAX Detection**: JAX automatically creates the configured number of CPU devices
-
-**Conda/Mamba** (automatic):
-
-```bash
-conda activate myenv  # XLA_FLAGS auto-configured
-echo $XLA_FLAGS
-# Output: --xla_force_host_platform_device_count=6
-```
-
-**uv/venv/virtualenv** (requires shell RC update):
-
-```bash
-# Add to ~/.bashrc or ~/.zshrc
-echo 'source $VIRTUAL_ENV/bin/homodyne-activate' >> ~/.bashrc
-source ~/.bashrc
-```
-
-### Performance Impact
-
-| Workflow | Device Count | Hardware | Performance |
-|----------|--------------|----------|-------------|
-| CMC (4 chains) | 4 devices | 14-core CPU | 1.4x speedup |
-| CMC (8 chains) | 8 devices | 36-core HPC | 1.8x speedup |
-| NLSQ optimization | 1 device | Any CPU | Optimal (no overhead) |
-| Auto mode | 2-8 devices | Adapts to CPU | Automatic optimization |
-
-### Best Practices
-
-**For MCMC workflows:**
-
-```bash
-homodyne-config-xla --mode mcmc      # Typical workstations
-homodyne-config-xla --mode mcmc-hpc  # HPC clusters (36+ cores)
-homodyne --method cmc --config config.yaml
-```
-
-**For NLSQ workflows:**
-
-```bash
-homodyne-config-xla --mode nlsq  # Optimal single-device performance
-homodyne --method nlsq --config config.yaml
-```
-
-**For mixed workflows:**
-
-```bash
-homodyne-config-xla --mode auto  # Adapts to hardware automatically
-```
-
-### Advanced Features
-
-**Manual override** (temporary):
-
-```bash
-export XLA_FLAGS="--xla_force_host_platform_device_count=2"
-source venv/bin/activate  # Respects your manual setting
-```
-
-**Per-environment configuration**:
-
-```bash
-export HOMODYNE_XLA_MODE=nlsq  # Takes precedence over ~/.homodyne_xla_mode
-```
-
-**Verbose mode**:
-
-```bash
-export HOMODYNE_VERBOSE=1
-source venv/bin/activate
-# Output: [homodyne] XLA: auto mode → 6 devices (detected 20 CPU cores)
-```
-
-**See documentation:**
-[XLA Configuration Guide](https://homodyne.readthedocs.io/en/latest/user-guide/shell-completion.html#xla-configuration-system)
-
-## Analysis Modes
-
-### Static Isotropic (3 parameters)
-
-- Parameters: `[D₀, α, D_offset]`
-- Fast analysis for isotropic systems
-- Ideal for quick parameter estimation
-
-### Laminar Flow (7 parameters)
-
-- Parameters: `[D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]`
-- Full anisotropic analysis with shear flow
-- Comprehensive characterization of complex systems
-
-## Parameter Constraints
-
-### Physical Parameters
-
-Default bounds for NLSQ optimization and MCMC priors (updated Nov 15, 2025):
-
-| Parameter | Min | Max | Units | Physical Meaning | Notes |
-|-----------|-----|-----|-------|------------------|-------|
-| **D0** | 1×10² | 1×10⁵ | Å²/s | Diffusion coefficient prefactor | Typical colloidal range |
-| **alpha** | -2.0 | 2.0 | - | Diffusion time exponent | Anomalous diffusion |
-| **D_offset** | -1×10⁵ | 1×10⁵ | Å²/s | Diffusion baseline correction | **Negative for jammed systems** |
-| **gamma_dot_t0** | 1×10⁻⁶ | 0.5 | s⁻¹ | Initial shear rate | Laminar flow only |
-| **beta** | -2.0 | 2.0 | - | Shear rate time exponent | Laminar flow only |
-| **gamma_dot_t_offset** | -0.1 | 0.1 | s⁻¹ | Shear rate baseline correction | Laminar flow only |
-| **phi0** | -10 | 10 | degrees | Initial flow angle | **Uses degrees, not radians** |
-
-### Scaling Parameters
-
-| Parameter | Min | Max | Physical Meaning | Notes |
-|-----------|-----|-----|------------------|-------|
-| **contrast** | 0.0 | 1.0 | Visibility parameter | Homodyne detection efficiency |
-| **offset** | 0.5 | 1.5 | Baseline level | ±50% from theoretical g2=1.0 |
-
-### Correlation Function Constraints
-
-Physics-enforced constraints applied during optimization:
-
-| Function | Min | Max | Notes |
-|----------|-----|-----|-------|
-| **g1 (c1)** | 0.0 | 1.0 | Normalized correlation function; log-space clipping: `log(g1) ∈ [-700, 0]` |
-| **g2 (c2)** | 0.5 | 2.5 | Experimental range with headroom; Theoretical: g2 = 1 + contrast × g1² |
-
-**Important Notes:**
-
-- **D_offset** can be negative for arrested/jammed systems (caging, jamming transitions)
-- **phi0** uses degrees throughout the codebase (templates, physics modules)
-- **gamma_dot_t_offset** allows negative values (baseline correction)
-- All bounds align with template files: `homodyne_static.yaml`,
-  `homodyne_laminar_flow.yaml`
-- User configs override these default bounds (no breaking changes)
+## Optimization Methods
+
+**NLSQ** (primary) -- JAX-native trust-region Levenberg-Marquardt with automatic
+anti-degeneracy defense, CMA-ES global search for multi-scale problems, and memory-aware
+routing for large datasets.
+
+**CMC** (secondary) -- Consensus Monte Carlo using NumPyro NUTS sampling with automatic
+sharding, NLSQ warm-start priors, and multiprocessing across CPU cores. Produces
+publication-quality posterior distributions with ArviZ diagnostics.
 
 ## Configuration
 
-The package uses YAML-based configuration with preserved template compatibility:
+Homodyne uses YAML configuration files. Generate a template:
+
+```bash
+homodyne-config --mode laminar_flow --output config.yaml
+```
+
+Key sections:
 
 ```yaml
-# config.yaml
-analysis_mode: "static_isotropic"
+analysis_mode: "laminar_flow"
 experimental_data:
   file_path: "data.h5"
 optimization:
   method: "nlsq"
   nlsq:
-    max_iterations: 10000
-    tolerance: 1e-8
+    anti_degeneracy:
+      per_angle_mode: "auto"   # auto, constant, individual, fourier
+  cmc:
+    sharding:
+      max_points_per_shard: "auto"
 ```
 
-## Performance Characteristics
+See the [User Guide](https://homodyne.readthedocs.io/en/latest/user-guide/index.html)
+for full configuration reference.
 
-### Optimization Methods
+## CLI Commands
 
-| Method | Speed | Accuracy | Use Case |
-|--------|-------|----------|----------|
-| **NLSQ** | Fast | Excellent | Production workflows, real-time analysis |
-| **CMC** | Slower | Excellent | Publication-quality, uncertainty quantification |
+| Command | Purpose |
+|---------|---------|
+| `homodyne` | Run XPCS analysis (NLSQ/CMC) |
+| `homodyne-config` | Generate and validate config files |
+| `homodyne-config-xla` | Configure XLA device settings |
+| `homodyne-post-install` | Install shell completion (bash/zsh/fish) |
+| `homodyne-cleanup` | Remove shell completion files |
 
-### Validated Performance Benchmarks
+Shell completion and aliases are available after running `homodyne-post-install --interactive`.
 
-Based on comprehensive scientific validation (T036-T041):
-
-| Dataset Size | Points | Optimization Time | Throughput | Convergence |
-|--------------|--------|-------------------|------------|-------------|
-| Small | 500 | 1.6s | 317 pts/s | 100% |
-| Medium | 4,000 | 1.5s | 2,758 pts/s | 100% |
-| Large | 9,375 | 1.6s | 5,977 pts/s | 100% |
-
-**Key Performance Features**:
-
-- ✅ **Sub-linear time scaling**: Near-constant execution time across dataset sizes
-- ✅ **Parameter recovery accuracy**: 2-14% error on core parameters
-- ✅ **Numerical stability**: \<4% parameter deviation across initial conditions
-- ✅ **Physics compliance**: 100% constraint satisfaction rate
-
-### Adaptive Subsampling for Large Datasets
-
-Homodyne includes **intelligent two-layer subsampling** to handle very large datasets
-(>50M points) while preserving XPCS correlation structure and minimizing accuracy loss.
-
-**Two-Layer Defense System**:
-
-- **Layer 1 (Homodyne)**: Physics-aware logarithmic subsampling
-
-  - Threshold: 50M points
-  - Reduction: 2-4x adaptive (conservative)
-  - Sampling: Logarithmic (dense at short times, sparse at long times)
-  - Preserves: XPCS correlation decay structure
-
-- **Layer 2 (NLSQ)**: Memory fallback with uniform sampling
-
-  - Threshold: 150M points
-  - Reduction: 2x maximum
-  - Sampling: Uniform (preserves time ordering)
-  - Activates: Only if Layer 1 insufficient
-
-**Subsampling Behavior by Dataset Size**:
-
-```text
-Dataset Size | Layer 1 (Homodyne) | Layer 2 (NLSQ)    | Total Reduction | Final Size
--------------|--------------------|--------------------|-----------------|------------
-23M          | Not triggered      | Not triggered      | 1x (none)       | 23M
-100M         | 100M → 50M (2x)    | Not triggered      | 2x              | 50M
-200M         | 200M → 50M (4x)    | Not triggered      | 4x              | 50M
-500M         | 500M → 125M (4x)   | 125M → 62.5M (2x)  | 8x              | 62.5M
-1000M        | 1000M → 250M (4x)  | 250M → 125M (2x)   | 8x              | 125M
-```
-
-**Configuration**:
-
-```yaml
-performance:
-  subsampling:
-    enabled: true              # Enable adaptive subsampling
-    trigger_threshold_points: 50000000  # 50M threshold
-    max_reduction_factor: 4    # Maximum 4x reduction (conservative)
-    method: "logarithmic"      # Preserves XPCS structure
-    preserve_edges: true       # Keep t_min and t_max
-```
-
-**Key Benefits**:
-
-- ✅ **Minimal accuracy loss**: 2-4x reduction (vs 10x in aggressive methods)
-- ✅ **Physics-aware**: Logarithmic sampling preserves correlation decay
-- ✅ **Automatic activation**: Only triggers for large datasets
-- ✅ **Transparent operation**: No user intervention required
-- ✅ **Backward compatible**: Existing configs work without changes
-
-### Streaming Optimizer for Memory-Bounded Large Datasets (v2.5.0+)
-
-For datasets exceeding available memory (>10M points on 64GB systems), the NLSQ wrapper
-automatically switches to **streaming optimization** using mini-batch gradient descent.
-This eliminates OOM errors by processing data in small batches.
-
-**Why Streaming?**
-
-Standard Levenberg-Marquardt optimization requires computing a dense Jacobian matrix
-(n_points × n_params × 8 bytes) plus JAX autodiff intermediates (~3× Jacobian size). For
-23M points with 53 parameters, this exceeds 30 GB. Streaming mode processes data in
-10K-point batches, keeping memory usage below 2 GB.
-
-**Memory-Based Auto-Selection**:
-
-```text
-Estimated Memory    | Mode Selected      | Reason
---------------------|--------------------|---------------------------------
-< 16 GB             | Stratified L-M     | Full Jacobian fits in memory
-16 GB - 70% RAM     | Stratified L-M     | Within safety margin
-> 70% available RAM | Streaming (L-BFGS) | Prevents OOM
-```
-
-**Configuration**:
-
-```yaml
-optimization:
-  nlsq:
-    # Memory threshold for automatic streaming mode (GB)
-    memory_threshold_gb: 16.0
-
-    # Force streaming mode regardless of memory (default: false)
-    use_streaming: false
-
-    # Streaming optimizer settings (used when streaming mode is active)
-    streaming:
-      batch_size: 10000       # Points per mini-batch
-      max_epochs: 50          # Maximum training epochs
-      learning_rate: 0.001    # L-BFGS line search scale
-      convergence_tol: 1e-6   # Convergence tolerance
-```
-
-**Performance Comparison**:
-
-| Mode | Memory | Convergence | Time (23M pts) |
-|------|--------|-------------|----------------|
-| Stratified L-M | ~30+ GB | Exact (Newton) | 10-15 min |
-| Streaming | ~2 GB | Approximate (L-BFGS) | 15-30 min |
-
-**Key Benefits**:
-
-- ✅ **No OOM errors**: Memory bounded by batch size, not dataset size
-- ✅ **Automatic selection**: Switches based on estimated memory usage
-- ✅ **Fault tolerance**: Retries failed batches, checkpoints progress
-- ✅ **Configurable**: Tune batch size, learning rate, epochs via YAML
-- ✅ **Physics compliance**: Same residual function and constraints
-
-**When to Use**:
-
-- **Stratified L-M (default)**: Datasets < 10M points, sufficient RAM (64GB+)
-- **Streaming**: Datasets > 10M points, memory-constrained systems (32GB RAM)
-
-## Pipeline Architecture: CPU-Optimized (v2.3.0+)
-
-The NLSQ analysis pipeline uses **JAX-accelerated CPU processing** for all operations,
-optimized for multi-core systems and HPC clusters.
-
-### Computational Stages
-
-**All stages run on CPU** with JAX JIT compilation:
-
-1. **Configuration Loading**: YAML parsing with PyYAML (\<1s)
-1. **Data Loading**: HDF5 file reading with h5py + NumPy (2-3s for cached data)
-1. **Data Validation**: Statistical quality checks with NumPy + SciPy (\<1s)
-1. **Angle Filtering**: Array slicing and indexing (\<1ms)
-1. **NLSQ Optimization**: JIT-compiled JAX physics functions (30-60s on 14-core CPU)
-   - Residual calculations called hundreds of times per iteration
-   - Data volume: 3 angles × 1001 × 1001 = 3M+ points per iteration
-   - Automatic parallelization across CPU cores
-1. **Theoretical Fit Computation**: JAX backend with per-angle scaling (~2-3s on CPU)
-1. **Result Saving**: JSON serialization + NPZ compression (~1s)
-1. **Parallel Plotting**: 20 parallel workers using Datashader (CPU-optimized, ~12s)
-
-### Performance Summary (14-Core CPU)
-
-| Stage | Backend | Duration | Notes |
-|-------|---------|----------|-------|
-| Config Loading | PyYAML | \<1s | I/O bound |
-| Data Loading | h5py+NumPy | ~2s | I/O bound |
-| Data Validation | NumPy+SciPy | \<1s | Fast validation |
-| Angle Filtering | NumPy | \<1ms | Array operations |
-| **NLSQ Optimization** | **JAX JIT** | **30-60s** | **Multi-core parallel** |
-| **Theoretical Fits** | **JAX JIT** | **~2-3s** | **CPU-accelerated** |
-| Result Saving | json+npz | ~1s | I/O bound |
-| Plotting (Workers) | Datashader | ~12s | Parallel workers |
-
-**Total Runtime**: ~50-80 seconds (14-core CPU)
-
-**HPC Speedup**: ~2-3x faster on 36-core nodes
-
-### Key Architectural Insights
-
-- **JAX JIT Compilation**: All compute-intensive operations use JAX's JIT compiler for
-  CPU optimization
-- **Multi-Core Parallelization**: Automatic thread distribution across available CPU
-  cores
-- **Memory Efficiency**: Optimized memory usage for datasets up to 100M+ points
-- **Parallel Visualization**: CPU workers efficiently handle batch plotting without
-  memory constraints
-
-## System Requirements (v2.3.0+)
-
-### Minimum
-
-- Python 3.12+
-- NumPy >= 2.3, SciPy >= 1.17
-- 4+ CPU cores
-- 8+ GB RAM
-
-### Recommended
-
-- Python 3.12+
-- 14+ CPU cores (desktop/workstation)
-- 16+ GB RAM
-- Linux, macOS, or Windows
-
-### HPC Environment
-
-- 36/128-core CPU nodes
-- 64+ GB RAM for large datasets
-- NUMA-aware configuration
-- High-speed storage (NVMe/parallel filesystem)
-
-## Dependencies (CPU-Only)
-
-### Required Dependencies
-
-- `jax>=0.8.2` - JAX CPU framework
-- `jaxlib>=0.8.2` - JAX XLA library
-- `numpy>=2.3` - Core numerical operations
-- `scipy>=1.17` - Scientific computing
-- `nlsq>=0.6.4` - NLSQ trust-region optimizer for JAX-native nonlinear least squares
-- `numpyro>=0.19.0` - MCMC with built-in progress bars
-- `blackjax>=1.3` - MCMC backend
-- `arviz>=0.23` - Bayesian diagnostics
-- `h5py>=3.15,<4.0` - HDF5 file support
-- `pyyaml>=6.0.3` - YAML configuration
-
-- `jaxopt>=0.8.3` - Differentiable optimization
-- `interpax>=0.3.12` - JIT-safe interpolation
-- `evosax>=0.2.0` - CMA-ES global optimization
-- `psutil>=7.2` - CPU/memory optimization
-- `cloudpickle>=3.1` - Serialization for multiprocessing
-- `tqdm>=4.67.1` - Progress bars
-- `matplotlib>=3.10` - Plotting
-- `datashader>=0.18` - Fast large-dataset visualization
-- `xarray>=2025.12` - Labeled array data
-- `scikit-learn>=1.6` - GMM bimodal detection
-
-### Version Notes
-
-- **JAX ≥0.8.2**: CPU-only, minimum version for stability
-- **NumPy ≥2.3**: Required for JAX compatibility
-- **Python 3.12+**: Minimum version for all dependencies
-
-## Testing
-
-Run tests with make:
+## Development
 
 ```bash
-make test              # Unit tests
-make test-all          # Full suite + coverage
+make test       # Unit tests
+make test-all   # Full suite + coverage
+make quality    # Format + lint + type-check
 ```
 
-## Migration from v1
+## Documentation
 
-> **Note:** v2.0 uses the NLSQ package for trust-region optimization. For details on the
-> v2.0 release, see [CHANGELOG.md](CHANGELOG.md#200---2025-10-12).
-
-The v2 rebuild maintains full API compatibility for validated components:
-
-```python
-# These imports work identically in v1 and v2
-from homodyne.data import load_xpcs_data, XPCSDataLoader
-from homodyne.core import compute_g2_scaled, TheoryEngine
-from homodyne.config import ConfigManager
-
-# New in v2: JAX-first optimization
-from homodyne.optimization import fit_nlsq_jax, fit_mcmc_jax
-from homodyne.device import configure_optimal_device
-```
-
-Existing YAML configuration files work without modification.
-
-## HPC CPU Optimization (v2.3.0+)
-
-### Multi-Core CPU Configuration
-
-Homodyne v2.3.0+ is optimized for multi-core CPUs on HPC clusters:
-
-- **36-core nodes**: Reserve 2 cores for OS, use 34 for computation
-- **128-core nodes**: Reserve 4-8 cores for OS, use remaining for computation
-- **NUMA awareness**: Automatic thread affinity for large HPC nodes
-- **Memory efficiency**: Optimized for datasets up to 100M+ points
-
-### HPC Slurm Job Example
-
-```bash
-#!/bin/bash
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=36
-#SBATCH --time=04:00:00
-#SBATCH --mem=64GB
-
-# Load Python module
-module load python/3.12
-
-# Activate environment
-source homodyne-env/bin/activate
-
-# Configure CPU threads (reserve 2 for OS)
-export OMP_NUM_THREADS=34
-export JAX_NUM_THREADS=34
-
-# Run analysis
-homodyne --config laminar_flow.yaml --method nlsq
-```
-
-### CPU Performance Optimization
-
-```python
-# scripts/nlsq/cpu_optimization.py
-import os
-import psutil
-
-# Reserve cores for system
-cpu_count = psutil.cpu_count(logical=False)
-optimal_threads = max(1, cpu_count - 2)
-
-os.environ['OMP_NUM_THREADS'] = str(optimal_threads)
-os.environ['JAX_NUM_THREADS'] = str(optimal_threads)
-```
-
-See [`scripts/nlsq/cpu_optimization.py`](scripts/nlsq/cpu_optimization.py) for
-comprehensive HPC setup guide.
-
-### Progress Tracking
-
-- **NLSQ**: Optional progress bars with `tqdm` installation
-- **MCMC**: Automatic progress bars via NumPyro (built-in)
-- Enable verbose mode in config for detailed output
-
-## Production Readiness
-
-### Error Recovery Mechanisms (T022-T024)
-
-The NLSQ optimizer includes **intelligent error recovery** for production reliability:
-
-**Automatic Retry Strategy**:
-
-- 3-attempt recovery with intelligent parameter perturbation
-- Convergence failure → perturb parameters 10-20%
-- Bounds violation → reset to bounds center
-- Ill-conditioned Jacobian → scale parameters 0.1x
-- Numerical instability → geometric mean reset
-
-**Actionable Diagnostics**:
-
-- Categorized error analysis (5 error types)
-- User-actionable suggestions
-- Comprehensive logging of recovery actions
-
-**Usage**:
-
-```python
-# Enabled by default
-result = fit_nlsq_jax(data, config)  # enable_recovery=True
-
-# Disable for debugging
-from homodyne.optimization.nlsq import NLSQWrapper
-wrapper = NLSQWrapper(enable_recovery=False)
-```
-
-### Scientific Validation (T036-T041)
-
-The NLSQ implementation has been **scientifically validated** through comprehensive
-testing:
-
-**Validation Results**: ✅ **7/7 tests passed (100% success rate)**
-
-- ✅ **T036**: Ground truth parameter recovery (easy/medium/hard cases)
-- ✅ **T037**: Numerical stability (5 initial conditions)
-- ✅ **T038**: Performance benchmarks (3 dataset sizes)
-- ✅ **T039**: Error recovery validation
-- ✅ **T040**: Physics validation (6 constraints)
-- ✅ **T041**: Validation report generation
-
-**Production Status**: ✅ **APPROVED for scientific research and production deployment**
-
-**Documentation**: See the test suites under `tests/validation/` for detailed analysis.
-
-## Authors
-
-- Wei Chen (weichen@anl.gov) - Argonne National Laboratory
-- Hongrui He (hhe@anl.gov) - Argonne National Laboratory
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details.
+- [User Guide](https://homodyne.readthedocs.io/en/latest/user-guide/index.html)
+- [API Reference](https://homodyne.readthedocs.io/en/latest/api-reference/index.html)
+- [Changelog](CHANGELOG.md)
 
 ## Citation
 
-If you use this software in your research, please cite both:
-
-**Software:**
+If you use Homodyne in your research, please cite:
 
 ```bibtex
-@software{chen2025homodyne,
-  title={Homodyne: JAX-First XPCS Analysis Package},
-  author={Chen, Wei and He, Hongrui},
-  year={2025},
-  organization={Argonne National Laboratory}
+@article{He2024,
+  author  = {He, Hongrui and Liang, Hao and Chu, Miaoqi and Jiang, Zhang and
+             de Pablo, Juan J and Tirrell, Matthew V and Narayanan, Suresh
+             and Chen, Wei},
+  title   = {Transport coefficient approach for characterizing nonequilibrium
+             dynamics in soft matter},
+  journal = {Proceedings of the National Academy of Sciences},
+  volume  = {121},
+  number  = {31},
+  year    = {2024},
+  doi     = {10.1073/pnas.2401162121}
 }
 ```
 
-**Theory Paper:**
-
 ```bibtex
-@article{he2024pnas,
-  title={Theoretical framework for characterizing transport properties in flowing soft matter},
-  author={He, Hongrui and others},
-  journal={Proceedings of the National Academy of Sciences},
-  volume={121},
-  year={2024},
-  doi={10.1073/pnas.2401162121}
+@article{He2025,
+  author  = {He, Hongrui and Liang, Heyi and Chu, Miaoqi and Jiang, Zhang and
+             de Pablo, Juan J and Tirrell, Matthew V and Narayanan, Suresh
+             and Chen, Wei},
+  title   = {Bridging microscopic dynamics and rheology in the yielding
+             of charged colloidal suspensions},
+  journal = {Proceedings of the National Academy of Sciences},
+  volume  = {122},
+  number  = {42},
+  year    = {2025},
+  doi     = {10.1073/pnas.2514216122}
 }
 ```
+
+## License
+
+MIT License -- see [LICENSE](LICENSE) for details.
+
+## Authors
+
+- Wei Chen (weichen@anl.gov) -- Argonne National Laboratory
+- Hongrui He (hhe@anl.gov) -- Argonne National Laboratory

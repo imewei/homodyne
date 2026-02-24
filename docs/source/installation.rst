@@ -37,10 +37,10 @@ Requirements
      - 0.6.4
      - Trust-region LM optimizer (Homodyne's ``curve_fit``)
    * - NumPyro
-     - 0.16+
+     - 0.19
      - Bayesian / CMC inference (optional but recommended)
    * - h5py
-     - 3.10+
+     - 3.15
      - HDF5 data loading
 
 .. note::
@@ -126,7 +126,7 @@ Available ``make`` targets during development:
    * - ``make test-all``
      - Full test suite with coverage
    * - ``make quality``
-     - Format + lint + type-check (Black, Ruff, MyPy)
+     - Format + lint + type-check (Ruff, MyPy)
    * - ``make docs``
      - Build HTML documentation
 
