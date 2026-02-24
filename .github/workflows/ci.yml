@@ -44,6 +44,15 @@ jobs:
       - name: Lint code
         run: uv run ruff check homodyne/ tests/ --output-format=github
 
+      - name: Shellcheck
+        run: |
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck -S warning homodyne/runtime/shell/completion.sh
+          else
+            sudo apt-get install -y shellcheck
+            shellcheck -S warning homodyne/runtime/shell/completion.sh
+          fi
+
   test:
     name: Test (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
@@ -86,6 +95,20 @@ jobs:
             --cov=homodyne \
             --cov-report=xml \
             --cov-report=term
+
+      - name: Run regression tests
+        run: |
+          uv run pytest tests/regression/ \
+            -v \
+            -n auto \
+            --tb=short \
+            -m "not slow"
+
+      - name: Run API compatibility tests
+        run: |
+          uv run pytest tests/api/ \
+            -v \
+            --tb=short
 
       - name: Run integration tests
         if: matrix.os == 'ubuntu-latest'
