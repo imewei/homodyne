@@ -17,6 +17,19 @@ multiple modules.
 
 #### Changed
 
+**CI/CD workflows (continued hardening):**
+
+- **ci(ci.yml)**: Integrate shellcheck into lint job for `completion.sh` validation; add
+  regression and API compatibility test steps to the test matrix; increase test timeout to
+  30 minutes; drop Windows from CI matrix (Linux + macOS only)
+
+- **ci(quality.yml)**: Add shellcheck job for shell script linting; include shellcheck
+  result in quality summary dashboard; remove code complexity job (radon/xenon)
+
+- **fix(ci)**: Resolve CI failures from hardcoded paths in `test_cli_core.py` and
+  `_version.py` formatting edge case in `pyproject.toml`; make memory routing test
+  CI-portable with fixed threshold instead of machine-dependent value
+
 **CI/CD workflows (`.github/workflows/`):**
 
 - **ci(workflows)**: Migrate all four workflows from `pip` to `uv` with
