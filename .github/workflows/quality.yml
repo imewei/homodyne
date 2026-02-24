@@ -43,7 +43,9 @@ jobs:
           uvx bandit -r homodyne/ -c pyproject.toml -ll
 
       - name: Check dependency vulnerabilities
-        run: uvx pip-audit --format=text
+        run: |
+          uv export --no-dev --format requirements-txt > /tmp/requirements.txt
+          uvx pip-audit -r /tmp/requirements.txt --format=text
         continue-on-error: true
 
       - name: Upload security report
@@ -78,7 +80,6 @@ jobs:
             --config-file=pyproject.toml \
             --show-error-codes \
             --pretty
-        continue-on-error: true
 
   coverage:
     name: Test Coverage
@@ -147,7 +148,7 @@ jobs:
           uvx radon mi homodyne/ -nb || true
 
           echo "=== Complexity Check ==="
-          uvx xenon homodyne/ --max-absolute B --max-modules A --max-average A || true
+          uvx xenon homodyne/ --max-absolute B --max-modules A --max-average A
 
   summary:
     name: Quality Summary
