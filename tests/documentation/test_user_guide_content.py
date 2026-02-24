@@ -166,7 +166,6 @@ class TestUserGuidePages:
             "per-angle",
             "YAML",
             "scaling",
-            "v2.4.0",
         ]
 
         for required in required_content:

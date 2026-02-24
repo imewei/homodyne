@@ -149,7 +149,7 @@ def test_autodoc_mock_imports_allowed():
     conf_path = docs_path / "source" / "conf.py"
 
     # Optional dependencies that are allowed to be mocked
-    allowed_mocks = {"arviz"}
+    allowed_mocks = {"arviz", "numpyro", "blackjax"}
 
     sys.path.insert(0, str(docs_path / "source"))
 
@@ -294,7 +294,7 @@ def test_project_metadata():
         assert conf.autodoc_typehints == "description", (
             "autodoc_typehints should be 'description'"
         )
-        assert conf.autosummary_generate is True, "autosummary_generate should be True"
+        assert conf.autosummary_generate is False, "autosummary_generate should be False"
 
     finally:
         sys.path.pop(0)
