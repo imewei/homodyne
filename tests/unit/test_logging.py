@@ -367,8 +367,8 @@ class TestAnalysisSummaryLogger:
         summary.add_output_file("/output/results.npz")
 
         result = summary.as_dict()
-        assert "/output/results.json" in result["output_files"]
-        assert "/output/results.npz" in result["output_files"]
+        assert str(Path("/output/results.json")) in result["output_files"]
+        assert str(Path("/output/results.npz")) in result["output_files"]
 
     def test_convergence_status(self) -> None:
         """Convergence status is set."""
