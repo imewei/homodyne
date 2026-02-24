@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 try:
     import arviz as az
+
     HAS_ARVIZ = True
 except ImportError:
     HAS_ARVIZ = False

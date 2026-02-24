@@ -58,6 +58,7 @@ repos:
           - jax>=0.8.2
           - nlsq>=0.6.4
           - scikit-learn>=1.6
+          - arviz>=0.21
         exclude: ^(tests/|docs/)
 
   # Markdown formatting

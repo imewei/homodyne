@@ -294,7 +294,9 @@ def test_project_metadata():
         assert conf.autodoc_typehints == "description", (
             "autodoc_typehints should be 'description'"
         )
-        assert conf.autosummary_generate is False, "autosummary_generate should be False"
+        assert conf.autosummary_generate is False, (
+            "autosummary_generate should be False"
+        )
 
     finally:
         sys.path.pop(0)

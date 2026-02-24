@@ -20,8 +20,8 @@ multiple modules.
 **CI/CD workflows (continued hardening):**
 
 - **ci(ci.yml)**: Integrate shellcheck into lint job for `completion.sh` validation; add
-  regression and API compatibility test steps to the test matrix; increase test timeout to
-  30 minutes; drop Windows from CI matrix (Linux + macOS only)
+  regression and API compatibility test steps to the test matrix; increase test timeout
+  to 30 minutes; drop Windows from CI matrix (Linux + macOS only)
 
 - **ci(quality.yml)**: Add shellcheck job for shell script linting; include shellcheck
   result in quality summary dashboard; remove code complexity job (radon/xenon)
