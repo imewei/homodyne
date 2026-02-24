@@ -403,6 +403,11 @@ cpu_threads = "auto"
 enable_jit = true
 cache_compilation = true
 
+[dependency-groups]
+dev = [
+    "ipykernel>=7.2.0",
+]
+
 # [tool.uv.sources]
 # Uncomment to use local NLSQ for development:
 # nlsq = { path = "../NLSQ", editable = true }
