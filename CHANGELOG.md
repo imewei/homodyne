@@ -26,20 +26,21 @@ reliability hardening across both optimization backends.
 **CMC shared memory and scheduling:**
 
 - **perf(cmc)**: Place per-shard data arrays in `SharedMemory` via
-  `SharedDataManager.create_shared_shard_arrays()`, eliminating per-process serialization
-  overhead through the spawn mechanism (`multiprocessing.py`)
+  `SharedDataManager.create_shared_shard_arrays()`, eliminating per-process
+  serialization overhead through the spawn mechanism (`multiprocessing.py`)
 
-- **perf(cmc)**: Pack all shard arrays per key into a single `SharedMemory` segment
-  (5 segments total regardless of shard count), preventing `Too many open files` OS limits
+- **perf(cmc)**: Pack all shard arrays per key into a single `SharedMemory` segment (5
+  segments total regardless of shard count), preventing `Too many open files` OS limits
   (`multiprocessing.py`)
 
-- **perf(cmc)**: Add noise-weighted LPT (Longest Processing Time first) shard scheduling —
-  dispatches largest/noisiest shards first to minimize tail latency (`multiprocessing.py`)
+- **perf(cmc)**: Add noise-weighted LPT (Longest Processing Time first) shard scheduling
+  — dispatches largest/noisiest shards first to minimize tail latency
+  (`multiprocessing.py`)
 
 - **perf(cmc)**: Enable persistent JIT compilation cache in workers via
   `jax.config.update()` with `min_compile_time_secs=0` (CMC functions compile in
-  0.07–0.15s, below the default 1.0s threshold). First worker compiles; subsequent workers
-  load from disk cache (`multiprocessing.py`)
+  0.07–0.15s, below the default 1.0s threshold). First worker compiles; subsequent
+  workers load from disk cache (`multiprocessing.py`)
 
 **NLSQ memory:**
 
@@ -52,8 +53,8 @@ reliability hardening across both optimization backends.
 
 **Core JAX cleanup:**
 
-- **refactor(core)**: Replace `safe_exp()` with direct `jnp.exp`/`np.exp` — all call sites
-  pre-clip to `[-700, 0]`, making the wrapper redundant in JIT hot paths
+- **refactor(core)**: Replace `safe_exp()` with direct `jnp.exp`/`np.exp` — all call
+  sites pre-clip to `[-700, 0]`, making the wrapper redundant in JIT hot paths
 
 - **refactor(core)**: Replace `safe_len()` with `.shape[0]` — always concrete in JAX,
   avoids Python dispatch overhead
@@ -74,21 +75,21 @@ reliability hardening across both optimization backends.
 
 - **fix(nlsq)**: Replace scale-sensitive norm-based out-of-core convergence
   (`||step||/||params|| < 1e-4`) with multi-criteria `xtol=1e-6` (per-component max) +
-  `ftol=1e-6` (cost change), both required. Prevents false convergence from large-magnitude
-  parameters like D₀ ~ 19231 (`wrapper.py`)
+  `ftol=1e-6` (cost change), both required. Prevents false convergence from
+  large-magnitude parameters like D₀ ~ 19231 (`wrapper.py`)
 
 **Physics and numerical correctness:**
 
-- **fix(physics)**: Replace `jnp.maximum`/`jnp.clip` with `jnp.where` for floor operations
-  on traced parameters (contrast, cos_factor, g1, g2) across NLSQ and NUTS hot paths —
-  `jnp.maximum` zeros the gradient below the floor (`physics_nlsq.py`, `fitting.py`,
-  `shear_weighting.py`)
+- **fix(physics)**: Replace `jnp.maximum`/`jnp.clip` with `jnp.where` for floor
+  operations on traced parameters (contrast, cos_factor, g1, g2) across NLSQ and NUTS
+  hot paths — `jnp.maximum` zeros the gradient below the floor (`physics_nlsq.py`,
+  `fitting.py`, `shear_weighting.py`)
 
-- **fix(physics)**: Raise `epsilon_abs` from 1e-20 to 1e-12 in `sqrt(diff² + ε)` smooth-abs
-  — 1e-20 is below float32 precision, producing NaN gradients (`wrapper.py`)
+- **fix(physics)**: Raise `epsilon_abs` from 1e-20 to 1e-12 in `sqrt(diff² + ε)`
+  smooth-abs — 1e-20 is below float32 precision, producing NaN gradients (`wrapper.py`)
 
-- **fix(physics)**: Remove `jnp.clip(g2, 0.5, 2.5)` in per-angle model — kills gradients at
-  boundaries; bounds enforced via optimizer constraints (`wrapper.py`)
+- **fix(physics)**: Remove `jnp.clip(g2, 0.5, 2.5)` in per-angle model — kills gradients
+  at boundaries; bounds enforced via optimizer constraints (`wrapper.py`)
 
 - **fix(physics)**: Enforce 2D meshgrid in `compute_g2_scaled` public API when
   `get_cached_meshgrid` returns 1D arrays for >2000 elements (`jax_backend.py`)
@@ -111,34 +112,34 @@ reliability hardening across both optimization backends.
 - **fix(nlsq)**: Derive dt from t1 minimum spacing when `data.dt` is missing instead of
   silently using `None` (`wrapper.py`)
 
-- **fix(nlsq)**: Fix gradient estimate perturbation to target physical params (index 2 in
-  auto_averaged mode) instead of always perturbing contrast at `[0]` (`wrapper.py`)
+- **fix(nlsq)**: Fix gradient estimate perturbation to target physical params (index 2
+  in auto_averaged mode) instead of always perturbing contrast at `[0]` (`wrapper.py`)
 
-- **fix(nlsq)**: Seed recovery perturbation RNG (`np.random.default_rng(42+attempt)`) for
-  reproducible retry sequences (`wrapper.py`)
+- **fix(nlsq)**: Seed recovery perturbation RNG (`np.random.default_rng(42+attempt)`)
+  for reproducible retry sequences (`wrapper.py`)
 
 - **fix(nlsq)**: Track `sigma_is_default` flag in `OptimizationResult` so fit quality
-  validator can distinguish "bad fit" from "meaningless chi-squared due to uniform sigma"
-  (`wrapper.py`, `results.py`)
+  validator can distinguish "bad fit" from "meaningless chi-squared due to uniform
+  sigma" (`wrapper.py`, `results.py`)
 
 **CMC reliability:**
 
-- **fix(cmc)**: Tighten NLSQ-informed prior `width_factor` from 3.0 to 2.0 (~95% coverage)
-  for sharper NUTS initialization (`priors.py`, `model.py`)
+- **fix(cmc)**: Tighten NLSQ-informed prior `width_factor` from 3.0 to 2.0 (~95%
+  coverage) for sharper NUTS initialization (`priors.py`, `model.py`)
 
 - **fix(cmc)**: Cap `D_offset_frac` tempering scale at 0.24 and clip to `[0, 0.5]` in
   reparameterization transforms to match prior support bounds (`reparameterization.py`)
 
-- **fix(cmc)**: Fix shard-local angle remapping via `argmin` in `xpcs_model_averaged` and
-  `xpcs_model_constant_averaged` to prevent cross-angle bias (`model.py`)
+- **fix(cmc)**: Fix shard-local angle remapping via `argmin` in `xpcs_model_averaged`
+  and `xpcs_model_constant_averaged` to prevent cross-angle bias (`model.py`)
 
 - **fix(cmc)**: Add `_SINGLE_SHARD_HARD_LIMIT = 100K` to prevent NUTS running O(n)
   leapfrog on excessively large single shards; auto-fallback to random sharding
   (`core.py`)
 
 - **fix(cmc)**: Harden multiprocessing backend — pre-generate PRNG keys in batch before
-  spawning workers, guard duplicate results from timed-out shards, handle non-finite CV in
-  heterogeneity detection (`multiprocessing.py`)
+  spawning workers, guard duplicate results from timed-out shards, handle non-finite CV
+  in heterogeneity detection (`multiprocessing.py`)
 
 - **fix(cmc)**: Map NumPyro `potential_energy` field to ArviZ `energy` convention and
   sanitize `extra_fields` keys (replace dots with underscores) for xarray compatibility
@@ -157,16 +158,17 @@ reliability hardening across both optimization backends.
 
 **Shell:**
 
-- **fix(shell)**: Replace `COMPREPLY=($(compgen ...))` with `mapfile -t` pattern to prevent
-  word-splitting and globbing on filenames with spaces (SC2207) (`completion.sh`)
+- **fix(shell)**: Replace `COMPREPLY=($(compgen ...))` with `mapfile -t` pattern to
+  prevent word-splitting and globbing on filenames with spaces (SC2207)
+  (`completion.sh`)
 
 #### Changed
 
 **Code quality:**
 
-- **refactor**: Add explicit `jnp.ndarray` type annotations to JIT return values and remove
-  `type: ignore` suppressions across `jax_backend.py`, `physics_cmc.py`, `physics_nlsq.py`,
-  and CLI modules
+- **refactor**: Add explicit `jnp.ndarray` type annotations to JIT return values and
+  remove `type: ignore` suppressions across `jax_backend.py`, `physics_cmc.py`,
+  `physics_nlsq.py`, and CLI modules
 
 - **style**: Sort imports alphabetically and remove unused `log_phase` import in
   `residual.py`
@@ -183,10 +185,11 @@ reliability hardening across both optimization backends.
 **Dependencies:**
 
 - **chore(deps)**: Bump ruff 0.15.1 → 0.15.2
-- **chore(deps)**: Update pyproject.toml — ruff ≥0.15.2, sphinx ≥9.1.0, myst-parser ≥5.0.0
+- **chore(deps)**: Update pyproject.toml — ruff ≥0.15.2, sphinx ≥9.1.0, myst-parser
+  ≥5.0.0
 - **chore(deps)**: Update pre-commit hooks — ruff-pre-commit v0.15.2, bandit 1.9.3
-- **chore(deps)**: Align mypy additional dependencies with project requirements (jax ≥0.8.2,
-  numpy ≥2.3, matplotlib ≥3.10)
+- **chore(deps)**: Align mypy additional dependencies with project requirements (jax
+  ≥0.8.2, numpy ≥2.3, matplotlib ≥3.10)
 
 **Tests:**
 
@@ -204,17 +207,19 @@ ______________________________________________________________________
 
 ### Numerical Correctness and Gradient Safety
 
-Bug-fix release addressing gradient-killing numerical floors, configuration access errors,
-and documentation accuracy. All fixes target the NLSQ Jacobian and NUTS leapfrog hot paths.
+Bug-fix release addressing gradient-killing numerical floors, configuration access
+errors, and documentation accuracy. All fixes target the NLSQ Jacobian and NUTS leapfrog
+hot paths.
 
 #### Fixed
 
 **Gradient-safe numerical floors (P1-C, P1-D, P2-C):**
 
 - **fix(physics)**: Replace `jnp.maximum(x, eps)` with `jnp.where(x > eps, x, eps)` in
-  `calculate_diffusion_coefficient`, `calculate_shear_rate`, and `calculate_shear_rate_cmc`
-  (`physics_utils.py`). `jnp.maximum` zeros the gradient below the floor, stalling both
-  NLSQ Jacobian computation and NUTS leapfrog integration.
+  `calculate_diffusion_coefficient`, `calculate_shear_rate`, and
+  `calculate_shear_rate_cmc` (`physics_utils.py`). `jnp.maximum` zeros the gradient
+  below the floor, stalling both NLSQ Jacobian computation and NUTS leapfrog
+  integration.
 
 - **fix(cmc)**: Replace `jnp.maximum(1 - D_offset_frac, 1e-10)` with `jnp.where` in
   `xpcs_model_reparameterized` D_offset back-transform (`model.py`)
@@ -225,8 +230,8 @@ and documentation accuracy. All fixes target the NLSQ Jacobian and NUTS leapfrog
   `getattr(cmc_config, ...)` on a raw dict (always returned `False`); now reads
   `config.require_nlsq_warmstart` (`core.py`)
 
-- **fix(nlsq)**: Remove hardcoded `dtype=jnp.float64` inside `@jit` shear meshgrid;
-  now uses `jnp.result_type(phi)` to preserve caller dtype (`physics_nlsq.py`)
+- **fix(nlsq)**: Remove hardcoded `dtype=jnp.float64` inside `@jit` shear meshgrid; now
+  uses `jnp.result_type(phi)` to preserve caller dtype (`physics_nlsq.py`)
 
 - **fix(cli)**: Read `stator_rotor_gap` from config instead of hardcoded `L=2000000.0`
   in CMC-only CLI path (`commands.py`)
@@ -240,9 +245,9 @@ and documentation accuracy. All fixes target the NLSQ Jacobian and NUTS leapfrog
 - **fix(cmc)**: Add `min_points_per_param` to `CMCConfig.from_dict` — was not
   configurable from YAML despite being a dataclass field (`config.py`)
 
-- **fix(nlsq)**: Align `hybrid_normalization_strategy` default in
-  `NLSQConfig.from_dict` to `"auto"` — was `"bounds"`, mismatching the
-  dataclass default and `NLSQWrapper` internal default (`nlsq/config.py`)
+- **fix(nlsq)**: Align `hybrid_normalization_strategy` default in `NLSQConfig.from_dict`
+  to `"auto"` — was `"bounds"`, mismatching the dataclass default and `NLSQWrapper`
+  internal default (`nlsq/config.py`)
 
 **Code quality (P2-F):**
 

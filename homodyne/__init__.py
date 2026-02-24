@@ -127,34 +127,34 @@ except ImportError:
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # data
-    "XPCSDataLoader":           ("homodyne.data",         "XPCSDataLoader"),
-    "load_xpcs_data":           ("homodyne.data",         "load_xpcs_data"),
+    "XPCSDataLoader": ("homodyne.data", "XPCSDataLoader"),
+    "load_xpcs_data": ("homodyne.data", "load_xpcs_data"),
     # core
-    "ParameterSpace":           ("homodyne.core",         "ParameterSpace"),
-    "ScaledFittingEngine":      ("homodyne.core",         "ScaledFittingEngine"),
-    "TheoryEngine":             ("homodyne.core",         "TheoryEngine"),
-    "compute_g2_scaled":        ("homodyne.core",         "compute_g2_scaled"),
+    "ParameterSpace": ("homodyne.core", "ParameterSpace"),
+    "ScaledFittingEngine": ("homodyne.core", "ScaledFittingEngine"),
+    "TheoryEngine": ("homodyne.core", "TheoryEngine"),
+    "compute_g2_scaled": ("homodyne.core", "compute_g2_scaled"),
     # optimization
-    "fit_mcmc_jax":             ("homodyne.optimization", "fit_mcmc_jax"),
-    "fit_nlsq_jax":             ("homodyne.optimization", "fit_nlsq_jax"),
-    "get_optimization_info":    ("homodyne.optimization", "get_optimization_info"),
+    "fit_mcmc_jax": ("homodyne.optimization", "fit_mcmc_jax"),
+    "fit_nlsq_jax": ("homodyne.optimization", "fit_nlsq_jax"),
+    "get_optimization_info": ("homodyne.optimization", "get_optimization_info"),
     # config
-    "ConfigManager":            ("homodyne.config",       "ConfigManager"),
+    "ConfigManager": ("homodyne.config", "ConfigManager"),
     # device
-    "configure_optimal_device": ("homodyne.device",       "configure_optimal_device"),
-    "get_device_status":        ("homodyne.device",       "get_device_status"),
+    "configure_optimal_device": ("homodyne.device", "configure_optimal_device"),
+    "get_device_status": ("homodyne.device", "get_device_status"),
     # cli
-    "cli_main":                 ("homodyne.cli",          "main"),
+    "cli_main": ("homodyne.cli", "main"),
 }
 
 # Sentinel names that trigger module-level HAS_* evaluation on first access.
 _MODULE_FLAGS: dict[str, tuple[str, str]] = {
-    "HAS_DATA":         ("homodyne.data",         "XPCSDataLoader"),
-    "HAS_CORE":         ("homodyne.core",         "ParameterSpace"),
+    "HAS_DATA": ("homodyne.data", "XPCSDataLoader"),
+    "HAS_CORE": ("homodyne.core", "ParameterSpace"),
     "HAS_OPTIMIZATION": ("homodyne.optimization", "fit_nlsq_jax"),
-    "HAS_CONFIG":       ("homodyne.config",       "ConfigManager"),
-    "HAS_DEVICE":       ("homodyne.device",       "configure_optimal_device"),
-    "HAS_CLI":          ("homodyne.cli",          "main"),
+    "HAS_CONFIG": ("homodyne.config", "ConfigManager"),
+    "HAS_DEVICE": ("homodyne.device", "configure_optimal_device"),
+    "HAS_CLI": ("homodyne.cli", "main"),
 }
 
 
@@ -200,19 +200,31 @@ __all__ = [
     "__version__",
     "get_package_info",
     # data
-    "XPCSDataLoader", "load_xpcs_data",
+    "XPCSDataLoader",
+    "load_xpcs_data",
     # core
-    "ParameterSpace", "ScaledFittingEngine", "TheoryEngine", "compute_g2_scaled",
+    "ParameterSpace",
+    "ScaledFittingEngine",
+    "TheoryEngine",
+    "compute_g2_scaled",
     # optimization
-    "fit_nlsq_jax", "fit_mcmc_jax", "get_optimization_info",
+    "fit_nlsq_jax",
+    "fit_mcmc_jax",
+    "get_optimization_info",
     # config
     "ConfigManager",
     # device
-    "configure_optimal_device", "get_device_status",
+    "configure_optimal_device",
+    "get_device_status",
     # cli
     "cli_main",
     # flags (resolved lazily)
-    "HAS_DATA", "HAS_CORE", "HAS_OPTIMIZATION", "HAS_CONFIG", "HAS_DEVICE", "HAS_CLI",
+    "HAS_DATA",
+    "HAS_CORE",
+    "HAS_OPTIMIZATION",
+    "HAS_CONFIG",
+    "HAS_DEVICE",
+    "HAS_CLI",
 ]
 
 
@@ -228,6 +240,7 @@ def get_package_info() -> dict:
 
     # Resolve HAS_* lazily (triggers __getattr__ if not yet cached)
     import homodyne as _self
+
     has_data = getattr(_self, "HAS_DATA", False)
     has_core = getattr(_self, "HAS_CORE", False)
     has_optimization = getattr(_self, "HAS_OPTIMIZATION", False)
@@ -322,6 +335,7 @@ def get_package_info() -> dict:
 def _check_installation() -> None:
     """Check installation status and provide helpful messages (CPU-only in v2.3.0)."""
     import homodyne as _self
+
     if not getattr(_self, "HAS_OPTIMIZATION", False):
         print(
             "Warning: Optimization modules not available. Core functionality limited.",
@@ -330,6 +344,7 @@ def _check_installation() -> None:
 
     try:
         import importlib
+
         importlib.import_module("jax")
     except ImportError:
         print("Note: JAX not available. Install with: pip install jax")
