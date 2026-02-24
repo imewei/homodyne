@@ -8,8 +8,11 @@ on:
     - cron: "0 3 * * 0"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
-  PYTHON_VERSION: "3.12"
+  JAX_ENABLE_X64: "1"
 
 jobs:
   security:
@@ -19,30 +22,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
 
       - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -e ".[dev]"
-          pip install bandit[toml] safety pip-audit
+        run: uv sync --extra dev
 
       - name: Run Bandit security scan
         run: |
-          bandit -r homodyne/ \
+          uvx bandit -r homodyne/ \
+            -c pyproject.toml \
             -f json \
             -o bandit-report.json \
-            -ll \
-            --exclude="*/tests/*"
-          bandit -r homodyne/ -ll --exclude="*/tests/*" || true
+            -ll || true
+          uvx bandit -r homodyne/ -c pyproject.toml -ll
 
       - name: Check dependency vulnerabilities
-        run: |
-          pip-audit --format=text || true
-          safety check --short-report || true
+        run: uvx pip-audit --format=text
+        continue-on-error: true
 
       - name: Upload security report
         if: always()
@@ -59,23 +61,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
 
       - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -e ".[dev]"
+        run: uv sync --extra dev
 
       - name: Run mypy
         run: |
-          mypy homodyne/ \
-            --ignore-missing-imports \
+          uv run mypy homodyne/ \
+            --config-file=pyproject.toml \
             --show-error-codes \
-            --pretty \
-            || true
+            --pretty
+        continue-on-error: true
 
   coverage:
     name: Test Coverage
@@ -84,29 +87,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
 
       - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -e ".[dev]"
+        run: uv sync --extra dev
 
       - name: Run tests with coverage
         run: |
-          pytest tests/ \
+          uv run pytest tests/ \
             --cov=homodyne \
             --cov-report=xml \
             --cov-report=html \
             --cov-report=term-missing \
-            --cov-fail-under=70 \
-            -m "not slow and not gpu" \
-            || true
+            -m "not slow"
+        continue-on-error: true
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           file: coverage.xml
           flags: quality
@@ -127,26 +130,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
 
-      - name: Install tools
-        run: |
-          pip install --upgrade pip
-          pip install radon xenon
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
 
       - name: Calculate complexity metrics
         run: |
           echo "=== Cyclomatic Complexity ==="
-          radon cc homodyne/ -a -nb || true
+          uvx radon cc homodyne/ -a -nb || true
 
           echo "=== Maintainability Index ==="
-          radon mi homodyne/ -nb || true
+          uvx radon mi homodyne/ -nb || true
 
           echo "=== Complexity Check ==="
-          xenon homodyne/ --max-absolute B --max-modules A --max-average A || true
+          uvx xenon homodyne/ --max-absolute B --max-modules A --max-average A || true
 
   summary:
     name: Quality Summary
@@ -156,7 +157,7 @@ jobs:
     steps:
       - name: Generate summary
         run: |
-          echo "## 🔍 Code Quality Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Code Quality Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Security Scan:** ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY
           echo "**Type Checking:** ${{ needs.type-check.result }}" >> $GITHUB_STEP_SUMMARY
