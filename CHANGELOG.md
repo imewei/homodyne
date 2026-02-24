@@ -9,7 +9,83 @@ ______________________________________________________________________
 
 ## [Unreleased]
 
-*No unreleased changes*
+### CI/CD Modernization and Code Quality
+
+Modernizes all GitHub Actions workflows to match the current codebase (uv, Python 3.13,
+ruff-only formatting, CPU-only architecture) and applies strict typing fixes across
+multiple modules.
+
+#### Changed
+
+**CI/CD workflows (`.github/workflows/`):**
+
+- **ci(workflows)**: Migrate all four workflows from `pip` to `uv` with
+  `astral-sh/setup-uv@v6` and `uv sync`/`uv run` for dependency management and command
+  execution
+
+- **ci(ci.yml)**: Expand test matrix to Python 3.12 + 3.13 (matching pyproject.toml
+  classifiers); add `defaults: run: shell: bash` on test job to fix Windows runner
+  compatibility (PowerShell doesn't support `\` line continuations); remove `develop`
+  branch trigger; remove GPU test job (CPU-only project); remove duplicate docs job
+  (handled by `docs.yml`); replace `black` with `ruff format`; update `ruff` to
+  `>=0.15.2`; set `JAX_ENABLE_X64=1` env; bump `codecov-action` to v5; add explicit
+  `permissions: contents: read`; replace `uv run pip install` with
+  `uv pip install`/`uvx`
+
+- **ci(quality.yml)**: Use `mypy --config-file=pyproject.toml` instead of
+  `--ignore-missing-imports`; use `uvx bandit` instead of installing bandit separately
+  (was not in dev deps — would fail); use `uvx` for pip-audit, radon, xenon (avoids
+  unpinned pip installs); replace `|| true` with `continue-on-error: true` for type
+  checking and coverage steps; add explicit `permissions: contents: read`
+
+- **ci(docs.yml)**: Fix artifact paths from `docs/_build/` to `docs/build/` (matching
+  Makefile `BUILDDIR = build`); replace `pip install -r docs/requirements.txt` with
+  `uv sync --extra docs`; add `timeout-minutes: 10`; add
+  `permissions: pull-requests: write` for PR comments; upgrade from `ubuntu-22.04` to
+  `ubuntu-latest`; remove Surge preview deployment and `pylint`/`pydocstyle` lint job
+  (not project dependencies)
+
+- **ci(release.yml)**: Move permissions from workflow-level to per-job declarations
+  (least-privilege: only `publish-pypi` gets `id-token: write`, only `github-release`
+  gets `contents: write`); use random heredoc delimiter for `GITHUB_OUTPUT` changelog;
+  fix PREVIOUS_TAG to use `git tag --sort=-v:refname` instead of fragile `HEAD^`; remove
+  malformed single-ref compare URL; bump `softprops/action-gh-release` from v1 to v2;
+  pass `github.ref_name`/`inputs.version` via `env:` for injection safety; replace
+  `uv run pip install` with `uvx`
+
+**Code quality:**
+
+- **refactor(typing)**: Add explicit `np.ndarray` type annotations for `np.clip` return
+  values to satisfy mypy strict mode (`nlsq/data_prep.py`, `recovery_strategies.py`)
+
+- **refactor(typing)**: Type `save_dict` as `dict[str, Any]` to prevent mypy overload
+  conflict with numpy's `savez_compressed` signature (`cli/commands.py`)
+
+- **refactor(typing)**: Use `importlib.import_module` for legacy `jax.lib.xla_bridge`
+  fallback to avoid static attribute check across different mypy environments
+  (`device/config.py`)
+
+- **refactor(typing)**: Wrap arithmetic return in `float()` to resolve `Any` return type
+  from untyped dict values (`scripts/laminar_logprob_probe.py`)
+
+- **style**: Enforce strict ruff formatting and typing across homodyne modules, config
+  templates, and test files
+
+**Documentation:**
+
+- **docs**: Restructure index.rst with `hidden` toctree directive and `list-table`
+  layout
+
+- **docs**: Remove deprecated version tags from Sphinx config and fix broken linkcheck
+  targets
+
+**Package:**
+
+- **chore**: Export `HAS_DATA` from `homodyne.__init__` for optional data availability
+  checks
+
+- **chore(config)**: Reformat YAML templates and refine config validation parameter
+  lists
 
 ______________________________________________________________________
 
