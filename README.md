@@ -22,8 +22,8 @@ All time integrals are evaluated numerically via cumulative trapezoid on the dis
 
 | Mode | Parameters | Count |
 |------|------------|-------|
-| **static** | $D_0, \alpha, D_{\text{offset}}$ | 3 |
-| **laminar_flow** | $D_0, \alpha, D_{\text{offset}}, \dot{\gamma}_0, \beta, \dot{\gamma}_{\text{offset}}, \phi_0$ | 7 |
+| **static** | D0, alpha, D_offset | 3 |
+| **laminar_flow** | D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0 | 7 |
 
 Per-angle contrast and offset are added automatically based on the number of azimuthal angles.
 
