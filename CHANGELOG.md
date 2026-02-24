@@ -29,21 +29,28 @@ multiple modules.
   branch trigger; remove GPU test job (CPU-only project); remove duplicate docs job
   (handled by `docs.yml`); replace `black` with `ruff format`; update `ruff` to
   `>=0.15.2`; set `JAX_ENABLE_X64=1` env; bump `codecov-action` to v5; add explicit
-  `permissions: contents: read`; replace `uv run pip install` with
-  `uv pip install`/`uvx`
+  `permissions: contents: read`; fix build job wheel smoke test to create isolated venv
+  via `uv venv .venv-test` + `VIRTUAL_ENV=` (was failing with "No virtual environment
+  found" since no `uv sync` runs in the build job)
 
 - **ci(quality.yml)**: Use `mypy --config-file=pyproject.toml` instead of
   `--ignore-missing-imports`; use `uvx bandit` instead of installing bandit separately
   (was not in dev deps — would fail); use `uvx` for pip-audit, radon, xenon (avoids
-  unpinned pip installs); replace `|| true` with `continue-on-error: true` for type
-  checking and coverage steps; add explicit `permissions: contents: read`
+  unpinned pip installs); add explicit `permissions: contents: read`; fix
+  `uvx pip-audit` to audit actual project dependencies via
+  `uv export | uvx pip-audit -r` (was scanning ephemeral env with only 28 self-deps);
+  remove `continue-on-error` from mypy step so type-check failures show in quality
+  summary dashboard; remove `|| true` from xenon so complexity gate (`--max-absolute B`)
+  actually enforces thresholds
 
 - **ci(docs.yml)**: Fix artifact paths from `docs/_build/` to `docs/build/` (matching
   Makefile `BUILDDIR = build`); replace `pip install -r docs/requirements.txt` with
-  `uv sync --extra docs`; add `timeout-minutes: 10`; add
-  `permissions: pull-requests: write` for PR comments; upgrade from `ubuntu-22.04` to
+  `uv sync --extra docs`; add `timeout-minutes: 10`; upgrade from `ubuntu-22.04` to
   `ubuntu-latest`; remove Surge preview deployment and `pylint`/`pydocstyle` lint job
-  (not project dependencies)
+  (not project dependencies); split into `build` + `comment` jobs to confine
+  `pull-requests: write` to the comment job only (build job runs third-party Sphinx
+  extensions under read-only permissions); PR comment now runs with `always()` so build
+  failures are reported instead of silently skipped
 
 - **ci(release.yml)**: Move permissions from workflow-level to per-job declarations
   (least-privilege: only `publish-pypi` gets `id-token: write`, only `github-release`
@@ -51,7 +58,12 @@ multiple modules.
   fix PREVIOUS_TAG to use `git tag --sort=-v:refname` instead of fragile `HEAD^`; remove
   malformed single-ref compare URL; bump `softprops/action-gh-release` from v1 to v2;
   pass `github.ref_name`/`inputs.version` via `env:` for injection safety; replace
-  `uv run pip install` with `uvx`
+  `uv run pip install` with `uvx`; restrict version regex to `vX.Y.Z` only (no
+  pre-release) to match `setuptools_scm` `tag_regex` — prevents silent version
+  corruption where a pre-release tag publishes a `devN` wheel; SHA-pin
+  `pypa/gh-action-pypi-publish` and `softprops/action-gh-release` to specific commit
+  digests for supply-chain safety; move `CURRENT_TAG` to `env:` block for
+  defense-in-depth consistency
 
 **Code quality:**
 
