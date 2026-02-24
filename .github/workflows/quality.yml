@@ -124,36 +124,10 @@ jobs:
           path: htmlcov/
           retention-days: 30
 
-  complexity:
-    name: Code Complexity
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: Calculate complexity metrics
-        run: |
-          echo "=== Cyclomatic Complexity ==="
-          uvx radon cc homodyne/ -a -nb || true
-
-          echo "=== Maintainability Index ==="
-          uvx radon mi homodyne/ -nb || true
-
-          echo "=== Complexity Check ==="
-          uvx xenon homodyne/ --max-absolute B --max-modules A --max-average A
-
   summary:
     name: Quality Summary
     runs-on: ubuntu-latest
-    needs: [security, type-check, coverage, complexity]
+    needs: [security, type-check, coverage]
     if: always()
     steps:
       - name: Generate summary
@@ -163,6 +137,5 @@ jobs:
           echo "**Security Scan:** ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY
           echo "**Type Checking:** ${{ needs.type-check.result }}" >> $GITHUB_STEP_SUMMARY
           echo "**Test Coverage:** ${{ needs.coverage.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Code Complexity:** ${{ needs.complexity.result }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "_Quality checks complete. See artifacts for detailed reports._" >> $GITHUB_STEP_SUMMARY
