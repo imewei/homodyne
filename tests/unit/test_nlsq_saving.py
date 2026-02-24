@@ -462,23 +462,23 @@ class TestSaveNLSQNPZFile:
             )
 
             # Load and verify all arrays present
-            data = np.load(output_dir / "fitted_data.npz")
-            expected_arrays = [
-                "phi_angles",
-                "c2_exp",
-                "c2_theoretical_raw",
-                "c2_theoretical_scaled",
-                "c2_solver_scaled",
-                "per_angle_scaling",
-                "per_angle_scaling_solver",
-                "residuals",
-                "residuals_normalized",
-                "t1",
-                "t2",
-                "q",
-            ]
-            for arr_name in expected_arrays:
-                assert arr_name in data, f"Missing array: {arr_name}"
+            with np.load(output_dir / "fitted_data.npz") as data:
+                expected_arrays = [
+                    "phi_angles",
+                    "c2_exp",
+                    "c2_theoretical_raw",
+                    "c2_theoretical_scaled",
+                    "c2_solver_scaled",
+                    "per_angle_scaling",
+                    "per_angle_scaling_solver",
+                    "residuals",
+                    "residuals_normalized",
+                    "t1",
+                    "t2",
+                    "q",
+                ]
+                for arr_name in expected_arrays:
+                    assert arr_name in data, f"Missing array: {arr_name}"
 
     def test_save_nlsq_npz_file_load_and_verify(self):
         """Test loading NPZ file and verifying array contents."""
@@ -522,14 +522,14 @@ class TestSaveNLSQNPZFile:
             )
 
             # Load and verify shapes and values
-            data = np.load(output_dir / "fitted_data.npz")
-            assert data["phi_angles"].shape == (3,)
-            assert data["c2_exp"].shape == (3, 10, 10)
-            assert np.allclose(data["phi_angles"], phi_angles)
-            assert np.allclose(data["c2_exp"], c2_exp)
-            assert np.allclose(
-                data["per_angle_scaling_solver"], per_angle_scaling_solver
-            )
+            with np.load(output_dir / "fitted_data.npz") as data:
+                assert data["phi_angles"].shape == (3,)
+                assert data["c2_exp"].shape == (3, 10, 10)
+                assert np.allclose(data["phi_angles"], phi_angles)
+                assert np.allclose(data["c2_exp"], c2_exp)
+                assert np.allclose(
+                    data["per_angle_scaling_solver"], per_angle_scaling_solver
+                )
 
 
 # ==============================================================================
