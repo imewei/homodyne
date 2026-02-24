@@ -701,7 +701,7 @@ class TestShellAliasDefinitions:
         post_install_file = _PROJECT_ROOT / "homodyne" / "post_install.py"
         assert post_install_file.exists()
 
-        content = post_install_file.read_text()
+        content = post_install_file.read_text(encoding="utf-8")
 
         # Check that correct aliases are defined
         assert "alias hm-nlsq='homodyne --method nlsq'" in content
@@ -712,7 +712,7 @@ class TestShellAliasDefinitions:
         post_install_file = _PROJECT_ROOT / "homodyne" / "post_install.py"
         assert post_install_file.exists()
 
-        content = post_install_file.read_text()
+        content = post_install_file.read_text(encoding="utf-8")
 
         # Deprecated aliases should not be defined
         # (they would show up as "alias hm-nuts=" or "alias hm-auto=")
@@ -723,7 +723,7 @@ class TestShellAliasDefinitions:
     def test_alias_descriptions_in_post_install(self):
         """Test that alias descriptions properly document the changes."""
         post_install_file = _PROJECT_ROOT / "homodyne" / "post_install.py"
-        content = post_install_file.read_text()
+        content = post_install_file.read_text(encoding="utf-8")
 
         # Check that aliases are defined for nlsq and cmc
         assert "hm-nlsq" in content
@@ -1078,7 +1078,7 @@ class TestConfigNormalization:
         # Check that normalization happened
         exp_data = config.config["experimental_data"]
         assert "file_path" in exp_data, "file_path should be added by normalization"
-        assert exp_data["file_path"] == "data/sample/test_data.hdf"
+        assert exp_data["file_path"] == str(Path("data/sample/test_data.hdf"))
 
         # Check that original fields are preserved
         assert exp_data["data_folder_path"] == "./data/sample/"
@@ -1121,7 +1121,7 @@ class TestConfigNormalization:
         # Check phi angles normalization
         exp_data = config.config["experimental_data"]
         assert "phi_angles_full_path" in exp_data
-        assert exp_data["phi_angles_full_path"] == "data/phi/angles.txt"
+        assert exp_data["phi_angles_full_path"] == str(Path("data/phi/angles.txt"))
 
     def test_normalization_with_absolute_paths(self):
         """Test normalization with absolute paths."""
@@ -1136,7 +1136,9 @@ class TestConfigNormalization:
         exp_data = config.config["experimental_data"]
 
         assert "file_path" in exp_data
-        assert exp_data["file_path"] == "/home/user/xpcs/data/experiment_001.hdf"
+        assert exp_data["file_path"] == str(
+            Path("/home/user/xpcs/data/experiment_001.hdf")
+        )
 
 
 class TestDataLoading:
