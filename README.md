@@ -12,22 +12,22 @@ implementing the theoretical framework from
 [He et al. PNAS 2025](https://doi.org/10.1073/pnas.2514216122) for characterizing
 transport properties in flowing soft matter systems.
 
-## Correlation Model
+## Homodyne Model
 
-```
-c2(phi, t1, t2) = offset + contrast * c1_diff(t1, t2) * [c1_shear(phi, t1, t2)]^2
+$$c_2(\phi, t_1, t_2) = \text{offset} + \text{contrast} \times c_1^{\text{diff}}(t_1, t_2) \times \left[c_1^{\text{shear}}(\phi, t_1, t_2)\right]^2$$
 
-c1_diff(t1, t2)        = exp[-q^2 * integral_{t1}^{t2} D(t') dt']
-c1_shear(phi, t1, t2)  = sinc(q * L * cos(phi0 - phi) / (2*pi) * integral_{t1}^{t2} gamma_dot(t') dt')
+$$c_1^{\text{diff}}(t_1, t_2) = \exp\!\left[-q^2 \int_{t_1}^{t_2} D(t')\, dt'\right]$$
 
-D(t)          = D0 * t^alpha + D_offset
-gamma_dot(t)  = gamma_dot_0 * t^beta + gamma_dot_offset
-```
+$$c_1^{\text{shear}}(\phi, t_1, t_2) = \operatorname{sinc}\!\left(\frac{q\, L\, \cos(\phi_0 - \phi)}{2\pi} \int_{t_1}^{t_2} \dot{\gamma}(t')\, dt'\right)$$
+
+$$D(t) = D_0\, t^{\alpha} + D_{\text{offset}} \qquad \dot{\gamma}(t) = \dot{\gamma}_0\, t^{\beta} + \dot{\gamma}_{\text{offset}}$$
+
+All time integrals are evaluated numerically via cumulative trapezoid on the discrete time grid.
 
 | Mode | Parameters | Count |
 |------|------------|-------|
-| **static** | D0, alpha, D_offset | 3 |
-| **laminar_flow** | D0, alpha, D_offset, gamma_dot_0, beta, gamma_dot_offset, phi0 | 7 |
+| **static** | $D_0,\; \alpha,\; D_{\text{offset}}$ | 3 |
+| **laminar_flow** | $D_0,\; \alpha,\; D_{\text{offset}},\; \dot{\gamma}_0,\; \beta,\; \dot{\gamma}_{\text{offset}},\; \phi_0$ | 7 |
 
 Per-angle contrast and offset are added automatically based on the number of azimuthal angles.
 
