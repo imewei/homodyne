@@ -2743,7 +2743,7 @@ def save_mcmc_results(
     # Step 2: Save samples.npz with full posterior
     try:
         samples_file = method_dir / "samples.npz"
-        save_dict = {}
+        save_dict: dict[str, Any] = {}
 
         # Combine samples from separate attributes (samples_params, samples_contrast, samples_offset)
         if hasattr(result, "samples_params") and result.samples_params is not None:
