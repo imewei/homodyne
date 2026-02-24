@@ -44,9 +44,12 @@ def temp_dir():
 @pytest.fixture
 def minimal_yaml_config(temp_dir):
     """Create a minimal valid YAML configuration file."""
+    # Use forward slashes to avoid YAML interpreting backslashes as escape
+    # sequences on Windows (e.g., \U in C:\Users is treated as Unicode escape)
+    data_folder = temp_dir.replace(os.sep, "/")
     config_content = f"""
 experimental_data:
-  data_folder_path: "{temp_dir}"
+  data_folder_path: "{data_folder}"
   data_file_name: "test_data.h5"
 
 analyzer_parameters:
@@ -535,10 +538,10 @@ class TestDiagonalCorrection:
 
         corrected = loader._correct_diagonal(mat)
 
-        # Off-diagonal should be unchanged
-        assert float(corrected[0, 1]) == 1.1
-        assert float(corrected[0, 2]) == 1.2
-        assert float(corrected[1, 2]) == 1.3
+        # Off-diagonal should be unchanged (use rtol for float32 when x64 disabled)
+        assert_allclose(float(corrected[0, 1]), 1.1, rtol=1e-6)
+        assert_allclose(float(corrected[0, 2]), 1.2, rtol=1e-6)
+        assert_allclose(float(corrected[1, 2]), 1.3, rtol=1e-6)
 
 
 # =============================================================================
