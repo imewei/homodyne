@@ -139,7 +139,6 @@ def compare_integration_methods(
     Returns dict with:
     - nlsq_method: Single trapezoid approximation
     - cmc_method: Cumulative trapezoid sum
-    - exact: Analytical solution (when possible)
     - relative_error: Between methods
     """
     t_end = n_steps * dt
@@ -162,18 +161,6 @@ def compare_integration_methods(
     trap_avg = 0.5 * (D_values[:-1] + D_values[1:])
     cmc_integral = np.sum(trap_avg)
 
-    # Analytical solution (for alpha != -1)
-    # ∫ (D0*t^α + D_offset) dt = D0*t^(α+1)/(α+1) + D_offset*t
-    if abs(alpha + 1) > 1e-10:
-        # Use t+epsilon for consistency
-        exact_end = D0 * (t_end + epsilon) ** (alpha + 1) / (alpha + 1) + D_offset * (
-            t_end + epsilon
-        )
-        exact_start = D0 * epsilon ** (alpha + 1) / (alpha + 1) + D_offset * epsilon
-        exact_integral = (exact_end - exact_start) / dt  # Normalize to "steps"
-    else:
-        exact_integral = None
-
     relative_error = abs(nlsq_integral - cmc_integral) / max(
         abs(nlsq_integral), abs(cmc_integral), 1e-10
     )
@@ -181,7 +168,6 @@ def compare_integration_methods(
     return {
         "nlsq_method": nlsq_integral,
         "cmc_method": cmc_integral,
-        "exact": exact_integral,
         "relative_error": relative_error,
         "n_steps": n_steps,
         "alpha": alpha,
