@@ -10,7 +10,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-import arviz as az
+try:
+    import arviz as az
+    HAS_ARVIZ = True
+except ImportError:
+    HAS_ARVIZ = False
+    az = None  # type: ignore
+
 import numpy as np
 from sklearn.mixture import GaussianMixture  # type: ignore[import-untyped]
 
@@ -101,8 +107,11 @@ def compute_ess(
 
     # Create ArviZ InferenceData for ESS computation
     try:
+        if not HAS_ARVIZ:
+            raise ImportError("Arviz is required for full ESS computation")
+            
         idata = az.from_dict(posterior=samples)
-
+            
         # Compute ESS using ArviZ
         ess_bulk = az.ess(idata, method="bulk")
         ess_tail = az.ess(idata, method="tail")

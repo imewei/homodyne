@@ -10,7 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-import arviz as az
+try:
+    import arviz as az
+    HAS_ARVIZ = True
+except ImportError:
+    HAS_ARVIZ = False
+    az = None  # type: ignore
+
 import numpy as np
 
 from homodyne.optimization.cmc.sampler import MCMCSamples, SamplingStats
@@ -445,6 +451,9 @@ def create_inference_data(mcmc_samples: MCMCSamples) -> az.InferenceData:
     az.InferenceData
         ArviZ-compatible data structure.
     """
+    if not HAS_ARVIZ:
+        raise ImportError("ArviZ is required to create InferenceData")
+        
     # Build posterior dictionary
     posterior_dict: dict[str, np.ndarray] = {}
 

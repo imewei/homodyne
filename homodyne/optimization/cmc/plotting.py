@@ -14,7 +14,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import arviz as az
+try:
+    import arviz as az
+    HAS_ARVIZ = True
+except ImportError:
+    HAS_ARVIZ = False
+    az = None  # type: ignore
+
 import matplotlib.pyplot as plt
 
 from homodyne.utils.logging import get_logger
@@ -56,6 +62,9 @@ def generate_diagnostic_plots(
     list[Path]
         Paths to saved plot files.
     """
+    if not HAS_ARVIZ:
+        raise ImportError("Arviz is required for diagnostic plots")
+
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
