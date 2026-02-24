@@ -16,18 +16,18 @@ transport properties in flowing soft matter systems.
 
 $$c_2(\phi, t_1, t_2) = \text{offset} + \text{contrast} \times c_1^{\text{diff}}(t_1, t_2) \times \left[c_1^{\text{shear}}(\phi, t_1, t_2)\right]^2$$
 
-$$c_1^{\text{diff}}(t_1, t_2) = \exp\!\left[-q^2 \int_{t_1}^{t_2} D(t')\, dt'\right]$$
+$$c_1^{\text{diff}}(t_1, t_2) = \exp\left[-q^2 \int_{t_1}^{t_2} D(t') \; dt'\right]$$
 
-$$c_1^{\text{shear}}(\phi, t_1, t_2) = \mathrm{sinc}\!\left(\frac{q\, L\, \cos(\phi_0 - \phi)}{2\pi} \int_{t_1}^{t_2} \dot{\gamma}(t')\, dt'\right)$$
+$$c_1^{\text{shear}}(\phi, t_1, t_2) = \mathrm{sinc}\left(\frac{q \; L \; \cos(\phi_0 - \phi)}{2\pi} \int_{t_1}^{t_2} \dot{\gamma}(t') \; dt'\right)$$
 
-$$D(t) = D_0\, t^{\alpha} + D_{\text{offset}} \qquad \dot{\gamma}(t) = \dot{\gamma}_0\, t^{\beta} + \dot{\gamma}_{\text{offset}}$$
+$$D(t) = D_0 \; t^{\alpha} + D_{\text{offset}} \qquad \dot{\gamma}(t) = \dot{\gamma}_0 \; t^{\beta} + \dot{\gamma}_{\text{offset}}$$
 
 All time integrals are evaluated numerically via cumulative trapezoid on the discrete time grid.
 
 | Mode | Parameters | Count |
 |------|------------|-------|
-| **static** | $D_0,\; \alpha,\; D_{\text{offset}}$ | 3 |
-| **laminar_flow** | $D_0,\; \alpha,\; D_{\text{offset}},\; \dot{\gamma}_0,\; \beta,\; \dot{\gamma}_{\text{offset}},\; \phi_0$ | 7 |
+| **static** | $D_0, \alpha, D_{\text{offset}}$ | 3 |
+| **laminar_flow** | $D_0, \alpha, D_{\text{offset}}, \dot{\gamma}_0, \beta, \dot{\gamma}_{\text{offset}}, \phi_0$ | 7 |
 
 Per-angle contrast and offset are added automatically based on the number of azimuthal angles.
 
