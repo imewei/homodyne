@@ -537,8 +537,8 @@ print(f"CMC used with {cmc_result.num_shards} shards")
 
 - **Linux**: Full support (HPC clusters recommended)
 - **macOS**: Full support
-- **Windows**: Full support
-- **Python**: 3.12+
+- **Windows**: Supported (not actively tested in CI)
+- **Python**: 3.12+ (tested on 3.12 and 3.13)
 
 **For GPU users**: Use Homodyne v2.2.1 (last GPU-supporting version)
 
@@ -600,12 +600,15 @@ Expected output: 9 tests passing (90-100% health score)
 ### Development Installation
 
 ```bash
-# CPU-only installation (all platforms)
+# Using uv (recommended)
+git clone https://github.com/imewei/homodyne.git
+cd homodyne
+uv sync --extra dev    # Install with dev dependencies
+
+# Or using pip
 pip install homodyne[dev]
 
-# Or from source
-git clone https://github.com/your-org/homodyne.git
-cd homodyne
+# Or editable install from source
 pip install -e ".[dev]"
 ```
 
@@ -726,13 +729,14 @@ The notebook covers:
 
 ## Shell Completion & CLI Tools
 
-Homodyne provides four CLI commands and intelligent shell completion for faster
+Homodyne provides five CLI commands and intelligent shell completion for faster
 workflows.
 
 ### Available Commands
 
 - **`homodyne`** - Run XPCS analysis (NLSQ/CMC)
 - **`homodyne-config`** - Generate and validate configuration files
+- **`homodyne-config-xla`** - Configure XLA device settings
 - **`homodyne-post-install`** - Install shell completion (bash/zsh/fish)
 - **`homodyne-cleanup`** - Remove shell completion scripts
 
@@ -1216,11 +1220,16 @@ optimized for multi-core systems and HPC clusters.
 - `h5py>=3.15,<4.0` - HDF5 file support
 - `pyyaml>=6.0.3` - YAML configuration
 
-### Optional Dependencies
-
-- `psutil>=7.2` - Enhanced CPU optimization
-- `matplotlib>=3.10` - Plotting capabilities
+- `jaxopt>=0.8.3` - Differentiable optimization
+- `interpax>=0.3.12` - JIT-safe interpolation
+- `evosax>=0.2.0` - CMA-ES global optimization
+- `psutil>=7.2` - CPU/memory optimization
+- `cloudpickle>=3.1` - Serialization for multiprocessing
+- `tqdm>=4.67.1` - Progress bars
+- `matplotlib>=3.10` - Plotting
 - `datashader>=0.18` - Fast large-dataset visualization
+- `xarray>=2025.12` - Labeled array data
+- `scikit-learn>=1.6` - GMM bimodal detection
 
 ### Version Notes
 
@@ -1342,7 +1351,7 @@ The NLSQ optimizer includes **intelligent error recovery** for production reliab
 result = fit_nlsq_jax(data, config)  # enable_recovery=True
 
 # Disable for debugging
-from homodyne.optimization.nlsq_wrapper import NLSQWrapper
+from homodyne.optimization.nlsq import NLSQWrapper
 wrapper = NLSQWrapper(enable_recovery=False)
 ```
 

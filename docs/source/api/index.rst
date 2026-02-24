@@ -28,6 +28,10 @@ Module Overview
      - Description
    * - :doc:`core`
      - Physical constants, parameter bounds, validation, and shared utilities
+   * - :doc:`homodyne_model`
+     - ``HomodyneModel`` — unified model facade for NLSQ and CMC
+   * - :doc:`jax_backend`
+     - JIT-compiled g₁/g₂ physics, autodiff, meshgrid cache
    * - :doc:`models`
      - ``DiffusionModel``, ``ShearModel``, ``CombinedModel`` — OO model interface
    * - :doc:`theory_engine`
@@ -42,6 +46,8 @@ Module Overview
      - CMC overview, ``fit_mcmc_jax()``, ``CMCConfig``, shard size guide
    * - :doc:`cmc_sampler`
      - ``SamplingPlan``, NUTS execution, adaptive sampling
+   * - :doc:`cmc_reparameterization`
+     - Parameter reparameterization for MCMC sampling efficiency
    * - :doc:`cmc_backends`
      - Multiprocessing backend, worker configuration, chain execution methods
    * - :doc:`data`
@@ -67,6 +73,8 @@ Quick Navigation
 **Core Physics**
 
 - :doc:`core` — Physics constants, validation, ``safe_exp()``, ``safe_sinc()``, scaling utilities
+- :doc:`homodyne_model` — ``HomodyneModel`` unified model facade
+- :doc:`jax_backend` — JIT-compiled g₁/g₂ functions, autodiff, cache management
 
 **Models**
 
@@ -83,6 +91,7 @@ Quick Navigation
 - :ref:`api-fit-mcmc` — ``fit_mcmc_jax()`` Bayesian pipeline
 - :ref:`api-cmc-config` — ``CMCConfig`` dataclass
 - :ref:`api-sampling-plan` — ``SamplingPlan`` adaptive scheduling
+- :ref:`api-reparam-config` — ``ReparamConfig`` and parameter transforms
 
 **Infrastructure**
 
@@ -98,6 +107,8 @@ Quick Navigation
    :caption: API Reference
 
    core
+   homodyne_model
+   jax_backend
    models
    theory_engine
    optimization
@@ -106,6 +117,7 @@ Quick Navigation
    nlsq_wrapper
    cmc
    cmc_sampler
+   cmc_reparameterization
    cmc_backends
    data
    config

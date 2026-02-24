@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path("../..").resolve()))
 
 # -- Project information -----------------------------------------------------
 project = "Homodyne"
-copyright = "2025, Wei Chen, Hongrui He - Argonne National Laboratory"
+copyright = "2024–2026, Wei Chen, Hongrui He - Argonne National Laboratory"
 author = "Wei Chen, Hongrui He"
 
 # Get version dynamically from package; fall back to hardcoded value
@@ -87,10 +87,10 @@ autodoc_typehints_description_target = "documented"
 autodoc_preserve_defaults = True
 
 # Mock optional dependencies that may be absent in CI environments
-autodoc_mock_imports: list[str] = ["arviz"]
+autodoc_mock_imports: list[str] = ["arviz", "numpyro", "blackjax"]
 
 # -- Options for autosummary extension ---------------------------------------
-autosummary_generate = True
+autosummary_generate = False
 autosummary_imported_members = False
 
 # -- Options for sphinx_autodoc_typehints ------------------------------------
