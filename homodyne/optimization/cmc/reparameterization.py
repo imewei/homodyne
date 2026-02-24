@@ -4,7 +4,7 @@
 Transforms correlated parameters to orthogonal sampling space,
 then converts back to physics parameters for output.
 
-Reparameterizations (v2.23.0+, reference-time):
+Reparameterizations (v2.22.2, reference-time):
 - D0, D_offset → log_D_ref, D_offset_frac (decorrelates D0/alpha via observable)
 - gamma_dot_t0 → log_gamma_ref (decorrelates gamma_dot_t0/beta via observable)
 

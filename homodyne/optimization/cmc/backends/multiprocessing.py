@@ -8,7 +8,7 @@ Optimizations (v2.9.1):
 - Adaptive polling: Adjust poll interval based on shard activity
 - Event.wait heartbeat: Efficient heartbeat using Event.wait(timeout)
 
-Optimizations (v2.23.0):
+Optimizations (v2.22.2):
 - LPT scheduling: Dispatch highest-cost shards first (size + noise weighted)
 - Per-shard shared memory: Shard arrays stored in shared memory (avoids pickle overhead)
 - deque for pending shards: O(1) popleft instead of O(n) list.pop(0)

@@ -164,7 +164,7 @@ class CMCConfig:
 
     # Combination
     combination_method: str = (
-        "robust_consensus_mc"  # Robust CMC with MAD outlier filtering (v2.23.0+)
+        "robust_consensus_mc"  # Robust CMC with MAD outlier filtering (v2.22.2)
     )
     min_success_rate: float = 0.90
     run_id: str | None = None

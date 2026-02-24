@@ -48,7 +48,7 @@ class _MockParameterSpace:
 
 @pytest.mark.unit
 def test_resolve_max_points_per_shard_laminar_large_pool():
-    # v2.24.0: Reduced shard sizes after reparameterization fixes bimodal posteriors
+    # v2.22.2: Reduced shard sizes after reparameterization fixes bimodal posteriors
     # With n_phi=1, angle_factor=0.6, base=5K (for 3M) → scaled=3K (MIN_SHARD_SIZE_LAMINAR)
     # With n_phi=10+, angle_factor=0.85, base=5K → scaled=4,250
     assert _resolve_max_points_per_shard("laminar_flow", 3_000_000, "auto") == 3_000
