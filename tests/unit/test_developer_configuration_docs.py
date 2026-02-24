@@ -18,7 +18,7 @@ def test_developer_guide_index_exists():
     )
 
     # Verify file is not empty
-    content = dev_guide_index.read_text()
+    content = dev_guide_index.read_text(encoding="utf-8")
     assert len(content) > 0, "developer/index.rst is empty"
     assert "toctree" in content, "developer/index.rst missing toctree directive"
 
@@ -32,7 +32,7 @@ def test_developer_guide_contributing_exists():
         f"developer/contributing_guide.rst not found at {contributing}"
     )
 
-    content = contributing.read_text()
+    content = contributing.read_text(encoding="utf-8")
     assert len(content) > 0, "developer/contributing_guide.rst is empty"
 
     # Verify key sections exist
@@ -58,7 +58,7 @@ def test_developer_guide_testing_exists():
         f"developer/testing_guide.rst not found at {testing_guide}"
     )
 
-    content = testing_guide.read_text()
+    content = testing_guide.read_text(encoding="utf-8")
     assert len(content) > 0, "developer/testing_guide.rst is empty"
 
     # Verify key sections exist
@@ -82,7 +82,7 @@ def test_configuration_index_exists():
 
     assert config_index.exists(), f"configuration/index.rst not found at {config_index}"
 
-    content = config_index.read_text()
+    content = config_index.read_text(encoding="utf-8")
     assert len(content) > 0, "configuration/index.rst is empty"
     assert "toctree" in content, "configuration/index.rst missing toctree directive"
 
@@ -94,7 +94,7 @@ def test_configuration_templates_exists():
 
     assert templates.exists(), f"configuration/templates.rst not found at {templates}"
 
-    content = templates.read_text()
+    content = templates.read_text(encoding="utf-8")
     assert len(content) > 0, "configuration/templates.rst is empty"
 
     # Verify key sections exist
@@ -112,7 +112,7 @@ def test_configuration_options_exists():
 
     assert options.exists(), f"configuration/options.rst not found at {options}"
 
-    content = options.read_text()
+    content = options.read_text(encoding="utf-8")
     assert len(content) > 0, "configuration/options.rst is empty"
 
     # Verify key sections exist
@@ -134,8 +134,8 @@ def test_developer_guide_references_claude_md():
     contributing = docs_path / "source" / "developer" / "contributing_guide.rst"
     testing_guide = docs_path / "source" / "developer" / "testing_guide.rst"
 
-    contributing_content = contributing.read_text()
-    testing_content = testing_guide.read_text()
+    contributing_content = contributing.read_text(encoding="utf-8")
+    testing_content = testing_guide.read_text(encoding="utf-8")
 
     # Check for command references (make test, black, ruff, mypy, pytest, uv)
     expected_refs = ["make test", "black", "ruff", "mypy", "pytest", "uv"]
@@ -152,7 +152,7 @@ def test_configuration_templates_reference_yaml():
     docs_path = Path(__file__).parent.parent.parent / "docs"
     templates = docs_path / "source" / "configuration" / "templates.rst"
 
-    content = templates.read_text()
+    content = templates.read_text(encoding="utf-8")
 
     # Check for references to template examples
     expected_refs = ["static", "laminar_flow", "contrast", "offset", "D0", "alpha"]
@@ -166,7 +166,7 @@ def test_internal_links_in_developer_guide():
     dev_guide_index = docs_path / "source" / "developer" / "index.rst"
 
     # Check that index.rst has proper toctree
-    index_content = dev_guide_index.read_text()
+    index_content = dev_guide_index.read_text(encoding="utf-8")
     assert "contributing" in index_content.lower(), (
         "contributing guide not referenced in dev guide index"
     )
@@ -181,7 +181,7 @@ def test_internal_links_in_configuration():
     config_index = docs_path / "source" / "configuration" / "index.rst"
 
     # Check that index.rst has proper toctree
-    index_content = config_index.read_text()
+    index_content = config_index.read_text(encoding="utf-8")
     assert "templates" in index_content.lower(), (
         "templates guide not referenced in configuration index"
     )
@@ -205,7 +205,7 @@ def test_sphinx_rst_formatting():
 
     for rst_file in rst_files:
         assert rst_file.exists(), f"RST file not found: {rst_file}"
-        content = rst_file.read_text()
+        content = rst_file.read_text(encoding="utf-8")
 
         # Check for required RST elements
         assert "=" in content or "-" in content or "~" in content, (
