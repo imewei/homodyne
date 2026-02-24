@@ -162,6 +162,7 @@ homodyne = [
 [tool.ruff]
 line-length = 88
 target-version = "py313"
+exclude = ["homodyne/_version.py"]
 
 [tool.ruff.lint]
 select = [

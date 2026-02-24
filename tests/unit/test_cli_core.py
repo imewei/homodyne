@@ -79,6 +79,9 @@ from homodyne.cli.args_parser import create_parser, validate_args
 from homodyne.cli.commands import _load_data
 from homodyne.config.manager import ConfigManager
 
+# Project root derived from test file location (tests/unit/test_cli_core.py → repo root)
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 # ==============================================================================
 # CLI Argument Parsing Tests (from test_cli_args.py)
 # ==============================================================================
@@ -695,9 +698,7 @@ class TestShellAliasDefinitions:
 
     def test_shell_aliases_defined(self):
         """Test that shell aliases are defined in post_install.py."""
-        post_install_file = Path(
-            "/home/wei/Documents/GitHub/homodyne/homodyne/post_install.py"
-        )
+        post_install_file = _PROJECT_ROOT / "homodyne" / "post_install.py"
         assert post_install_file.exists()
 
         content = post_install_file.read_text()
@@ -708,9 +709,7 @@ class TestShellAliasDefinitions:
 
     def test_deprecated_aliases_not_defined(self):
         """Test that deprecated aliases are not defined."""
-        post_install_file = Path(
-            "/home/wei/Documents/GitHub/homodyne/homodyne/post_install.py"
-        )
+        post_install_file = _PROJECT_ROOT / "homodyne" / "post_install.py"
         assert post_install_file.exists()
 
         content = post_install_file.read_text()
@@ -723,9 +722,7 @@ class TestShellAliasDefinitions:
 
     def test_alias_descriptions_in_post_install(self):
         """Test that alias descriptions properly document the changes."""
-        post_install_file = Path(
-            "/home/wei/Documents/GitHub/homodyne/homodyne/post_install.py"
-        )
+        post_install_file = _PROJECT_ROOT / "homodyne" / "post_install.py"
         content = post_install_file.read_text()
 
         # Check that aliases are defined for nlsq and cmc
@@ -951,7 +948,7 @@ class TestCliHelpOutput:
             [sys.executable, "-m", "homodyne.cli.main", "--help"],
             capture_output=True,
             text=True,
-            cwd="/home/wei/Documents/GitHub/homodyne",
+            cwd=str(_PROJECT_ROOT),
         )
 
         assert result.returncode == 0
@@ -967,7 +964,7 @@ class TestCliHelpOutput:
             [sys.executable, "-m", "homodyne.cli.main", "--help"],
             capture_output=True,
             text=True,
-            cwd="/home/wei/Documents/GitHub/homodyne",
+            cwd=str(_PROJECT_ROOT),
         )
 
         assert result.returncode == 0
@@ -996,7 +993,7 @@ class TestVersionInformation:
             [sys.executable, "-m", "homodyne.cli.main", "--version"],
             capture_output=True,
             text=True,
-            cwd="/home/wei/Documents/GitHub/homodyne",
+            cwd=str(_PROJECT_ROOT),
         )
 
         assert result.returncode == 0
