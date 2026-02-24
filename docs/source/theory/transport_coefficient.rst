@@ -99,15 +99,6 @@ by **cumulative trapezoidal integration** of :math:`D(t)` on the experimental ti
 
    \mathcal{D}(t_1, t_2) \;=\; \int_{t_1}^{t_2} D(t') \, dt'
 
-For reference, the analytical result (used in tests and for intuition, but not in the
-implementation) is:
-
-.. math::
-
-   \int_{t_1}^{t_2} D(t') \, dt'
-   \;=\; \frac{D_0}{1+\alpha}\!\left(t_2^{1+\alpha} - t_1^{1+\alpha}\right)
-         + D_\mathrm{offset}(t_2 - t_1)
-
 The numerical integration is implemented in :mod:`homodyne.core.physics_utils` (shared
 trapezoidal kernels) and used by both :mod:`homodyne.core.jax_backend` (NLSQ meshgrid mode)
 and :mod:`homodyne.core.physics_cmc` (CMC element-wise mode).
@@ -135,7 +126,6 @@ the mean-squared displacement is:
 
    \mathrm{MSD}(t) \;\equiv\; \mathrm{Var}[x(t) - x(0)]
    \;=\; \int_0^t D(t')\,dt'
-   \;=\; \frac{D_0}{1+\alpha}\,t^{1+\alpha} + D_\mathrm{offset}\,t
 
 The effective **physical** (Stokes-Einstein) diffusion coefficient at time :math:`t` is
 half the homodyne value:
@@ -143,10 +133,9 @@ half the homodyne value:
 .. math::
 
    D_\mathrm{SE}(t) \;=\; \frac{\mathrm{MSD}(t)}{2t}
-   \;=\; \frac{D_0}{2(1+\alpha)}\,t^\alpha + \frac{D_\mathrm{offset}}{2}
 
-For :math:`\alpha = 0` (standard Brownian motion): :math:`D_\mathrm{SE} = D_0/2 + D_\mathrm{offset}/2`,
-a constant. For :math:`\alpha < 0` (sub-diffusion with aging): particles slow down over time.
+For :math:`\alpha = 0` (standard Brownian motion): :math:`D_\mathrm{SE}` is a constant.
+For :math:`\alpha < 0` (sub-diffusion with aging): particles slow down over time.
 
 
 Table of J(t) for Classical Processes

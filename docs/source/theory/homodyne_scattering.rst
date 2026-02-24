@@ -175,16 +175,9 @@ The accumulated strain is computed by **cumulative trapezoidal integration** of
 
    \Gamma(t_1, t_2) \;=\; \int_{t_1}^{t_2} \dot{\gamma}(t')\,dt'
 
-For reference, the analytical result is:
-
-.. math::
-
-   \Gamma(t_1, t_2)
-   \;=\; \frac{\dot{\gamma}_0}{1+\beta_\gamma}\!\left(t_2^{1+\beta_\gamma} - t_1^{1+\beta_\gamma}\right)
-         + \dot{\gamma}_\mathrm{offset}(t_2 - t_1)
-
 where :math:`\beta_\gamma` is the shear exponent parameter (named ``beta`` in config,
-not to be confused with optical contrast).
+not to be confused with optical contrast). This integral is evaluated numerically
+via cumulative trapezoid on the experimental time grid.
 
 **Full parameter set for** ``laminar_flow`` **mode**
 (see :ref:`parameter_guide` for physical interpretation and default bounds):

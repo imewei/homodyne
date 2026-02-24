@@ -62,9 +62,8 @@ Cumulative Trapezoid Integration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The diffusion and shear integrals :math:`\mathcal{D}(t_1, t_2)` and :math:`\Gamma(t_1, t_2)`
-are evaluated analytically via the closed-form power-law formulas (see
-:ref:`theory_transport_coefficient`). For general non-power-law models, the package falls
-back to **cumulative trapezoid integration**:
+are always evaluated numerically via **cumulative trapezoid integration** on the discrete
+time grid:
 
 .. math::
 

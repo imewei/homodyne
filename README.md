@@ -15,12 +15,10 @@ transport properties in flowing soft matter systems.
 ## Correlation Model
 
 ```
-c2(phi, t1, t2) = offset + contrast * [c1(phi, t1, t2)]^2
-c1(phi, t1, t2) = c1_diff(t1, t2) * c1_shear(phi, t1, t2)
+c2(phi, t1, t2) = offset + contrast * c1_diff(t1, t2) * [c1_shear(phi, t1, t2)]^2
 
-c1_diff(t1, t2)        = exp[-(q^2 / 2) * integral D(t') dt']
-c1_shear(phi, t1, t2)  = [sinc(Phi(phi, t1, t2))]^2
-Phi(phi, t1, t2)       = (1/2pi) * q * L * cos(phi0 - phi) * integral gamma_dot(t') dt'
+c1_diff(t1, t2)        = exp[-q^2 * integral_{t1}^{t2} D(t') dt']
+c1_shear(phi, t1, t2)  = sinc(q * L * cos(phi0 - phi) / (2*pi) * integral_{t1}^{t2} gamma_dot(t') dt')
 
 D(t)          = D0 * t^alpha + D_offset
 gamma_dot(t)  = gamma_dot_0 * t^beta + gamma_dot_offset

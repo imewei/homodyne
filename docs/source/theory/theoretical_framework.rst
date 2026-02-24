@@ -115,19 +115,7 @@ The diffusion integral over the time window :math:`[t_1, t_2]`:
 
 .. math::
 
-   J(t_1, t_2) = \int_{t_1}^{t_2} D(t) \, dt
-
-For the power-law parameterization, this evaluates analytically to:
-
-.. math::
-
-   J(t_1, t_2) = \frac{D_0}{1+\alpha}\left(t_2^{1+\alpha} - t_1^{1+\alpha}\right) + D_{\text{offset}}(t_2 - t_1)
-
-**Special case** (:math:`\alpha = 0`, normal diffusion):
-
-.. math::
-
-   J(t_1, t_2) = D_0(t_2 - t_1) + D_{\text{offset}}(t_2 - t_1) = (D_0 + D_{\text{offset}})(t_2 - t_1)
+   J(t_1, t_2) = \int_{t_1}^{t_2} D(t') \, dt'
 
 Shear Integral
 ~~~~~~~~~~~~~~
@@ -136,13 +124,10 @@ The shear integral over the time window :math:`[t_1, t_2]`:
 
 .. math::
 
-   \Gamma(t_1, t_2) = \int_{t_1}^{t_2} \dot{\gamma}(t) \, dt
+   \Gamma(t_1, t_2) = \int_{t_1}^{t_2} \dot{\gamma}(t') \, dt'
 
-For the power-law parameterization:
-
-.. math::
-
-   \Gamma(t_1, t_2) = \frac{\dot{\gamma}_0}{1+\beta}\left(t_2^{1+\beta} - t_1^{1+\beta}\right) + \dot{\gamma}_{\text{offset}}(t_2 - t_1)
+Both integrals are evaluated numerically via cumulative trapezoid on the discrete time
+grid (see :doc:`computational_methods` for implementation details).
 
 Numerical Evaluation (NLSQ vs CMC)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
