@@ -19,6 +19,8 @@ References:
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import numpy as np
 
 from homodyne.optimization.nlsq.memory import (
@@ -104,20 +106,29 @@ class TestAntiDegeneracyPreCheck:
         This is the critical regression test. With 23M points and 53 expanded
         params, select_nlsq_strategy returns OUT_OF_CORE (~59 GB). With 9
         effective params, it returns STANDARD (~10 GB).
+
+        Uses a fixed 16 GB threshold to be independent of runner RAM
+        (macOS CI runners have only 7 GB, which makes even 9 params exceed
+        the 75%-of-RAM threshold).
         """
         n_points = 23_000_000
+        fixed_threshold = (16.0, {"detection_method": "mock"})
 
-        # With expanded params (53): should be OUT_OF_CORE
-        decision_expanded = select_nlsq_strategy(n_points, 53)
-        assert decision_expanded.strategy == NLSQStrategy.OUT_OF_CORE, (
-            f"53 params should trigger out-of-core, got {decision_expanded.strategy}"
-        )
+        with patch(
+            "homodyne.optimization.nlsq.memory.get_adaptive_memory_threshold",
+            return_value=fixed_threshold,
+        ):
+            # With expanded params (53): should be OUT_OF_CORE (~59 GB > 16 GB)
+            decision_expanded = select_nlsq_strategy(n_points, 53)
+            assert decision_expanded.strategy == NLSQStrategy.OUT_OF_CORE, (
+                f"53 params should trigger out-of-core, got {decision_expanded.strategy}"
+            )
 
-        # With effective params (9): should be STANDARD
-        decision_effective = select_nlsq_strategy(n_points, 9)
-        assert decision_effective.strategy == NLSQStrategy.STANDARD, (
-            f"9 effective params should fit in standard, got {decision_effective.strategy}"
-        )
+            # With effective params (9): should be STANDARD (~10 GB < 16 GB)
+            decision_effective = select_nlsq_strategy(n_points, 9)
+            assert decision_effective.strategy == NLSQStrategy.STANDARD, (
+                f"9 effective params should fit in standard, got {decision_effective.strategy}"
+            )
 
     def test_static_mode_3_angles(self):
         """T090f: static mode with 3 angles, auto → auto_averaged (5 params)."""
