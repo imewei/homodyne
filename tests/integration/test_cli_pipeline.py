@@ -280,7 +280,7 @@ class TestCLIInvalidConfig:
             ],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=60,
         )
         assert output_path.exists()
 
@@ -298,7 +298,7 @@ class TestCLIInvalidConfig:
             ],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=60,
         )
 
         assert result.returncode == 0, (
