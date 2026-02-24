@@ -82,11 +82,14 @@ class TestMemoryDetection:
             assert result is not None
             assert result > 0
 
+    @pytest.mark.skipif(
+        not hasattr(os, "sysconf"), reason="os.sysconf not available on Windows"
+    )
     def test_detect_fallback_to_sysconf(self):
         """Should fallback to os.sysconf when psutil unavailable.
 
         Note: This test verifies the fallback path exists and os.sysconf
-        is callable on Linux systems.
+        is callable on Linux/macOS systems.
         """
         # Verify sysconf is available on this system
         assert callable(os.sysconf)
