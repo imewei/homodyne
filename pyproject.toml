@@ -408,6 +408,13 @@ dev = [
     "ipykernel>=7.2.0",
 ]
 
+[tool.uv]
+# Override uvloop to be Unix-only (orbax-checkpoint declares it unconditionally,
+# but uvloop does not support Windows)
+override-dependencies = [
+    "uvloop>=0.22.1; sys_platform != 'win32'",
+]
+
 # [tool.uv.sources]
 # Uncomment to use local NLSQ for development:
 # nlsq = { path = "../NLSQ", editable = true }
