@@ -39,7 +39,7 @@ Examples:
   %(prog)s --static-mode                      # Force static mode (3 parameters)
   %(prog)s --laminar-flow --method cmc        # Force laminar flow (7 parameters) with CMC
 
-Recommended NLSQ → CMC Workflow:
+Recommended NLSQ -> CMC Workflow:
   Step 1: Run NLSQ to get point estimates
     %(prog)s --method nlsq --config config.yaml --output-dir results/
 
@@ -58,10 +58,10 @@ Optimization Methods:
            Per-shard NUTS sampling with NumPyro/BlackJAX backend.
 
 Physical Model:
-  c₂(φ,t₁,t₂) = 1 + contrast × [c₁(φ,t₁,t₂)]²
+  c2(phi,t1,t2) = 1 + contrast * [c1(phi,t1,t2)]^2
 
-  Static Mode:     3 parameters [D₀, α, D_offset]
-  Laminar Flow:    7 parameters [D₀, α, D_offset, γ̇₀, β, γ̇_offset, φ₀]
+  Static Mode:     3 parameters [D0, alpha, D_offset]
+  Laminar Flow:    7 parameters [D0, alpha, D_offset, shear0, beta, shear_offset, phi0]
 
 Homodyne v{__version__} - CPU-Optimized JAX Architecture
         """
@@ -220,7 +220,7 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
         "--initial-d0",
         type=float,
         default=None,
-        help="Override initial D0 (diffusion coefficient at t=1s, nm²/s) from config",
+        help="Override initial D0 (diffusion coefficient at t=1s, nm^2/s) from config",
     )
 
     override_group.add_argument(
@@ -234,7 +234,7 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
         "--initial-d-offset",
         type=float,
         default=None,
-        help="Override initial D_offset (constant offset diffusion, nm²/s) from config",
+        help="Override initial D_offset (constant offset diffusion, nm^2/s) from config",
     )
 
     # Initial parameter overrides (laminar flow mode: 4 additional parameters)
@@ -242,7 +242,7 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
         "--initial-gamma-dot-t0",
         type=float,
         default=None,
-        help="Override initial gamma_dot_t0 (shear rate at t=1s, s⁻¹) from config (laminar flow only)",
+        help="Override initial gamma_dot_t0 (shear rate at t=1s, 1/s) from config (laminar flow only)",
     )
 
     override_group.add_argument(
@@ -256,7 +256,7 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
         "--initial-gamma-dot-offset",
         type=float,
         default=None,
-        help="Override initial gamma_dot_t_offset (constant offset shear rate, s⁻¹) from config (laminar flow only)",
+        help="Override initial gamma_dot_t_offset (constant offset shear rate, 1/s) from config (laminar flow only)",
     )
 
     override_group.add_argument(
@@ -289,7 +289,7 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
     parser.add_argument(
         "--plot-simulated-data",
         action="store_true",
-        help="Plot theoretical C₂ heatmaps using parameters from config (no experimental data required)",
+        help="Plot theoretical C2 heatmaps using parameters from config (no experimental data required)",
     )
 
     parser.add_argument(
@@ -311,14 +311,14 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
         "--contrast",
         type=float,
         default=0.3,
-        help="Contrast parameter for simulated data: c₂ = 1 + contrast × c₁² (default: %(default)s, requires --plot-simulated-data)",
+        help="Contrast parameter for simulated data: c2 = 1 + contrast * c1^2 (default: %(default)s, requires --plot-simulated-data)",
     )
 
     parser.add_argument(
         "--offset",
         type=float,
         default=1.0,
-        help="Offset parameter for simulated data: c₂ = offset + contrast × c₁² (default: %(default)s, requires --plot-simulated-data)",
+        help="Offset parameter for simulated data: c2 = offset + contrast * c1^2 (default: %(default)s, requires --plot-simulated-data)",
     )
 
     parser.add_argument(
