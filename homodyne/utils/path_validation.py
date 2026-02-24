@@ -78,6 +78,11 @@ def validate_save_path(
     if path is None:
         return None
 
+    # Reject null bytes before Path conversion (security: prevents null-byte injection;
+    # Python 3.13+ may not raise ValueError for embedded nulls on all platforms)
+    if isinstance(path, str) and "\x00" in path:
+        raise PathValidationError(f"Null bytes not allowed in path: {path!r}")
+
     # Convert to Path object
     path = Path(path)
 
