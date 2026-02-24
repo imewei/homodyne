@@ -354,8 +354,8 @@ optimization:
       scale_threshold: 1000.0
 
       # CMA-ES Parameter Normalization
-      normalize: true            # Enable bounds-based normalization
-      normalization_epsilon: 1.0e-12  # Prevent division by zero
+      normalize: true # Enable bounds-based normalization
+      normalization_epsilon: 1.0e-12 # Prevent division by zero
 
       # Post-CMA-ES refinement
       refine_with_nlsq: true

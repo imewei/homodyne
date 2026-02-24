@@ -373,7 +373,7 @@ optimization:
       constant_scaling_threshold: 3 # Use constant when n_phi >= this
 
       # Fourier reparameterization (flat keys at anti_degeneracy level)
-      fourier_order: 2         # Number of Fourier harmonics
+      fourier_order: 2 # Number of Fourier harmonics
       fourier_auto_threshold: 6 # Min angles for Fourier mode
 
       # REQUIRED for shear_weighting
@@ -447,8 +447,8 @@ optimization:
       scale_threshold: 1000.0
 
       # CMA-ES Parameter Normalization
-      normalize: true            # Enable bounds-based normalization
-      normalization_epsilon: 1.0e-12  # Prevent division by zero
+      normalize: true # Enable bounds-based normalization
+      normalization_epsilon: 1.0e-12 # Prevent division by zero
 
       # Post-CMA-ES refinement
       refine_with_nlsq: true

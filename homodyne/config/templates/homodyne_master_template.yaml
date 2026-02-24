@@ -690,7 +690,7 @@ optimization:
 
       # Fourier reparameterization (Layer 1 - legacy, rarely needed)
       # NOTE: These are flat keys at anti_degeneracy level, not nested.
-      fourier_order: 2         # Number of Fourier harmonics (CONSTRAINT: >= 1)
+      fourier_order: 2 # Number of Fourier harmonics (CONSTRAINT: >= 1)
       fourier_auto_threshold: 6 # Min angles for Fourier mode (CONSTRAINT: >= 1)
 
       # Hierarchical Optimization (Layer 2)
@@ -874,8 +874,8 @@ optimization:
 
       # CMA-ES Parameter Normalization
       # Normalizes parameters to [0,1] based on bounds for better scale handling
-      normalize: true            # Enable bounds-based normalization (recommended)
-      normalization_epsilon: 1.0e-12  # Prevent division by zero for tiny ranges
+      normalize: true # Enable bounds-based normalization (recommended)
+      normalization_epsilon: 1.0e-12 # Prevent division by zero for tiny ranges
 
       # Post-CMA-ES NLSQ TRF refinement
       refine_with_nlsq: true # Refine CMA-ES solution with L-M
@@ -903,12 +903,12 @@ optimization:
     # Logs warnings for potential issues but does not raise exceptions.
     #
     quality_validation:
-      enable: true                          # Enable post-fit quality checks
-      reduced_chi_squared_threshold: 10.0   # Warn if χ²_red > threshold
-      warn_on_max_restarts: true            # Warn if CMA-ES didn't converge
-      warn_on_bounds_hit: true              # Warn if physical params at bounds
-      warn_on_convergence_failure: true     # Warn if optimization failed
-      bounds_tolerance: 1.0e-9              # Tolerance for "at bounds" detection
+      enable: true # Enable post-fit quality checks
+      reduced_chi_squared_threshold: 10.0 # Warn if χ²_red > threshold
+      warn_on_max_restarts: true # Warn if CMA-ES didn't converge
+      warn_on_bounds_hit: true # Warn if physical params at bounds
+      warn_on_convergence_failure: true # Warn if optimization failed
+      bounds_tolerance: 1.0e-9 # Tolerance for "at bounds" detection
 
   # ===========================================================================
   # STREAMING CHECKPOINT/RESUME (>100M points)
@@ -1253,8 +1253,7 @@ optimization:
       # When NLSQ warm-start is available, build tighter TruncatedNormal priors
       # centered on NLSQ estimates instead of using the wide default priors.
       # This dramatically improves NUTS sampling efficiency and reduces divergences.
-      use_nlsq_informed_priors:
-        true # Build TruncatedNormal priors from NLSQ estimates
+      use_nlsq_informed_priors: true # Build TruncatedNormal priors from NLSQ estimates
       nlsq_prior_width_factor:
         2.0 # Width = NLSQ_std × factor (~95.4% coverage)
         # CONSTRAINT: [1.0, 10.0]

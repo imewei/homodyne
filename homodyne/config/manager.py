@@ -904,7 +904,13 @@ class ConfigManager:
         # Validate combination
         combination = cmc_config.get("combination", {})
         comb_method = combination.get("method", "robust_consensus_mc")
-        valid_methods = ["consensus_mc", "robust_consensus_mc", "weighted_gaussian", "simple_average", "auto"]
+        valid_methods = [
+            "consensus_mc",
+            "robust_consensus_mc",
+            "weighted_gaussian",
+            "simple_average",
+            "auto",
+        ]
         if comb_method not in valid_methods:
             raise ValueError(
                 f"Combination method must be one of {valid_methods}, got: {comb_method}"
