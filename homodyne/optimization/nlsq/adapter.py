@@ -327,7 +327,7 @@ def get_or_create_model(
 
         # Extract per-angle scaling parameters if present
         n_physical = 3 if model_mode == "static" else 7
-        if per_angle_scaling and n_params_val > n_physical + 2 * n_phi:
+        if per_angle_scaling and n_params_val >= n_physical + 2 * n_phi:
             contrast_vals = params_array[:n_phi]
             offset_vals = params_array[n_phi : 2 * n_phi]
             physical_params = params_array[2 * n_phi :]

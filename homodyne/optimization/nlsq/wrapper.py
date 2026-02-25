@@ -3155,7 +3155,10 @@ class NLSQWrapper(NLSQAdapterBase):
         # during L-BFGS warmup, which would cause local minimum traps (gamma_dot_t0 -> 0)
         # The shuffle must happen HERE, not in _fit_with_stratified_hybrid_streaming,
         # because other code paths may also use the stratified data.
-        shuffle_seed = 42  # Fixed seed for reproducibility
+        # Fixed seed for reproducible stratified shuffling.
+        # Not user-configurable — this ensures deterministic data ordering
+        # for consistent NLSQ convergence across runs.
+        shuffle_seed = 42
         rng = np.random.RandomState(shuffle_seed)
         perm = rng.permutation(len(phi_stratified))
         phi_stratified = phi_stratified[perm]
@@ -4850,12 +4853,17 @@ class NLSQWrapper(NLSQAdapterBase):
                 f"mean={float(np.mean(residuals_0)):.6e}"
             )
 
-            # Perturb a physical parameter by 1% (not contrast/offset scaling).
-            # In auto_averaged mode, params = [contrast, offset, D0, ...], so
-            # the first physical param is at index 2.  In other modes, index 0.
-            phys_idx = (
-                2 if effective_per_angle_scaling and len(initial_params) > 2 else 0
-            )
+            # Perturb the first physical parameter (D0) by 1%.
+            # BUG-5: In auto_averaged mode, effective_per_angle_scaling=False but
+            # params = [contrast_avg, offset_avg, D0, ...], so D0 is at index 2.
+            # In individual mode, D0 is at index 2*n_phi. In fixed_constant, D0
+            # is at index 0 (no scaling params in vector).
+            if effective_per_angle_scaling:
+                phys_idx = 2 * residual_fn.n_phi  # individual mode
+            elif len(initial_params) > 2:
+                phys_idx = 2  # auto_averaged: [contrast_avg, offset_avg, D0, ...]
+            else:
+                phys_idx = 0  # fixed_constant: [D0, alpha, ...]
             params_test = np.array(initial_params, copy=True)
             params_test[phys_idx] *= 1.01  # 1% perturbation
             residuals_1 = residual_fn(params_test)
@@ -4983,8 +4991,9 @@ class NLSQWrapper(NLSQAdapterBase):
                     popt[i] = np.clip(popt[i], lower_bounds[i], upper_bounds[i])
                     bounds_violated = True
 
-                    # Determine parameter name for logging
-                    if per_angle_scaling:
+                    # BUG-6: Use effective_per_angle_scaling (post anti-degeneracy)
+                    # not per_angle_scaling (original config), to match actual param layout.
+                    if effective_per_angle_scaling:
                         n_angles = residual_fn.n_phi
                         n_scaling = 2 * n_angles
                         if i < n_angles:
@@ -5267,9 +5276,14 @@ class NLSQWrapper(NLSQAdapterBase):
         # Check for shear collapse in laminar_flow mode
         is_laminar_flow = "gamma_dot_t0" in physical_param_names
         if is_laminar_flow:
-            n_phi = (
-                len(stratified_data.chunks) if hasattr(stratified_data, "chunks") else 1
+            # BUG-4: Use actual unique phi count from stratified data, not .chunks
+            n_phi_check = (
+                len(set(stratified_data.phi_flat.tolist()))
+                if hasattr(stratified_data, "phi_flat")
+                else 1
             )
+            # In auto_averaged mode, popt has scalar contrast/offset (n_phi_eff=1)
+            n_phi = n_phi_check if effective_per_angle_scaling else 1
             if len(popt) > 2 * n_phi + 3:
                 gamma_dot_t0_idx = 2 * n_phi + 3
                 gamma_dot_t0_value = popt[gamma_dot_t0_idx]
@@ -6746,7 +6760,7 @@ class NLSQWrapper(NLSQAdapterBase):
             # The optimizer may call with single points during Jacobian computation
             x_batch_2d = jnp.atleast_2d(x_batch)
 
-            params_all = jnp.array(params_tuple)
+            params_all = jnp.stack(params_tuple)
 
             # Extract indices from x_batch (now guaranteed 2D)
             phi_idx = x_batch_2d[:, 0].astype(jnp.int32)
@@ -7089,7 +7103,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 """Model function with Fourier coefficient inputs."""
                 # Handle both single points (1D) and batches (2D)
                 x_batch_2d = jnp.atleast_2d(x_batch)
-                params_all = jnp.array(params_tuple)
+                params_all = jnp.stack(params_tuple)
 
                 # Extract Fourier coefficients and physical params
                 # Layout: [contrast_coeffs, offset_coeffs, physical_params]
