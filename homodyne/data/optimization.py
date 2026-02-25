@@ -294,7 +294,13 @@ class DatasetOptimizer:
             for key, value in strategy.jax_config.items():
                 import os
 
+                # NOTE: These env vars are only effective before JAX's first import.
+                # If JAX is already imported, use jax.config.update() instead.
                 os.environ[key.upper()] = value
+                logger.debug(
+                    "Set JAX env var %s=%s (may be ignored if JAX already imported)",
+                    key.upper(), value,
+                )
 
         optimization_config = {
             "dataset_info": dataset_info,
@@ -345,7 +351,13 @@ class DatasetOptimizer:
             for key, value in strategy.jax_config.items():
                 import os
 
+                # NOTE: These env vars are only effective before JAX's first import.
+                # If JAX is already imported, use jax.config.update() instead.
                 os.environ[key.upper()] = value
+                logger.debug(
+                    "Set JAX env var %s=%s (may be ignored if JAX already imported)",
+                    key.upper(), value,
+                )
 
         optimization_config = {
             "dataset_info": dataset_info,

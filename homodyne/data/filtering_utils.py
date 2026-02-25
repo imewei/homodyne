@@ -215,6 +215,8 @@ class XPCSDataFilter:
             # Validate result
             self._validate_filtering_result(result)
 
+        except ValueError:
+            raise  # Don't swallow intentional ValueError (e.g., stride guard)
         except Exception as e:
             error_msg = f"Data filtering failed: {str(e)}"
             logger.error(error_msg)

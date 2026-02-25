@@ -413,14 +413,21 @@ def _validate_physics_parameters(
                         ),
                     )
 
-        report.physics_checks = {
-            "q_range_valid": PhysicsConstants.Q_MIN_TYPICAL
-            <= np.min(q_values)
-            <= np.max(q_values)
-            <= PhysicsConstants.Q_MAX_TYPICAL,
-            "q_min": float(np.min(q_values)) if len(q_values) > 0 else None,
-            "q_max": float(np.max(q_values)) if len(q_values) > 0 else None,
-        }
+        if len(q_values) > 0:
+            report.physics_checks = {
+                "q_range_valid": PhysicsConstants.Q_MIN_TYPICAL
+                <= float(np.min(q_values))
+                <= float(np.max(q_values))
+                <= PhysicsConstants.Q_MAX_TYPICAL,
+                "q_min": float(np.min(q_values)),
+                "q_max": float(np.max(q_values)),
+            }
+        else:
+            report.physics_checks = {
+                "q_range_valid": False,
+                "q_min": None,
+                "q_max": None,
+            }
 
     except Exception as e:
         report.add_issue(

@@ -1005,7 +1005,7 @@ class XPCSDataLoader:
                 "wavevector_q_list": filtered_dqlist,  # Selected q-vectors (may be multiple for APS old)
                 "phi_angles_list": filtered_dphilist,  # Corresponding phi angles
                 "t1": time_1d,  # 1D time array starting from 0: [0, dt, 2*dt, ...]
-                "t2": time_1d,  # Same 1D array (for backward compatibility)
+                "t2": time_1d.copy(),  # Independent copy (prevent aliasing mutation)
                 "c2_exp": c2_exp,  # Shape: (n_selected_pairs, sliced_frames, sliced_frames)
             }
 
@@ -1170,7 +1170,7 @@ class XPCSDataLoader:
                 "wavevector_q_list": final_dqlist,
                 "phi_angles_list": final_dphilist,
                 "t1": time_1d,  # 1D time array starting from 0: [0, dt, 2*dt, ...]
-                "t2": time_1d,  # Same 1D array (for backward compatibility)
+                "t2": time_1d.copy(),  # Independent copy (prevent aliasing mutation)
                 "c2_exp": c2_exp,
             }
 
@@ -1438,8 +1438,8 @@ class XPCSDataLoader:
                 f"Filtering utilities not available: {e}. Skipping data filtering.",
             )
             return None
-        except Exception as e:
-            logger.error(f"Data filtering failed with unexpected error: {e}")
+        except (ValueError, TypeError, KeyError) as e:
+            logger.error(f"Data filtering failed: {e}")
 
             # Check if we should fallback or raise
             fallback_on_empty = filtering_config.get("fallback_on_empty", True)
@@ -1500,7 +1500,7 @@ class XPCSDataLoader:
                 "Phi filtering system not available - using original selection",
             )
             return selected_indices
-        except Exception as e:
+        except (TypeError, IndexError, KeyError) as e:
             logger.warning(
                 f"Phi filtering integration failed: {e} - using original selection",
             )
@@ -1548,7 +1548,9 @@ class XPCSDataLoader:
             logger.warning(f"start_frame={raw_start_frame} < 1, clamping to 1")
             raw_start_frame = 1
         start_frame = raw_start_frame - 1  # Convert to 0-based indexing
-        end_frame = self.analyzer_config.get("end_frame", c2_matrices.shape[-1])
+        end_frame = self.analyzer_config.get("end_frame", -1)
+        if end_frame < 0:
+            end_frame = c2_matrices.shape[-1]
 
         # Validate frame parameters
         max_frames = c2_matrices.shape[-1]
@@ -1594,6 +1596,10 @@ class XPCSDataLoader:
         start_frame = self.analyzer_config.get("start_frame", 1)
         end_frame = self.analyzer_config.get("end_frame", matrix_size + start_frame - 1)
 
+        # Handle sentinel value: end_frame=-1 means "use all frames"
+        if end_frame < 0:
+            end_frame = matrix_size + start_frame - 1
+
         # Create 1D time array starting from 0
         # Time range covers the frame window: 0 to (end_frame - start_frame) * dt
         time_max = dt * (end_frame - start_frame)
@@ -1607,7 +1613,9 @@ class XPCSDataLoader:
         if not HAS_NUMPY:
             raise RuntimeError("NumPy is required for cache saving")
         # Ensure cache directory exists
-        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        cache_dir = os.path.dirname(cache_path)
+        if cache_dir:
+            os.makedirs(cache_dir, exist_ok=True)
 
         # Convert JAX arrays back to numpy for caching
         cache_data: dict[str, Any] = {}

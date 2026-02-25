@@ -662,6 +662,10 @@ class AdvancedMemoryManager:
             element_size = np.dtype(dtype).itemsize
             total_bytes = size * element_size
 
+            if total_bytes == 0:
+                logger.warning("Zero-size virtual memory allocation requested")
+                return np.empty(0, dtype=dtype)
+
             # Ensure virtual memory directory exists
             os.makedirs(os.path.dirname(self._virtual_memory_path), exist_ok=True)
 
@@ -685,15 +689,16 @@ class AdvancedMemoryManager:
 
             atexit.register(_cleanup_vm)
 
-            # Memory map the file
-            with open(vm_file, "r+b") as fh:
-                mm = mmap.mmap(fh.fileno(), 0)
+            # Memory map the file — keep fh open for mmap lifetime
+            fh = open(vm_file, "r+b")
+            mm = mmap.mmap(fh.fileno(), 0)
 
             # Create numpy array from memory map
-            buffer = np.frombuffer(mm, dtype=dtype)
+            buffer = np.ndarray(shape=(total_bytes // np.dtype(dtype).itemsize,), dtype=dtype, buffer=mm)
 
-            # Store reference to keep mmap alive
+            # Store references to keep mmap and file handle alive
             buffer._homodyne_mmap = mm  # type: ignore[attr-defined]
+            buffer._homodyne_fh = fh  # type: ignore[attr-defined]
             buffer._homodyne_vm_file = vm_file  # type: ignore[attr-defined]
 
             logger.info(

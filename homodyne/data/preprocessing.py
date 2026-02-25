@@ -717,7 +717,10 @@ class PreprocessingPipeline:
 
         logger.debug(f"Applying normalization: {method.value}")
 
-        normalized_data = data.copy()
+        normalized_data = {
+            k: (np.array(v) if isinstance(v, np.ndarray) else v)
+            for k, v in data.items()
+        }
 
         if method == NormalizationMethod.BASELINE:
             # Normalize by t=0 value (diagonal)
@@ -817,7 +820,10 @@ class PreprocessingPipeline:
         c2_exp = data["c2_exp"]
         logger.debug(f"Applying noise reduction: {method.value}")
 
-        denoised_data = data.copy()
+        denoised_data = {
+            k: (np.array(v) if isinstance(v, np.ndarray) else v)
+            for k, v in data.items()
+        }
 
         if method == NoiseReductionMethod.MEDIAN:
             # Median filtering
