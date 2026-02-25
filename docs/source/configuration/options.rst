@@ -35,7 +35,7 @@ Configuration metadata and versioning:
 .. code-block:: yaml
 
     metadata:
-      config_version: "2.9.0"           # Configuration format version
+      config_version: "2.22.2"           # Configuration format version
       description: "..."                 # Human-readable description
       analysis_mode: "static"            # "static" or "laminar_flow"
       parameter_count: 3                 # Physical parameters only
