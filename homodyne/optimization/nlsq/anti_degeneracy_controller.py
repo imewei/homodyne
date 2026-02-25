@@ -705,7 +705,11 @@ class AntiDegeneracyController:
             return self.mapper.get_group_indices()
 
         # Fallback for backward compatibility (should not reach here in normal use)
-        assert self.fourier is not None, "Fourier reparameterizer must be initialized"
+        if self.fourier is None:
+            raise ValueError(
+                "get_group_variance_indices called but neither mapper nor fourier is initialized. "
+                "This can occur with per_angle_mode='constant' where group variance is not applicable."
+            )
         n_per_group = (
             self.fourier.n_coeffs_per_param if self.use_fourier else self.n_phi
         )

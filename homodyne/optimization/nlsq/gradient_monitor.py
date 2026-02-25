@@ -288,7 +288,7 @@ class GradientCollapseMonitor:
 
         # Record history with size limit to prevent memory leaks
         # Drop oldest entries when limit is reached
-        if len(self.history) >= self.MAX_HISTORY_SIZE:
+        while len(self.history) >= self.MAX_HISTORY_SIZE:
             self.history.pop(0)
 
         self.history.append(
