@@ -124,7 +124,7 @@ def _configure_cpu_optimal(
 
             num_cores = multiprocessing.cpu_count()
             os.environ["OMP_NUM_THREADS"] = str(num_cores)
-            os.environ["JAX_PLATFORM_NAME"] = "cpu"
+            os.environ["JAX_PLATFORMS"] = "cpu"
 
             config_result.update(
                 {

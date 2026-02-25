@@ -466,9 +466,9 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
     # Fallback per-parameter diagnostics
     if "per_parameter_diagnostics" not in diagnostics_dict["convergence"]:
         param_keys = set(per_param_stats.keys())
-        if result.r_hat is not None and isinstance(result.r_hat, dict):
+        if hasattr(result, "r_hat") and result.r_hat is not None and isinstance(result.r_hat, dict):
             param_keys.update(result.r_hat.keys())
-        if result.effective_sample_size is not None and isinstance(
+        if hasattr(result, "effective_sample_size") and result.effective_sample_size is not None and isinstance(
             result.effective_sample_size, dict
         ):
             param_keys.update(result.effective_sample_size.keys())
@@ -477,12 +477,12 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
             for name in sorted(param_keys):
                 stats = per_param_stats.get(name, {})
                 r_hat_val = None
-                if isinstance(result.r_hat, dict):
+                if hasattr(result, "r_hat") and isinstance(result.r_hat, dict):
                     r_hat_val = result.r_hat.get(name)
                 elif "r_hat" in stats:
                     r_hat_val = stats.get("r_hat")
                 ess_val = None
-                if isinstance(result.effective_sample_size, dict):
+                if hasattr(result, "effective_sample_size") and isinstance(result.effective_sample_size, dict):
                     ess_val = result.effective_sample_size.get(name)
                 elif "ess" in stats:
                     ess_val = stats.get("ess")

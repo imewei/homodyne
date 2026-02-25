@@ -11,6 +11,7 @@ from typing import Any
 
 import numpy as np
 
+from homodyne.io.json_utils import json_serializer
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -50,20 +51,20 @@ def save_nlsq_json_files(
     # Save parameters.json
     param_file = output_dir / "parameters.json"
     with open(param_file, "w") as f:
-        json.dump(param_dict, f, indent=2)
+        json.dump(param_dict, f, indent=2, default=json_serializer)
     # T056: Log file path and write completion
     logger.debug(f"Saved parameters to {param_file}")
 
     # Save analysis_results_nlsq.json
     analysis_file = output_dir / "analysis_results_nlsq.json"
     with open(analysis_file, "w") as f:
-        json.dump(analysis_dict, f, indent=2)
+        json.dump(analysis_dict, f, indent=2, default=json_serializer)
     logger.debug(f"Saved analysis results to {analysis_file}")
 
     # Save convergence_metrics.json
     convergence_file = output_dir / "convergence_metrics.json"
     with open(convergence_file, "w") as f:
-        json.dump(convergence_dict, f, indent=2)
+        json.dump(convergence_dict, f, indent=2, default=json_serializer)
     logger.debug(f"Saved convergence metrics to {convergence_file}")
 
     # T058a: Log file sizes after write completion
@@ -155,4 +156,5 @@ def save_nlsq_npz_file(
 
     # T058a: Log file path and file size after write completion
     file_size_mb = npz_file.stat().st_size / (1024 * 1024)
-    logger.info(f"Saved NPZ file with 10 arrays to {npz_file} ({file_size_mb:.2f} MB)")
+    n_arrays = 10 + (1 if c2_solver is not None else 0)
+    logger.info(f"Saved NPZ file with {n_arrays} arrays to {npz_file} ({file_size_mb:.2f} MB)")

@@ -282,7 +282,7 @@ def _configure_jax_cpu(
 
     try:
         # Force CPU platform
-        os.environ["JAX_PLATFORM_NAME"] = "cpu"
+        os.environ["JAX_PLATFORMS"] = "cpu"
         jax_config["platform"] = "cpu"
 
         # Note: x64 precision automatically enabled by nlsq import (when imported before JAX)
