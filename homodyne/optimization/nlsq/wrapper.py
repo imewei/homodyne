@@ -3952,8 +3952,8 @@ class NLSQWrapper(NLSQAdapterBase):
             Returns:
                 Theoretical g2 values at requested indices (size matches xdata)
             """
-            # Convert params tuple to array
-            params_array = jnp.asarray(params_tuple)
+            # Convert params tuple to array (stack avoids retracing vs asarray)
+            params_array = jnp.stack(params_tuple)
 
             # Extract per-angle scaling parameters (legacy mode removed Nov 2025)
             # Per-angle mode: first n_phi are contrasts, next n_phi are offsets
