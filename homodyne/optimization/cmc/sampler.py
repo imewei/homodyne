@@ -257,7 +257,7 @@ def _compute_mcmc_safe_d0(
             new_d_offset = max(new_d_offset, -1e6)  # Allow negative but bound
 
             logger_inst.warning(
-                f"⚠️ MCMC-SAFE ADJUSTMENT: Initial D0={d0:.4g} causes g1≈{g1_estimate:.2e} (vanishing gradients). "
+                f"MCMC-SAFE ADJUSTMENT: Initial D0={d0:.4g} causes g1≈{g1_estimate:.2e} (vanishing gradients). "
                 f"Scaling D0 to {new_d0:.4g} (×{scale_factor:.4f}) for MCMC exploration stability. "
                 f"The sampler can still converge to optimal values if supported by likelihood."
             )
@@ -1056,7 +1056,7 @@ def run_nuts_sampling(
     # Critical warning for zero acceptance rate
     if np.isfinite(accept_prob) and accept_prob < 0.001:
         run_logger.warning(
-            "⚠️ CRITICAL: Acceptance rate is essentially 0% - all proposals rejected! "
+            "CRITICAL: Acceptance rate is essentially 0% - all proposals rejected! "
             "This indicates severe sampling problems. Possible causes:\n"
             "  1. Initial values are outside prior support or at boundaries\n"
             "  2. Likelihood returns -inf due to numerical issues (NaN/overflow)\n"
@@ -1108,7 +1108,7 @@ def run_nuts_sampling(
                 total_evals = num_samples * config.num_chains
                 issue_rate = n_issues_total / max(total_evals, 1)
                 run_logger.warning(
-                    f"⚠️ Numerical issues detected: {n_issues_total:.0f} NaN/Inf occurrences "
+                    f"Numerical issues detected: {n_issues_total:.0f} NaN/Inf occurrences "
                     f"({issue_rate:.1%} of evaluations). "
                     "This may indicate parameter combinations causing overflow in physics model."
                 )
@@ -1162,6 +1162,7 @@ def run_nuts_with_retry(
     analysis_mode: str,
     max_retries: int = 3,
     rng_key: jax.random.PRNGKey | None = None,
+    per_angle_mode: str = "individual",
 ) -> tuple[MCMCSamples, SamplingStats]:
     """Run NUTS sampling with automatic retry on failure.
 
@@ -1216,7 +1217,7 @@ def run_nuts_with_retry(
         )
 
         attempt_logger.info(
-            f"🔄 Attempt {attempt_num}/{max_retries}: starting NUTS "
+            f"Attempt {attempt_num}/{max_retries}: starting NUTS "
             f"(chains={config.num_chains}, samples={config.num_samples}, "
             f"target_accept={current_target_accept_prob:.2f}, div_threshold={divergence_threshold:.0%})"
         )
@@ -1239,6 +1240,7 @@ def run_nuts_with_retry(
                 analysis_mode=analysis_mode,
                 rng_key=attempt_key,
                 progress_bar=attempt == 0,  # Only show progress on first attempt
+                per_angle_mode=per_angle_mode,
             )
 
             # Check for excessive divergences (adaptive threshold)
@@ -1253,7 +1255,7 @@ def run_nuts_with_retry(
             duration = time.perf_counter() - attempt_start
             if divergence_rate > divergence_threshold:
                 attempt_logger.warning(
-                    f"🔄 Attempt {attempt_num}/{max_retries}: divergence_rate={divergence_rate:.1%} "
+                    f"Attempt {attempt_num}/{max_retries}: divergence_rate={divergence_rate:.1%} "
                     f"> threshold {divergence_threshold:.0%}, retrying with smaller step sizes..."
                 )
                 # Escalate target_accept_prob for next retry (smaller step sizes)
@@ -1266,7 +1268,7 @@ def run_nuts_with_retry(
                 continue
 
             attempt_logger.info(
-                f"✅ Attempt {attempt_num}/{max_retries} succeeded in {duration:.2f}s "
+                f"Attempt {attempt_num}/{max_retries} succeeded in {duration:.2f}s "
                 f"(divergences={stats.num_divergent}, accept_prob={stats.accept_prob:.3f})"
             )
             return samples, stats
@@ -1274,12 +1276,12 @@ def run_nuts_with_retry(
         except Exception as e:
             duration = time.perf_counter() - attempt_start
             attempt_logger.warning(
-                f"❌ Attempt {attempt_num}/{max_retries} failed after {duration:.2f}s: {e}"
+                f"Attempt {attempt_num}/{max_retries} failed after {duration:.2f}s: {e}"
             )
             last_error = e
 
     run_logger.error(
-        f"❌ MCMC sampling failed after {max_retries} attempts: {last_error}"
+        f"MCMC sampling failed after {max_retries} attempts: {last_error}"
     )
     # All retries failed
     raise RuntimeError(

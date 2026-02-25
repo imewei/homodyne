@@ -283,7 +283,12 @@ def _combine_shard_chunk(
                     )
                     continue
                 shard_means.append(np.mean(samples))
-                shard_variances.append(np.var(samples))
+                # Use ddof=1 (unbiased estimator) for the posterior variance
+                # used in precision-weighted combination.  For typical shard
+                # sizes (6000+ samples) the difference is negligible, but for
+                # adaptive-sampled small shards (350 samples) ddof=0 would
+                # underestimate posterior width by ~0.3%.
+                shard_variances.append(np.var(samples, ddof=1))
 
             if not shard_means:
                 raise ValueError(
@@ -393,7 +398,7 @@ def _combine_shard_chunk(
                     )
                     continue
                 shard_means.append(np.mean(samples))
-                shard_variances.append(np.var(samples))
+                shard_variances.append(np.var(samples, ddof=1))
 
             if not shard_means:
                 raise ValueError(
@@ -602,7 +607,15 @@ def combine_shard_samples_bimodal(
                     # Unimodal shard or non-modal param: use full posterior
                     samples = shard_samples[shard_idx].samples[name].flatten()
                     shard_means.append(float(np.mean(samples)))
-                    shard_variances.append(float(np.var(samples)))
+                    shard_variances.append(float(np.var(samples, ddof=1)))
+
+            # Exclude degenerate shards (near-zero variance) before consensus
+            if len(shard_variances) >= 3:
+                median_var = float(np.median(shard_variances))
+                degenerate_threshold = 1e-6 * median_var if median_var > 0 else 1e-30
+                valid_mask = [v >= degenerate_threshold for v in shard_variances]
+                shard_means = [m for m, ok in zip(shard_means, valid_mask, strict=True) if ok]
+                shard_variances = [v for v, ok in zip(shard_variances, valid_mask, strict=True) if ok]
 
             if len(shard_means) < 3:
                 # Too few shards: use simple mean

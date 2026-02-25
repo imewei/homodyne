@@ -1330,13 +1330,17 @@ def _fit_mcmc_jax_impl(
         run_logger.info(f"Using backend: {backend.get_name()}")
 
         # Enforce timeout only where supported (multiprocessing). Others log advisory.
+        # Build a shallow copy of the config so we never mutate the caller's object.
+        import dataclasses as _dc
+
+        run_config = _dc.replace(config)  # shallow copy; all scalar fields are copied
         if backend.get_name().startswith("multiprocessing"):
             effective_timeout = min(config.per_shard_timeout, suggested_timeout)
             if effective_timeout != config.per_shard_timeout:
                 run_logger.info(
                     f"Applying tighter per_shard_timeout={effective_timeout}s based on shard cost"
                 )
-            config.per_shard_timeout = effective_timeout
+            run_config.per_shard_timeout = effective_timeout
         else:
             run_logger.warning(
                 f"Backend '{backend.get_name()}' does not enforce per_shard_timeout; "
@@ -1352,7 +1356,7 @@ def _fit_mcmc_jax_impl(
         mcmc_samples = backend.run(
             model=xpcs_model,
             model_kwargs=model_kwargs,
-            config=config,
+            config=run_config,  # use copy with effective timeout, not caller's config
             shards=shards,
             initial_values=initial_values,
             parameter_space=parameter_space,

@@ -522,6 +522,8 @@ def compute_fitted_c2(
     L: float,
     dt: float,
     analysis_mode: str,
+    fixed_contrasts: np.ndarray | None = None,
+    fixed_offsets: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Compute fitted C2 values from posterior mean.
 
@@ -535,6 +537,14 @@ def compute_fitted_c2(
         Physics parameters.
     analysis_mode : str
         Analysis mode.
+    fixed_contrasts : np.ndarray | None
+        Per-angle contrast array of shape (n_phi,) for ``constant`` and
+        ``constant_averaged`` modes where contrast is not sampled.
+        Required when neither ``contrast_0`` nor ``contrast`` appears
+        in posterior samples.
+    fixed_offsets : np.ndarray | None
+        Per-angle offset array of shape (n_phi,) paired with
+        ``fixed_contrasts``.
 
     Returns
     -------
@@ -574,8 +584,34 @@ def compute_fitted_c2(
     # Get per-angle contrast/offset
     n_phi = len(phi_unique)
 
-    contrasts = np.array([stats[f"contrast_{i}"]["mean"] for i in range(n_phi)])
-    offsets = np.array([stats[f"offset_{i}"]["mean"] for i in range(n_phi)])
+    # Handle all per-angle modes:
+    #   individual: contrast_0, contrast_1, ... are sampled
+    #   auto:       contrast (single) is sampled and broadcast
+    #   constant/constant_averaged: not sampled; caller supplies fixed_contrasts
+    if "contrast_0" in stats:
+        contrasts = np.array([stats[f"contrast_{i}"]["mean"] for i in range(n_phi)])
+        offsets = np.array([stats[f"offset_{i}"]["mean"] for i in range(n_phi)])
+    elif "contrast" in stats:
+        # Auto mode: single sampled contrast/offset broadcast to all angles
+        contrasts = np.full(n_phi, stats["contrast"]["mean"])
+        offsets = np.full(n_phi, stats["offset"]["mean"])
+    elif fixed_contrasts is not None and fixed_offsets is not None:
+        # Constant/constant_averaged mode: contrast/offset are fixed, not sampled.
+        # Caller must supply the pre-computed fixed arrays.
+        contrasts = np.asarray(fixed_contrasts, dtype=float)
+        offsets = np.asarray(fixed_offsets, dtype=float)
+        if contrasts.shape != (n_phi,) or offsets.shape != (n_phi,):
+            raise ValueError(
+                f"fixed_contrasts/fixed_offsets must have shape ({n_phi},), "
+                f"got {contrasts.shape} and {offsets.shape}"
+            )
+    else:
+        raise KeyError(
+            f"Cannot find contrast parameters in posterior stats "
+            f"(available keys: {sorted(stats.keys())}). "
+            f"For constant/constant_averaged mode, pass fixed_contrasts and "
+            f"fixed_offsets arrays (shape ({n_phi},)) from the original model_kwargs."
+        )
 
     # Map phi to indices
     # CRITICAL FIX: Clip indices to valid range to prevent out-of-bounds access
@@ -613,33 +649,66 @@ def compute_fitted_c2(
         ]
     )  # shape: (n_posterior_samples, n_physical_params)
 
-    batched_contrasts = np.stack(
-        [
-            np.array(
-                [
-                    result.samples[f"contrast_{j}"][
-                        chain_indices[i], within_chain_indices[i]
+    # Handle all per-angle modes for posterior draws
+    if "contrast_0" in result.samples:
+        # Individual mode: per-angle contrast/offset sampled independently
+        batched_contrasts = np.stack(
+            [
+                np.array(
+                    [
+                        result.samples[f"contrast_{j}"][
+                            chain_indices[i], within_chain_indices[i]
+                        ]
+                        for j in range(n_phi)
                     ]
-                    for j in range(n_phi)
-                ]
-            )
-            for i in range(n_posterior_samples)
-        ]
-    )  # shape: (n_posterior_samples, n_phi)
+                )
+                for i in range(n_posterior_samples)
+            ]
+        )  # shape: (n_posterior_samples, n_phi)
 
-    batched_offsets = np.stack(
-        [
-            np.array(
-                [
-                    result.samples[f"offset_{j}"][
-                        chain_indices[i], within_chain_indices[i]
+        batched_offsets = np.stack(
+            [
+                np.array(
+                    [
+                        result.samples[f"offset_{j}"][
+                            chain_indices[i], within_chain_indices[i]
+                        ]
+                        for j in range(n_phi)
                     ]
-                    for j in range(n_phi)
-                ]
-            )
-            for i in range(n_posterior_samples)
-        ]
-    )  # shape: (n_posterior_samples, n_phi)
+                )
+                for i in range(n_posterior_samples)
+            ]
+        )  # shape: (n_posterior_samples, n_phi)
+    elif "contrast" in result.samples:
+        # Auto mode: single sampled contrast/offset broadcast to all angles
+        batched_contrasts = np.stack(
+            [
+                np.full(
+                    n_phi,
+                    result.samples["contrast"][
+                        chain_indices[i], within_chain_indices[i]
+                    ],
+                )
+                for i in range(n_posterior_samples)
+            ]
+        )  # shape: (n_posterior_samples, n_phi)
+
+        batched_offsets = np.stack(
+            [
+                np.full(
+                    n_phi,
+                    result.samples["offset"][
+                        chain_indices[i], within_chain_indices[i]
+                    ],
+                )
+                for i in range(n_posterior_samples)
+            ]
+        )  # shape: (n_posterior_samples, n_phi)
+    else:
+        # Constant/constant_averaged mode: fixed values, no uncertainty over contrast.
+        # Use the fixed arrays from the mean-computation step (already validated above).
+        batched_contrasts = np.tile(contrasts, (n_posterior_samples, 1))
+        batched_offsets = np.tile(offsets, (n_posterior_samples, 1))
 
     # vmap over the first axis (sample index); all other args are fixed.
     _t1_jnp = jnp.array(t1)

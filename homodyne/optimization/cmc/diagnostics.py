@@ -34,10 +34,15 @@ DEFAULT_MAX_DIVERGENCE_RATE = 0.05
 def compute_r_hat(
     samples: dict[str, np.ndarray],
 ) -> dict[str, float]:
-    """Compute R-hat (Gelman-Rubin diagnostic) for each parameter.
+    """Compute split-R-hat (Vehtari et al. 2021) for each parameter.
 
-    R-hat measures chain convergence by comparing within-chain and
-    between-chain variance. Values close to 1.0 indicate convergence.
+    Uses ArviZ's implementation of split-R-hat, which splits each chain in
+    half before computing R-hat across 2*n_chains half-chains.  This detects
+    both between-chain discordance and within-chain non-stationarity that the
+    original 1992 Gelman-Rubin formula misses.
+
+    Falls back to the classical Gelman-Rubin formula when ArviZ is not
+    available.
 
     Parameters
     ----------
@@ -49,7 +54,24 @@ def compute_r_hat(
     dict[str, float]
         R-hat value for each parameter.
     """
-    r_hat_dict: dict[str, float] = {}
+    # Prefer ArviZ split-R-hat (Vehtari et al. 2021) over manual formula.
+    if HAS_ARVIZ:
+        try:
+            idata = az.from_dict(posterior=samples)
+            rhat_ds = az.rhat(idata)
+            r_hat_dict: dict[str, float] = {}
+            for name in samples:
+                if hasattr(rhat_ds, name):
+                    val = float(getattr(rhat_ds, name).values)
+                    r_hat_dict[name] = val if np.isfinite(val) else np.nan
+                else:
+                    r_hat_dict[name] = np.nan
+            return r_hat_dict
+        except Exception as e:
+            logger.warning(f"ArviZ R-hat computation failed: {e}, using fallback")
+
+    # Fallback: classical Gelman-Rubin (1992) formula
+    r_hat_dict = {}
 
     for name, arr in samples.items():
         if arr.ndim != 2:
@@ -59,7 +81,6 @@ def compute_r_hat(
         n_chains, n_samples = arr.shape
 
         if n_chains < 2:
-            # Cannot compute R-hat with single chain
             r_hat_dict[name] = np.nan
             continue
 
@@ -74,7 +95,6 @@ def compute_r_hat(
         # Pooled variance estimate
         var_plus = ((n_samples - 1) * W + B) / n_samples
 
-        # R-hat
         if W > 0:
             r_hat = np.sqrt(var_plus / W)
         else:
@@ -262,6 +282,7 @@ def create_diagnostics_dict(
     n_samples: int,
     warmup_time: float,
     sampling_time: float,
+    num_shards: int = 1,
 ) -> dict[str, Any]:
     """Create diagnostics dictionary for JSON output.
 
@@ -289,6 +310,10 @@ def create_diagnostics_dict(
         Warmup time in seconds.
     sampling_time : float
         Sampling time in seconds.
+    num_shards : int
+        Number of shards combined (default 1). For CMC runs, ``divergences``
+        is the aggregate total across all shards, so the correct denominator
+        is ``num_shards * n_chains * n_samples``.
 
     Returns
     -------
@@ -299,8 +324,10 @@ def create_diagnostics_dict(
     r_hat_values = [v for v in r_hat.values() if not np.isnan(v)]
     ess_values = [v for v in ess_bulk.values() if not np.isnan(v)]
 
-    total_samples = n_chains * n_samples
-    divergence_rate = divergences / total_samples if total_samples > 0 else 0
+    # For CMC, divergences are aggregated across all shards; use the full
+    # total_transitions = num_shards * n_chains * n_samples as the denominator.
+    total_transitions = num_shards * n_chains * n_samples
+    divergence_rate = divergences / total_transitions if total_transitions > 0 else 0
 
     return {
         "convergence_status": convergence_status,
@@ -431,15 +458,21 @@ def log_analysis_summary(
 
     # Status with clear indicator
     if convergence_status == "converged":
-        logger.info("✓ Status: CONVERGED")
+        logger.info("Status: CONVERGED")
     else:
-        logger.error(f"✗ Status: {convergence_status.upper()}")
+        logger.error(f"Status: {convergence_status.upper()}")
 
     # Key metrics
     logger.info(f"  Shards: {shards_succeeded}/{n_shards} ({success_rate:.0%} success)")
     logger.info(f"  Runtime: {execution_time:.1f}s ({execution_time / 60:.1f} min)")
-    logger.info(f"  R-hat (max): {max_rhat:.4f} {'✓' if max_rhat <= 1.05 else '✗'}")
-    logger.info(f"  ESS (min): {min_ess:.0f} {'✓' if min_ess >= 100 else '✗'}")
+    logger.info(
+        f"  R-hat (max): {max_rhat:.4f} "
+        f"{'[OK]' if max_rhat <= 1.05 else '[FAIL]'}"
+    )
+    logger.info(
+        f"  ESS (min): {min_ess:.0f} "
+        f"{'[OK]' if min_ess >= 100 else '[FAIL]'}"
+    )
     logger.info(f"  Divergences: {divergences} ({div_rate:.1%})")
 
     # Recommendations if there are issues
@@ -450,7 +483,7 @@ def log_analysis_summary(
         logger.info("-" * 40)
         logger.info("RECOMMENDATIONS:")
         for rec in recommendations:
-            logger.info(f"  → {rec}")
+            logger.info(f"  - {rec}")
 
     logger.info("=" * 60)
 
@@ -759,14 +792,14 @@ def log_precision_analysis(
         very_high_z = sum(1 for z in z_scores if z > 3)
         if very_high_z > 0:
             lines.append(
-                f"    ⚠️ CRITICAL: {very_high_z}/{len(z_scores)} params have z > 3 (severe disagreement)"
+                f"    CRITICAL: {very_high_z}/{len(z_scores)} params have z > 3 (severe disagreement)"
             )
         elif high_z > 0:
             lines.append(
-                f"    ⚠️ WARNING: {high_z}/{len(z_scores)} params have z > 2 (significant disagreement)"
+                f"    WARNING: {high_z}/{len(z_scores)} params have z > 2 (significant disagreement)"
             )
         else:
-            lines.append("    ✓ All params have z ≤ 2 (good agreement)")
+            lines.append("    All params have z <= 2 (good agreement)")
 
     if rel_diffs:
         max_diff = max(rel_diffs)
@@ -777,10 +810,10 @@ def log_precision_analysis(
         over_tolerance = sum(1 for d in rel_diffs if d > tolerance_pct)
         if over_tolerance > 0:
             lines.append(
-                f"    ⚠️ {over_tolerance}/{len(rel_diffs)} params exceed {tolerance_pct:.0f}% tolerance"
+                f"    WARNING: {over_tolerance}/{len(rel_diffs)} params exceed {tolerance_pct:.0f}% tolerance"
             )
         else:
-            lines.append(f"    ✓ All params within {tolerance_pct:.0f}% tolerance")
+            lines.append(f"    All params within {tolerance_pct:.0f}% tolerance")
 
     if unc_ratios:
         lines.append(
@@ -791,12 +824,12 @@ def log_precision_analysis(
         too_uncertain = sum(1 for r in unc_ratios if r > 10)
         if too_precise > 0:
             lines.append(
-                f"    ⚠️ {too_precise}/{len(unc_ratios)} params have ratio < 0.5x "
+                f"    WARNING: {too_precise}/{len(unc_ratios)} params have ratio < 0.5x "
                 "(CMC artificially precise - check for shard heterogeneity)"
             )
         if too_uncertain > 0:
             lines.append(
-                f"    ℹ️ {too_uncertain}/{len(unc_ratios)} params have ratio > 10x (CMC more uncertain)"
+                f"    INFO: {too_uncertain}/{len(unc_ratios)} params have ratio > 10x (CMC more uncertain)"
             )
 
     if pcrs:
@@ -806,7 +839,7 @@ def log_precision_analysis(
         low_pcr = sum(1 for p in pcrs if p < 0.3)
         if low_pcr > 0:
             lines.append(
-                f"    ℹ️ {low_pcr}/{len(pcrs)} params have PCR < 0.3 (weak data constraint)"
+                f"    INFO: {low_pcr}/{len(pcrs)} params have PCR < 0.3 (weak data constraint)"
             )
 
     lines.append("-" * 80)
@@ -835,13 +868,13 @@ def log_precision_analysis(
         # Add warning markers
         marker = ""
         if np.isfinite(z_score) and z_score > 3:
-            marker = " ❌"  # Severe
+            marker = " [SEVERE]"
         elif np.isfinite(z_score) and z_score > 2:
-            marker = " ⚠️"  # Warning
+            marker = " [WARN]"
         elif np.isfinite(rel_diff) and abs(rel_diff * 100) > tolerance_pct:
-            marker = " ⚠️"  # Warning
+            marker = " [WARN]"
         elif np.isfinite(unc_ratio) and unc_ratio < 0.5:
-            marker = " ⚠️"  # Artificially precise
+            marker = " [WARN]"  # Artificially precise
 
         lines.append(
             f"{param_name:<18} {cmc_mean_str:>11} {cmc_std_str:>10} "

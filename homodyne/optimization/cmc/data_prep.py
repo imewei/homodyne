@@ -529,8 +529,9 @@ def shard_data_random(
         effective_points_per_shard = (prepared.n_total + max_shards - 1) // max_shards
         logger.info(
             f"Random sharding: {prepared.n_total:,} points → {max_shards} shards "
-            f"(~{effective_points_per_shard:,} points each, increased from "
-            f"{max_points_per_shard:,} to fit all data)"
+            f"(~{effective_points_per_shard:,} points each"
+            f"{f', increased from {max_points_per_shard:,}' if max_points_per_shard is not None else ''}"
+            f" to fit all data)"
         )
         num_shards = max_shards
     else:

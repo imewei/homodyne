@@ -11,6 +11,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import numpyro.distributions as dist
 
+from homodyne.core.scaling_utils import (
+    estimate_per_angle_scaling as _estimate_per_angle_scaling_canonical,
+)
 from homodyne.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -142,9 +145,9 @@ def estimate_per_angle_scaling(
 ) -> dict[str, float]:
     """Estimate contrast and offset initial values for each phi angle.
 
-    Optimization (v2.9.1): Uses vectorized grouped operations instead of
-    sequential loop over angles. Provides 3-5x speedup for typical datasets
-    with 20+ phi angles.
+    Thin wrapper that delegates to the canonical implementation in
+    ``homodyne.core.scaling_utils``.  Kept here for backward compatibility
+    with any internal callers within this module.
 
     Parameters
     ----------
@@ -168,106 +171,16 @@ def estimate_per_angle_scaling(
     dict[str, float]
         Dictionary with keys 'contrast_0', 'offset_0', 'contrast_1', 'offset_1', etc.
     """
-    c2 = np.asarray(c2_data)
-    t1_arr = np.asarray(t1)
-    t2_arr = np.asarray(t2)
-    phi_idx = np.asarray(phi_indices)
-
-    # Pre-compute time lags once (vectorized)
-    delta_t = np.abs(t1_arr - t2_arr)
-
-    # Pre-compute midpoint defaults
-    contrast_mid = (contrast_bounds[0] + contrast_bounds[1]) / 2.0
-    offset_mid = (offset_bounds[0] + offset_bounds[1]) / 2.0
-
-    # Pre-allocate result arrays
-    contrast_results = np.full(n_phi, contrast_mid)
-    offset_results = np.full(n_phi, offset_mid)
-    points_per_angle = np.zeros(n_phi, dtype=np.int64)
-
-    # Count points per angle using bincount (vectorized)
-    points_per_angle = np.bincount(phi_idx, minlength=n_phi)
-
-    # Identify angles with sufficient data
-    sufficient_mask = points_per_angle >= 100
-    n_sufficient = np.sum(sufficient_mask)
-
-    if n_sufficient == 0:
-        # No angles have enough data - return defaults
-        logger.info(
-            f"All {n_phi} angles have insufficient data, using midpoint defaults"
-        )
-        return {
-            **{f"contrast_{i}": contrast_mid for i in range(n_phi)},
-            **{f"offset_{i}": offset_mid for i in range(n_phi)},
-        }
-
-    # Vectorized estimation for angles with sufficient data
-    # Sort data by phi index for efficient grouped operations
-    sort_idx = np.argsort(phi_idx)
-    c2_sorted = c2[sort_idx]
-    delta_t_sorted = delta_t[sort_idx]
-    phi_sorted = phi_idx[sort_idx]
-
-    # Find group boundaries
-    group_starts = np.searchsorted(phi_sorted, np.arange(n_phi))
-    group_ends = np.searchsorted(phi_sorted, np.arange(n_phi), side="right")
-
-    # Process each angle with sufficient data
-    for i in range(n_phi):
-        if not sufficient_mask[i]:
-            logger.info(
-                f"Angle {i}: insufficient data ({points_per_angle[i]} points), "
-                f"using midpoint init contrast={contrast_mid:.4f}, offset={offset_mid:.4f}"
-            )
-            continue
-
-        # Extract data for this angle using pre-sorted arrays
-        start, end = group_starts[i], group_ends[i]
-        c2_angle = c2_sorted[start:end]
-        delta_t_angle = delta_t_sorted[start:end]
-
-        # Inline the estimation logic to avoid function call overhead
-        # (quantile operations are already vectorized)
-        n_points = end - start
-
-        # Find lag thresholds
-        lag_threshold_high = np.percentile(delta_t_angle, 80)  # 0.80 quantile
-        lag_threshold_low = np.percentile(delta_t_angle, 20)  # 0.20 quantile
-
-        # OFFSET: from large-lag region
-        large_lag_mask = delta_t_angle >= lag_threshold_high
-        if np.sum(large_lag_mask) >= 10:
-            offset_est = np.percentile(c2_angle[large_lag_mask], 10)
-        else:
-            offset_est = np.percentile(c2_angle, 10)
-        offset_est = float(np.clip(offset_est, offset_bounds[0], offset_bounds[1]))
-
-        # CONTRAST: from small-lag region
-        small_lag_mask = delta_t_angle <= lag_threshold_low
-        if np.sum(small_lag_mask) >= 10:
-            c2_ceiling = np.percentile(c2_angle[small_lag_mask], 90)
-        else:
-            c2_ceiling = np.percentile(c2_angle, 90)
-        contrast_est = float(
-            np.clip(c2_ceiling - offset_est, contrast_bounds[0], contrast_bounds[1])
-        )
-
-        contrast_results[i] = contrast_est
-        offset_results[i] = offset_est
-
-        logger.info(
-            f"Angle {i}: estimated contrast={contrast_est:.4f}, offset={offset_est:.4f} "
-            f"from {n_points:,} data points"
-        )
-
-    # Build result dictionary
-    estimates: dict[str, float] = {}
-    for i in range(n_phi):
-        estimates[f"contrast_{i}"] = float(contrast_results[i])
-        estimates[f"offset_{i}"] = float(offset_results[i])
-
-    return estimates
+    return _estimate_per_angle_scaling_canonical(
+        c2_data=c2_data,
+        t1=t1,
+        t2=t2,
+        phi_indices=phi_indices,
+        n_phi=n_phi,
+        contrast_bounds=contrast_bounds,
+        offset_bounds=offset_bounds,
+        log=logger,
+    )
 
 
 # Physical parameter names in canonical order
@@ -1056,7 +969,25 @@ def extract_nlsq_values_for_cmc(
         # Laminar flow: contrast, offset, D0, alpha, D_offset, gamma_dot_t0, beta,
         #               gamma_dot_t_offset, phi0 (9 params)
         # Per-angle scaling adds more params, but physical params are at the end
-        if n_params >= 9:
+        # Determine analysis mode from parameter structure
+        # Static individual with ≥3 angles: n_params = 3 + 2*n_phi (≥9 for n_phi≥3)
+        # Laminar flow minimum: 7 physical + 2 scaling = 9
+        # Disambiguation: check if (n_params - 3) is even and ≥ 4 (static individual)
+        # vs (n_params - 7) is even and ≥ 2 (laminar flow)
+        n_static_scaling = n_params - 3
+        n_laminar_scaling = n_params - 7
+        is_likely_static_individual = (
+            n_static_scaling >= 4 and n_static_scaling % 2 == 0 and n_laminar_scaling >= 4
+        )
+        # Use laminar flow ONLY if scaling count is small (2-3 angles max without ambiguity)
+        # For n_params >= 9, check the analysis_mode hint from model_kwargs if available
+        analysis_mode_hint = getattr(nlsq_result, "analysis_mode", None)
+        if analysis_mode_hint == "static" or (
+            analysis_mode_hint is None and is_likely_static_individual
+        ):
+            physical_names = ["D0", "alpha", "D_offset"]
+            n_physical = 3
+        elif n_params >= 9:
             # Laminar flow (7 physical + 2 scaling minimum)
             # With per-angle scaling, first params are contrast/offset per angle
             # Last 7 are physical params

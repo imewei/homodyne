@@ -11,6 +11,7 @@ This module provides functions for saving CMC results to files:
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -266,11 +267,18 @@ def save_parameters_json(
     stats = result.get_posterior_stats()
 
     # Convert numpy types to Python types for JSON
-    stats_json: dict[str, dict[str, float]] = {}
+    stats_json: dict[str, dict[str, float | str | None]] = {}
     for name, param_stats in stats.items():
-        stats_json[name] = {
-            k: float(v) if not np.isnan(v) else None for k, v in param_stats.items()
-        }
+        converted: dict[str, float | str | None] = {}
+        for k, v in param_stats.items():
+            fv = float(v)
+            if math.isnan(fv):
+                converted[k] = None
+            elif math.isinf(fv):
+                converted[k] = "Infinity" if fv > 0 else "-Infinity"
+            else:
+                converted[k] = fv
+        stats_json[name] = converted
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(stats_json, f, indent=2)
@@ -306,20 +314,29 @@ def save_diagnostics_json(
         n_samples=result.n_samples,
         warmup_time=result.warmup_time,
         sampling_time=result.execution_time - result.warmup_time,
+        num_shards=result.num_shards,
     )
 
-    # Convert numpy types
+    # Convert numpy types with NaN/Inf sanitization
     def convert_numpy(obj):
         if isinstance(obj, np.ndarray):
-            return obj.tolist()
+            return convert_numpy(obj.tolist())
         if isinstance(obj, (np.integer, np.floating)):
-            return float(obj)
+            v = float(obj)
+            if math.isnan(v):
+                return None
+            if math.isinf(v):
+                return "Infinity" if v > 0 else "-Infinity"
+            return v
         if isinstance(obj, dict):
             return {k: convert_numpy(v) for k, v in obj.items()}
         if isinstance(obj, list):
             return [convert_numpy(item) for item in obj]
-        if np.isnan(obj) if isinstance(obj, float) else False:
-            return None
+        if isinstance(obj, float):
+            if math.isnan(obj):
+                return None
+            if math.isinf(obj):
+                return "Infinity" if obj > 0 else "-Infinity"
         return obj
 
     diagnostics_json = convert_numpy(diagnostics)
