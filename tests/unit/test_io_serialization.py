@@ -48,7 +48,13 @@ class TestJsonSafe:
         assert result == [[1, 2], [3.0, 4]]
 
     def test_handles_nan_inf(self):
-        """Test handling of NaN and Inf values."""
+        """Test that NaN/Inf are sanitized for JSON compatibility.
+
+        JSON spec does not support NaN, Inf, or -Inf. They are converted to:
+        - NaN → None
+        - Inf → "Infinity"
+        - -Inf → "-Infinity"
+        """
         data = {
             "nan_val": np.nan,
             "inf_val": np.inf,
@@ -56,11 +62,13 @@ class TestJsonSafe:
             "arr": np.array([1.0, np.nan, np.inf]),
         }
         result = json_safe(data)
-        assert np.isnan(result["nan_val"])
-        assert np.isinf(result["inf_val"])
-        assert np.isinf(result["ninf_val"])
+        assert result["nan_val"] is None
+        assert result["inf_val"] == "Infinity"
+        assert result["ninf_val"] == "-Infinity"
         assert len(result["arr"]) == 3
-        assert np.isnan(result["arr"][1])
+        assert result["arr"][0] == 1.0
+        assert result["arr"][1] is None  # NaN → None
+        assert result["arr"][2] == "Infinity"  # Inf → "Infinity"
 
     def test_handles_empty_arrays(self):
         """Test handling of empty arrays."""
