@@ -273,6 +273,7 @@ class CMCResult:
             # 10K rows give a statistically equivalent 9x9 result in ~50 ms.
             _max_cov_samples = 10_000
             if all_samples.shape[0] > _max_cov_samples:
+                # Fixed seed for reproducible covariance subsampling.
                 rng = np.random.default_rng(seed=0)
                 idx = rng.choice(
                     all_samples.shape[0], size=_max_cov_samples, replace=False
@@ -390,10 +391,10 @@ class CMCResult:
                 "D0",
                 "alpha",
                 "D_offset",
-                "gamma_dot_0",
+                "gamma_dot_t0",
                 "beta",
-                "gamma_dot_offset",
-                "phi_0",
+                "gamma_dot_t_offset",
+                "phi0",
             ]
         else:
             required_physical = ["D0", "alpha", "D_offset"]

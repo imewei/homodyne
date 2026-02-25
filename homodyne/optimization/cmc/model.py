@@ -174,7 +174,11 @@ def xpcs_model_scaled(
     # =========================================================================
     # 0. Compute scaling factors and prior tempering scale
     # =========================================================================
-    scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+    # P0-1: Use pre-computed scalings from model_kwargs (avoids ~50K Python
+    # allocations per NUTS leapfrog step). Fallback for backward compat.
+    scalings = kwargs.get("scalings") or compute_scaling_factors(
+        parameter_space, n_phi, analysis_mode
+    )
     prior_scale = math.sqrt(num_shards)
 
     # =========================================================================
@@ -233,20 +237,26 @@ def xpcs_model_scaled(
     # =========================================================================
     # 4. Compute theoretical g1 using EXACT same physics as NLSQ
     # =========================================================================
+    # P0-2: Use pre-computed wavevector constants from model_kwargs.
+    wq2hdt = kwargs.get("wavevector_q_squared_half_dt")
+    sp = kwargs.get("sinc_prefactor")
     if shard_grid is not None:
-        wavevector_q_squared_half_dt = jnp.asarray(0.5 * (q**2) * dt)
-        sinc_prefactor = jnp.asarray(0.5 / math.pi * q * L * dt)
+        if wq2hdt is None:
+            wq2hdt = jnp.asarray(0.5 * (q**2) * dt)
+        if sp is None:
+            sp = jnp.asarray(0.5 / math.pi * q * L * dt)
         g1_all_phi = compute_g1_total_with_precomputed(
-            params, phi_unique, shard_grid, wavevector_q_squared_half_dt, sinc_prefactor
+            params, phi_unique, shard_grid, wq2hdt, sp
         )
     else:
         g1_all_phi = compute_g1_total(
             params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
         )
 
-    # T3-3: Use int32 for point indices regardless of phi_indices.dtype to prevent
-    # silent wrong indexing if phi_indices were accidentally float.
-    point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
+    # P1-3: Use pre-computed point_idx from model_kwargs.
+    point_idx = kwargs.get("point_idx")
+    if point_idx is None:
+        point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
     g1_per_point = g1_all_phi[phi_indices, point_idx]
 
     # =========================================================================
@@ -369,7 +379,10 @@ def xpcs_model_constant(
     # =========================================================================
     # 1. Compute scaling factors and prior tempering scale
     # =========================================================================
-    scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+    # P0-1: Use pre-computed scalings from model_kwargs.
+    scalings = kwargs.get("scalings") or compute_scaling_factors(
+        parameter_space, n_phi, analysis_mode
+    )
     prior_scale = math.sqrt(num_shards)
 
     # =========================================================================
@@ -406,20 +419,26 @@ def xpcs_model_constant(
     # =========================================================================
     # 3. Compute theoretical g1 using EXACT same physics as NLSQ
     # =========================================================================
+    # P0-2: Use pre-computed wavevector constants from model_kwargs.
+    wq2hdt = kwargs.get("wavevector_q_squared_half_dt")
+    sp = kwargs.get("sinc_prefactor")
     if shard_grid is not None:
-        wavevector_q_squared_half_dt = jnp.asarray(0.5 * (q**2) * dt)
-        sinc_prefactor = jnp.asarray(0.5 / math.pi * q * L * dt)
+        if wq2hdt is None:
+            wq2hdt = jnp.asarray(0.5 * (q**2) * dt)
+        if sp is None:
+            sp = jnp.asarray(0.5 / math.pi * q * L * dt)
         g1_all_phi = compute_g1_total_with_precomputed(
-            params, phi_unique, shard_grid, wavevector_q_squared_half_dt, sinc_prefactor
+            params, phi_unique, shard_grid, wq2hdt, sp
         )
     else:
         g1_all_phi = compute_g1_total(
             params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
         )
 
-    # T3-3: Use int32 for point indices regardless of phi_indices.dtype to prevent
-    # silent wrong indexing if phi_indices were accidentally float.
-    point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
+    # P1-3: Use pre-computed point_idx from model_kwargs.
+    point_idx = kwargs.get("point_idx")
+    if point_idx is None:
+        point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
     g1_per_point = g1_all_phi[phi_indices, point_idx]
 
     # =========================================================================
@@ -508,7 +527,10 @@ def xpcs_model_averaged(
     # =========================================================================
     # 0. Compute scaling factors and prior tempering scale
     # =========================================================================
-    scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+    # P0-1: Use pre-computed scalings from model_kwargs.
+    scalings = kwargs.get("scalings") or compute_scaling_factors(
+        parameter_space, n_phi, analysis_mode
+    )
 
     # Prior tempering (Scott et al. 2016): widen priors by sqrt(K) so that
     # the combined posterior across K shards has exactly one prior contribution.
@@ -581,21 +603,27 @@ def xpcs_model_averaged(
     # =========================================================================
     # 3. Compute theoretical C2
     # =========================================================================
-    wavevector_q_squared_half_dt = jnp.asarray(0.5 * (q**2) * dt)
-    sinc_prefactor = jnp.asarray(0.5 / math.pi * q * L * dt)
+    # P0-2: Use pre-computed wavevector constants from model_kwargs.
+    wq2hdt = kwargs.get("wavevector_q_squared_half_dt")
+    sp = kwargs.get("sinc_prefactor")
+    if wq2hdt is None:
+        wq2hdt = jnp.asarray(0.5 * (q**2) * dt)
+    if sp is None:
+        sp = jnp.asarray(0.5 / math.pi * q * L * dt)
 
     if shard_grid is not None:
         g1_all_phi = compute_g1_total_with_precomputed(
-            params, phi_unique, shard_grid, wavevector_q_squared_half_dt, sinc_prefactor
+            params, phi_unique, shard_grid, wq2hdt, sp
         )
     else:
         g1_all_phi = compute_g1_total(
             params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
         )
 
-    # T3-3: Use int32 for point indices regardless of phi_indices.dtype to prevent
-    # silent wrong indexing if phi_indices were accidentally float.
-    point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
+    # P1-3: Use pre-computed point_idx from model_kwargs.
+    point_idx = kwargs.get("point_idx")
+    if point_idx is None:
+        point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
     g1 = g1_all_phi[phi_indices, point_idx]
 
     # =========================================================================
@@ -727,7 +755,10 @@ def xpcs_model_constant_averaged(
     # =========================================================================
     # 1. Compute scaling factors and prior tempering scale
     # =========================================================================
-    scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+    # P0-1: Use pre-computed scalings from model_kwargs.
+    scalings = kwargs.get("scalings") or compute_scaling_factors(
+        parameter_space, n_phi, analysis_mode
+    )
     prior_scale = math.sqrt(num_shards)
 
     # =========================================================================
@@ -776,21 +807,27 @@ def xpcs_model_constant_averaged(
     # =========================================================================
     # 3. Compute theoretical C2
     # =========================================================================
-    wavevector_q_squared_half_dt = jnp.asarray(0.5 * (q**2) * dt)
-    sinc_prefactor = jnp.asarray(0.5 / math.pi * q * L * dt)
+    # P0-2: Use pre-computed wavevector constants from model_kwargs.
+    wq2hdt = kwargs.get("wavevector_q_squared_half_dt")
+    sp = kwargs.get("sinc_prefactor")
+    if wq2hdt is None:
+        wq2hdt = jnp.asarray(0.5 * (q**2) * dt)
+    if sp is None:
+        sp = jnp.asarray(0.5 / math.pi * q * L * dt)
 
     if shard_grid is not None:
         g1_all_phi = compute_g1_total_with_precomputed(
-            params, phi_unique, shard_grid, wavevector_q_squared_half_dt, sinc_prefactor
+            params, phi_unique, shard_grid, wq2hdt, sp
         )
     else:
         g1_all_phi = compute_g1_total(
             params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
         )
 
-    # T3-3: Use int32 for point indices regardless of phi_indices.dtype to prevent
-    # silent wrong indexing if phi_indices were accidentally float.
-    point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
+    # P1-3: Use pre-computed point_idx from model_kwargs.
+    point_idx = kwargs.get("point_idx")
+    if point_idx is None:
+        point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
     g1 = g1_all_phi[phi_indices, point_idx]
 
     # =========================================================================
@@ -875,7 +912,10 @@ def xpcs_model_reparameterized(
     # =========================================================================
     # 0. Compute scaling factors and prior tempering scale
     # =========================================================================
-    scalings = compute_scaling_factors(parameter_space, n_phi, analysis_mode)
+    # P0-1: Use pre-computed scalings from model_kwargs.
+    scalings = kwargs.get("scalings") or compute_scaling_factors(
+        parameter_space, n_phi, analysis_mode
+    )
     prior_scale = math.sqrt(num_shards)
 
     # =========================================================================
@@ -1005,21 +1045,27 @@ def xpcs_model_reparameterized(
     # =========================================================================
     # 3. Compute theoretical C2
     # =========================================================================
-    wavevector_q_squared_half_dt = jnp.asarray(0.5 * (q**2) * dt)
-    sinc_prefactor = jnp.asarray(0.5 / math.pi * q * L * dt)
+    # P0-2: Use pre-computed wavevector constants from model_kwargs.
+    wq2hdt = kwargs.get("wavevector_q_squared_half_dt")
+    sp = kwargs.get("sinc_prefactor")
+    if wq2hdt is None:
+        wq2hdt = jnp.asarray(0.5 * (q**2) * dt)
+    if sp is None:
+        sp = jnp.asarray(0.5 / math.pi * q * L * dt)
 
     if shard_grid is not None:
         g1_all_phi = compute_g1_total_with_precomputed(
-            params, phi_unique, shard_grid, wavevector_q_squared_half_dt, sinc_prefactor
+            params, phi_unique, shard_grid, wq2hdt, sp
         )
     else:
         g1_all_phi = compute_g1_total(
             params, t1, t2, phi_unique, q, L, dt, time_grid=time_grid
         )
 
-    # T3-3: Use int32 for point indices regardless of phi_indices.dtype to prevent
-    # silent wrong indexing if phi_indices were accidentally float.
-    point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
+    # P1-3: Use pre-computed point_idx from model_kwargs.
+    point_idx = kwargs.get("point_idx")
+    if point_idx is None:
+        point_idx = jnp.arange(phi_indices.shape[0], dtype=jnp.int32)
     g1 = g1_all_phi[phi_indices, point_idx]
 
     # =========================================================================

@@ -22,7 +22,6 @@ import multiprocessing as mp
 import multiprocessing.shared_memory
 import os
 import queue
-import tempfile
 import threading
 import time
 from collections import deque
@@ -538,7 +537,7 @@ def _run_shard_worker(
     os.environ["JAX_ENABLE_X64"] = "true"
     if "JAX_COMPILATION_CACHE_DIR" not in os.environ:
         os.environ["JAX_COMPILATION_CACHE_DIR"] = str(
-            Path(tempfile.gettempdir()) / "homodyne_jax_cache"
+            Path(os.path.expanduser("~/.cache/homodyne/jax_cache"))
         )
     # Unconditionally ensure device_count=4, stripping any stale value first.
     import re as _re
@@ -560,7 +559,7 @@ def _run_shard_worker(
     # 1.0s min_compile_time threshold, so we lower it to 0.
     _cache_dir = os.environ.get(
         "JAX_COMPILATION_CACHE_DIR",
-        str(Path(tempfile.gettempdir()) / "homodyne_jax_cache"),
+        str(Path(os.path.expanduser("~/.cache/homodyne/jax_cache"))),
     )
     jax.config.update("jax_compilation_cache_dir", _cache_dir)
     jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
@@ -672,12 +671,8 @@ def _run_shard_worker(
     _q = model_kwargs["q"]
     _L = model_kwargs["L"]
     _dt = model_kwargs["dt"]
-    model_kwargs["wavevector_q_squared_half_dt"] = jnp.asarray(
-        0.5 * (_q**2) * _dt
-    )
-    model_kwargs["sinc_prefactor"] = jnp.asarray(
-        0.5 / _math.pi * _q * _L * _dt
-    )
+    model_kwargs["wavevector_q_squared_half_dt"] = jnp.asarray(0.5 * (_q**2) * _dt)
+    model_kwargs["sinc_prefactor"] = jnp.asarray(0.5 / _math.pi * _q * _L * _dt)
 
     # P1-3: Pre-compute point_idx array (constant for entire shard).
     model_kwargs["point_idx"] = jnp.arange(
@@ -1140,7 +1135,7 @@ class MultiprocessingBackend(CMCBackend):
             # This amortizes JAX compilation overhead across all shards
             run_logger.debug(f"Pre-generating {n_shards} PRNG keys...")
             key_gen_start = time.time()
-            shard_keys = _generate_shard_keys(n_shards, seed=42)
+            shard_keys = _generate_shard_keys(n_shards, seed=config.seed)
             key_gen_time = time.time() - key_gen_start
             run_logger.debug(f"PRNG key generation completed in {key_gen_time:.3f}s")
 

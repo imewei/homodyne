@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess  # nosec B404
 import tempfile
@@ -32,6 +33,9 @@ if TYPE_CHECKING:
     from homodyne.optimization.cmc.sampler import MCMCSamples
 
 logger = get_logger(__name__)
+
+_SAFE_PATH_RE = re.compile(r"^[/a-zA-Z0-9._-]+$")
+_PBS_JOB_ID_RE = re.compile(r"^\d+(\.\w+)*$")
 
 # Default PBS job template
 PBS_JOB_TEMPLATE = """#!/bin/bash
@@ -296,12 +300,18 @@ class PBSBackend(CMCBackend):
         str
             PBS job ID.
         """
-        # Check for conda/venv activation
+        # Check for conda/venv activation (validate paths for shell safety)
         activate_env = ""
-        if os.environ.get("CONDA_PREFIX"):
-            activate_env = f"source activate {os.environ['CONDA_PREFIX']}"
-        elif os.environ.get("VIRTUAL_ENV"):
-            activate_env = f"source {os.environ['VIRTUAL_ENV']}/bin/activate"
+        conda_prefix = os.environ.get("CONDA_PREFIX", "")
+        virtual_env = os.environ.get("VIRTUAL_ENV", "")
+        if conda_prefix:
+            if not _SAFE_PATH_RE.match(conda_prefix):
+                raise ValueError(f"Unsafe characters in CONDA_PREFIX: {conda_prefix!r}")
+            activate_env = f"source activate {conda_prefix}"
+        elif virtual_env:
+            if not _SAFE_PATH_RE.match(virtual_env):
+                raise ValueError(f"Unsafe characters in VIRTUAL_ENV: {virtual_env!r}")
+            activate_env = f"source {virtual_env}/bin/activate"
 
         # Generate job script
         job_script = PBS_JOB_TEMPLATE.format(
@@ -332,6 +342,8 @@ class PBSBackend(CMCBackend):
         )
 
         job_id = result.stdout.strip()
+        if not _PBS_JOB_ID_RE.match(job_id):
+            raise ValueError(f"Unexpected PBS job ID format: {job_id!r}")
         return job_id
 
     def _wait_for_jobs(self, job_ids: list[str]) -> None:
@@ -413,16 +425,35 @@ class PBSBackend(CMCBackend):
             if not path.exists():
                 raise RuntimeError(f"Result file not found: {path}")
 
-            data = np.load(path, allow_pickle=True)
+            data = np.load(path, allow_pickle=False)
+
+            # Reconstruct samples dict from prefixed arrays
+            param_names = list(data["param_names"])
+            samples_dict = {
+                name: data[f"sample_{name}"]
+                for name in param_names
+                if f"sample_{name}" in data
+            }
+            # Fallback for old format with single "samples" key
+            if not samples_dict and "samples" in data:
+                samples_arr = data["samples"]
+                samples_dict = {
+                    name: samples_arr[..., i] for i, name in enumerate(param_names)
+                }
+
+            # Reconstruct extra_fields from prefixed arrays
+            extra_fields: dict[str, Any] = {}
+            for key in data.files:
+                if key.startswith("extra_"):
+                    field_name = key[6:]  # Remove "extra_" prefix
+                    extra_fields[field_name] = data[key]
 
             samples = MCMCSamples(
-                samples=dict(data["samples"].item()),
-                param_names=list(data["param_names"]),
+                samples=samples_dict,
+                param_names=param_names,
                 n_chains=int(data["n_chains"]),
                 n_samples=int(data["n_samples"]),
-                extra_fields=(
-                    dict(data["extra_fields"].item()) if "extra_fields" in data else {}
-                ),
+                extra_fields=extra_fields,
             )
             results.append(samples)
 

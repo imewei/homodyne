@@ -433,7 +433,7 @@ def log_analysis_summary(
     if convergence_status == "converged":
         logger.info("✓ Status: CONVERGED")
     else:
-        logger.warning(f"✗ Status: {convergence_status.upper()}")
+        logger.error(f"✗ Status: {convergence_status.upper()}")
 
     # Key metrics
     logger.info(f"  Shards: {shards_succeeded}/{n_shards} ({success_rate:.0%} success)")
@@ -494,8 +494,8 @@ def get_convergence_recommendations(
     if np.isfinite(max_rhat) and max_rhat > 1.1:
         recommendations.append(
             f"HIGH R-HAT ({max_rhat:.3f}): Chains have not mixed. "
-            "Try: increase num_warmup (currently {n_warmup}), "
-            "or use more chains (currently {n_chains})."
+            f"Try: increase num_warmup, "
+            f"or use more chains (currently {n_chains})."
         )
     elif np.isfinite(max_rhat) and max_rhat > 1.05:
         recommendations.append(

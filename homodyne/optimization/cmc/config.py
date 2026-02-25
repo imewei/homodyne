@@ -375,6 +375,8 @@ class CMCConfig:
             bimodal_min_separation=reparameterization.get(
                 "bimodal_min_separation", 0.5
             ),
+            # Reproducibility
+            seed=config_dict.get("seed", 42),
         )
 
         # Validate and log any issues
@@ -565,6 +567,10 @@ class CMCConfig:
                 f"bimodal_min_separation must be in (0, 2.0], got: {self.bimodal_min_separation}"
             )
 
+        # Validate seed (reproducibility)
+        if not isinstance(self.seed, int) or self.seed < 0:
+            errors.append(f"seed must be a non-negative integer, got: {self.seed}")
+
         # Validate NLSQ-informed priors (Feb 2026)
         if not (1.0 <= self.nlsq_prior_width_factor <= 10.0):
             errors.append(
@@ -703,8 +709,12 @@ class CMCConfig:
         # Ensure minimum viable sampling (ESS requires ~50 samples per param).
         # P2-B: Cap at configured defaults — adaptive scaling should only reduce,
         # never exceed, the user's configured num_warmup/num_samples.
-        min_samples_for_params = min(max(self.min_samples, 50 * n_params), self.num_samples)
-        min_warmup_for_params = min(max(self.min_warmup, 20 * n_params), self.num_warmup)
+        min_samples_for_params = min(
+            max(self.min_samples, 50 * n_params), self.num_samples
+        )
+        min_warmup_for_params = min(
+            max(self.min_warmup, 20 * n_params), self.num_warmup
+        )
 
         # Apply bounds
         final_warmup = max(min_warmup_for_params, scaled_warmup)
@@ -867,4 +877,5 @@ class CMCConfig:
                 "bimodal_min_weight": self.bimodal_min_weight,
                 "bimodal_min_separation": self.bimodal_min_separation,
             },
+            "seed": self.seed,
         }

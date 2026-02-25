@@ -135,9 +135,8 @@ def load_samples_npz(
     if not input_path.is_file():
         raise ValueError(f"Path is not a regular file: {input_path}")
 
-    # Load with allow_pickle=True (required for object arrays like param_names)
-    # Security note: Only load files from trusted sources (CMC output)
-    data = np.load(input_path, allow_pickle=True)
+    # All arrays use native numpy dtypes (string, float, int) — no pickle needed
+    data = np.load(input_path, allow_pickle=False)
 
     return {
         "schema_version": tuple(data["schema_version"]),

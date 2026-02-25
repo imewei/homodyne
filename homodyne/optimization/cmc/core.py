@@ -6,6 +6,7 @@ main entry point for CMC analysis, matching the CLI signature.
 
 from __future__ import annotations
 
+import math
 import time
 from datetime import datetime
 from pathlib import Path
@@ -36,7 +37,8 @@ from homodyne.optimization.cmc.reparameterization import (
 )
 from homodyne.optimization.cmc.results import CMCResult
 from homodyne.optimization.cmc.sampler import run_nuts_sampling
-from homodyne.utils.logging import get_logger, with_context
+from homodyne.optimization.cmc.scaling import compute_scaling_factors
+from homodyne.utils.logging import get_logger, log_exception, with_context
 
 if TYPE_CHECKING:
     from homodyne.config.parameter_space import ParameterSpace
@@ -580,6 +582,51 @@ def fit_mcmc_jax(
     >>> print(result.convergence_status)
     converged
     """
+    try:
+        return _fit_mcmc_jax_impl(
+            data=data,
+            t1=t1,
+            t2=t2,
+            phi=phi,
+            q=q,
+            L=L,
+            analysis_mode=analysis_mode,
+            method=method,
+            cmc_config=cmc_config,
+            initial_values=initial_values,
+            parameter_space=parameter_space,
+            dt=dt,
+            output_dir=output_dir,
+            progress_bar=progress_bar,
+            run_id=run_id,
+            nlsq_result=nlsq_result,
+            **kwargs,
+        )
+    except Exception as exc:
+        log_exception(logger, exc, context={"phase": "CMC fitting"})
+        raise
+
+
+def _fit_mcmc_jax_impl(
+    data: np.ndarray,
+    t1: np.ndarray,
+    t2: np.ndarray,
+    phi: np.ndarray,
+    q: float,
+    L: float,
+    analysis_mode: str,
+    method: str = "mcmc",
+    cmc_config: dict[str, Any] | None = None,
+    initial_values: dict[str, float] | None = None,
+    parameter_space: ParameterSpace = None,
+    dt: float | None = None,
+    output_dir: Path | str | None = None,
+    progress_bar: bool = True,
+    run_id: str | None = None,
+    nlsq_result: dict | None = None,
+    **kwargs,
+) -> CMCResult:
+    """Internal implementation of fit_mcmc_jax."""
     start_time = time.perf_counter()
     run_identifier = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
     run_logger = with_context(logger, run=run_identifier, analysis="cmc")
@@ -1107,6 +1154,18 @@ def fit_mcmc_jax(
     t_min = 0.0  # Always start from t=0 for consistent integration
     t_max = float(max(t1_np.max(), t2_np.max()))
     n_time_points = int(round(t_max / dt_used)) + 1
+    # Guard against OOM: cap time grid at 100K points. For typical XPCS
+    # experiments (dt~0.1s, t_max~100s) this gives ~1001 points.
+    # High-frequency data (dt~1e-5, t_max~10000) would request 1B points.
+    MAX_TIME_GRID_POINTS = 100_000
+    if n_time_points > MAX_TIME_GRID_POINTS:
+        run_logger.warning(
+            f"[CMC] Time grid would require {n_time_points:,} points "
+            f"(dt={dt_used:.6g}, t_max={t_max:.6g}). "
+            f"Capping at {MAX_TIME_GRID_POINTS:,} to prevent OOM. "
+            f"Effective dt will be {t_max / (MAX_TIME_GRID_POINTS - 1):.6g}s."
+        )
+        n_time_points = MAX_TIME_GRID_POINTS
     time_grid_np = np.linspace(t_min, t_max, n_time_points)
     time_grid = jnp.array(time_grid_np)
 
@@ -1149,12 +1208,13 @@ def fit_mcmc_jax(
             f"[CMC] Grid spacing {actual_grid_dt:.6g}s differs from config dt={dt_used:.6g}s"
         )
 
+    phi_indices_arr = jnp.array(prepared.phi_indices)
     model_kwargs = {
         "data": jnp.array(prepared.data),
         "t1": jnp.array(prepared.t1),
         "t2": jnp.array(prepared.t2),
         "phi_unique": jnp.array(prepared.phi_unique),
-        "phi_indices": jnp.array(prepared.phi_indices),
+        "phi_indices": phi_indices_arr,
         "q": q,
         "L": L,
         "dt": dt_used,
@@ -1163,6 +1223,18 @@ def fit_mcmc_jax(
         "parameter_space": parameter_space,
         "n_phi": prepared.n_phi,
         "noise_scale": prepared.noise_scale,
+        # P0-1: Pre-compute scaling factors once (pure function of static inputs,
+        # avoids ~50K Python allocations per NUTS leapfrog step).
+        "scalings": (
+            compute_scaling_factors(parameter_space, prepared.n_phi, analysis_mode)
+            if parameter_space is not None
+            else None
+        ),
+        # P0-2: Pre-compute wavevector constants (depend only on q, L, dt).
+        "wavevector_q_squared_half_dt": jnp.asarray(0.5 * (q**2) * dt_used),
+        "sinc_prefactor": jnp.asarray(0.5 / math.pi * q * L * dt_used),
+        # P1-3: Pre-compute point index array (depends only on data shape).
+        "point_idx": jnp.arange(phi_indices_arr.shape[0], dtype=jnp.int32),
     }
 
     # D2: Pre-compute shard-constant grid quantities for single-shard path only.

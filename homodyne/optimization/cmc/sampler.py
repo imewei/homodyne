@@ -835,9 +835,9 @@ def run_nuts_sampling(
         progress_bar=progress_bar,
     )
 
-    # Create RNG key
+    # Create RNG key from config seed (defaults to 42 for reproducibility)
     if rng_key is None:
-        rng_key = jax.random.PRNGKey(42)
+        rng_key = jax.random.PRNGKey(config.seed)
 
     # Run sampling with timing
     adaptive_note = ""
@@ -1197,7 +1197,7 @@ def run_nuts_with_retry(
         If all retries fail.
     """
     if rng_key is None:
-        rng_key = jax.random.PRNGKey(42)
+        rng_key = jax.random.PRNGKey(config.seed)
 
     last_error = None
     run_logger = with_context(logger, run=getattr(config, "run_id", None))
