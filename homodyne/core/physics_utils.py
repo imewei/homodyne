@@ -190,9 +190,9 @@ def calculate_shear_rate(
         1e-5,
     )
 
-    # Replace t=0 with dt: where(time_array == 0, dt, time_array)
-    # This avoids discontinuity since both t[0] and t[1] map to dt
-    time_safe = jnp.where(time_array == 0.0, dt, time_array)
+    # Replace near-zero values with dt floor, matching calculate_diffusion_coefficient
+    # This provides a continuous floor instead of exact-zero equality check
+    time_safe = jnp.maximum(time_array, dt)
 
     gamma_t = gamma_dot_0 * (time_safe**beta) + gamma_dot_offset
     # Ensure positive values — use jnp.where (not jnp.maximum) to preserve gradients.

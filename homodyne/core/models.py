@@ -573,7 +573,7 @@ def create_model(analysis_mode: str) -> CombinedModel:
     Returns:
         Configured CombinedModel instance
     """
-    valid_modes = ["static", "laminar_flow"]
+    valid_modes = ["static", "laminar_flow", "static_isotropic", "static_anisotropic"]
     if analysis_mode not in valid_modes:
         raise ValueError(
             f"Invalid analysis mode '{analysis_mode}'. Must be one of {valid_modes}",
@@ -585,7 +585,7 @@ def create_model(analysis_mode: str) -> CombinedModel:
 
 def get_available_models() -> list[str]:
     """Get list of available analysis modes."""
-    return ["static", "laminar_flow"]
+    return ["static", "laminar_flow", "static_isotropic", "static_anisotropic"]
 
 
 # Export main classes and functions

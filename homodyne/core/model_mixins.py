@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from homodyne.core.jax_backend import (
     get_device_info,
-    get_performance_summary,
     gradient_g2,
     hessian_g2,
     jax_available,
@@ -131,7 +130,6 @@ class GradientCapabilityMixin:
         """Get comprehensive gradient capability information."""
         backend_info = validate_backend()
         device_info = get_device_info()
-        get_performance_summary()
 
         # Determine best available method
         if backend_info["jax_available"]:

@@ -75,6 +75,12 @@ def estimate_contrast_offset_from_quantiles(
     c2 = np.asarray(c2_data)
     dt = np.asarray(delta_t)
 
+    # Filter non-finite values before estimation
+    finite_mask = np.isfinite(c2)
+    if not np.all(finite_mask):
+        c2 = c2[finite_mask]
+        dt = dt[finite_mask]
+
     # Sanity checks
     if len(c2) < 100:
         # Not enough data for robust estimation - return midpoints

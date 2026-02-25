@@ -202,9 +202,12 @@ class ParameterSpace:
             "alpha": self.alpha_bounds,
             "D_offset": self.D_offset_bounds,
             "gamma_dot_0": self.gamma_dot_t0_bounds,
+            "gamma_dot_t0": self.gamma_dot_t0_bounds,
             "beta": self.beta_bounds,
             "gamma_dot_offset": self.gamma_dot_t_offset_bounds,
+            "gamma_dot_t_offset": self.gamma_dot_t_offset_bounds,
             "phi_0": self.phi0_bounds,
+            "phi0": self.phi0_bounds,
         }
         return bound_map.get(param_name, (0.0, 1.0))  # Safe fallback
 
@@ -751,7 +754,7 @@ if JAX_AVAILABLE:
             return (sum_theory_sq, sum_theory, sum_exp, sum_theory_exp, n_data), None
 
         # Initialize accumulators
-        carry_init = (0.0, 0.0, 0.0, 0.0, 0)
+        carry_init = (0.0, 0.0, 0.0, 0.0, 0.0)
 
         # Process all chunks
         (

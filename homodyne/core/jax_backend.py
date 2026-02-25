@@ -197,7 +197,7 @@ def get_cached_meshgrid(t1: "jnp.ndarray", t2: "jnp.ndarray") -> tuple:
         if n1 > 2000:
             _cache_stats["skipped_large"] += 1  # T041: Track skipped large arrays
             return t1, t2
-    except (TypeError, Exception):
+    except TypeError:
         # Inside JIT tracing - skip stats AND caching
         if t1.shape[0] > 2000:
             return t1, t2
@@ -1168,7 +1168,7 @@ def compute_chi_squared(
         Chi-squared value
     """
     theory = compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset, dt)
-    residuals = (data - theory) / (sigma + EPS)  # Avoid division by zero
+    residuals = (data - theory) / sigma  # sigma validated > 0 upstream
     return jnp.sum(residuals**2)
 
 
@@ -1346,8 +1346,8 @@ def validate_backend() -> dict[str, Any]:
     # Test basic computation
     try:
         test_params = jnp.array([100.0, 0.0, 10.0])
-        test_t1 = jnp.array([0.0])
-        test_t2 = jnp.array([1.0])
+        test_t1 = jnp.array([0.0, 0.001, 0.002])
+        test_t2 = jnp.array([0.0, 0.001, 0.002])
         test_q = 0.01
 
         # Test forward computation

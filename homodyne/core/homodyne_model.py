@@ -131,6 +131,14 @@ class HomodyneModel:
         self.physics_factors = create_physics_factors_from_config_dict(config)
         logger.info(f"Pre-computed physics factors: {self.physics_factors}")
 
+        # Resolve end_frame sentinel (-1 means "use all frames")
+        if self.end_frame < 0:
+            raise ValueError(
+                f"end_frame={self.end_frame} is a sentinel value and must be resolved "
+                f"to a concrete frame index before constructing HomodyneModel. "
+                f"Use XPCSDataLoader to resolve this value from the HDF5 file."
+            )
+
         # Create time array
         n_time = self.end_frame - self.start_frame + 1
         self.time_array = jnp.linspace(

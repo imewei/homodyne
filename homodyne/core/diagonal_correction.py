@@ -250,6 +250,8 @@ if HAS_JAX:
         3. Replace diagonal via a single scatter .at[diag_indices].set()
         """
         size = c2_mat.shape[0]
+        if size <= 1:
+            return c2_mat  # Nothing to correct for 1x1 or empty matrix
 
         # Extract side band: off-diagonal elements adjacent to main diagonal
         indices_i = jnp.arange(size - 1)
