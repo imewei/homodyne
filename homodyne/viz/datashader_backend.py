@@ -185,16 +185,16 @@ class DatashaderRenderer:
 
         We convert matplotlib colormap names to color lists for compatibility.
         """
-        import matplotlib.cm as cm
+        import matplotlib
         import matplotlib.colors as mcolors
 
         # Get matplotlib colormap
         try:
-            mpl_cmap = cm.get_cmap(cmap)
+            mpl_cmap = matplotlib.colormaps.get_cmap(cmap)
         except ValueError:
             # Fallback to jet if colormap not found
             logger.warning(f"Colormap '{cmap}' not found, using 'jet'")
-            mpl_cmap = cm.get_cmap("jet")
+            mpl_cmap = matplotlib.colormaps.get_cmap("jet")
 
         # Convert to list of hex colors (Datashader format)
         # Sample 256 colors from the colormap
@@ -264,7 +264,7 @@ def plot_c2_heatmap_fast(
     ...     phi_angle=0.0
     ... )
     """
-    import matplotlib.cm as cm
+    import matplotlib
     import matplotlib.pyplot as plt
     from matplotlib.cm import ScalarMappable
     from matplotlib.colors import Normalize
@@ -321,7 +321,7 @@ def plot_c2_heatmap_fast(
     # Add colorbar using the resolved color scale
     # Create ScalarMappable with same colormap and data range
     norm = Normalize(vmin=vmin_use, vmax=vmax_use)
-    sm = ScalarMappable(cmap=cm.get_cmap(cmap), norm=norm)
+    sm = ScalarMappable(cmap=matplotlib.colormaps.get_cmap(cmap), norm=norm)
     sm.set_array([])  # Required for colorbar
 
     cbar = plt.colorbar(sm, ax=ax, label="g₂(t₁,t₂)", shrink=0.9)
@@ -464,13 +464,13 @@ def plot_c2_comparison_fast(
     axes[0].set_ylabel("t₂ (s)", fontsize=10)
 
     # Add colorbar for experimental panel
-    import matplotlib.cm as cm
+    import matplotlib
     from matplotlib.cm import ScalarMappable
     from matplotlib.colors import Normalize
 
     # Use SHARED normalization for both experimental and fit colorbars
     norm_shared = Normalize(vmin=vmin_shared, vmax=vmax_shared)
-    sm_exp = ScalarMappable(cmap=cm.get_cmap("jet"), norm=norm_shared)
+    sm_exp = ScalarMappable(cmap=matplotlib.colormaps.get_cmap("jet"), norm=norm_shared)
     sm_exp.set_array([])
     cbar0 = plt.colorbar(sm_exp, ax=axes[0], label="C₂(t₁,t₂)")
     cbar0.ax.tick_params(labelsize=8)
@@ -482,7 +482,7 @@ def plot_c2_comparison_fast(
     axes[1].set_ylabel("t₂ (s)", fontsize=10)
 
     # Add colorbar for fit panel (same normalization as experimental)
-    sm_fit = ScalarMappable(cmap=cm.get_cmap("jet"), norm=norm_shared)
+    sm_fit = ScalarMappable(cmap=matplotlib.colormaps.get_cmap("jet"), norm=norm_shared)
     sm_fit.set_array([])
     cbar1 = plt.colorbar(sm_fit, ax=axes[1], label="C₂(t₁,t₂)")
     cbar1.ax.tick_params(labelsize=8)
@@ -495,7 +495,7 @@ def plot_c2_comparison_fast(
 
     # Add colorbar for residuals panel using actual min/max
     norm_res = Normalize(vmin=res_min, vmax=res_max)
-    sm_res = ScalarMappable(cmap=cm.get_cmap("jet"), norm=norm_res)
+    sm_res = ScalarMappable(cmap=matplotlib.colormaps.get_cmap("jet"), norm=norm_res)
     sm_res.set_array([])
     cbar2 = plt.colorbar(sm_res, ax=axes[2], label="ΔC₂")
     cbar2.ax.tick_params(labelsize=8)
