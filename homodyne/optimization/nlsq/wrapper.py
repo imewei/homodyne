@@ -1446,12 +1446,12 @@ class NLSQWrapper(NLSQAdapterBase):
                     )
                     # Fall through to stratified least-squares
 
-            # Extract anti-degeneracy config for defense system v2.14.0
-            # (Now applies to stratified LS, not just hybrid streaming)
+            # Extract NLSQ config dict for tolerance propagation and anti-degeneracy
+            nlsq_config_dict = None
             anti_degeneracy_config = None
             if config is not None and hasattr(config, "config"):
-                nlsq_config_ad = config.config.get("optimization", {}).get("nlsq", {})
-                anti_degeneracy_config = nlsq_config_ad.get("anti_degeneracy", {})
+                nlsq_config_dict = config.config.get("optimization", {}).get("nlsq", {})
+                anti_degeneracy_config = nlsq_config_dict.get("anti_degeneracy", {})
                 if anti_degeneracy_config:
                     logger.info(
                         f"Anti-Degeneracy config loaded: per_angle_mode="
@@ -1469,6 +1469,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     logger=logger,
                     target_chunk_size=target_chunk_size,
                     anti_degeneracy_config=anti_degeneracy_config,
+                    nlsq_config_dict=nlsq_config_dict,
                 )
 
                 # Compute final residuals for result creation
@@ -2341,7 +2342,11 @@ class NLSQWrapper(NLSQAdapterBase):
         current_params = initial_params.copy()
 
         # Compute initial cost for optimization success tracking
-        initial_residuals = residual_fn(xdata, *initial_params)
+        # Handle both calling conventions: f(xdata, *params) and f(params)
+        if hasattr(residual_fn, 'n_total_points') or isinstance(residual_fn, FunctionEvaluationCounter):
+            initial_residuals = residual_fn(initial_params)
+        else:
+            initial_residuals = residual_fn(xdata, *initial_params)
         initial_cost = np.sum(initial_residuals**2)
 
         # Determine if we should use large dataset functions
@@ -2688,7 +2693,7 @@ class NLSQWrapper(NLSQAdapterBase):
             # Recovery strategy: perturb parameters or relax tolerance
             if attempt == 0:
                 # First retry: perturb parameters by 10%
-                perturbation = np.random.randn(*params.shape) * 0.1
+                perturbation = np.random.default_rng(seed=42).standard_normal(params.shape) * 0.1
                 new_params = params * (1.0 + perturbation)
 
                 # Clip to bounds if they exist
@@ -2701,7 +2706,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 }
             else:
                 # Second retry: larger perturbation (20%)
-                perturbation = np.random.randn(*params.shape) * 0.2
+                perturbation = np.random.default_rng(seed=123).standard_normal(params.shape) * 0.2
                 new_params = params * (1.0 + perturbation)
 
                 if bounds is not None:
@@ -4485,6 +4490,7 @@ class NLSQWrapper(NLSQAdapterBase):
         logger: Any,
         target_chunk_size: int = 100_000,
         anti_degeneracy_config: dict | None = None,
+        nlsq_config_dict: dict | None = None,
     ) -> tuple[np.ndarray, np.ndarray, dict]:
         """Fit using NLSQ's least_squares() with stratified residual function.
 
@@ -4933,6 +4939,14 @@ class NLSQWrapper(NLSQAdapterBase):
         # Data is encapsulated in residual_fn
         optimization_start = time.perf_counter()
 
+        # Extract convergence tolerances from NLSQConfig (BUG-14 fix)
+        # Previously hardcoded to ftol=xtol=gtol=1e-8, max_nfev=1000
+        cfg = nlsq_config_dict or {}
+        opt_ftol = float(cfg.get("ftol", cfg.get("tolerance", 1e-8)))
+        opt_xtol = float(cfg.get("xtol", 1e-8))
+        opt_gtol = float(cfg.get("gtol", 1e-8))
+        opt_max_nfev = int(cfg.get("max_iterations", 1000))
+
         # Instantiate LeastSquares with stability mode enabled
         # Stability mode provides:
         # - Automatic memory management (switches to LSMR when memory tight)
@@ -4947,10 +4961,10 @@ class NLSQWrapper(NLSQAdapterBase):
             jac=None,  # Use JAX autodiff for Jacobian
             bounds=bounds,  # Parameter bounds
             method="trf",  # Trust Region Reflective
-            ftol=1e-8,  # Function tolerance
-            xtol=1e-8,  # Parameter tolerance
-            gtol=1e-8,  # Gradient tolerance
-            max_nfev=1000,  # Max function evaluations
+            ftol=opt_ftol,  # Function tolerance (from config)
+            xtol=opt_xtol,  # Parameter tolerance (from config)
+            gtol=opt_gtol,  # Gradient tolerance (from config)
+            max_nfev=opt_max_nfev,  # Max function evaluations (from config)
             verbose=2,  # Show progress
         )
 
@@ -5036,32 +5050,47 @@ class NLSQWrapper(NLSQAdapterBase):
                 logger.warning("  - Optimizer exploring unphysical parameter space")
                 logger.warning("=" * 80)
 
+        # Compute final residuals first (needed for both cost and covariance scaling)
+        final_residuals = residual_fn(popt)
+        final_cost = float(np.sum(final_residuals**2))
+        n_data = len(final_residuals)
+        n_params = len(popt)
+
+        # Use actual data point count, not padded length from StratifiedResidualFunction
+        n_data_real = (
+            residual_fn.n_total_points
+            if hasattr(residual_fn, 'n_total_points')
+            else n_data
+        )
+
         # Compute covariance matrix from Jacobian
         # NLSQ's least_squares may or may not provide pcov directly
         if "pcov" in result and result["pcov"] is not None:
             pcov = np.asarray(result["pcov"])
             logger.info("Using covariance matrix from NLSQ result")
         else:
-            # Compute covariance from Jacobian: pcov = inv(J^T J)
+            # Compute covariance from Jacobian: pcov = s² * inv(J^T J)
+            # where s² = RSS / (n - p) is the estimated noise variance
             logger.info("Computing covariance matrix from Jacobian...")
+
+            # Noise variance estimate (reduced chi-squared)
+            s2 = final_cost / max(n_data_real - n_params, 1)
 
             # Use JAX to compute Jacobian at final parameters
             jac_fn = jax.jacfwd(residual_fn)
             J = jac_fn(popt)
             J = np.asarray(J)
 
-            # Compute covariance: (J^T J)^{-1}
-            # This is the standard formula for nonlinear least squares
             try:
                 JTJ = J.T @ J
-                pcov = np.linalg.inv(JTJ)
+                pcov = np.linalg.inv(JTJ) * s2
             except np.linalg.LinAlgError:
                 logger.warning("Singular Jacobian, using pseudo-inverse for covariance")
-                pcov = np.linalg.pinv(JTJ)
+                pcov = np.linalg.pinv(JTJ) * s2
 
-        # Compute final cost
-        final_residuals = residual_fn(popt)
-        final_cost = float(np.sum(final_residuals**2))
+            logger.info(
+                f"Covariance scaling: s²={s2:.6e} (n_data={n_data_real}, n_params={n_params})"
+            )
 
         # Extract convergence information
         success = result.get("success", True)
@@ -5282,8 +5311,8 @@ class NLSQWrapper(NLSQAdapterBase):
                 if hasattr(stratified_data, "phi_flat")
                 else 1
             )
-            # In auto_averaged mode, popt has scalar contrast/offset (n_phi_eff=1)
-            n_phi = n_phi_check if effective_per_angle_scaling else 1
+            # After expansion, popt always has n_phi_check contrast/offset entries
+            n_phi = n_phi_check
             if len(popt) > 2 * n_phi + 3:
                 gamma_dot_t0_idx = 2 * n_phi + 3
                 gamma_dot_t0_value = popt[gamma_dot_t0_idx]
@@ -5418,6 +5447,7 @@ class NLSQWrapper(NLSQAdapterBase):
             t1_arr = np.asarray(d.t1)
             t2_arr = np.asarray(d.t2)
             g2_arr = np.asarray(d.g2)
+            sigma_arr = getattr(d, 'sigma', None)
 
             # Extract 1D from meshgrids if needed (borrowed from _prepare_data)
             if t1_arr.ndim == 2 and t1_arr.size > 0:
@@ -5429,11 +5459,18 @@ class NLSQWrapper(NLSQAdapterBase):
                 phi_arr, t1_arr, t2_arr, indexing="ij"
             )
 
+            # Flatten sigma if available
+            if sigma_arr is not None:
+                sigma_arr = np.asarray(sigma_arr)
+                sigma_flat = sigma_arr.ravel()
+            else:
+                sigma_flat = None
+
             # These flattens create copies usually, but for 25M points (200MB) it's acceptable ONCE
             # The OOM comes from creating SECOND and THIRD copies during stratification.
-            return phi_grid.ravel(), t1_grid.ravel(), t2_grid.ravel(), g2_arr.ravel()
+            return phi_grid.ravel(), t1_grid.ravel(), t2_grid.ravel(), g2_arr.ravel(), sigma_flat
 
-        phi_flat, t1_flat, t2_flat, g2_flat = _get_flat_arrays(data)
+        phi_flat, t1_flat, t2_flat, g2_flat, sigma_flat = _get_flat_arrays(data)
 
         # Calculate optimal chunk size
         n_points = len(phi_flat)
@@ -5489,6 +5526,7 @@ class NLSQWrapper(NLSQAdapterBase):
         ftol = 1e-6  # Relative cost function change
         lm_lambda = 0.01  # Initial damping
         rel_change = float("inf")  # Initialize to prevent NameError at loop exit
+        cost_change = float("inf")  # Initialize for multi-criteria convergence
 
         # ====================================================================
         # JIT-compiled Chunk Kernel with FULL HOMODYNE PHYSICS (v2.14.1+)
@@ -5673,8 +5711,9 @@ class NLSQWrapper(NLSQAdapterBase):
                 t1_c = t1_flat[ind_c]
                 t2_c = t2_flat[ind_c]
                 g2_c = g2_flat[ind_c]
+                sigma_c = sigma_flat[ind_c] if sigma_flat is not None else 1.0
                 c2_chunk = compute_chunk_chi2(
-                    params_eval, p_c, t1_c, t2_c, g2_c, sigma_val
+                    params_eval, p_c, t1_c, t2_c, g2_c, sigma_c
                 )
                 total_c2 += c2_chunk
                 eval_count += 1
@@ -5687,8 +5726,9 @@ class NLSQWrapper(NLSQAdapterBase):
                 return total_c2 * scale
             return 0.0
 
-        # Sigma placeholder (physics constants already extracted above)
-        sigma_val = 1.0
+        # Use per-point sigma if available from data, otherwise unit weighting
+        if sigma_flat is None:
+            logger.info("No per-point sigma available - using unit weighting for OOC")
 
         # Optimization Loop
         logger.info(f"Starting Out-of-Core Loop (Max iter: {max_iter})...")
@@ -5709,10 +5749,11 @@ class NLSQWrapper(NLSQAdapterBase):
                 t1_c = t1_flat[indices_chunk]
                 t2_c = t2_flat[indices_chunk]
                 g2_c = g2_flat[indices_chunk]
+                sigma_c = sigma_flat[indices_chunk] if sigma_flat is not None else 1.0
 
                 # Compute and Accumulate (using FULL homodyne physics v2.14.1+)
                 JtJ, Jtr, chi2 = compute_chunk_accumulators(
-                    params_curr, phi_c, t1_c, t2_c, g2_c, sigma_val
+                    params_curr, phi_c, t1_c, t2_c, g2_c, sigma_c
                 )
 
                 total_JtJ += JtJ
@@ -5807,9 +5848,15 @@ class NLSQWrapper(NLSQAdapterBase):
                             f"Out-of-Core converged: xtol={rel_change:.2e}<{xtol:.0e}, "
                             f"ftol={cost_change:.2e}<{ftol:.0e}"
                         )
+                        # Invert J^T J to get covariance (pcov = (J^T J)^{-1})
+                        try:
+                            pcov = np.linalg.inv(np.array(total_JtJ))
+                        except np.linalg.LinAlgError:
+                            logger.warning("Singular J^T J in OOC — using pseudo-inverse for covariance")
+                            pcov = np.linalg.pinv(np.array(total_JtJ))
                         return (
                             np.array(params_curr),
-                            np.array(total_JtJ),
+                            pcov,
                             {
                                 "chi_squared": float(chi2_new),
                                 "iterations": i + 1,
@@ -5830,14 +5877,20 @@ class NLSQWrapper(NLSQAdapterBase):
                 break
 
         # Determine final status (rel_change initialized to inf before loop)
-        converged = rel_change < xtol
+        converged = rel_change < xtol and cost_change < ftol
         info = {
             "chi_squared": float(total_chi2),
             "iterations": i + 1,
             "convergence_status": "converged" if converged else "max_iter",
             "message": "Out-of-Core accumulation completed",
         }
-        return np.array(params_curr), np.array(total_JtJ), info
+        # Invert J^T J to get covariance (pcov = (J^T J)^{-1})
+        try:
+            pcov = np.linalg.inv(np.array(total_JtJ))
+        except np.linalg.LinAlgError:
+            logger.warning("Singular J^T J in OOC — using pseudo-inverse for covariance")
+            pcov = np.linalg.pinv(np.array(total_JtJ))
+        return np.array(params_curr), pcov, info
 
     def _fit_with_stratified_hybrid_streaming(
         self,
@@ -7284,10 +7337,40 @@ class NLSQWrapper(NLSQAdapterBase):
                 outer_iteration_callback=shear_weight_update_callback,
             )
 
+            # Compute covariance from Hessian of loss function (BUG-15 fix)
+            # Gauss-Newton approximation: H ≈ 2 * J^T J for least-squares loss
+            # So pcov = s² * inv(J^T J) ≈ 2 * s² * inv(H)
+            n_hier_data = len(y_data)
+            n_hier_params = len(hier_result.x)
+            s2_hier = hier_result.fun / max(n_hier_data - n_hier_params, 1)
+            try:
+                popt_jax = jnp.asarray(hier_result.x)
+                H = np.asarray(jax.hessian(loss_fn)(popt_jax))
+            except Exception as e:
+                logger.warning(
+                    f"Could not compute Hessian: {e}. Using identity placeholder."
+                )
+                H = None
+
+            if H is not None:
+                try:
+                    pcov_hier = 2.0 * s2_hier * np.linalg.inv(H)
+                    logger.info(
+                        f"Hierarchical covariance from Hessian: s²={s2_hier:.6e} "
+                        f"(n_data={n_hier_data}, n_params={n_hier_params})"
+                    )
+                except np.linalg.LinAlgError:
+                    logger.warning(
+                        "Singular Hessian in hierarchical path, using pseudo-inverse"
+                    )
+                    pcov_hier = 2.0 * s2_hier * np.linalg.pinv(H)
+            else:
+                pcov_hier = np.eye(n_hier_params)
+
             # Convert HierarchicalResult to standard format
             result = {
                 "x": hier_result.x,
-                "pcov": np.eye(len(hier_result.x)),  # Placeholder
+                "pcov": pcov_hier,
                 "success": hier_result.success,
                 "message": hier_result.message,
                 "function_evaluations": hier_result.n_outer_iterations
@@ -7907,7 +7990,16 @@ class NLSQWrapper(NLSQAdapterBase):
         Returns:
             (use_streaming, estimated_gb, reason) tuple
         """
-        import psutil
+        try:
+            import psutil
+        except ImportError:
+            from homodyne.optimization.nlsq.memory import detect_total_system_memory
+
+            total_bytes = detect_total_system_memory()
+            if total_bytes is not None:
+                total_gb = total_bytes / (1024**3)
+                return (False, 0.0, f"psutil not available; system has {total_gb:.1f} GB")
+            return (False, 0.0, "psutil not available; system memory unknown")
 
         # Compute adaptive threshold if not explicitly provided
         if memory_threshold_gb is None:
