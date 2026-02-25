@@ -184,8 +184,11 @@ class RecoveryStrategyApplicator:
         np.ndarray
             Perturbed parameters
         """
-        perturbation = np.random.randn(*params.shape) * perturbation_fraction
-        perturbed = params * (1.0 + perturbation)
+        rng = np.random.default_rng()
+        perturbation = rng.standard_normal(params.shape) * perturbation_fraction
+        # Additive fallback for zero-valued params (multiplicative would leave them at zero)
+        scale = np.where(np.abs(params) > 1e-30, np.abs(params), 1.0)
+        perturbed = params + perturbation * scale
         return perturbed
 
     def should_retry(self, attempt: int) -> bool:
