@@ -54,7 +54,7 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 45
     needs: validate
     permissions:
       contents: read
@@ -76,6 +76,7 @@ jobs:
         run: |
           uv run pytest tests/ \
             -v \
+            -n 2 \
             --tb=short \
             -m "not slow" \
             --cov=homodyne \
