@@ -543,7 +543,10 @@ class PreprocessingPipeline:
 
         logger.debug(f"Applying enhanced diagonal correction: {method}")
 
-        corrected_data = data.copy()
+        corrected_data = {
+            k: (np.array(v) if isinstance(v, np.ndarray) else v)
+            for k, v in data.items()
+        }
 
         # Use unified module if available
         if HAS_DIAGONAL_CORRECTION and apply_diagonal_correction is not None:

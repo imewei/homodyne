@@ -380,30 +380,19 @@ class XPCSDataFilter:
         if not frame_filtering:
             return None
 
-        # For now, implement basic stride-based filtering
-        # This can be extended with more sophisticated frame selection logic
+        # Stride-based frame filtering is data subsampling, which violates
+        # the "Never subsample data" rule. Raise an error if stride > 1
+        # is requested. This prevents silent precision loss.
         stride = frame_filtering.get("stride", 1)
         if stride <= 1:
             return None
 
-        logger.debug(f"Applying frame filtering with stride: {stride}")
-
-        # Create strided indices
-        selected_indices = np.arange(0, total_count, stride)
-        mask = np.zeros(total_count, dtype=bool)
-        mask[selected_indices] = True
-
-        # Statistics
-        selected_count = len(selected_indices)
-        result.filter_statistics["frame"] = {
-            "stride": stride,
-            "selected_count": int(selected_count),
-            "selection_fraction": float(selected_count / total_count),
-        }
-
-        logger.debug(f"Frame filtering: {selected_count}/{total_count} frames selected")
-
-        return mask
+        raise ValueError(
+            f"Frame filtering with stride={stride} would subsample data "
+            f"(selecting {total_count // stride}/{total_count} points). "
+            f"Data subsampling is prohibited to preserve full precision. "
+            f"Remove 'frame_filtering.stride' from your configuration."
+        )
 
     def _calculate_matrix_quality_score(self, matrix: np.ndarray) -> float:
         """Calculate quality score for a correlation matrix.

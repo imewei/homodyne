@@ -272,7 +272,7 @@ class MemoryMapManager:
                 logger.debug(f"Opened memory-mapped HDF5: {file_path}")
                 yield hdf_file
 
-            except Exception as e:
+            except OSError as e:
                 logger.error(f"Failed to open memory-mapped HDF5 {file_path}: {e}")
                 raise
 
@@ -293,7 +293,7 @@ class MemoryMapManager:
                 del self._access_counts[file_path]
                 del self._last_access[file_path]
                 logger.debug(f"Closed old memory mapping: {file_path}")
-            except Exception as e:
+            except OSError as e:
                 logger.warning(f"Error closing memory mapping {file_path}: {e}")
 
     def close_all(self) -> None:
@@ -302,7 +302,7 @@ class MemoryMapManager:
             for file_path, hdf_file in list(self._open_maps.items()):
                 try:
                     hdf_file.close()
-                except Exception as e:
+                except OSError as e:
                     logger.warning(f"Error closing {file_path}: {e}")
 
             self._open_maps.clear()
@@ -633,7 +633,7 @@ class MultiLevelCache:
                     self._update_access_stats(key, current_time)
                     logger.debug(f"Cache hit (SSD): {key}")
                     return item
-                except Exception as e:
+                except (OSError, ValueError) as e:
                     logger.warning(f"Failed to load from SSD cache {key}: {e}")
 
             # Check HDD cache
@@ -647,7 +647,7 @@ class MultiLevelCache:
                     self._update_access_stats(key, current_time)
                     logger.debug(f"Cache hit (HDD): {key}")
                     return item
-                except Exception as e:
+                except (OSError, ValueError) as e:
                     logger.warning(f"Failed to load from HDD cache {key}: {e}")
 
             logger.debug(f"Cache miss: {key}")
@@ -722,7 +722,7 @@ class MultiLevelCache:
             while self._ssd_usage_mb > self.ssd_cache_mb:
                 self._evict_from_ssd()
 
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.warning(f"Failed to cache to SSD {key}: {e}")
 
     def _put_hdd(self, key: str, item: Any) -> None:
@@ -738,7 +738,7 @@ class MultiLevelCache:
             while self._hdd_usage_mb > self.hdd_cache_mb:
                 self._evict_from_hdd()
 
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.warning(f"Failed to cache to HDD {key}: {e}")
 
     def _save_to_disk(self, file_path: Path, item: Any) -> float:
@@ -756,11 +756,12 @@ class MultiLevelCache:
             # Write to disk
             with open(file_path, "wb") as f:
                 f.write(compressed)
+            os.chmod(file_path, 0o600)
 
             size_mb = len(compressed) / (1024 * 1024)
             return size_mb
 
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.error(f"Failed to save {file_path}: {e}")
             raise
 
@@ -787,7 +788,7 @@ class MultiLevelCache:
             item = pickle.loads(serialized)  # nosec B301
             return item
 
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.error(f"Failed to load {file_path}: {e}")
             raise
 
@@ -891,7 +892,7 @@ class MultiLevelCache:
             self._ssd_usage_mb -= file_size_mb
             logger.debug(f"Evicted from SSD: {oldest_file.name} ({file_size_mb:.1f}MB)")
 
-        except Exception as e:
+        except OSError as e:
             logger.warning(f"Error evicting from SSD cache: {e}")
 
     def _evict_from_hdd(self) -> None:
@@ -909,7 +910,7 @@ class MultiLevelCache:
             self._hdd_usage_mb -= file_size_mb
             logger.debug(f"Evicted from HDD: {oldest_file.name} ({file_size_mb:.1f}MB)")
 
-        except Exception as e:
+        except OSError as e:
             logger.warning(f"Error evicting from HDD cache: {e}")
 
     def get_cache_stats(self) -> dict[str, Any]:
@@ -1196,7 +1197,7 @@ class PerformanceEngine:
 
             return correlation_matrices
 
-        except Exception as e:
+        except (OSError, KeyError, ValueError) as e:
             logger.error(f"Failed to load correlation matrices: {e}")
             raise PerformanceEngineError(
                 f"Correlation matrix loading failed: {e}",
@@ -1396,7 +1397,7 @@ class PerformanceEngine:
                 f"Background prefetch completed for {len(data_keys)} data keys",
             )
 
-        except Exception as e:
+        except OSError as e:
             logger.warning(f"Background prefetch failed: {e}")
 
     def get_performance_report(self) -> dict[str, Any]:

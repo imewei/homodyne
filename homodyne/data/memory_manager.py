@@ -22,10 +22,10 @@ Key Features:
 - Proactive memory management to prevent out-of-memory conditions
 """
 
+import atexit
 import gc
 import mmap
 import os
-import tempfile
 import threading
 import time
 from collections import deque
@@ -489,9 +489,12 @@ class AdvancedMemoryManager:
 
         # Virtual memory support
         self._virtual_memory_enabled = self.memory_config.get("virtual_memory", True)
+        default_vm_path = str(
+            Path(os.path.expanduser("~/.cache/homodyne/vm")) / "homodyne_vm"
+        )
         self._virtual_memory_path = self.memory_config.get(
             "virtual_memory_path",
-            str(Path(tempfile.gettempdir()) / "homodyne_vm"),
+            default_vm_path,
         )
 
         # Start monitoring
@@ -670,10 +673,21 @@ class AdvancedMemoryManager:
             # Create and map file
             with open(vm_file, "wb") as f:
                 f.write(b"\x00" * total_bytes)
+            os.chmod(vm_file, 0o600)
+
+            # Register cleanup on process exit (best-effort)
+            def _cleanup_vm(path: str = vm_file) -> None:
+                try:
+                    if os.path.exists(path):
+                        os.unlink(path)
+                except OSError:
+                    pass
+
+            atexit.register(_cleanup_vm)
 
             # Memory map the file
-            with open(vm_file, "r+b") as f:
-                mm = mmap.mmap(f.fileno(), 0)
+            with open(vm_file, "r+b") as fh:
+                mm = mmap.mmap(fh.fileno(), 0)
 
             # Create numpy array from memory map
             buffer = np.frombuffer(mm, dtype=dtype)

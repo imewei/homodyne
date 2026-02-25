@@ -100,7 +100,7 @@ XPCS_CONFIG_SCHEMA = {
         "defaults": {
             "phi_angles_path": "./output/",
             "cache_file_path": None,  # Will use data_folder_path if None
-            "cache_filename_template": "cached_c2_frames_{start_frame}_{end_frame}.npz",
+            "cache_filename_template": "cached_c2_frames_${start_frame}_${end_frame}.npz",
             "cache_compression": True,
             "apply_diagonal_correction": True,
         },
@@ -697,7 +697,7 @@ def create_example_yaml_config(
             "data_file_name": data_file,
             "phi_angles_path": "./output/",
             "cache_file_path": "./cache/",
-            "cache_filename_template": "cached_c2_frames_{start_frame}_{end_frame}.npz",
+            "cache_filename_template": "cached_c2_frames_${start_frame}_${end_frame}.npz",
             "cache_compression": True,
             "apply_diagonal_correction": True,
         },

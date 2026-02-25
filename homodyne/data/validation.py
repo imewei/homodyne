@@ -303,7 +303,7 @@ def _validate_array_shapes(data: dict[str, Any], report: DataQualityReport) -> N
             )
 
         # Check correlation matrix dimensions
-        if c2_exp.ndim >= 2:
+        if c2_exp.ndim >= 3:
             n_matrices, matrix_size1, matrix_size2 = c2_exp.shape[-3:]
 
             if matrix_size1 != matrix_size2:

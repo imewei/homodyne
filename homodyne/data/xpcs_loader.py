@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import string
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -173,6 +175,27 @@ except ImportError:
     AdvancedDatasetOptimizer = None  # type: ignore
 
 logger = get_logger(__name__)
+
+# Regex to detect old str.format()-style placeholders: {var} or {var:.4f}
+_OLD_FORMAT_RE = re.compile(r"\{(\w+)(?::[^}]*)?\}")
+
+
+def _migrate_cache_template(template: str) -> str:
+    """Auto-convert old {var} format templates to ${var} syntax.
+
+    Returns the template unchanged if it already uses $ syntax.
+    Logs a warning on first migration.
+    """
+    if "$" not in template and _OLD_FORMAT_RE.search(template):
+        migrated = _OLD_FORMAT_RE.sub(r"${\1}", template)
+        logger.warning(
+            "Cache template uses deprecated {var} format; auto-migrated to ${var}. "
+            "Update your YAML config: %r -> %r",
+            template,
+            migrated,
+        )
+        return migrated
+    return template
 
 
 class XPCSDataFormatError(Exception):
@@ -508,6 +531,10 @@ class XPCSDataLoader:
             self.exp_config["data_folder_path"],
             self.exp_config["data_file_name"],
         )
+        if ".." in str(data_file_path) or "\x00" in str(data_file_path):
+            raise ValueError(
+                f"Path traversal detected in data file path: {data_file_path}"
+            )
 
         if not os.path.exists(data_file_path):
             logger.warning(f"Data file not found: {data_file_path}")
@@ -582,21 +609,26 @@ class XPCSDataLoader:
         start_frame = self.analyzer_config.get("start_frame", 1)
         end_frame = self.analyzer_config.get("end_frame", 8000)
 
-        # Construct cache filename
-        cache_template = self.exp_config.get(
-            "cache_filename_template",
-            "cached_c2_frames_{start_frame}_{end_frame}.npz",
+        # Construct cache filename (using string.Template for safety)
+        cache_template = _migrate_cache_template(
+            self.exp_config.get(
+                "cache_filename_template",
+                "cached_c2_frames_${start_frame}_${end_frame}.npz",
+            )
         )
 
         # Get wavevector_q for cache filename (selective caching support)
         scattering_config = self.analyzer_config.get("scattering", {})
         wavevector_q = scattering_config.get("wavevector_q", 0.0054)
 
-        cache_filename = cache_template.format(
+        tmpl = string.Template(cache_template)
+        cache_filename = tmpl.safe_substitute(
             start_frame=start_frame,
             end_frame=end_frame,
-            wavevector_q=wavevector_q,
+            wavevector_q=f"{wavevector_q:.4f}",
         )
+        if os.sep in cache_filename or ".." in cache_filename:
+            raise ValueError(f"Unsafe cache filename from template: {cache_filename!r}")
         cache_path = os.path.join(cache_folder, cache_filename)
 
         # If user provided a direct NPZ path, prefer it
@@ -724,12 +756,13 @@ class XPCSDataLoader:
                 self._validate_cache_q_vector(metadata)
                 logger.debug(f"Cache metadata validation passed: {metadata}")
 
-            # Extract correlation data
-            c2_exp = data["c2_exp"]
+            # Extract correlation data — np.array() copies from mmap before
+            # the context manager closes the file (prevents dangling mmap views)
+            c2_exp = np.array(data["c2_exp"])
 
             # Load 1D time arrays (only 1D format supported)
-            t1 = data["t1"]
-            t2 = data["t2"]
+            t1 = np.array(data["t1"])
+            t2 = np.array(data["t2"])
 
             # Reject old 2D meshgrid cache format
             if t1.ndim == 2 or t2.ndim == 2:
@@ -740,8 +773,8 @@ class XPCSDataLoader:
                 )
 
             return {
-                "wavevector_q_list": data["wavevector_q_list"],
-                "phi_angles_list": data["phi_angles_list"],
+                "wavevector_q_list": np.array(data["wavevector_q_list"]),
+                "phi_angles_list": np.array(data["phi_angles_list"]),
                 "t1": t1,  # 1D array: [0, dt, 2*dt, ...]
                 "t2": t2,  # 1D array: [0, dt, 2*dt, ...]
                 "c2_exp": c2_exp,
@@ -1665,17 +1698,22 @@ class XPCSDataLoader:
         scattering_config = self.analyzer_config.get("scattering", {})
         wavevector_q = scattering_config.get("wavevector_q", 0.0054)
 
-        # Construct cache filename
-        cache_template = self.exp_config.get(
-            "cache_filename_template",
-            "cached_c2_frames_{start_frame}_{end_frame}.npz",
+        # Construct cache filename (using string.Template for safety)
+        cache_template = _migrate_cache_template(
+            self.exp_config.get(
+                "cache_filename_template",
+                "cached_c2_frames_${start_frame}_${end_frame}.npz",
+            )
         )
 
-        cache_filename = cache_template.format(
+        tmpl = string.Template(cache_template)
+        cache_filename = tmpl.safe_substitute(
             start_frame=start_frame,
             end_frame=end_frame,
-            wavevector_q=wavevector_q,
+            wavevector_q=f"{wavevector_q:.4f}",
         )
+        if os.sep in cache_filename or ".." in cache_filename:
+            raise ValueError(f"Unsafe cache filename from template: {cache_filename!r}")
 
         return Path(str(cache_folder)) / cache_filename  # type: ignore[no-any-return]
 

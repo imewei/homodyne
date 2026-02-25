@@ -168,7 +168,7 @@ class DatasetOptimizer:
             batch_size = min(batch_size * 2, chunk_size)
             jax_config = {
                 "xla_python_client_mem_fraction": "0.8",
-                "jax_enable_x64": "false",  # NLSQ can use float32
+                "jax_enable_x64": "true",  # Float64 mandatory for NLSQ (params span 6+ orders)
                 "jax_platforms": "cpu",
             }
         elif method.lower() == "cmc":
@@ -183,7 +183,7 @@ class DatasetOptimizer:
         else:
             jax_config = {
                 "xla_python_client_mem_fraction": "0.8",
-                "jax_enable_x64": "false",
+                "jax_enable_x64": "true",  # Float64 mandatory (params span 6+ orders)
                 "jax_platforms": "cpu",
             }
 
