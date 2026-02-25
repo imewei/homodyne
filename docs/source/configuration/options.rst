@@ -125,7 +125,7 @@ Data input and caching configuration:
 
       # Caching for performance
       cache_file_path: "./data/"
-      cache_filename_template: "cached_c2_static_q{wavevector_q:.4f}_frames_{start_frame}_{end_frame}.npz"
+      cache_filename_template: "cached_c2_static_q${wavevector_q}_frames_${start_frame}_${end_frame}.npz"
       cache_compression: true
 
       # Data format

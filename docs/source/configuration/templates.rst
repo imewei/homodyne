@@ -107,7 +107,7 @@ Complete template with all available options:
       phi_angles_file: "phi_angles_list.txt"
 
       cache_file_path: "./data/"
-      cache_filename_template: "cached_c2_static_q{wavevector_q:.4f}_frames_{start_frame}_{end_frame}.npz"
+      cache_filename_template: "cached_c2_static_q${wavevector_q}_frames_${start_frame}_${end_frame}.npz"
       cache_compression: true
 
       data_type: "float64"
@@ -458,7 +458,7 @@ Complete template:
       phi_angles_file: "phi_angles_list.txt"
 
       cache_file_path: "./data/"
-      cache_filename_template: "cached_c2_flow_q{wavevector_q:.4f}_frames_{start_frame}_{end_frame}.npz"
+      cache_filename_template: "cached_c2_flow_q${wavevector_q}_frames_${start_frame}_${end_frame}.npz"
       cache_compression: true
 
       data_type: "float64"
