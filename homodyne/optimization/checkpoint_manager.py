@@ -16,6 +16,7 @@ homodyne-specific state (batch statistics, recovery actions, best parameters).
 """
 
 import hashlib
+import os
 import time
 from pathlib import Path
 
@@ -197,6 +198,8 @@ class CheckpointManager:
                             metadata_group.attrs[key] = json.dumps(value)
                         elif isinstance(value, np.ndarray):
                             metadata_group.create_dataset(key, data=value)
+
+            os.chmod(checkpoint_path, 0o600)
 
             elapsed = time.time() - start_time
 

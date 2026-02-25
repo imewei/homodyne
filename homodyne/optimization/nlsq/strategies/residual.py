@@ -473,125 +473,15 @@ class StratifiedResidualFunction:
         L: float,
         dt: float | None,
     ) -> jnp.ndarray:
+        """DEPRECATED: Dead code path -- not called from any live execution path.
+
+        Retained for reference. The live path is _call_jax_vectorized.
+        _call_jax routes exclusively to _call_jax_vectorized, and
+        _call_jax_chunked raises RuntimeError immediately.
         """
-        Raw chunk residual computation (JIT-compiled).
-
-        This method is JIT-compiled and called for each chunk during optimization.
-        It computes weighted residuals: (g2_obs - g2_theory) / sigma
-
-        The computation follows the same logic as _create_residual_function in nlsq_wrapper.py,
-        but works with a single chunk at a time.
-
-        Performance Optimization (Spec 006 - FR-001):
-        Uses pre-computed flat_indices instead of computing jnp.searchsorted on
-        every call. This eliminates O(N log N) index computation per iteration,
-        providing ~15-20% speedup.
-
-        Args:
-            g2_obs: Observed g2 values for this chunk
-            sigma_full: Full sigma array (3D: phi × t1 × t2) - will be indexed
-            params_all: All parameters [scaling_params, physical_params]
-            phi_unique: Pre-computed unique phi values (avoid jnp.unique in JIT)
-            t1_unique: Pre-computed unique t1 values (avoid jnp.unique in JIT)
-            t2_unique: Pre-computed unique t2 values (avoid jnp.unique in JIT)
-            flat_indices: Pre-computed flat indices for this chunk (FR-001 optimization)
-            t1_indices: Pre-computed t1 indices for diagonal masking (v2.14.2+)
-            t2_indices: Pre-computed t2 indices for diagonal masking (v2.14.2+)
-            q: Wave vector magnitude (1/Å)
-            L: Sample-to-detector distance (mm)
-            dt: Time step (seconds), optional
-
-        Returns:
-            Weighted residuals: (g2_obs - g2_theory) / sigma
-        """
-
-        # Extract scaling and physical parameters
-        if self.per_angle_scaling:
-            # Per-angle mode: params = [contrast_0, ..., contrast_{n-1}, offset_0, ..., offset_{n-1}, *physical]
-            contrast = params_all[: self.n_phi]  # Shape: (n_phi,)
-            offset = params_all[self.n_phi : 2 * self.n_phi]  # Shape: (n_phi,)
-            physical_params = params_all[2 * self.n_phi :]
-        else:
-            # Legacy mode: params = [contrast, offset, *physical]
-            contrast = params_all[0]  # Scalar
-            offset = params_all[1]  # Scalar
-            physical_params = params_all[2:]
-
-        # Compute theoretical g2 using vectorized computation over phi angles
-        dt_value = dt if dt is not None else 0.001
-        if self.per_angle_scaling:
-            # Vectorize over phi with corresponding contrast/offset
-            def compute_for_angle(
-                phi_val: float, contrast_val: float, offset_val: float
-            ) -> jnp.ndarray:
-                return jnp.squeeze(
-                    compute_g2_scaled(
-                        params=physical_params,
-                        t1=t1_unique,
-                        t2=t2_unique,
-                        phi=phi_val,
-                        q=q,
-                        L=L,
-                        contrast=contrast_val,
-                        offset=offset_val,
-                        dt=dt_value,
-                    ),
-                    axis=0,
-                )
-
-            compute_g2_vmap = jax.vmap(compute_for_angle, in_axes=(0, 0, 0))
-            g2_theory_grid = compute_g2_vmap(
-                phi_unique, contrast, offset
-            )  # Shape: (n_phi, n_t1, n_t2)
-        else:
-            # Legacy: single contrast/offset for all angles
-            def compute_for_angle_scalar(phi_val: float) -> jnp.ndarray:
-                return jnp.squeeze(
-                    compute_g2_scaled(
-                        params=physical_params,
-                        t1=t1_unique,
-                        t2=t2_unique,
-                        phi=phi_val,
-                        q=q,
-                        L=L,
-                        contrast=float(contrast),
-                        offset=float(offset),
-                        dt=dt_value,
-                    ),
-                    axis=0,
-                )
-
-            compute_g2_vmap = jax.vmap(compute_for_angle_scalar, in_axes=0)
-            g2_theory_grid = compute_g2_vmap(phi_unique)  # Shape: (n_phi, n_t1, n_t2)
-
-        # Note: diagonal correction is not applied to the theory grid here.
-        # Diagonal points (t1==t2) are masked to zero residuals below,
-        # making any theory value at those points irrelevant to the fit.
-
-        # Flatten theory grid
-        g2_theory_flat = g2_theory_grid.flatten()
-
-        # Extract theory values for chunk points using pre-computed indices
-        # (FR-001 optimization: indices computed once during __init__)
-        g2_theory_chunk = g2_theory_flat[flat_indices]
-
-        # Get sigma values for chunk points (same indexing)
-        sigma_flat = sigma_full.flatten()
-        sigma_chunk = sigma_flat[flat_indices]
-
-        # Compute weighted residuals — mask out zero-sigma points entirely
-        # (sigma=0 indicates invalid/excluded data; adding EPS would inflate
-        # such points to dominate the cost function).
-        EPS = 1e-10
-        valid_sigma = sigma_chunk > EPS
-        safe_sigma = jnp.where(valid_sigma, sigma_chunk, 1.0)
-        residuals = jnp.where(valid_sigma, (g2_obs - g2_theory_chunk) / safe_sigma, 0.0)
-
-        # v2.14.2+: Mask diagonal points (t1 == t2) to zero
-        # Diagonal points are autocorrelation artifacts, not physics
-        residuals = jnp.where(t1_indices != t2_indices, residuals, 0.0)
-
-        return residuals
+        raise RuntimeError(
+            "_compute_chunk_residuals_raw is deprecated. Use _call_jax_vectorized."
+        )
 
     def _call_jax(self, params: jnp.ndarray) -> jnp.ndarray:
         """JAX-native residuals for use in JIT/Jacobian contexts.

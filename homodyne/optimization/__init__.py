@@ -24,11 +24,14 @@ Note: Legacy mcmc/ package removed in v3.0. CMC is the sole MCMC backend.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 # Import submodules as attributes for hasattr() checks
 # These imports expose the submodule packages even if their contents fail to import
 from homodyne.optimization import nlsq
+
+_logger = logging.getLogger(__name__)
 
 # Handle NLSQ imports with intelligent fallback
 try:
@@ -54,7 +57,7 @@ try:
 
     NLSQ_AVAILABLE = True
 except ImportError as e:
-    print(f"Warning: Could not import NLSQ optimization: {e}")
+    _logger.warning("Could not import NLSQ optimization: %s", e)
     fit_nlsq_jax = None  # type: ignore[assignment]
     fit_nlsq_multistart = None  # type: ignore[assignment]
     MultiStartConfig = None  # type: ignore[assignment,misc]
@@ -95,11 +98,18 @@ try:
     # CMC uses NumPyro/JAX
     MCMC_JAX_AVAILABLE = True
     NUMPYRO_AVAILABLE = True
-    BLACKJAX_AVAILABLE = True
     MCMC_AVAILABLE = True
 
+    # Check BlackJAX availability separately (optional dependency)
+    try:
+        import blackjax as _blackjax_check  # noqa: F401
+
+        BLACKJAX_AVAILABLE = True
+    except ImportError:
+        BLACKJAX_AVAILABLE = False
+
 except ImportError as e:
-    print(f"Warning: Could not import CMC optimization: {e}")
+    _logger.warning("Could not import CMC optimization: %s", e)
     fit_mcmc_jax = None  # type: ignore[assignment]
     CMCConfig = None  # type: ignore[assignment,misc]
     CMCResult = None  # type: ignore[assignment,misc]

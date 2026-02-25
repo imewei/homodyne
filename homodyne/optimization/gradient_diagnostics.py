@@ -377,42 +377,42 @@ def print_gradient_report(
     """
     diag = diagnose_gradient_imbalance(parameters, data, config, analysis_mode)
 
-    print("\n" + "=" * 80)
-    print("GRADIENT DIAGNOSTIC REPORT")
-    print("=" * 80)
+    logger.info("\n" + "=" * 80)
+    logger.info("GRADIENT DIAGNOSTIC REPORT")
+    logger.info("=" * 80)
 
-    # Print gradient norms
-    print("\nGradient Norms (SSE):")
-    print("-" * 80)
+    # Log gradient norms
+    logger.info("\nGradient Norms (SSE):")
+    logger.info("-" * 80)
     baseline_grad = np.median(list(diag["gradient_norms"].values()))
     for name, grad in diag["gradient_norms"].items():
         ratio = grad / baseline_grad
         bar_length = int(min(50, np.log10(max(ratio, 0.1)) * 10 + 25))
         bar = "█" * max(0, bar_length)
-        print(f"{name:18s}: {grad:>12.2e}  {ratio:>8.1f}× median  {bar}")
+        logger.info(f"{name:18s}: {grad:>12.2e}  {ratio:>8.1f}× median  {bar}")
 
-    # Print diagnosis
-    print("\n" + "-" * 80)
+    # Log diagnosis
+    logger.info("\n" + "-" * 80)
     if diag["imbalance_detected"]:
-        print("⚠ GRADIENT IMBALANCE DETECTED")
-        print(f"Maximum ratio: {diag['max_ratio']:.0f}×")
-        print("\nThis can cause:")
-        print("  - Premature convergence")
-        print("  - Missing fine-scale features (oscillations)")
-        print("  - Poor fit quality despite low chi-squared")
+        logger.warning("GRADIENT IMBALANCE DETECTED")
+        logger.warning(f"Maximum ratio: {diag['max_ratio']:.0f}×")
+        logger.info("\nThis can cause:")
+        logger.info("  - Premature convergence")
+        logger.info("  - Missing fine-scale features (oscillations)")
+        logger.info("  - Poor fit quality despite low chi-squared")
     else:
-        print("✓ No significant gradient imbalance")
+        logger.info("No significant gradient imbalance")
 
-    # Print recommendations
-    print("\n" + "=" * 80)
-    print("RECOMMENDATIONS")
-    print("=" * 80)
-    print(diag["recommendations"]["summary"])
+    # Log recommendations
+    logger.info("\n" + "=" * 80)
+    logger.info("RECOMMENDATIONS")
+    logger.info("=" * 80)
+    logger.info(diag["recommendations"]["summary"])
 
     if diag["imbalance_detected"]:
-        print("\nTo apply these fixes:")
-        print("  1. Add x_scale_map to your configuration file")
-        print("  2. Re-run optimization with updated config")
-        print("  3. Verify improved convergence and fit quality")
+        logger.info("\nTo apply these fixes:")
+        logger.info("  1. Add x_scale_map to your configuration file")
+        logger.info("  2. Re-run optimization with updated config")
+        logger.info("  3. Verify improved convergence and fit quality")
 
-    print("=" * 80 + "\n")
+    logger.info("=" * 80 + "\n")
