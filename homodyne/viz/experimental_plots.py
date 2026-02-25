@@ -10,7 +10,9 @@ from typing import Any
 import matplotlib
 import numpy as np
 
-matplotlib.use("Agg")
+# Set Agg backend only if no backend is already active (avoid breaking interactive sessions)
+if matplotlib.get_backend().lower() in ("", "agg") or not matplotlib.is_interactive():
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 from homodyne.utils.logging import get_logger  # noqa: E402
@@ -51,12 +53,12 @@ def plot_experimental_data(
 
     # Extract time extent for imshow if time arrays are available
     if t1 is not None and t2 is not None:
-        t_min = float(np.min(t1))
-        t_max = float(np.max(t1))
-        extent = [t_min, t_max, t_min, t_max]
+        t1_min, t1_max = float(np.min(t1)), float(np.max(t1))
+        t2_min, t2_max = float(np.min(t2)), float(np.max(t2))
+        extent = [t2_min, t2_max, t1_min, t1_max]  # [xmin, xmax, ymin, ymax] = [t2, t1]
         xlabel = "t₂ (s)"
         ylabel = "t₁ (s)"
-        logger.debug(f"Using time extent: [{t_min:.3f}, {t_max:.3f}] seconds")
+        logger.debug(f"Using time extent: t1=[{t1_min:.3f}, {t1_max:.3f}], t2=[{t2_min:.3f}, {t2_max:.3f}] seconds")
     else:
         extent = None
         xlabel = "t₂ Index"
