@@ -181,8 +181,9 @@ from homodyne.optimization.nlsq.anti_degeneracy_controller import (  # noqa: E40
 )
 
 # CMA-ES global optimization wrapper (v2.15.0 / NLSQ 0.6.4+)
+# Note: NLSQ_CMAES_AVAILABLE from cmaes_wrapper is the canonical source
 from homodyne.optimization.nlsq.cmaes_wrapper import (  # noqa: E402
-    CMAES_AVAILABLE as NLSQ_CMAES_AVAILABLE,
+    CMAES_AVAILABLE as NLSQ_CMAES_AVAILABLE,  # overrides global_optimization import
 )
 from homodyne.optimization.nlsq.cmaes_wrapper import (  # noqa: E402
     CMAESResult,

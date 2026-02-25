@@ -161,7 +161,7 @@ class StandardExecutor(OptimizationExecutor):
                 gtol=1e-6,
                 ftol=1e-6,
                 max_nfev=5000,
-                verbose=2,
+                verbose=0,
                 stability="auto",  # Enable memory management and stability
             )
 
@@ -245,7 +245,7 @@ class LargeDatasetExecutor(OptimizationExecutor):
                 gtol=1e-6,
                 ftol=1e-6,
                 max_nfev=5000,
-                verbose=2,
+                verbose=0,
                 show_progress=True,
                 stability="auto",  # Enable memory management and stability
             )
