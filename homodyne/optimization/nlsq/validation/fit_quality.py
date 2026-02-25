@@ -107,9 +107,9 @@ def _classify_parameter_status(
     """
     statuses = []
     for _i, (val, lb, ub) in enumerate(zip(values, lower, upper, strict=False)):
-        if abs(val - lb) < atol:
+        if abs(val - lb) < atol * (1.0 + abs(lb)):
             statuses.append("at_lower_bound")
-        elif abs(val - ub) < atol:
+        elif abs(val - ub) < atol * (1.0 + abs(ub)):
             statuses.append("at_upper_bound")
         else:
             statuses.append("active")

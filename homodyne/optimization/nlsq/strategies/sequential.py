@@ -594,16 +594,14 @@ def optimize_single_angle(
 
         # Compute covariance if possible
         try:
-            # Covariance from Jacobian
+            # Covariance from Jacobian: (J^T J)^{-1} * s^2
+            # where s^2 = sum(r^2) / (n - p) is the residual variance estimate
             if jac is not None:
                 residual_values = result.get("fun", residuals(result["x"]))
                 n_residuals = len(residual_values)
                 n_params = len(initial_params)
-                cov = (
-                    np.linalg.inv(jac.T @ jac)
-                    * (residual_values @ residual_values)
-                    / (n_residuals - n_params)
-                )
+                s2 = (residual_values @ residual_values) / max(n_residuals - n_params, 1)
+                cov = np.linalg.inv(jac.T @ jac) * s2
             else:
                 raise ValueError("No Jacobian available")
         except (np.linalg.LinAlgError, ValueError):
