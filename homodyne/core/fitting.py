@@ -170,7 +170,7 @@ class ParameterSpace:
                 )
                 return bounds
 
-            except Exception as e:
+            except (TypeError, KeyError, AttributeError, ValueError) as e:
                 logger.warning(
                     f"Failed to use ParameterManager: {e}, falling back to defaults",
                 )
@@ -558,7 +558,7 @@ class UnifiedHomodyneEngine:
                 nll = 0.5 * chi_squared + 0.5 * np.sum(np.log(2 * np.pi * sigma**2))
                 return float(nll)
 
-        except Exception as e:
+        except (ValueError, ArithmeticError) as e:
             logger.warning(f"Likelihood computation failed: {e}")
             return 1e10  # Return large value on failure
 

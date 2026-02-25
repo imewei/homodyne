@@ -295,7 +295,7 @@ class CombinedModel(
         """
         self.analysis_mode = analysis_mode
 
-        if analysis_mode == "static":
+        if analysis_mode in ("static", "static_isotropic", "static_anisotropic"):
             # Static mode: only diffusion parameters
             parameter_names = ["D0", "alpha", "D_offset"]
             name = "static_diffusion"

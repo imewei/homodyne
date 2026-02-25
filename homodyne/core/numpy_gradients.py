@@ -158,6 +158,10 @@ def _estimate_optimal_step(
                 optimal_h[i] = h_init[i]
 
         except Exception:
+            logger.debug(
+                "Numeric step-size computation failed for param %d, using initial step",
+                i,
+            )
             optimal_h[i] = h_init[i]
 
     # Apply bounds
@@ -924,6 +928,9 @@ def _compute_hessian_finite_diff(
             config.max_step,
         )
     except Exception:
+        logger.debug(
+            "Step-size estimation failed in Hessian computation, using default step"
+        )
         h = np.full_like(x, DEFAULT_STEP)
 
     # Base function value

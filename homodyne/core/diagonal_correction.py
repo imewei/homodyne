@@ -277,12 +277,13 @@ if HAS_JAX:
         result: jnp.ndarray = _diagonal_correction_jax_core(c2_jax)
         return result
 
+    # Hoist vmap to module level to prevent re-tracing on every call
+    _vmapped_diagonal_correction = vmap(_diagonal_correction_jax_core, in_axes=0)
+
     def _diagonal_correction_batch_jax(c2_matrices: ArrayLike) -> jnp.ndarray:
         """Batch JAX implementation using vmap."""
         c2_jax = jnp.asarray(c2_matrices)
-        # vmap over first axis (n_phi)
-        vmapped_correction = vmap(_diagonal_correction_jax_core, in_axes=0)
-        result: jnp.ndarray = vmapped_correction(c2_jax)
+        result: jnp.ndarray = _vmapped_diagonal_correction(c2_jax)
         return result
 
 else:

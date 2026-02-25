@@ -362,20 +362,17 @@ class TheoryEngine:
         self, params: np.ndarray, q: float, L: float
     ) -> None:
         """Validate core computation inputs."""
-        # Skip validation inside JIT compilation to avoid JAX tracer errors
-        # These checks would fail with JAX traced values
-        if jax_available:
-            # In JAX mode, skip runtime validation
-            return
+        # Skip parameter validation inside JIT compilation to avoid JAX tracer errors.
+        # q and L are Python floats (not tracers), so we CAN validate them in JAX mode.
+        if not jax_available:
+            # Parameter validation only works with concrete (non-traced) values
+            params_any: Any = params
+            if not self.model.validate_parameters(params_any):
+                logger.warning(
+                    "Parameters outside recommended bounds - results may be unreliable",
+                )
 
-        # Parameter validation
-        params_any: Any = params
-        if not self.model.validate_parameters(params_any):
-            logger.warning(
-                "Parameters outside recommended bounds - results may be unreliable",
-            )
-
-        # Experimental setup validation
+        # Experimental setup validation (q, L are Python floats, safe in all modes)
         if q <= 0:
             raise ValueError(f"Wave vector q must be positive, got {q}")
         if L <= 0:

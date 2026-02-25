@@ -329,7 +329,7 @@ class HomodyneModel:
             contrast=contrast,
             offset=offset,
             dt=self.dt,
-            physics_factors=self.physics_factors.to_dict(),  # type: ignore[arg-type]
+            **{f"pf_{k}": v for k, v in self.physics_factors.to_dict().items()},
         )
         logger.info(f"Saved data to: {data_file}")
 
