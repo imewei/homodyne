@@ -207,26 +207,29 @@ def estimate_gradient_noise(
     try:
         params_base = np.asarray(params, dtype=float)
         jacobians = []
+        rng = np.random.default_rng(seed=42)
+
+        # Define residual_vector once outside the loop (branch condition is loop-invariant)
+        if hasattr(residual_fn, "jax_residual"):
+
+            def residual_vector(p):
+                return jnp.asarray(
+                    residual_fn.jax_residual(jnp.asarray(p))
+                ).reshape(-1)
+
+        else:
+
+            def residual_vector(p):
+                return jnp.asarray(residual_fn(x_subset, *tuple(p))).reshape(-1)
 
         for _ in range(n_samples):
             # Add small perturbation
             noise = (
-                np.random.randn(len(params_base)) * perturbation * np.abs(params_base)
+                rng.standard_normal(len(params_base)) * perturbation * np.abs(params_base)
             )
             params_perturbed = params_base + noise
 
             params_jnp = jnp.asarray(params_perturbed)
-            if hasattr(residual_fn, "jax_residual"):
-
-                def residual_vector(p):
-                    return jnp.asarray(
-                        residual_fn.jax_residual(jnp.asarray(p))
-                    ).reshape(-1)
-
-            else:
-
-                def residual_vector(p):
-                    return jnp.asarray(residual_fn(x_subset, *tuple(p))).reshape(-1)
 
             # Use jacfwd (JVP-based): O(n × cost_f), faster for m >> n
             jac = jax.jacfwd(residual_vector)(params_jnp)
