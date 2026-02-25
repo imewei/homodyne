@@ -247,12 +247,10 @@ def _compute_g1_shear_from_idx(
     )
 
     # Compute gamma(t) on the safe time grid.
-    # time_safe already has t=0 replaced; additionally ensure dt floor for CMC.
-    dt_floor = jnp.maximum(jnp.asarray(dt_safe), 1e-5)
-    time_safe_cmc = jnp.where(time_safe == 0.0, dt_floor, time_safe)
+    # P2-C: time_safe already has all t=0 elements floored by precompute_shard_grid
+    # (epsilon >= 1e-8 > 0), so no additional guard is needed here.
     # Use jnp.where instead of jnp.maximum to preserve gradients when γ̇(t) → 0.
-    # See D_grid comment above for rationale.
-    gamma_raw = gamma_dot_0 * (time_safe_cmc**beta) + gamma_dot_offset
+    gamma_raw = gamma_dot_0 * (time_safe**beta) + gamma_dot_offset
     gamma_grid = jnp.where(gamma_raw > 1e-10, gamma_raw, 1e-10)
     gamma_cumsum = _trapezoid_cumsum(gamma_grid)
 
@@ -321,7 +319,12 @@ def _compute_g1_total_with_precomputed(
     # Broadcast and multiply: (P, N)
     n_phi = g1_shear.shape[0]
     g1_diff_broadcasted = jnp.broadcast_to(g1_diff[None, :], (n_phi, g1_diff.shape[0]))
-    return g1_diff_broadcasted * g1_shear  # type: ignore[no-any-return]
+    g1_total = g1_diff_broadcasted * g1_shear
+    # P1-A: Gradient-safe lower floor — consistent with physics_nlsq.py and jax_backend.py.
+    # g1_shear (sinc²) is exactly zero at Phi=n*pi; without this floor, d(g2)/dparams=0
+    # at those points, stalling NUTS leapfrog.
+    epsilon = 1e-10
+    return jnp.where(g1_total > epsilon, g1_total, epsilon)
 
 
 # =============================================================================
@@ -516,8 +519,9 @@ def _compute_g1_total_elementwise(
 
     # Multiply: g₁_total[phi, i] = g₁_diffusion[i] × g₁_shear[phi, i]
     g1_total = g1_diff_broadcasted * g1_shear
-
-    return g1_total  # type: ignore[no-any-return]
+    # P1-B: Gradient-safe lower floor — consistent with all other g1_total implementations.
+    epsilon = 1e-10
+    return jnp.where(g1_total > epsilon, g1_total, epsilon)  # type: ignore[no-any-return]
 
 
 # =============================================================================
