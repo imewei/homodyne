@@ -137,7 +137,7 @@ experimental_data:
 
   # Caching (processed C2 data, speeds up re-runs)
   cache_file_path: "./data/sample/"
-  cache_filename_template: "cached_c2_q{wavevector_q:.4f}_frames_{start_frame}_{end_frame}.npz"
+  cache_filename_template: "cached_c2_q${wavevector_q}_frames_${start_frame}_${end_frame}.npz"
   cache_compression: true
 
   # Data format specifications

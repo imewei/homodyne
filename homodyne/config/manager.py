@@ -20,9 +20,11 @@ try:
 
     HAS_YAML = True
     yaml_module: ModuleType | None = yaml
+    _YAMLError: type[BaseException] = yaml.YAMLError
 except ImportError:
     HAS_YAML = False
     yaml_module = None
+    _YAMLError = Exception
 
 # Import minimal logging
 try:
@@ -142,14 +144,19 @@ class ConfigManager:
             logger.error(f"JSON parsing error: {e}")
             logger.info("Using default configuration...")
             self.config = self._get_default_config()
-        except Exception as e:
-            # Handle YAML errors and other exceptions
-            error_type = (
-                "YAML parsing"
-                if HAS_YAML and "yaml" in str(type(e)).lower()
-                else "Configuration parsing"
-            )
-            logger.error(f"{error_type} error: {e}")
+        except FileNotFoundError:
+            # Re-raise immediately: wrong config path must be reported, not silenced.
+            # Proceeding with stub defaults would produce confusing downstream errors.
+            raise
+        except (
+            OSError,
+            ValueError,
+            UnicodeDecodeError,
+            TypeError,
+            KeyError,
+            _YAMLError,
+        ) as e:
+            logger.error(f"Configuration parsing error: {e}")
             logger.info("Using default configuration...")
             self.config = self._get_default_config()
 
@@ -750,7 +757,7 @@ class ConfigManager:
             "enable": "auto",
             "min_points_for_cmc": 100000,
             "sharding": {
-                "strategy": "stratified",
+                "strategy": "random",
                 "num_shards": "auto",
                 "max_points_per_shard": "auto",
             },
@@ -763,9 +770,10 @@ class ConfigManager:
                 "resume_from_checkpoint": True,
             },
             "combination": {
-                "method": "consensus_mc",
+                "method": "robust_consensus_mc",
                 "validate_results": True,
                 "min_success_rate": 0.90,
+                "min_success_rate_warning": 0.80,
             },
             # Per-shard NUTS defaults are tuned to keep
             # laminar_flow CMC workloads below the 2 hour
@@ -785,6 +793,12 @@ class ConfigManager:
                 "max_per_shard_rhat": 1.1,
                 "max_between_shard_kl": 2.0,
                 "min_success_rate": 0.90,
+                "max_divergence_rate": 0.10,
+                "require_nlsq_warmstart": False,
+                "use_nlsq_informed_priors": True,
+                "nlsq_prior_width_factor": 2.0,
+                "max_parameter_cv": 1.0,
+                "heterogeneity_abort": True,
             },
         }
 
@@ -982,9 +996,28 @@ class ConfigManager:
         T052: Logs default value applications at DEBUG level.
         T053: Logs unusual settings as warnings.
         """
+        _KNOWN_TOP_LEVEL_KEYS = {
+            "metadata",
+            "analysis_mode",
+            "analyzer_parameters",
+            "experimental_data",
+            "optimization",
+            "output",
+            "logging",
+            "config_version",
+            "initial_parameters",
+        }
+
         if not self.config:
             logger.warning("Configuration is empty")
             return
+
+        # Warn about unknown top-level keys (possible typos)
+        unknown_keys = set(self.config.keys()) - _KNOWN_TOP_LEVEL_KEYS
+        if unknown_keys:
+            logger.warning(
+                "Unknown top-level config keys (possible typo): %s", unknown_keys
+            )
 
         # Check for required sections
         required_sections = ["analysis_mode"]
@@ -1036,6 +1069,11 @@ class ConfigManager:
         memory_fraction = nlsq_config.get("memory_fraction")
         if memory_fraction:
             logger.debug(f"Memory fraction: {memory_fraction}")
+            if not (0 < memory_fraction < 1):
+                logger.warning(
+                    "memory_fraction=%s outside valid range (0, 1); should be between 0 and 1",
+                    memory_fraction,
+                )
 
     def _log_unusual_settings(self) -> None:
         """T053: Log unusual but valid settings with impact warnings.
