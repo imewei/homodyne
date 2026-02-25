@@ -253,6 +253,8 @@ def plot_trace_plots(
 
     if show:
         plt.show()
+    elif save_path is not None:
+        plt.close(fig)
 
     return fig
 
@@ -410,6 +412,8 @@ def plot_kl_divergence_matrix(
 
     if show:
         plt.show()
+    elif save_path is not None:
+        plt.close(fig)
 
     return fig
 
@@ -539,6 +543,8 @@ def plot_convergence_diagnostics(
 
     if show:
         plt.show()
+    elif save_path is not None:
+        plt.close(fig)
 
     return fig
 
@@ -917,6 +923,8 @@ def plot_posterior_comparison(
 
     if show:
         plt.show()
+    elif save_path is not None:
+        plt.close(fig)
 
     return fig
 
@@ -1222,6 +1230,8 @@ def plot_cmc_summary_dashboard(
 
     if show:
         plt.show()
+    elif save_path is not None:
+        plt.close(fig)
 
     return fig
 
