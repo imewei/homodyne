@@ -1330,6 +1330,8 @@ def plot_arviz_trace(
 
     if show:
         plt.show()
+    elif save_path is not None:
+        plt.close(fig)
 
     return fig  # type: ignore[return-value]
 
@@ -1419,6 +1421,8 @@ def plot_arviz_posterior(
 
     if show:
         plt.show()
+    elif save_path is not None:
+        plt.close(fig)
 
     return fig
 
@@ -1527,6 +1531,8 @@ def plot_arviz_pair(
 
     if show:
         plt.show()
+    elif save_path is not None:
+        plt.close(fig)
 
     return fig  # type: ignore[return-value]
 

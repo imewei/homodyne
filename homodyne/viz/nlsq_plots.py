@@ -14,7 +14,9 @@ import jax.numpy as jnp
 import matplotlib
 import numpy as np
 
-matplotlib.use("Agg")
+# Set Agg backend only if no backend is already active (avoid breaking interactive sessions)
+if matplotlib.get_backend().lower() in ("", "agg") or not matplotlib.is_interactive():
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 from homodyne.utils.logging import get_logger  # noqa: E402
@@ -436,7 +438,7 @@ def generate_and_plot_fitted_simulations(
 
     # Save fitted C2 data as NPZ
     npz_file = simulated_data_dir / "c2_fitted_data.npz"
-    np.savez(
+    np.savez_compressed(
         npz_file,
         c2_data=c2_fitted,
         phi_angles=phi_angles_list,
