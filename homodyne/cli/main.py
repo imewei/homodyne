@@ -19,13 +19,18 @@ import sys
 # P2-A: Set JAX_ENABLE_X64 explicitly before any JAX import.
 os.environ.setdefault("JAX_ENABLE_X64", "1")
 
+_DEFAULT_XLA_FLAGS = [
+    "--xla_force_host_platform_device_count=4",
+    "--xla_disable_hlo_passes=constant_folding",
+]
 if "XLA_FLAGS" not in os.environ:
-    # No existing XLA_FLAGS, set default
-    os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
-elif "xla_force_host_platform_device_count" not in os.environ["XLA_FLAGS"]:
-    # XLA_FLAGS exists but doesn't specify device count, append it
-    os.environ["XLA_FLAGS"] += " --xla_force_host_platform_device_count=4"
-# else: User has already configured device count, respect their setting
+    os.environ["XLA_FLAGS"] = " ".join(_DEFAULT_XLA_FLAGS)
+else:
+    existing = os.environ["XLA_FLAGS"]
+    for flag in _DEFAULT_XLA_FLAGS:
+        flag_name = flag.split("=")[0]
+        if flag_name not in existing:
+            os.environ["XLA_FLAGS"] += " " + flag
 
 # Suppress NLSQ GPU warnings (v2.3.0 is CPU-only)
 os.environ.setdefault("NLSQ_SKIP_GPU_CHECK", "1")
