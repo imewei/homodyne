@@ -107,14 +107,17 @@ def transform_nlsq_to_reparam_space(
         log_D_ref = math.log(D_ref)
         reparam_values["log_D_ref"] = log_D_ref
 
-        # D_offset_frac = D_offset / (D_ref + D_offset)
+        # D_offset_frac = D_offset / (D_ref + D_offset), clipped to [0, 0.5]
+        # to match TruncatedNormal prior support (low=0.0, high=0.5) in model.py.
+        # P1-C: Clip lower bound to 0.0 — negative D_offset (jammed/arrested systems)
+        # produces negative frac, which falls outside prior support.
         if D_offset is not None:
             denom = D_ref + D_offset
             if denom > 0:
-                # Clip to [0, 0.5] to match the TruncatedNormal prior high=0.5 in model.py.
-                # If NLSQ produced a large D_offset, an unclipped frac_loc > 0.5 would
-                # place the prior mean outside the prior's support, degrading NUTS exploration.
-                reparam_values["D_offset_frac"] = min(D_offset / denom, 0.5)
+                raw_frac = D_offset / denom
+                reparam_values["D_offset_frac"] = float(np.clip(raw_frac, 0.0, 0.5))
+            elif D_offset > 0:
+                reparam_values["D_offset_frac"] = 0.5  # D_ref ~ 0
             else:
                 reparam_values["D_offset_frac"] = 0.05  # Safe default
 
@@ -241,10 +244,18 @@ def transform_to_sampling_space(
         D_ref = max(D_ref, 1e-10)
         log_D_ref = np.log(D_ref)
 
-        # D_offset_frac = D_offset / (D_ref + D_offset)
-        # Clip to [0, 0.5] to match the TruncatedNormal prior high=0.5 in model.py.
+        # D_offset_frac = D_offset / (D_ref + D_offset), clipped to [0, 0.5]
+        # to match the TruncatedNormal prior support (low=0.0, high=0.5) in model.py.
+        # P1-C: Clip lower bound to 0.0 — negative D_offset (jammed/arrested systems)
+        # produces negative frac, which falls outside the prior support and crashes NUTS init.
         denom = D_ref + D_offset
-        D_offset_frac = min(D_offset / denom, 0.5) if denom > 0 else 0.0
+        if denom > 0:
+            raw_frac = D_offset / denom
+            D_offset_frac = float(np.clip(raw_frac, 0.0, 0.5))
+        elif D_offset > 0:
+            D_offset_frac = 0.5  # D_ref ~ 0, D_offset dominates
+        else:
+            D_offset_frac = 0.0
 
         result["log_D_ref"] = float(log_D_ref)
         result["D_offset_frac"] = float(D_offset_frac)

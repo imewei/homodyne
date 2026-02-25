@@ -659,6 +659,31 @@ def _run_shard_worker(
     # stay alive for the entire sampling duration alongside their JAX twins.
     del shard_data
 
+    # P0-1: Pre-compute scaling factors ONCE before NUTS starts.
+    from homodyne.optimization.cmc.scaling import compute_scaling_factors
+
+    model_kwargs["scalings"] = compute_scaling_factors(
+        parameter_space, n_phi, analysis_mode
+    )
+
+    # P0-2: Pre-compute physics prefactors (constant for entire shard).
+    import math as _math
+
+    _q = model_kwargs["q"]
+    _L = model_kwargs["L"]
+    _dt = model_kwargs["dt"]
+    model_kwargs["wavevector_q_squared_half_dt"] = jnp.asarray(
+        0.5 * (_q**2) * _dt
+    )
+    model_kwargs["sinc_prefactor"] = jnp.asarray(
+        0.5 / _math.pi * _q * _L * _dt
+    )
+
+    # P1-3: Pre-compute point_idx array (constant for entire shard).
+    model_kwargs["point_idx"] = jnp.arange(
+        model_kwargs["phi_indices"].shape[0], dtype=jnp.int32
+    )
+
     # D2: Pre-compute shard-constant quantities (time_safe + searchsorted indices)
     # once before NUTS starts.  Eliminates redundant work on every leapfrog step.
     try:
@@ -1597,19 +1622,21 @@ class MultiprocessingBackend(CMCBackend):
                 f"All shards failed. Error categories: {error_categories}"
             )
 
-        # Check success rate
+        # Check success rate — warn first, then error for worse.
+        # P2-A: Previously, warning (0.80) < min (0.90) made the elif unreachable.
+        # Fixed: check warning threshold first (higher), then error threshold (lower).
         success_rate = len(successful_samples) / n_shards
-        if success_rate < config.min_success_rate:
-            # Critical: below minimum threshold
+        if success_rate < config.min_success_rate_warning:
+            # Critical: below warning threshold (worst case)
             run_logger.error(
                 f"Success rate {success_rate:.1%} below minimum threshold "
-                f"{config.min_success_rate:.1%} - analysis may be unreliable"
+                f"{config.min_success_rate_warning:.1%} - analysis may be unreliable"
             )
-        elif success_rate < config.min_success_rate_warning:
-            # Warning: below warning threshold but above minimum
+        elif success_rate < config.min_success_rate:
+            # Degraded: between warning and recommended thresholds
             run_logger.warning(
                 f"Success rate {success_rate:.1%} below recommended threshold "
-                f"{config.min_success_rate_warning:.1%} - consider investigating failed shards"
+                f"{config.min_success_rate:.1%} - consider investigating failed shards"
             )
 
         valid_durations = [d for _, d in shard_timings if d is not None]

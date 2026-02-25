@@ -203,6 +203,9 @@ class CMCConfig:
     bimodal_min_weight: float = 0.2  # Minimum weight for GMM bimodal detection
     bimodal_min_separation: float = 0.5  # Minimum relative separation for bimodal
 
+    # Reproducibility
+    seed: int = 42  # Base seed for PRNG key generation
+
     # Computed fields
     _validation_errors: list[str] = field(default_factory=list, repr=False)
 
@@ -242,6 +245,7 @@ class CMCConfig:
             "per_shard_timeout",
             "heartbeat_timeout",
             "prior_tempering",
+            "seed",
         }
         unknown_keys = set(config_dict.keys()) - _known_keys
         if unknown_keys:
@@ -696,9 +700,11 @@ class CMCConfig:
         scaled_warmup = int(self.num_warmup * scale_factor)
         scaled_samples = int(self.num_samples * scale_factor)
 
-        # Ensure minimum viable sampling (ESS requires ~50 samples per param)
-        min_samples_for_params = max(self.min_samples, 50 * n_params)
-        min_warmup_for_params = max(self.min_warmup, 20 * n_params)
+        # Ensure minimum viable sampling (ESS requires ~50 samples per param).
+        # P2-B: Cap at configured defaults — adaptive scaling should only reduce,
+        # never exceed, the user's configured num_warmup/num_samples.
+        min_samples_for_params = min(max(self.min_samples, 50 * n_params), self.num_samples)
+        min_warmup_for_params = min(max(self.min_warmup, 20 * n_params), self.num_warmup)
 
         # Apply bounds
         final_warmup = max(min_warmup_for_params, scaled_warmup)
