@@ -4,9 +4,23 @@ This module provides helper functions for JSON serialization of numpy arrays
 and other complex objects.
 """
 
+import math
 from typing import Any
 
 import numpy as np
+
+
+def _sanitize_float(v: float) -> float | str | None:
+    """Convert non-finite floats to JSON-safe representations.
+
+    JSON spec does not support NaN, Inf, or -Inf. These are converted to
+    None (NaN) or string representations (Inf/-Inf) to prevent json.dump crashes.
+    """
+    if math.isnan(v):
+        return None
+    if math.isinf(v):
+        return "Infinity" if v > 0 else "-Infinity"
+    return v
 
 
 def json_safe(value: Any) -> Any:
@@ -34,11 +48,17 @@ def json_safe(value: Any) -> Any:
     elif isinstance(value, (list, tuple)):
         return [json_safe(v) for v in value]
     elif isinstance(value, np.ndarray):
-        return value.tolist()
+        # Recurse through tolist() result to sanitize any NaN/Inf floats
+        return json_safe(value.tolist())
     elif isinstance(value, (np.integer, np.floating)):
-        return value.item()
+        v = value.item()
+        if isinstance(v, float):
+            return _sanitize_float(v)
+        return v
     elif isinstance(value, (np.bool_,)):
         return bool(value)
+    elif isinstance(value, float):
+        return _sanitize_float(value)
     elif hasattr(value, "tolist"):
         return value.tolist()
     else:
@@ -76,7 +96,10 @@ def json_serializer(obj: Any) -> Any:
     elif isinstance(obj, np.integer):
         return int(obj)
     elif isinstance(obj, np.floating):
-        return float(obj)
+        v = float(obj)
+        return _sanitize_float(v)
+    elif isinstance(obj, float):
+        return _sanitize_float(obj)
     elif isinstance(obj, (np.bool_,)):
         return bool(obj)
     elif hasattr(obj, "tolist"):

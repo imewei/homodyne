@@ -466,9 +466,11 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
     # Fallback per-parameter diagnostics
     if "per_parameter_diagnostics" not in diagnostics_dict["convergence"]:
         param_keys = set(per_param_stats.keys())
-        if isinstance(result.r_hat, dict):
+        if result.r_hat is not None and isinstance(result.r_hat, dict):
             param_keys.update(result.r_hat.keys())
-        if isinstance(result.effective_sample_size, dict):
+        if result.effective_sample_size is not None and isinstance(
+            result.effective_sample_size, dict
+        ):
             param_keys.update(result.effective_sample_size.keys())
         if param_keys:
             fallback_entries = []

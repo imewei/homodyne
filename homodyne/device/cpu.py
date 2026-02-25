@@ -101,8 +101,14 @@ def detect_cpu_info() -> dict[str, Any]:
         # Set optimization recommendations
         cpu_brand = info["cpu_brand"]
         optimization_flags = info["optimization_flags"]
-        assert isinstance(cpu_brand, str)
-        assert isinstance(optimization_flags, list)
+        if not isinstance(cpu_brand, str):
+            raise TypeError(
+                f"Expected str for cpu_brand, got {type(cpu_brand).__name__}"
+            )
+        if not isinstance(optimization_flags, list):
+            raise TypeError(
+                f"Expected list for optimization_flags, got {type(optimization_flags).__name__}"
+            )
         if "Intel" in cpu_brand:
             optimization_flags.append("intel_mkl")
         elif "AMD" in cpu_brand:
