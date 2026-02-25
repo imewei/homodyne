@@ -1769,7 +1769,11 @@ def _save_results(
 
     # Extract parameters based on result type
     if hasattr(result, "parameters"):
-        results_summary["parameters"] = result.parameters
+        results_summary["parameters"] = (
+            result.parameters.tolist()
+            if hasattr(result.parameters, "tolist")
+            else result.parameters
+        )
     elif hasattr(result, "mean_params"):
         # MCMC result format
         results_summary["parameters"] = {
@@ -2170,6 +2174,12 @@ def _prepare_parameter_data(
 
     if n_angles is None:
         remainder = max(0, len(result.parameters) - n_physical)
+        if remainder % 2 != 0 and remainder > 0:
+            logger.warning(
+                "Cannot cleanly infer n_angles: parameter count %d - n_physical %d = %d (odd). "
+                "Falling back to n_angles=1.",
+                len(result.parameters), n_physical, remainder,
+            )
         inferred = remainder // 2 if remainder % 2 == 0 and remainder else 1
         n_angles = max(1, inferred)
         logger.debug(
@@ -2470,7 +2480,7 @@ def save_nlsq_results(
             "n_angles": n_angles,
             "n_time_points": c2_exp.shape[1] * c2_exp.shape[2],
             "total_data_points": n_data_points,
-            "q_value": float(metadata["q"]),
+            "q_value": float(metadata["q"]) if metadata.get("q") is not None else None,
         },
         "optimization_summary": {
             "convergence_status": result.convergence_status,
@@ -2572,8 +2582,10 @@ def save_nlsq_results(
     # Convert time arrays to 1D
     # Note: t1 and t2 are already in SECONDS from the data loader (_calculate_time_arrays)
     # Do NOT multiply by dt again - that would give seconds²
-    t1 = np.asarray(data["t1"])
-    t2 = np.asarray(data["t2"])
+    # Use filtered_data for consistency (t1/t2 are angle-independent, but filtered_data
+    # is the authoritative data dict used throughout this function)
+    t1 = np.asarray(filtered_data["t1"])
+    t2 = np.asarray(filtered_data["t2"])
     if t1.ndim == 2:
         t1 = t1[:, 0]
     if t2.ndim == 2:
@@ -2734,7 +2746,7 @@ def save_mcmc_results(
         param_dict = _create_mcmc_parameters_dict(result)
         param_file = method_dir / "parameters.json"
         with open(param_file, "w") as f:
-            json.dump(param_dict, f, indent=2)
+            json.dump(param_dict, f, indent=2, default=_json_serializer)
         logger.debug(f"Saved parameters to {param_file}")
     except Exception as e:
         logger.warning(f"Failed to save parameters.json: {e}")
@@ -2748,6 +2760,7 @@ def save_mcmc_results(
         # Combine samples from separate attributes (samples_params, samples_contrast, samples_offset)
         if hasattr(result, "samples_params") and result.samples_params is not None:
             samples_list = [result.samples_params]
+            contrast_inserted = False
 
             if (
                 hasattr(result, "samples_contrast")
@@ -2758,6 +2771,7 @@ def save_mcmc_results(
                 if contrast_samples.ndim == 1:
                     contrast_samples = contrast_samples[:, np.newaxis]
                 samples_list.insert(0, contrast_samples)
+                contrast_inserted = True
 
             if hasattr(result, "samples_offset") and result.samples_offset is not None:
                 # Reshape to (n_samples, 1) if needed
@@ -2765,7 +2779,7 @@ def save_mcmc_results(
                 if offset_samples.ndim == 1:
                     offset_samples = offset_samples[:, np.newaxis]
                 samples_list.insert(
-                    1 if hasattr(result, "samples_contrast") else 0, offset_samples
+                    1 if contrast_inserted else 0, offset_samples
                 )
 
             # Concatenate all samples
@@ -2831,7 +2845,7 @@ def save_mcmc_results(
         analysis_dict = _create_mcmc_analysis_dict(result, data, method_name)
         analysis_file = method_dir / f"analysis_results_{method_name}.json"
         with open(analysis_file, "w") as f:
-            json.dump(analysis_dict, f, indent=2)
+            json.dump(analysis_dict, f, indent=2, default=_json_serializer)
         logger.debug(f"Saved analysis results to {analysis_file}")
     except Exception as e:
         logger.warning(f"Failed to save analysis_results_{method_name}.json: {e}")
@@ -2842,7 +2856,7 @@ def save_mcmc_results(
         diagnostics_dict = _create_mcmc_diagnostics_dict(result)
         diagnostics_file = method_dir / "diagnostics.json"
         with open(diagnostics_file, "w") as f:
-            json.dump(diagnostics_dict, f, indent=2)
+            json.dump(diagnostics_dict, f, indent=2, default=_json_serializer)
         logger.debug(f"Saved diagnostics to {diagnostics_file}")
     except Exception as e:
         logger.warning(f"Failed to save diagnostics.json: {e}")
@@ -3024,7 +3038,7 @@ def _compute_theoretical_c2_from_mcmc(
     result: Any,
     data: dict[str, Any],
     config: Any,
-) -> np.ndarray:
+) -> dict[str, np.ndarray]:
     """Compute theoretical C2 using MCMC posterior mean parameters.
 
     Parameters
@@ -3293,12 +3307,10 @@ def _compute_theoretical_c2_from_mcmc(
 
 
 def _json_serializer(obj: Any) -> Any:
-    """JSON serializer for numpy arrays and other objects."""
-    if isinstance(obj, np.ndarray):
-        return obj.tolist()
-    elif isinstance(obj, np.integer):
-        return int(obj)
-    elif isinstance(obj, np.floating):
-        return float(obj)
-    else:
-        return str(obj)
+    """JSON serializer for numpy arrays and other objects.
+
+    Delegates to homodyne.io.json_utils.json_serializer for NaN/Inf sanitization.
+    """
+    from homodyne.io.json_utils import json_serializer
+
+    return json_serializer(obj)
