@@ -832,7 +832,7 @@ class TestCachePathGeneration:
     def test_generate_cache_path_with_template(self, nested_config_dict):
         """Test cache path with custom template."""
         nested_config_dict["experimental_data"]["cache_filename_template"] = (
-            "cache_{start_frame}_{end_frame}_q{wavevector_q}.npz"
+            "cache_${start_frame}_${end_frame}_q${wavevector_q}.npz"
         )
         loader = XPCSDataLoader(config_dict=nested_config_dict)
         cache_path = loader._generate_cache_path()
