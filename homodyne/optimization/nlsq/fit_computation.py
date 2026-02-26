@@ -415,11 +415,14 @@ def compute_theoretical_fits(
     if dt_value is not None:
         dt = float(dt_value)
     else:
-        logger.warning(
-            "dt not found in metadata - falling back to dt=0.1 s. "
-            "Verify metadata contains 'dt' for correct physics."
+        # dt is required for the J(t1,t2) numerical integration used by
+        # compute_g2_scaled().  A wrong dt produces incorrect theory curves and
+        # misleading post-fit visualisations.  Raise rather than silently fall
+        # back to an arbitrary 0.1 s default.
+        raise ValueError(
+            "dt (frame exposure time) is required for compute_theoretical_fits() "
+            "but was not found in metadata. Pass metadata with a valid 'dt' key."
         )
-        dt = 0.1
     q = metadata["q"]
 
     if q is None:

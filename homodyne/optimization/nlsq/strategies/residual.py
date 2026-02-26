@@ -625,7 +625,7 @@ class StratifiedResidualFunction:
             # (_validate_chunk_structure_inline) already ran during __init__.
             # Return the cached result — True means construction succeeded.
             self.logger.info(
-                "✓ Chunk structure validation passed (cached — validated during build)"
+                "Chunk structure validation passed (cached -- validated during build)"
             )
             return getattr(self, "_chunk_structure_valid", True)
 
@@ -668,7 +668,7 @@ class StratifiedResidualFunction:
                     f"t2={len(chunk.t2)}, g2={len(chunk.g2)}"
                 )
 
-        self.logger.info("✓ Chunk structure validation passed")
+        self.logger.info("Chunk structure validation passed")
         return True
 
     def get_diagnostics(self) -> dict[str, Any]:

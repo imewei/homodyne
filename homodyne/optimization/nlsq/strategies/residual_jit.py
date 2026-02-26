@@ -503,7 +503,7 @@ class StratifiedResidualFunctionJIT:
                 )
 
         self.logger.info(
-            "✓ Chunk structure validation passed: all chunks angle-complete"
+            "Chunk structure validation passed: all chunks angle-complete"
         )
         return True
 

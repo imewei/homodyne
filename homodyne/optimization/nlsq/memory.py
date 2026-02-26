@@ -336,8 +336,10 @@ def select_nlsq_strategy(
     >>> print(decision.reason)
     'Peak memory (12.8 GB) exceeds threshold (24.0 GB)'
     """
-    # T038: Add timing for memory strategy selection
-    with log_phase("memory_strategy_selection", logger=logger) as phase:
+    # T038: Add timing for memory strategy selection.
+    # The with-block covers the full decision tree so that log_phase
+    # captures the complete selection time, not just the metric computation.
+    with log_phase("memory_strategy_selection", logger=logger):
         # Get unified memory threshold
         threshold_gb, _ = get_adaptive_memory_threshold(memory_fraction)
 
@@ -351,57 +353,57 @@ def select_nlsq_strategy(
         else:
             peak_memory_gb = estimate_peak_memory_gb(n_points, n_params)
 
-    logger.debug(
-        f"Memory strategy analysis completed in {phase.duration * 1000:.1f}ms: "
-        f"n_points={n_points:,}, n_params={n_params}, "
-        f"index={index_memory_gb:.2f} GB, peak={peak_memory_gb:.2f} GB, "
-        f"threshold={threshold_gb:.2f} GB"
-    )
-
-    # Decision tree (check index FIRST - extreme case)
-    if index_memory_gb > threshold_gb:
-        # Performance Optimization (Spec 001 - T051): Log auto-streaming mode activation
-        logger.info(
-            f"Auto-switching to HYBRID_STREAMING: index array ({index_memory_gb:.2f} GB) "
-            f"exceeds threshold ({threshold_gb:.2f} GB)"
+        logger.debug(
+            f"Memory strategy analysis: "
+            f"n_points={n_points:,}, n_params={n_params}, "
+            f"index={index_memory_gb:.2f} GB, peak={peak_memory_gb:.2f} GB, "
+            f"threshold={threshold_gb:.2f} GB"
         )
+
+        # Decision tree (check index FIRST - extreme case)
+        if index_memory_gb > threshold_gb:
+            # Performance Optimization (Spec 001 - T051): Log auto-streaming mode activation
+            logger.info(
+                f"Auto-switching to HYBRID_STREAMING: index array ({index_memory_gb:.2f} GB) "
+                f"exceeds threshold ({threshold_gb:.2f} GB)"
+            )
+            return StrategyDecision(
+                strategy=NLSQStrategy.HYBRID_STREAMING,
+                threshold_gb=threshold_gb,
+                index_memory_gb=index_memory_gb,
+                peak_memory_gb=peak_memory_gb,
+                reason=(
+                    f"Index array ({index_memory_gb:.2f} GB) exceeds "
+                    f"threshold ({threshold_gb:.2f} GB)"
+                ),
+            )
+
+        if peak_memory_gb > threshold_gb:
+            # Performance Optimization (Spec 001 - T051): Log auto-streaming mode activation
+            logger.info(
+                f"Auto-switching to OUT_OF_CORE: peak memory ({peak_memory_gb:.2f} GB) "
+                f"exceeds threshold ({threshold_gb:.2f} GB)"
+            )
+            return StrategyDecision(
+                strategy=NLSQStrategy.OUT_OF_CORE,
+                threshold_gb=threshold_gb,
+                index_memory_gb=index_memory_gb,
+                peak_memory_gb=peak_memory_gb,
+                reason=(
+                    f"Peak memory ({peak_memory_gb:.2f} GB) exceeds "
+                    f"threshold ({threshold_gb:.2f} GB)"
+                ),
+            )
+
         return StrategyDecision(
-            strategy=NLSQStrategy.HYBRID_STREAMING,
+            strategy=NLSQStrategy.STANDARD,
             threshold_gb=threshold_gb,
             index_memory_gb=index_memory_gb,
             peak_memory_gb=peak_memory_gb,
             reason=(
-                f"Index array ({index_memory_gb:.2f} GB) exceeds "
-                f"threshold ({threshold_gb:.2f} GB)"
+                f"Memory fits: {peak_memory_gb:.2f} GB < {threshold_gb:.2f} GB threshold"
             ),
         )
-
-    if peak_memory_gb > threshold_gb:
-        # Performance Optimization (Spec 001 - T051): Log auto-streaming mode activation
-        logger.info(
-            f"Auto-switching to OUT_OF_CORE: peak memory ({peak_memory_gb:.2f} GB) "
-            f"exceeds threshold ({threshold_gb:.2f} GB)"
-        )
-        return StrategyDecision(
-            strategy=NLSQStrategy.OUT_OF_CORE,
-            threshold_gb=threshold_gb,
-            index_memory_gb=index_memory_gb,
-            peak_memory_gb=peak_memory_gb,
-            reason=(
-                f"Peak memory ({peak_memory_gb:.2f} GB) exceeds "
-                f"threshold ({threshold_gb:.2f} GB)"
-            ),
-        )
-
-    return StrategyDecision(
-        strategy=NLSQStrategy.STANDARD,
-        threshold_gb=threshold_gb,
-        index_memory_gb=index_memory_gb,
-        peak_memory_gb=peak_memory_gb,
-        reason=(
-            f"Memory fits: {peak_memory_gb:.2f} GB < {threshold_gb:.2f} GB threshold"
-        ),
-    )
 
 
 __all__ = [

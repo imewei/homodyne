@@ -25,6 +25,7 @@ Response Actions
 
 from __future__ import annotations
 
+import collections
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -224,7 +225,11 @@ class GradientCollapseMonitor:
             per_angle_indices, dtype=np.intp
         )
 
-        self.history: list[dict] = []
+        # Use a deque with bounded maxlen so that appending automatically
+        # drops the oldest entry — O(1) on both ends vs O(n) list.pop(0).
+        self.history: collections.deque[dict] = collections.deque(
+            maxlen=self.MAX_HISTORY_SIZE
+        )
         self.consecutive_count: int = 0
         self.collapse_detected: bool = False
         self.collapse_events: list[CollapseEvent] = []
@@ -286,11 +291,8 @@ class GradientCollapseMonitor:
         # Compute ratio (avoid division by zero)
         ratio = physical_grad_norm / (per_angle_grad_norm + 1e-12)
 
-        # Record history with size limit to prevent memory leaks
-        # Drop oldest entries when limit is reached
-        while len(self.history) >= self.MAX_HISTORY_SIZE:
-            self.history.pop(0)
-
+        # Record history.  deque(maxlen=MAX_HISTORY_SIZE) drops the oldest
+        # entry automatically on append — no manual pop loop needed.
         self.history.append(
             {
                 "iteration": iteration,
@@ -393,7 +395,7 @@ class GradientCollapseMonitor:
             "lambda_multiplier": self.config.lambda_multiplier_on_collapse,
             "best_params": self.best_params,
             "best_loss": self.best_loss,
-            "history": self.history[-10:],  # Last 10 entries
+            "history": list(self.history)[-10:],  # Last 10 entries
             "collapse_events": self.collapse_events,
         }
 
@@ -435,7 +437,7 @@ class GradientCollapseMonitor:
 
     def reset(self) -> None:
         """Reset monitor state for new optimization run."""
-        self.history = []
+        self.history = collections.deque(maxlen=self.MAX_HISTORY_SIZE)
         self.consecutive_count = 0
         self.collapse_detected = False
         self.collapse_events = []

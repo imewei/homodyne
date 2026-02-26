@@ -257,7 +257,17 @@ class LargeDatasetExecutor(OptimizationExecutor):
             else:
                 # OptimizeResult object
                 popt = result.x
-                pcov = getattr(result, "pcov", np.zeros((len(popt), len(popt))))
+                if not hasattr(result, "pcov"):
+                    # Identity matrix is a safer fallback than zeros: downstream
+                    # code that inverts pcov or extracts uncertainties via sqrt(diag)
+                    # will produce zeros (no information) rather than NaN/Inf.
+                    _module_logger.warning(
+                        "OptimizeResult has no pcov attribute — using identity matrix "
+                        "as covariance placeholder. Uncertainties will be unreliable."
+                    )
+                    pcov = np.eye(len(popt))
+                else:
+                    pcov = result.pcov
                 info = {"nfev": getattr(result, "nfev", 0)}
 
             info["success"] = True
@@ -358,7 +368,16 @@ class StreamingExecutor(OptimizationExecutor):
             }
 
             popt = np.asarray(result["x"])
-            pcov = result.get("pcov", np.zeros((len(popt), len(popt))))
+            if "pcov" not in result:
+                # Identity matrix is safer than zeros: sqrt(diag) yields ones
+                # (max uncertainty) rather than zeros (falsely indicating certainty).
+                _module_logger.warning(
+                    "Streaming optimizer result has no 'pcov' key — using identity "
+                    "matrix as covariance placeholder. Uncertainties will be unreliable."
+                )
+                pcov = np.eye(len(popt))
+            else:
+                pcov = np.asarray(result["pcov"])
 
             return ExecutionResult(
                 popt=popt,

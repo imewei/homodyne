@@ -14,8 +14,12 @@ import jax.numpy as jnp
 import matplotlib
 import numpy as np
 
-# Set Agg backend only if no backend is already active (avoid breaking interactive sessions)
-if matplotlib.get_backend().lower() in ("", "agg") or not matplotlib.is_interactive():
+# Set Agg backend only if no interactive backend is already active.
+# Checking is_interactive() alone can be True for non-GUI backends in some
+# environments; compare against the known interactive backend families instead.
+_current_backend = matplotlib.get_backend().lower()
+_interactive_backends = ("qt", "gtk", "wx", "tk", "macosx", "nbagg", "webagg")
+if not any(_current_backend.startswith(b) for b in _interactive_backends):
     matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
@@ -947,5 +951,10 @@ def _resolve_color_limits(
         vmin = 1.0
     if vmax is None:
         vmax = 1.5
+
+    # Guard against degenerate range (constant/flat data) which causes imshow
+    # to emit a warning and render a blank image with an invalid colorbar.
+    if vmin >= vmax:
+        vmax = vmin + 1.0
 
     return vmin, vmax

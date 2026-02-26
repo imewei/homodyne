@@ -424,16 +424,26 @@ class ResultBuilder:
                 residuals = residual_fn(xdata, *self.parameters)
                 quality = compute_quality_metrics(residuals, self.n_data, n_params)
             except (ValueError, RuntimeError, TypeError):
-                # Fallback if residual computation fails
+                # Fallback if residual computation fails.
+                # NLSQ/scipy least_squares stores cost = 0.5*RSS as "fun"
+                # (internal convention).  Multiply by 2 to get chi-squared.
+                # NOTE: OOC and hierarchical paths use different keys
+                # ("chi_squared", "final_cost") and don't set "fun", so this
+                # defaults to 0.0 for those callers (acceptable — they supply
+                # residual_fn and hit the primary path above).
+                fun_val = float(self.info.get("fun", 0.0))
+                chi_sq_fallback = fun_val * 2.0
                 quality = QualityMetrics(
-                    chi_squared=float(self.info.get("fun", 0.0)),
-                    reduced_chi_squared=float(self.info.get("fun", 0.0))
+                    chi_squared=chi_sq_fallback,
+                    reduced_chi_squared=chi_sq_fallback
                     / max(self.n_data - n_params, 1),
                     quality_flag="unknown",
                 )
         else:
-            # Use info from optimizer
-            chi_sq = float(self.info.get("fun", 0.0))
+            # Use info from optimizer.
+            # NLSQ/scipy least_squares stores cost = 0.5*RSS as "fun".
+            # Multiply by 2 to get chi-squared.  See note above re: OOC/hier.
+            chi_sq = float(self.info.get("fun", 0.0)) * 2.0
             quality = QualityMetrics(
                 chi_squared=chi_sq,
                 reduced_chi_squared=chi_sq / max(self.n_data - n_params, 1),

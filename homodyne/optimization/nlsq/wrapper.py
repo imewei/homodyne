@@ -5497,7 +5497,6 @@ class NLSQWrapper(NLSQAdapterBase):
 
         # 2. Setup Optimization State
         params_curr = jnp.array(initial_params)
-        n_iter = 0
 
         cfg_dict = (
             config.config
@@ -5510,13 +5509,19 @@ class NLSQWrapper(NLSQAdapterBase):
         L_val = float(data.L)
         dt_val = float(getattr(data, "dt", cfg_dict.get("dt", 0.001)))
 
-        # Extract global unique time arrays for meshgrid construction
-        t_unique_global = jnp.sort(jnp.unique(jnp.concatenate([t1_flat, t2_flat])))
+        # Extract global unique time arrays for meshgrid construction.
+        # IMPORTANT: t1 and t2 must remain separate — merging them into a single
+        # union array creates a padded square grid (n_t × n_t) which is wrong
+        # for non-symmetric XPCS data where n_t1 ≠ n_t2.  All flat-index
+        # arithmetic downstream uses (n_t1, n_t2) as the grid shape.
+        t1_unique_global = jnp.sort(jnp.unique(jnp.asarray(t1_flat)))
+        t2_unique_global = jnp.sort(jnp.unique(jnp.asarray(t2_flat)))
         n_phi = len(phi_unique)
-        n_t = len(t_unique_global)
+        n_t1 = len(t1_unique_global)
+        n_t2 = len(t2_unique_global)
 
         logger.info(
-            f"Full Physics Setup: n_phi={n_phi}, n_t={n_t}, "
+            f"Full Physics Setup: n_phi={n_phi}, n_t1={n_t1}, n_t2={n_t2}, "
             f"q={q_val:.4e}, L={L_val:.4e}, dt={dt_val:.4e}"
         )
         max_iter = cfg_dict.get("optimization", {}).get("max_iterations", 50)
@@ -5557,8 +5562,8 @@ class NLSQWrapper(NLSQAdapterBase):
                         lambda phi_val, c_val, o_val: jnp.squeeze(
                             compute_g2_scaled(
                                 params=physical_params,
-                                t1=t_unique_global,
-                                t2=t_unique_global,
+                                t1=t1_unique_global,
+                                t2=t2_unique_global,
                                 phi=phi_val,
                                 q=q_val,
                                 L=L_val,
@@ -5578,8 +5583,8 @@ class NLSQWrapper(NLSQAdapterBase):
                         lambda phi_val: jnp.squeeze(
                             compute_g2_scaled(
                                 params=physical_params,
-                                t1=t_unique_global,
-                                t2=t_unique_global,
+                                t1=t1_unique_global,
+                                t2=t2_unique_global,
                                 phi=phi_val,
                                 q=q_val,
                                 L=L_val,
@@ -5597,15 +5602,16 @@ class NLSQWrapper(NLSQAdapterBase):
                 # so theory grid diagonal values are never used.
 
                 # === FLAT INDEXING: Extract chunk values from grid ===
+                # Grid shape: (n_phi, n_t1, n_t2) — C-order, phi slowest
                 g2_theory_flat = g2_theory_grid.flatten()
 
-                # Find indices in the unique arrays
+                # Find indices in the separate unique arrays
                 phi_indices = jnp.searchsorted(phi_unique, phi_c)
-                t1_indices = jnp.searchsorted(t_unique_global, t1_c)
-                t2_indices = jnp.searchsorted(t_unique_global, t2_c)
+                t1_indices = jnp.searchsorted(t1_unique_global, t1_c)
+                t2_indices = jnp.searchsorted(t2_unique_global, t2_c)
 
                 # Compute flat indices (C-order: phi varies slowest)
-                flat_indices = phi_indices * (n_t * n_t) + t1_indices * n_t + t2_indices
+                flat_indices = phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices
 
                 # Extract theory values for this chunk
                 g2_theory_chunk = g2_theory_flat[flat_indices]
@@ -5641,8 +5647,8 @@ class NLSQWrapper(NLSQAdapterBase):
                     lambda phi_val, c_val, o_val: jnp.squeeze(
                         compute_g2_scaled(
                             params=physical_params,
-                            t1=t_unique_global,
-                            t2=t_unique_global,
+                            t1=t1_unique_global,
+                            t2=t2_unique_global,
                             phi=phi_val,
                             q=q_val,
                             L=L_val,
@@ -5659,8 +5665,8 @@ class NLSQWrapper(NLSQAdapterBase):
                     lambda phi_val: jnp.squeeze(
                         compute_g2_scaled(
                             params=physical_params,
-                            t1=t_unique_global,
-                            t2=t_unique_global,
+                            t1=t1_unique_global,
+                            t2=t2_unique_global,
                             phi=phi_val,
                             q=q_val,
                             L=L_val,
@@ -5677,11 +5683,12 @@ class NLSQWrapper(NLSQAdapterBase):
             # out below via `jnp.where(t1_c != t2_c, res, 0.0)`.
 
             # === FLAT INDEXING: Extract chunk values ===
+            # Grid shape: (n_phi, n_t1, n_t2) — C-order, phi slowest
             g2_theory_flat = g2_theory_grid.flatten()
             phi_indices = jnp.searchsorted(phi_unique, phi_c)
-            t1_indices = jnp.searchsorted(t_unique_global, t1_c)
-            t2_indices = jnp.searchsorted(t_unique_global, t2_c)
-            flat_indices = phi_indices * (n_t * n_t) + t1_indices * n_t + t2_indices
+            t1_indices = jnp.searchsorted(t1_unique_global, t1_c)
+            t2_indices = jnp.searchsorted(t2_unique_global, t2_c)
+            flat_indices = phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices
             g2_theory_chunk = g2_theory_flat[flat_indices]
 
             # Compute chi-squared with diagonal mask
@@ -5769,7 +5776,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 logger.warning("Gradient/Hessian contains NaNs/Infs. Checking params.")
                 # If we are here, current params are bad? Or gradients near boundary are bad.
                 # If params valid but grad inf: likely at boundary singularity (tau=0).
-                if n_iter == 0:
+                if i == 0:
                     raise RuntimeError("Initial parameters produced invalid gradients.")
                 # We should have rejected the previous step!
                 # But we are here.
@@ -5848,12 +5855,14 @@ class NLSQWrapper(NLSQAdapterBase):
                             f"Out-of-Core converged: xtol={rel_change:.2e}<{xtol:.0e}, "
                             f"ftol={cost_change:.2e}<{ftol:.0e}"
                         )
-                        # Invert J^T J to get covariance (pcov = (J^T J)^{-1})
+                        # pcov = s² * (J^T J)^{-1}  where s² = RSS / (n - p)
+                        # Consistent with the stratified LS path (line ~5086).
+                        s2 = float(chi2_new) / max(count - n_params, 1)
                         try:
-                            pcov = np.linalg.inv(np.array(total_JtJ))
+                            pcov = s2 * np.linalg.inv(np.array(total_JtJ))
                         except np.linalg.LinAlgError:
                             logger.warning("Singular J^T J in OOC — using pseudo-inverse for covariance")
-                            pcov = np.linalg.pinv(np.array(total_JtJ))
+                            pcov = s2 * np.linalg.pinv(np.array(total_JtJ))
                         return (
                             np.array(params_curr),
                             pcov,
@@ -5884,12 +5893,14 @@ class NLSQWrapper(NLSQAdapterBase):
             "convergence_status": "converged" if converged else "max_iter",
             "message": "Out-of-Core accumulation completed",
         }
-        # Invert J^T J to get covariance (pcov = (J^T J)^{-1})
+        # pcov = s² * (J^T J)^{-1}  where s² = RSS / (n - p)
+        # Consistent with the stratified LS path (line ~5086).
+        s2 = float(total_chi2) / max(count - n_params, 1)
         try:
-            pcov = np.linalg.inv(np.array(total_JtJ))
+            pcov = s2 * np.linalg.inv(np.array(total_JtJ))
         except np.linalg.LinAlgError:
             logger.warning("Singular J^T J in OOC — using pseudo-inverse for covariance")
-            pcov = np.linalg.pinv(np.array(total_JtJ))
+            pcov = s2 * np.linalg.pinv(np.array(total_JtJ))
         return np.array(params_curr), pcov, info
 
     def _fit_with_stratified_hybrid_streaming(
