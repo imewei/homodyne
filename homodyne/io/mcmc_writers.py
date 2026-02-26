@@ -447,7 +447,13 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
         diagnostics_dict["sampling_efficiency"]["target_acceptance"] = 0.80
 
     if hasattr(result, "divergences"):
-        diagnostics_dict["sampling_efficiency"]["divergences"] = int(result.divergences)
+        import math
+
+        _div = result.divergences
+        # int() raises ValueError on NaN; guard before converting.
+        diagnostics_dict["sampling_efficiency"]["divergences"] = (
+            int(_div) if math.isfinite(float(_div)) else 0
+        )
 
     if hasattr(result, "tree_depth_warnings"):
         diagnostics_dict["sampling_efficiency"]["tree_depth_warnings"] = int(

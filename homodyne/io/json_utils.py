@@ -60,7 +60,9 @@ def json_safe(value: Any) -> Any:
     elif isinstance(value, float):
         return _sanitize_float(value)
     elif hasattr(value, "tolist"):
-        return value.tolist()
+        # Recurse through json_safe so that custom array-like objects whose
+        # tolist() returns floats containing NaN/Inf are properly sanitized.
+        return json_safe(value.tolist())
     else:
         return value
 
@@ -92,7 +94,10 @@ def json_serializer(obj: Any) -> Any:
     '{"arr": [1, 2, 3]}'
     """
     if isinstance(obj, np.ndarray):
-        return obj.tolist()
+        # Recurse through json_safe so NaN/Inf floats inside the array are
+        # sanitized (tolist() converts np.nan → Python float nan, which the
+        # stock json encoder would either reject or emit as the invalid token NaN).
+        return json_safe(obj.tolist())
     elif isinstance(obj, np.integer):
         return int(obj)
     elif isinstance(obj, np.floating):
@@ -103,6 +108,7 @@ def json_serializer(obj: Any) -> Any:
     elif isinstance(obj, (np.bool_,)):
         return bool(obj)
     elif hasattr(obj, "tolist"):
-        return obj.tolist()
+        # Same sanitization for other array-like objects.
+        return json_safe(obj.tolist())
     else:
         return str(obj)

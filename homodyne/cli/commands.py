@@ -1235,9 +1235,11 @@ def load_nlsq_result_from_file(nlsq_result_path: Path) -> dict[str, Any] | None:
         }
 
         logger.info(f"Loaded NLSQ results from {params_file}")
+        _rchi2 = result["reduced_chi_squared"]
+        _rchi2_str = f"{_rchi2:.2f}" if _rchi2 is not None else "N/A"
         logger.info(
             f"  Convergence: {result['convergence_status']}, "
-            f"reduced χ² = {result['reduced_chi_squared']:.2f}"
+            f"reduced χ² = {_rchi2_str}"
         )
 
         # Log physical parameters for diagnostics
@@ -1696,7 +1698,10 @@ def _generate_cmc_diagnostic_plots(
 
             diag_file = diag_dir / "cmc_diagnostics.json"
             with open(diag_file, "w") as f:
-                json.dump(diag_data, f, indent=2, default=str)
+                # Use _json_serializer (not default=str) so NaN/Inf values in
+                # KL matrices and per-shard diagnostics are sanitized to null/"Infinity"
+                # rather than written as the string "nan"/"inf".
+                json.dump(diag_data, f, indent=2, default=_json_serializer)
             logger.debug(f"CMC diagnostic data saved to: {diag_file}")
 
     except ImportError as e:
@@ -1798,7 +1803,10 @@ def _save_results(
     try:
         if args.output_format == "yaml":
             with open(output_file, "w") as f:
-                yaml.dump(results_summary, f, default_flow_style=False)
+                # Apply json_safe before yaml.dump so NaN/Inf floats (e.g.,
+                # chi_squared) are converted to None/"Infinity" rather than
+                # PyYAML's .nan/.inf tokens, which surprise downstream consumers.
+                yaml.dump(_json_safe(results_summary), f, default_flow_style=False)
         elif args.output_format == "json":
             with open(output_file, "w") as f:
                 json.dump(results_summary, f, indent=2, default=_json_serializer)
@@ -1809,7 +1817,7 @@ def _save_results(
             }
             if hasattr(result, "samples_params") and result.samples_params is not None:
                 arrays_to_save["samples_params"] = result.samples_params
-            np.savez(output_file, **arrays_to_save)
+            np.savez_compressed(output_file, **arrays_to_save)
 
         logger.info(f"✓ Results saved: {output_file}")
 
@@ -2871,7 +2879,10 @@ def save_mcmc_results(
         try:
             shard_diag_file = method_dir / "shard_diagnostics.json"
             with open(shard_diag_file, "w") as f:
-                json.dump(result.per_shard_diagnostics, f, indent=2, default=str)
+                # Use _json_serializer (not default=str) so NaN/Inf values in
+                # per-shard diagnostics are written as null/"Infinity" rather
+                # than the string "nan"/"inf".
+                json.dump(result.per_shard_diagnostics, f, indent=2, default=_json_serializer)
             logger.debug(f"Saved per-shard diagnostics to {shard_diag_file}")
         except Exception as e:
             logger.warning(f"Failed to save shard_diagnostics.json: {e}")
