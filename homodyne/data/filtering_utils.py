@@ -347,7 +347,7 @@ class XPCSDataFilter:
                 if quality_score < quality_threshold:
                     mask[i] = False
 
-            except Exception as e:
+            except (ValueError, RuntimeError, IndexError, TypeError) as e:
                 logger.warning(f"Quality calculation failed for matrix {i}: {e}")
                 quality_scores.append(0.0)
                 mask[i] = False

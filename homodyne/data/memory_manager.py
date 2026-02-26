@@ -570,7 +570,8 @@ class AdvancedMemoryManager:
             buffer = pool.get_buffer()
 
             if buffer is not None:
-                return buffer[:size], f"pool_{pool_size}"  # Return view of correct size
+                view = buffer[:size]  # Return view of correct size
+                return view, f"pool_{pool_size}"
 
             return None, None
 
@@ -582,8 +583,25 @@ class AdvancedMemoryManager:
                 pool_size = int(pool_id.split("_")[1])
                 if pool_size in self._pools:
                     pool = self._pools[pool_size]
-                    # Get the underlying buffer (may be larger than the view)
+                    # Walk the base chain to find the original pool buffer.
+                    # Guard: only return if the base has the expected pool size;
+                    # mismatched size means we have a view-of-view chain where
+                    # an intermediate view is not the original allocation.
                     base_buffer = buffer.base if buffer.base is not None else buffer
+                    if base_buffer.size != pool_size:
+                        # Try one more level up (view of view)
+                        if (
+                            base_buffer.base is not None
+                            and base_buffer.base.size == pool_size
+                        ):
+                            base_buffer = base_buffer.base
+                        else:
+                            # Cannot recover original buffer; do not corrupt pool
+                            logger.debug(
+                                f"Skipping pool return: base size {base_buffer.size} "
+                                f"!= pool size {pool_size}"
+                            )
+                            return
                     pool.return_buffer(base_buffer)
             except (ValueError, IndexError):
                 pass
@@ -674,9 +692,12 @@ class AdvancedMemoryManager:
                 f"{self._virtual_memory_path}_{int(time.time())}_{os.getpid()}.dat"
             )
 
-            # Create and map file
+            # Create sparse file: seek to the last byte and write one zero.
+            # This avoids allocating total_bytes in RAM just to populate zeros —
+            # the OS fills unwritten extents with zero pages on demand.
             with open(vm_file, "wb") as f:
-                f.write(b"\x00" * total_bytes)
+                f.seek(total_bytes - 1)
+                f.write(b"\x00")
             os.chmod(vm_file, 0o600)
 
             # Register cleanup on process exit (best-effort)

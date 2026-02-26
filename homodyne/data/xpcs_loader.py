@@ -1097,13 +1097,18 @@ class XPCSDataLoader:
             # Ensure we have consistent array sizes
             min_count = min(len(c2_matrices_for_filtering), len(filtered_dqlist))
             if len(c2_matrices_for_filtering) != len(filtered_dqlist):
+                n_matrices = len(c2_matrices_for_filtering)
+                n_pairs = len(filtered_dqlist)
+                n_discarded = abs(n_matrices - n_pairs)
                 logger.warning(
-                    f"Matrix count ({len(c2_matrices_for_filtering)}) != (q,phi) pair count ({len(filtered_dqlist)})",
+                    f"APS-U matrix/pair count mismatch: {n_matrices} matrices vs "
+                    f"{n_pairs} (q,phi) pairs — truncating to {min_count} entries, "
+                    f"discarding {n_discarded} unmatched {'matrices' if n_matrices > n_pairs else '(q,phi) pairs'}. "
+                    "Check HDF5 file integrity."
                 )
                 c2_matrices_for_filtering = c2_matrices_for_filtering[:min_count]
                 filtered_dqlist = filtered_dqlist[:min_count]
                 filtered_dphilist = filtered_dphilist[:min_count]
-                logger.debug(f"Truncated to {min_count} entries for consistency")
 
             # Apply comprehensive data filtering
             logger.debug("Applying comprehensive data filtering")
@@ -1558,8 +1563,11 @@ class XPCSDataLoader:
             logger.warning(f"start_frame adjusted to 0 (was {start_frame + 1})")
             start_frame = 0
         if end_frame > max_frames:
+            original_end_frame = end_frame
             end_frame = max_frames
-            logger.warning(f"end_frame adjusted to {max_frames} (was {end_frame})")
+            logger.warning(
+                f"end_frame adjusted to {max_frames} (was {original_end_frame})"
+            )
 
         # Apply frame slicing if needed
         if start_frame > 0 or end_frame < max_frames:
@@ -1744,7 +1752,9 @@ class XPCSDataLoader:
 
         # Save phi angles list
         phi_file = os.path.join(phi_folder, "phi_angles_list.txt")
-        os.makedirs(os.path.dirname(phi_file), exist_ok=True)
+        phi_dir = os.path.dirname(phi_file)
+        if phi_dir:
+            os.makedirs(phi_dir, exist_ok=True)
         np.savetxt(
             phi_file,
             phi_angles,

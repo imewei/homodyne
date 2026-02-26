@@ -550,12 +550,13 @@ class PreprocessingPipeline:
 
         # Use unified module if available
         if HAS_DIAGONAL_CORRECTION and apply_diagonal_correction is not None:
+            extra_kwargs = {k: v for k, v in config.items() if k not in ("method", "enabled", "backend")}
             for i in range(len(c2_exp)):
                 corrected_data["c2_exp"][i] = apply_diagonal_correction(
                     c2_exp[i],
                     method=method,
                     backend="numpy",
-                    **config,
+                    **extra_kwargs,
                 )
         else:
             # Fallback to local implementations
@@ -686,8 +687,7 @@ class PreprocessingPipeline:
         for i in range(size):
             # Get off-diagonal values for interpolation
             if i > 0 and i < size - 1:
-                # Use neighboring off-diagonal values
-                [i - 1, i + 1]
+                # Use neighboring off-diagonal values for interpolation
                 y_points = [c2_mat[i - 1, i], c2_mat[i + 1, i]]
 
                 # Simple linear interpolation
@@ -727,11 +727,12 @@ class PreprocessingPipeline:
             for i in range(len(c2_exp)):
                 c2_matrix = c2_exp[i]
                 baseline = c2_matrix[0, 0]  # t=0 correlation
-                if baseline != 0:
+                if abs(baseline) > np.finfo(float).eps:
                     normalized_data["c2_exp"][i] = c2_matrix / baseline
                 else:
                     logger.warning(
-                        f"Zero baseline value at matrix {i}, skipping normalization",
+                        f"Near-zero baseline value ({baseline:.3e}) at matrix {i}, "
+                        "skipping normalization",
                     )
 
         elif method == NormalizationMethod.STATISTICAL:

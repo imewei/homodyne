@@ -130,15 +130,22 @@ class PhiAngleFilter:
         optimization_mask = np.zeros(len(phi_angles_array), dtype=bool)
 
         for min_angle, max_angle in ranges:
-            # Ensure valid range
+            # Handle wrapped ranges (e.g., [170, -170] crosses the ±180° boundary).
+            # These are NOT invalid — they span from min_angle to +180 and from -180
+            # to max_angle. angle_filtering.py uses identical logic.
             if min_angle > max_angle:
-                logger.warning(f"Invalid range [{min_angle}, {max_angle}], skipping")
-                continue
-
-            # Apply range filter with vectorized operations
-            range_mask = (phi_angles_array >= min_angle) & (
-                phi_angles_array <= max_angle
-            )
+                logger.debug(
+                    f"Wrapped range [{min_angle}, {max_angle}] detected — "
+                    "applying split mask across ±180° boundary"
+                )
+                range_mask = (phi_angles_array >= min_angle) | (
+                    phi_angles_array <= max_angle
+                )
+            else:
+                # Normal (non-wrapped) range
+                range_mask = (phi_angles_array >= min_angle) & (
+                    phi_angles_array <= max_angle
+                )
             optimization_mask |= range_mask
 
             angles_in_range = np.sum(range_mask)
@@ -183,14 +190,18 @@ class PhiAngleFilter:
         valid = True
         for i, (min_angle, max_angle) in enumerate(target_ranges):
             if min_angle > max_angle:
-                logger.error(
-                    f"Range {i}: min_angle ({min_angle}) > max_angle ({max_angle})",
+                # Wrapped ranges spanning the +/-180 degree boundary are valid.
+                # filter_angles_for_optimization explicitly supports them by
+                # splitting the mask: (angle >= min) | (angle <= max).
+                logger.debug(
+                    f"Range {i}: min_angle ({min_angle}) > max_angle ({max_angle}) "
+                    "— wrapped range across +/-180 degree boundary",
                 )
-                valid = False
             if not (-360 <= min_angle <= 360 and -360 <= max_angle <= 360):
-                logger.warning(
+                logger.error(
                     f"Range {i}: angles outside typical range [-360, 360]: [{min_angle}, {max_angle}]",
                 )
+                valid = False
         return valid
 
     def get_angle_statistics(

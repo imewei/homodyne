@@ -559,6 +559,12 @@ def _compute_data_statistics(data: dict[str, Any], report: DataQualityReport) ->
                     "min": float(np.min(arr)),
                     "max": float(np.max(arr)),
                     "finite_fraction": float(np.sum(np.isfinite(arr)) / arr.size),
+                    # sum/first/last are used by _identify_changed_components
+                    # as a change-detection fingerprint. Must be stored here or
+                    # incremental validation always falls back to full re-validation.
+                    "sum": float(np.sum(arr)) if arr.size > 0 else 0.0,
+                    "first": float(arr.flat[0]) if arr.size > 0 else 0.0,
+                    "last": float(arr.flat[-1]) if arr.size > 0 else 0.0,
                 }
 
         report.data_statistics = stats
@@ -938,7 +944,15 @@ def _compute_data_hash(data: dict[str, Any]) -> str:
         if hasattr(value, "shape"):
             # Use shape and checksum for arrays
             arr = np.asarray(value)
-            hash_data.append(f"{key}:{arr.shape}:{np.sum(arr) if arr.size > 0 else 0}")
+            if arr.size > 0:
+                # More robust hash: shape + sum + std + first/last/middle values
+                fingerprint = (
+                    f"{key}:{arr.shape}:{np.sum(arr):.15g}:"
+                    f"{np.std(arr):.15g}:{arr.flat[0]:.15g}:{arr.flat[-1]:.15g}"
+                )
+                hash_data.append(fingerprint)
+            else:
+                hash_data.append(f"{key}:{arr.shape}:empty")
         else:
             # Non-array values use string hash
             hash_data.append(f"{key}:{hash(str(value))}")
@@ -1013,15 +1027,28 @@ def _identify_changed_components(
         if key in ["wavevector_q_list", "phi_angles_list", "t1", "t2", "c2_exp"]:
             if hasattr(value, "shape"):
                 arr = np.asarray(value)
-                # Simple change detection based on shape and checksum
-                current_signature = f"{arr.shape}:{np.sum(arr) if arr.size > 0 else 0}"
+                # Richer change detection: shape + sum + std + first + last
+                # Matches the fingerprint stored by _compute_data_statistics.
+                if arr.size > 0:
+                    current_signature = (
+                        f"{arr.shape}:{np.sum(arr):.15g}:{np.std(arr):.15g}"
+                        f":{arr.flat[0]:.15g}:{arr.flat[-1]:.15g}"
+                    )
+                else:
+                    current_signature = f"{arr.shape}:0"
 
                 if key in previous_report.data_statistics:
                     previous_stats = previous_report.data_statistics[key]
                     if isinstance(previous_stats, dict):
                         prev_shape = previous_stats.get("shape", "")
-                        prev_sum = previous_stats.get("sum", 0)
-                        previous_signature = f"{prev_shape}:{prev_sum}"
+                        prev_sum = float(previous_stats.get("sum", 0))
+                        prev_std = float(previous_stats.get("std", 0))
+                        prev_first = float(previous_stats.get("first", 0))
+                        prev_last = float(previous_stats.get("last", 0))
+                        previous_signature = (
+                            f"{prev_shape}:{prev_sum:.15g}:{prev_std:.15g}"
+                            f":{prev_first:.15g}:{prev_last:.15g}"
+                        )
 
                         if current_signature != previous_signature:
                             changed.append(key)
