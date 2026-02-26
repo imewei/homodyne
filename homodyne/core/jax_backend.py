@@ -993,7 +993,14 @@ def compute_g1_total(
     t1, t2 = get_cached_meshgrid(t1, t2)
 
     # Compute physics factors using configuration dt.
-    # Fallback 0.001s = APS-U standard XPCS frame rate (1 kHz).
+    # P2-R6-03: Warn when dt is not provided — physics factors are dt-dependent.
+    # Fallback 0.001s = APS-U standard XPCS frame rate (1 kHz), but callers
+    # should always supply dt explicitly for reproducible results.
+    if dt is None:
+        logger.warning(
+            "compute_g1_total: dt not provided; falling back to 0.001 s (1 kHz). "
+            "Pass dt explicitly for correct physics factors."
+        )
     dt_value = dt if dt is not None else 0.001
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
     sinc_prefactor = 0.5 / PI * q * L * dt_value
@@ -1057,7 +1064,14 @@ def compute_g2_scaled(
         t1, t2 = jnp.meshgrid(t1, t2, indexing="ij")
 
     # Compute physics factors using configuration dt.
-    # Fallback 0.001s = APS-U standard XPCS frame rate (1 kHz).
+    # P2-R6-03: Warn when dt is not provided — physics factors are dt-dependent.
+    # Fallback 0.001s = APS-U standard XPCS frame rate (1 kHz), but callers
+    # should always supply dt explicitly for reproducible results.
+    if dt is None:
+        logger.warning(
+            "compute_g2_scaled: dt not provided; falling back to 0.001 s (1 kHz). "
+            "Pass dt explicitly for correct physics factors."
+        )
     dt_value = dt if dt is not None else 0.001
     wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_value
     sinc_prefactor = 0.5 / PI * q * L * dt_value
@@ -1492,15 +1506,15 @@ def _get_performance_recommendations() -> list[str]:
 
     if not JAX_AVAILABLE:
         recommendations.append(
-            "🚀 Install JAX for 10-50x performance improvement: pip install jax",
+            "[PERF] Install JAX for 10-50x performance improvement: pip install jax",
         )
 
         if not numpy_gradients_available:
             recommendations.append(
-                "📊 Install scipy for basic numerical differentiation: pip install scipy",
+                "[PERF] Install scipy for basic numerical differentiation: pip install scipy",
             )
         else:
-            recommendations.append("✅ NumPy gradients available as fallback")
+            recommendations.append("[OK] NumPy gradients available as fallback")
 
     if JAX_AVAILABLE:
         try:
@@ -1509,12 +1523,12 @@ def _get_performance_recommendations() -> list[str]:
             devices = jax.devices()
             if len(devices) > 1:
                 recommendations.append(
-                    f"🔥 {len(devices)} compute devices available for parallel processing",
+                    f"[INFO] {len(devices)} compute devices available for parallel processing",
                 )
             if any("gpu" in str(d).lower() for d in devices):
-                recommendations.append("🎯 GPU acceleration available")
+                recommendations.append("[INFO] GPU device detected")
             if any("tpu" in str(d).lower() for d in devices):
-                recommendations.append("⚡ TPU acceleration available")
+                recommendations.append("[INFO] TPU device detected")
         except Exception:
             logger.debug("Device inspection failed; proceeding without device hints")
 

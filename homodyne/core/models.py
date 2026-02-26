@@ -378,7 +378,10 @@ class CombinedModel(
                             f"CombinedModel.compute_g1: compute_g1_total completed, result.shape={result.shape}",
                         )
                 return result
-            except Exception as e:
+            # P2-R6-07: Narrow broad except — realistic failures from compute_g1_total
+            # are ValueError (bad params), RuntimeError (XLA), or ArithmeticError.
+            # Bare raise preserves the original traceback for all exception types.
+            except (ValueError, RuntimeError, ArithmeticError) as e:
                 logger.error(
                     f"CombinedModel.compute_g1: compute_g1_total failed with error: {e}",
                 )

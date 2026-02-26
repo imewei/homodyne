@@ -386,10 +386,11 @@ class TheoryEngine:
                 f"q = {q:.2e} outside typical range - check experimental setup",
             )
         # L is in Angstroms - check reasonable range
-        # Typical range: 100,000 Å (10mm) to 100,000,000 Å (10m)
+        # Typical range: 100,000 Å (10 μm) to 100,000,000 Å (10 mm)
+        # Note: 1 Å = 1e-10 m, so 1e5 Å = 10 μm, 1e8 Å = 10 mm.
         if not (1e5 <= L <= 1e8):
             logger.warning(
-                f"L = {L:.1f} Å outside typical range [1e5, 1e8] Å (10mm to 10m) - check experimental setup",
+                f"L = {L:.1f} Å outside typical range [1e5, 1e8] Å (10 μm to 10 mm) - check experimental setup",
             )
 
     def _validate_scaling_parameters(self, contrast: float, offset: float) -> None:

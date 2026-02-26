@@ -15,7 +15,7 @@ Performance Features:
 - JIT compilation for optimal performance
 - Automatic differentiation for gradient-based optimization
 - Vectorized operations for parallel computation
-- GPU/TPU acceleration when available
+- CPU-optimized multi-core computation
 - Memory-efficient handling of large correlation matrices
 """
 

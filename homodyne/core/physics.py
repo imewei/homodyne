@@ -409,10 +409,11 @@ def validate_experimental_setup(
         return False
 
     # Check detector distance (L is in Angstroms)
-    # Typical range: 100,000 Å (10mm) to 100,000,000 Å (10m)
+    # Typical range: 100,000 Å (10 μm) to 100,000,000 Å (10 mm)
+    # Note: 1 Å = 1e-10 m, so 1e5 Å = 10 μm, 1e8 Å = 10 mm.
     if not (1e5 <= L <= 1e8):
         logger.warning(
-            f"Sample-detector distance {L:.1f} Å outside reasonable range [1e5, 1e8] Å (10mm to 10m)",
+            f"Sample-detector distance {L:.1f} Å outside reasonable range [1e5, 1e8] Å (10 μm to 10 mm)",
         )
         return False
 
@@ -441,7 +442,10 @@ def estimate_correlation_time(D0: float, alpha: float, q: float) -> float:
     Returns:
         Estimated correlation time (seconds)
     """
-    if alpha == 0.0:
+    # P2-R6-02: Use epsilon tolerance instead of exact float equality.
+    # NLSQ/MCMC parameters are rarely exactly 0.0; alpha=1e-15 from an
+    # optimiser would incorrectly take the anomalous branch.
+    if abs(alpha) < 1e-12:
         # Normal diffusion
         return 1.0 / (q**2 * D0) if D0 > 0 else np.inf
     else:

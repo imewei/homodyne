@@ -755,7 +755,11 @@ if JAX_AVAILABLE:
             return (sum_theory_sq, sum_theory, sum_exp, sum_theory_exp, n_data), None
 
         # Initialize accumulators
-        carry_init = (0.0, 0.0, 0.0, 0.0, 0)
+        # P1-R6-01: Use jnp.array(0) (JAX int32) not Python int(0).
+        # lax.scan requires consistent carry dtypes across iterations.
+        # chunk_size = theory_chunk.shape[0] is a JAX int32; adding a Python
+        # int(0) creates a dtype mismatch that can cause XLA failures.
+        carry_init = (0.0, 0.0, 0.0, 0.0, jnp.array(0, dtype=jnp.int32))
 
         # Process all chunks
         (

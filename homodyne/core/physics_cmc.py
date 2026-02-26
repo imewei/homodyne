@@ -131,8 +131,13 @@ def precompute_shard_grid(
     # Build time_safe: apply singularity floor once
     # This is identical to what calculate_diffusion_coefficient and
     # calculate_shear_rate_cmc do internally on every leapfrog step.
+    # P2-R6-05: Use jnp.where (not jnp.maximum) for consistency with project
+    # gradient-safe floor convention (CLAUDE.md critical rule #7). Although
+    # time_safe here is shard-constant and not differentiated through, the
+    # jnp.where form is used throughout physics_utils.py and prevents
+    # accidental regression if this path is ever made differentiable.
     epsilon = max(dt_safe * 0.5, 1e-8)
-    time_safe = jnp.maximum(time_grid, epsilon)
+    time_safe = jnp.where(time_grid > epsilon, time_grid, epsilon)
 
     # Build searchsorted indices: shard-constant because time_grid, t1, t2 are fixed
     max_index = time_grid.shape[0] - 1
@@ -714,8 +719,14 @@ def compute_g1_total(
         )
 
     # Compute the physics factors using configuration dt
-    # IMPORTANT: Config dt value will OVERRIDE this default
-    # Default dt = 0.001s if not in config (APS-U standard XPCS frame rate: 1ms)
+    # P2-R6-04: Warn when dt is not provided — physics factors are dt-dependent.
+    # Fallback 0.001s = APS-U standard XPCS frame rate (1 kHz), but callers
+    # should always supply dt explicitly for reproducible results.
+    if dt is None:
+        logger.warning(
+            "CMC compute_g1_total: dt not provided; falling back to 0.001 s (1 kHz). "
+            "Pass dt explicitly for correct physics factors."
+        )
     dt_value = dt if dt is not None else 0.001
 
     if time_grid is None:

@@ -159,7 +159,9 @@ def _estimate_optimal_step(
             else:
                 optimal_h[i] = h_init[i]
 
-        except Exception:
+        # P2-R6-08: Narrow broad except — realistic failures from numerical
+        # step estimation are arithmetic/overflow errors, not system errors.
+        except (ValueError, ArithmeticError, FloatingPointError, OverflowError):
             logger.debug(
                 "Numeric step-size computation failed for param %d, using initial step",
                 i,

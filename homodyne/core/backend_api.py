@@ -39,8 +39,6 @@ Part of Architecture Refactoring v2.9.1.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 # Import CMC backend (element-wise computations)
 from homodyne.core.physics_cmc import (
     compute_g1_diffusion as compute_g1_diffusion_cmc,
@@ -72,9 +70,6 @@ from homodyne.core.physics_utils import (
     safe_sinc,
     trapezoid_cumsum,
 )
-
-if TYPE_CHECKING:
-    pass
 
 
 def get_available_backends() -> dict[str, bool]:
