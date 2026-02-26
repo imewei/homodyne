@@ -1609,8 +1609,8 @@ class XPCSDataLoader:
             end_frame = matrix_size + start_frame - 1
 
         # Create 1D time array starting from 0
-        # Time range covers the frame window: 0 to (end_frame - start_frame) * dt
-        time_max = dt * (end_frame - start_frame)
+        # Last point at index (N-1), not N
+        time_max = dt * (matrix_size - 1)
         time_1d = np.linspace(0, time_max, matrix_size)
 
         return time_1d
@@ -1755,25 +1755,29 @@ class XPCSDataLoader:
         phi_dir = os.path.dirname(phi_file)
         if phi_dir:
             os.makedirs(phi_dir, exist_ok=True)
-        np.savetxt(
-            phi_file,
-            phi_angles,
-            fmt="%.6f",
-            header="Phi angles (degrees)",
-            comments="# ",
-        )
 
-        # Save wavevector q list
-        q_file = os.path.join(data_folder, "wavevector_q_list.txt")
-        np.savetxt(
-            q_file,
-            q_values,
-            fmt="%.8e",
-            header="Wavevector q (1/Angstrom)",
-            comments="# ",
-        )
+        try:
+            np.savetxt(
+                phi_file,
+                phi_angles,
+                fmt="%.6f",
+                header="Phi angles (degrees)",
+                comments="# ",
+            )
 
-        logger.debug(f"Text files saved: {phi_file}, {q_file}")
+            # Save wavevector q list
+            q_file = os.path.join(data_folder, "wavevector_q_list.txt")
+            np.savetxt(
+                q_file,
+                q_values,
+                fmt="%.8e",
+                header="Wavevector q (1/Angstrom)",
+                comments="# ",
+            )
+
+            logger.debug(f"Text files saved: {phi_file}, {q_file}")
+        except OSError as e:
+            logger.warning(f"Could not save text files (non-fatal): {e}")
 
     def _validate_loaded_data(
         self,

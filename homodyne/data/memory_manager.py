@@ -430,7 +430,7 @@ class MemoryPressureMonitor:
         first_avg = sum(first_half) / len(first_half)
         second_avg = sum(second_half) / len(second_half)
 
-        change = (second_avg - first_avg) / first_avg
+        change = (second_avg - first_avg) / max(first_avg, 1e-10)
 
         if change > 0.05:
             return "increasing"

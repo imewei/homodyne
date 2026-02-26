@@ -431,8 +431,8 @@ class PreprocessingPipeline:
             # Calculate final metrics
             provenance.total_duration = time.time() - start_time
 
-            # Success if at least some stages completed
-            success = any(stage_results.values())
+            # Success if pipeline is empty (nothing to fail) or at least some stages completed
+            success = (len(stage_results) == 0) or any(stage_results.values())
 
             logger.info(
                 f"Preprocessing pipeline completed in {provenance.total_duration:.2f}s",
@@ -545,7 +545,7 @@ class PreprocessingPipeline:
         logger.debug(f"Applying enhanced diagonal correction: {method}")
 
         corrected_data = {
-            k: (np.array(v) if isinstance(v, np.ndarray) else v)
+            k: (np.array(v) if isinstance(v, np.ndarray) else copy.deepcopy(v))
             for k, v in data.items()
         }
 
@@ -721,7 +721,7 @@ class PreprocessingPipeline:
         # Deep-copy non-ndarray values (lists, dicts, etc.) so that downstream
         # mutations of e.g. "filters_applied" lists do not corrupt the original dict.
         normalized_data = {
-            k: (np.array(v) if isinstance(v, np.ndarray) else copy.deepcopy(v))
+            k: (np.array(v, copy=True) if isinstance(v, np.ndarray) else copy.deepcopy(v))
             for k, v in data.items()
         }
 
@@ -918,7 +918,10 @@ class PreprocessingPipeline:
         """Standardize data format to ensure consistency across APS vs APS-U sources."""
         logger.debug("Standardizing data format")
 
-        standardized_data = data.copy()
+        standardized_data = {
+            k: (np.array(v) if isinstance(v, np.ndarray) else copy.deepcopy(v))
+            for k, v in data.items()
+        }
 
         # Ensure consistent data types
         if "wavevector_q_list" in data:

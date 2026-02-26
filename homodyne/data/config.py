@@ -499,9 +499,13 @@ def _validate_parameter_values_fallback(config: dict[str, Any]) -> list[str]:
         phi_range = data_filtering.get("phi_range", {})
         if phi_range:
             phi_min, phi_max = phi_range.get("min"), phi_range.get("max")
-            if phi_min is not None and phi_max is not None and phi_min >= phi_max:
+            if phi_min is not None and phi_max is not None and phi_min == phi_max:
                 errors.append(
-                    f"phi_range.min ({phi_min}) must be less than phi_range.max ({phi_max})"
+                    f"phi_range.min ({phi_min}) equals phi_range.max ({phi_max}): zero-width range"
+                )
+            elif phi_min is not None and phi_max is not None and phi_min > phi_max:
+                logger.debug(
+                    f"phi_range [{phi_min}, {phi_max}] is a wrapped range across +/-180 degrees"
                 )
             if phi_min is not None and not (-360 <= phi_min <= 360):
                 errors.append(

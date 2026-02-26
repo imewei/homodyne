@@ -354,15 +354,19 @@ class XPCSDataFilter:
 
         # Statistics
         selected_count = np.sum(mask)
-        result.filter_statistics["quality"] = {
-            "threshold": quality_threshold,
-            "selected_count": int(selected_count),
-            "quality_scores": {
+        if quality_scores:
+            score_stats = {
                 "mean": float(np.mean(quality_scores)),
                 "std": float(np.std(quality_scores)),
                 "min": float(np.min(quality_scores)),
                 "max": float(np.max(quality_scores)),
-            },
+            }
+        else:
+            score_stats = {"mean": 0.0, "std": 0.0, "min": 0.0, "max": 0.0}
+        result.filter_statistics["quality"] = {
+            "threshold": quality_threshold,
+            "selected_count": int(selected_count),
+            "quality_scores": score_stats,
             "selection_fraction": float(selected_count / len(correlation_matrices)),
         }
 
@@ -438,7 +442,7 @@ class XPCSDataFilter:
 
             return float(overall_quality)
 
-        except Exception as e:
+        except (ValueError, RuntimeError, IndexError, TypeError) as e:
             logger.warning(f"Quality score calculation failed: {e}")
             return 0.0
 

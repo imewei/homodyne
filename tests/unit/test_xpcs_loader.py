@@ -561,10 +561,10 @@ class TestTimeArrayCalculation:
 
         time_1d = loader._calculate_time_arrays(10)
 
-        # Should be 10 points from 0 to 1.0
+        # Should be 10 points from 0 to (matrix_size-1)*dt = 0.9
         assert len(time_1d) == 10
         assert time_1d[0] == 0.0
-        assert_allclose(time_1d[-1], 1.0, rtol=1e-10)
+        assert_allclose(time_1d[-1], 0.9, rtol=1e-10)
 
     def test_calculate_time_arrays_starts_at_zero(self, nested_config_dict):
         """Test time array always starts at zero."""
