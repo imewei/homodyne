@@ -19,6 +19,7 @@ if matplotlib.get_backend().lower() in ("", "agg") or not matplotlib.is_interact
     matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
+from homodyne.io.json_utils import json_serializer as _json_serializer  # noqa: E402
 from homodyne.utils.logging import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
@@ -466,7 +467,7 @@ def generate_and_plot_fitted_simulations(
         "analysis_mode": analysis_mode,
     }
     with open(config_file, "w") as f:
-        json.dump(sim_config, f, indent=2)
+        json.dump(sim_config, f, indent=2, default=_json_serializer)
     logger.info(f"Saved simulation config: {config_file}")
 
     # Generate individual plots for each phi angle
@@ -476,15 +477,16 @@ def generate_and_plot_fitted_simulations(
 
     # Get time extent for plotting
     if t1 is not None and t2 is not None:
-        t_min = float(np.min(t1))
-        t_max = float(np.max(t1))
-        extent = [t_min, t_max, t_min, t_max]
-        xlabel = "t₂ (s)"
-        ylabel = "t₁ (s)"
+        t1_min, t1_max = float(np.min(t1)), float(np.max(t1))
+        t2_min, t2_max = float(np.min(t2)), float(np.max(t2))
+        # imshow uses .T so after transpose: x=t1, y=t2
+        extent = [t1_min, t1_max, t2_min, t2_max]
+        xlabel = "t₁ (s)"
+        ylabel = "t₂ (s)"
     else:
         extent = None
-        xlabel = "t₂ Index"
-        ylabel = "t₁ Index"
+        xlabel = "t₁ Index"
+        ylabel = "t₂ Index"
 
     for i, phi_deg in enumerate(phi_angles_list):
         fig, ax = plt.subplots(figsize=(8, 7))
@@ -793,7 +795,7 @@ def _generate_plots_datashader(
 
             logger.info(f"Generated {len(phi_angles)} heatmap plots (parallel)")
 
-        except Exception as e:
+        except (OSError, RuntimeError, TimeoutError) as e:
             logger.warning(f"Parallel plotting failed: {e.__class__.__name__}: {e}")
             logger.info("Falling back to sequential plotting...")
 

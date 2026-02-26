@@ -115,7 +115,10 @@ def plot_trace_plots(
     # Extract samples
     if result.samples_params is None:
         logger.warning("No parameter samples available for trace plots")
-        return _create_empty_figure("No samples available")
+        fig = _create_empty_figure("No samples available")
+        if not show:
+            plt.close(fig)
+        return fig
 
     samples = result.samples_params
     num_params = samples.shape[-1] if samples.ndim >= 2 else 1
@@ -255,6 +258,7 @@ def plot_trace_plots(
         plt.show()
     elif save_path is not None:
         plt.close(fig)
+    # Note: when show=False and save_path=None, caller owns the figure and must close it.
 
     return fig
 
@@ -329,12 +333,14 @@ def plot_kl_divergence_matrix(
     fig, ax = plt.subplots(figsize=figsize)
 
     # Plot heatmap
+    kl_max = float(np.nanmax(kl_matrix)) if np.any(np.isfinite(kl_matrix)) else 0.0
+    vmax = max(threshold * 1.5, kl_max)
     im = ax.imshow(
         kl_matrix,
         cmap=cmap,
         aspect="auto",
         vmin=0,
-        vmax=max(threshold * 1.5, kl_matrix.max()),
+        vmax=vmax,
     )
 
     # Add colorbar
@@ -995,12 +1001,17 @@ def plot_cmc_summary_dashboard(
             num_shards = kl_matrix.shape[0]
             threshold = 2.0
 
+            _kl_max = (
+                float(np.nanmax(kl_matrix))
+                if np.any(np.isfinite(kl_matrix))
+                else 0.0
+            )
             im = ax_kl.imshow(
                 kl_matrix,
                 cmap="coolwarm",
                 aspect="auto",
                 vmin=0,
-                vmax=max(threshold * 1.5, kl_matrix.max()),
+                vmax=max(threshold * 1.5, _kl_max),
             )
             plt.colorbar(im, ax=ax_kl, label="KL Divergence")
 
@@ -1051,13 +1062,26 @@ def plot_cmc_summary_dashboard(
         # Plot ESS for all parameters
         if result.per_shard_diagnostics is not None:
             num_shards = len(result.per_shard_diagnostics)
-            num_params = len(result.mean_params)
 
-            # Get parameter names
+            # Define canonical parameter names first, then derive count
             if result.analysis_mode == "static":
-                param_names = ["D0", "alpha", "D_offset"][:num_params]
+                param_names = ["D0", "alpha", "D_offset"]
+            elif result.analysis_mode == "laminar_flow":
+                param_names = [
+                    "D0",
+                    "alpha",
+                    "D_offset",
+                    "gamma_dot_t0",
+                    "beta",
+                    "gamma_dot_t_offset",
+                    "phi0",
+                ]
             else:
-                param_names = [f"P{i}" for i in range(num_params)]
+                _count = (
+                    len(result.mean_params) if result.mean_params is not None else 0
+                )
+                param_names = [f"P{i}" for i in range(_count)]
+            num_params = len(param_names)
 
             # Collect ESS values
             ess_list: list[list[float]] = []
@@ -1074,11 +1098,22 @@ def plot_cmc_summary_dashboard(
 
                 # Plot as box plot
                 positions = np.arange(num_params)
+                import matplotlib as _mpl
+
+                _mpl_ver = tuple(
+                    int(x) for x in _mpl.__version__.split(".")[:2]
+                )
+                _bp_kwargs: dict = {
+                    "positions": positions,
+                    "patch_artist": True,
+                }
+                if _mpl_ver >= (3, 9):
+                    _bp_kwargs["tick_labels"] = param_names
+                else:
+                    _bp_kwargs["labels"] = param_names
                 bp = ax_conv.boxplot(
                     [ess_matrix[:, i] for i in range(num_params)],
-                    positions=positions,
-                    tick_labels=param_names,
-                    patch_artist=True,
+                    **_bp_kwargs,
                 )
 
                 # Color boxes
@@ -1117,10 +1152,11 @@ def plot_cmc_summary_dashboard(
             transform=ax_conv.transAxes,
         )
 
-    # Panel 3: Trace plots for first 3 parameters (middle row)
-    num_trace_params = min(3, len(result.mean_params))
+    # Panel 3: Trace plots for up to 2 parameters (middle row, 2 columns)
+    _n_params_total = len(result.mean_params) if result.mean_params is not None else 0
+    num_trace_params = min(2, _n_params_total)
     for i in range(num_trace_params):
-        ax_trace = fig.add_subplot(gs[1, i % 2 if num_trace_params <= 2 else 0])
+        ax_trace = fig.add_subplot(gs[1, i])
 
         try:
             # Plot traces for this parameter
@@ -1301,7 +1337,10 @@ def plot_arviz_trace(
 
     if result.samples_params is None:
         logger.warning("No parameter samples available for trace plots")
-        return _create_empty_figure("No samples available")
+        fig = _create_empty_figure("No samples available")
+        if not show:
+            plt.close(fig)
+        return fig
 
     # Convert to ArviZ InferenceData
     idata = result.to_arviz()
@@ -1381,11 +1420,17 @@ def plot_arviz_posterior(
         import arviz as az
     except ImportError:
         logger.warning("ArviZ not available. Cannot create posterior plots.")
-        return _create_empty_figure("ArviZ not installed")
+        fig = _create_empty_figure("ArviZ not installed")
+        if not show:
+            plt.close(fig)
+        return fig
 
     if result.samples_params is None:
         logger.warning("No parameter samples available for posterior plots")
-        return _create_empty_figure("No samples available")
+        fig = _create_empty_figure("No samples available")
+        if not show:
+            plt.close(fig)
+        return fig
 
     # Convert to ArviZ InferenceData
     idata = result.to_arviz()
@@ -1469,11 +1514,17 @@ def plot_arviz_pair(
         import arviz as az
     except ImportError:
         logger.warning("ArviZ not available. Cannot create pair plots.")
-        return _create_empty_figure("ArviZ not installed")
+        fig = _create_empty_figure("ArviZ not installed")
+        if not show:
+            plt.close(fig)
+        return fig
 
     if result.samples_params is None:
         logger.warning("No parameter samples available for pair plots")
-        return _create_empty_figure("No samples available")
+        fig = _create_empty_figure("No samples available")
+        if not show:
+            plt.close(fig)
+        return fig
 
     # Convert to ArviZ InferenceData
     idata = result.to_arviz()

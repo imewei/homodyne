@@ -55,14 +55,14 @@ def plot_experimental_data(
     if t1 is not None and t2 is not None:
         t1_min, t1_max = float(np.min(t1)), float(np.max(t1))
         t2_min, t2_max = float(np.min(t2)), float(np.max(t2))
-        extent = [t2_min, t2_max, t1_min, t1_max]  # [xmin, xmax, ymin, ymax] = [t2, t1]
-        xlabel = "t₂ (s)"
-        ylabel = "t₁ (s)"
+        extent = [t1_min, t1_max, t2_min, t2_max]  # [xmin, xmax, ymin, ymax] = [t1, t2]
+        xlabel = "t₁ (s)"
+        ylabel = "t₂ (s)"
         logger.debug(f"Using time extent: t1=[{t1_min:.3f}, {t1_max:.3f}], t2=[{t2_min:.3f}, {t2_max:.3f}] seconds")
     else:
         extent = None
-        xlabel = "t₂ Index"
-        ylabel = "t₁ Index"
+        xlabel = "t₁ Index"
+        ylabel = "t₂ Index"
         logger.debug("Time arrays not available, using frame indices")
 
     # Get phi angles array from data
@@ -127,7 +127,6 @@ def _plot_3d_experimental_data(
 
         fig, ax = plt.subplots(figsize=(8, 7))
 
-        # Transpose to show diagonal from bottom-left to top-right
         im = ax.imshow(
             angle_data.T,
             aspect="equal",
@@ -207,7 +206,6 @@ def _plot_2d_experimental_data(
 ) -> None:
     """Plot 2D experimental data (single correlation matrix)."""
     fig, ax = plt.subplots(figsize=(10, 8))
-    # Transpose to show diagonal from bottom-left to top-right
     im = ax.imshow(
         c2_exp.T,
         aspect="equal",

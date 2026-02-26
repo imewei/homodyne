@@ -429,9 +429,11 @@ def plot_c2_comparison_fast(
         c2_fit.T, t1, t2, cmap="jet", vmin=vmin_shared, vmax=vmax_shared
     )
 
-    # Residuals colormap using actual min/max
-    res_min = float(residuals.min())
-    res_max = float(residuals.max())
+    # Residuals colormap using actual min/max (guard against all-NaN or zero-span)
+    res_min = float(np.nanmin(residuals)) if np.any(np.isfinite(residuals)) else 0.0
+    res_max = float(np.nanmax(residuals)) if np.any(np.isfinite(residuals)) else 1.0
+    if res_min == res_max:
+        res_max = res_min + 1e-10
     img_res = renderer.rasterize_heatmap(
         residuals.T,
         t1,
