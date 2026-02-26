@@ -34,6 +34,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
@@ -165,7 +166,7 @@ def plot_trace_plots(
     if is_cmc and result.per_shard_diagnostics is not None:
         # CMC: Plot multiple shard traces
         num_shards = len(result.per_shard_diagnostics)
-        colors = plt.get_cmap("tab10")(np.linspace(0, 1, num_shards))
+        colors = matplotlib.colormaps["tab10"](np.linspace(0, 1, num_shards))
 
         for param_idx in range(num_params_to_plot):
             ax = axes[param_idx]
@@ -863,7 +864,7 @@ def plot_posterior_comparison(
 
         # Extract per-shard samples
         num_shards = len(result.per_shard_diagnostics)
-        colors = plt.get_cmap("tab10")(np.linspace(0, 1, num_shards))
+        colors = matplotlib.colormaps["tab10"](np.linspace(0, 1, num_shards))
 
         for shard_idx, shard_diag in enumerate(result.per_shard_diagnostics):
             if "trace_data" in shard_diag:
@@ -1168,7 +1169,7 @@ def plot_cmc_summary_dashboard(
             # Plot traces for this parameter
             if result.per_shard_diagnostics is not None:
                 num_shards = len(result.per_shard_diagnostics)
-                colors = plt.get_cmap("tab10")(np.linspace(0, 1, num_shards))
+                colors = matplotlib.colormaps["tab10"](np.linspace(0, 1, num_shards))
 
                 for shard_idx, shard_diag in enumerate(result.per_shard_diagnostics):
                     if "trace_data" in shard_diag:

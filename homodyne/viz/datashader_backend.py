@@ -138,12 +138,18 @@ class DatashaderRenderer:
             name="intensity",
         )
 
+        # Filter NaN values from coordinates for Canvas range computation
+        x_finite = x_coords[np.isfinite(x_coords)]
+        y_finite = y_coords[np.isfinite(y_coords)]
+        if x_finite.size == 0 or y_finite.size == 0:
+            raise ValueError("Cannot rasterize: all coordinate values are NaN")
+
         # Create canvas at target resolution
         canvas = ds.Canvas(
             plot_width=self.width,
             plot_height=self.height,
-            x_range=(float(x_coords.min()), float(x_coords.max())),
-            y_range=(float(y_coords.min()), float(y_coords.max())),
+            x_range=(float(x_finite.min()), float(x_finite.max())),
+            y_range=(float(y_finite.min()), float(y_finite.max())),
         )
 
         # Rasterize (CPU-optimized for HPC)

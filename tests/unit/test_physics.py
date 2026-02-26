@@ -28,7 +28,7 @@ class TestValidationResult:
         assert result.parameters_checked == 5
         assert result.message == "All parameters valid"
         assert len(result.violations) == 0
-        assert "✓" in str(result)
+        assert "OK" in str(result)
 
     def test_invalid_result(self):
         """Test invalid ValidationResult."""
@@ -42,7 +42,7 @@ class TestValidationResult:
         assert result.valid is False
         assert result.parameters_checked == 5
         assert len(result.violations) == 2
-        assert "✗" in str(result)
+        assert "FAIL" in str(result)
         assert "D0 out of bounds" in str(result)
         assert "alpha out of bounds" in str(result)
 
@@ -53,8 +53,8 @@ class TestValidationResult:
             valid=False, violations=["Error 1", "Error 2"], message="Failed"
         )
 
-        assert str(valid_result) == "✓ Success"
-        assert "✗ Failed" in str(invalid_result)
+        assert str(valid_result) == "OK Success"
+        assert "FAIL Failed" in str(invalid_result)
         assert "Error 1" in str(invalid_result)
         assert "Error 2" in str(invalid_result)
 

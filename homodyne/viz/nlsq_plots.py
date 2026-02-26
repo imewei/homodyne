@@ -896,8 +896,10 @@ def _generate_plots_matplotlib(
         cbar1.ax.tick_params(labelsize=8)
 
         # Panel 3: Residuals
-        residual_min = float(np.min(residuals[i]))
-        residual_max = float(np.max(residuals[i]))
+        residual_min = float(np.nanmin(residuals[i]))
+        residual_max = float(np.nanmax(residuals[i]))
+        if not np.isfinite(residual_min) or not np.isfinite(residual_max):
+            residual_min, residual_max = -0.1, 0.1
         im2 = axes[2].imshow(
             residuals[i].T,
             origin="lower",

@@ -184,9 +184,10 @@ def _plot_3d_experimental_data(
         time_diagonal = np.arange(c2_exp.shape[-1])
 
     for idx in range(min(10, c2_exp.shape[0])):
-        diagonal = np.diag(c2_exp[idx])
+        min_dim = min(c2_exp[idx].shape)
+        diagonal = np.diag(c2_exp[idx][:min_dim, :min_dim])
         phi_deg = phi_angles_list[idx] if len(phi_angles_list) > idx else idx
-        ax.plot(time_diagonal, diagonal, label=f"φ={phi_deg:.1f}°", alpha=0.7)
+        ax.plot(time_diagonal[:min_dim], diagonal, label=f"φ={phi_deg:.1f}°", alpha=0.7)
 
     ax.set_xlabel("Time (s)" if t1 is not None else "Time Index")
     ax.set_ylabel("C₂(t, t)")
