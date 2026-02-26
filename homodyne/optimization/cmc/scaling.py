@@ -77,9 +77,6 @@ class ParameterScaling:
         Lower bound for clipping.
     high : float
         Upper bound for clipping.
-    use_log_space : bool
-        Reserved for future use. Homodyne currently uses purely linear
-        z-space scaling with smooth bounding for all parameters.
     """
 
     name: str
@@ -87,7 +84,6 @@ class ParameterScaling:
     scale: float
     low: float
     high: float
-    use_log_space: bool = False
 
     def _smooth_bound(
         self, raw: jnp.ndarray, low: float, high: float, eps: float = 1e-12
@@ -223,7 +219,6 @@ def compute_scaling_factors(
             scale=scale,
             low=low,
             high=high,
-            use_log_space=False,  # Always linear
         )
 
     return scalings

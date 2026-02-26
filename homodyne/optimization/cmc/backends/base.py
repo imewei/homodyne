@@ -155,62 +155,193 @@ def combine_shard_samples(
 ) -> MCMCSamples:
     """Combine samples from multiple shards.
 
-    Uses hierarchical combination for large shard counts to limit peak memory.
-    For K > chunk_size shards, combines in chunks of chunk_size, then combines
-    the intermediate results. This reduces peak memory from O(K) to O(chunk_size).
+    For K <= chunk_size shards, uses a single-pass combination.
+
+    For K > chunk_size shards (hierarchical mode), accumulates posterior
+    moments (mean, variance) across chunks without drawing intermediate
+    synthetic samples. A single Gaussian draw is performed at the end from
+    the aggregated moments. This avoids the precision-multiplication artefact
+    that arises when recursive combination re-applies precision-weighting to
+    synthetically drawn intermediate samples (P1-R6-01).
 
     Memory scaling:
-    - Each shard result: ~100KB (13 params × 2 chains × 1500 samples × 8 bytes)
-    - Direct combination: K × 100KB peak memory
-    - Hierarchical (chunk=500): max(500 × 100KB, K/500 × 100KB) ≈ 50MB peak
+    - Each shard result: ~100KB (13 params × 4 chains × 1500 samples × 8 bytes)
+    - Hierarchical (chunk=500): processes max(chunk_size) shards at once (~50MB)
+      then releases them. Moment accumulation uses O(n_params) space.
 
     Parameters
     ----------
     shard_samples : list[MCMCSamples]
         Samples from each shard.
     method : str
-        Combination method: "consensus_mc" (recommended),
-        "weighted_gaussian", "simple_average", or "auto".
+        Combination method: "robust_consensus_mc" (recommended),
+        "consensus_mc", "weighted_gaussian", "simple_average", or "auto".
     chunk_size : int
-        Number of shards to combine at once for hierarchical combination.
-        Default 500 keeps peak memory under ~50MB per combination step.
+        Number of shards to process per chunk for hierarchical combination.
+        Default 500 keeps peak memory under ~50MB per processing step.
 
     Returns
     -------
     MCMCSamples
         Combined samples.
     """
+    import gc
 
     if len(shard_samples) == 1:
         return shard_samples[0]
 
-    # For large shard counts, use hierarchical combination to limit memory
+    # For large shard counts, use moment-accumulation to limit memory.
+    # P1-R6-01: Do NOT draw intermediate samples and re-combine them.
+    # Recursive precision-weighting on synthetic draws inflates precision
+    # by the number of hierarchical levels, over-narrowing the final posterior.
+    # Instead: accumulate (weighted_mean_sum, precision_sum) across all chunks,
+    # then perform a single Gaussian draw at the end.
+    if len(shard_samples) > chunk_size and method in (
+        "robust_consensus_mc",
+        "consensus_mc",
+        "auto",
+    ):
+        logger.info(
+            f"Hierarchical combination (moment-accumulation): {len(shard_samples)} shards "
+            f"in chunks of {chunk_size}"
+        )
+        param_names = shard_samples[0].param_names
+        n_chains = shard_samples[0].n_chains
+        n_samples = shard_samples[0].n_samples
+        n_chunks = (len(shard_samples) + chunk_size - 1) // chunk_size
+
+        # Two-pass approach: collect per-shard (mean, var) summaries, then
+        # apply degenerate-shard filtering before precision-weighted combination.
+        # This matches the robust filtering in _combine_shard_chunk while avoiding
+        # the precision-inflation bug of recursive intermediate draws.
+        import numpy as np
+
+        # Pass 1: collect per-shard summaries (O(K * n_params) floats)
+        shard_stats: dict[str, list[tuple[float, float]]] = {
+            name: [] for name in param_names
+        }
+        n_excluded: dict[str, int] = dict.fromkeys(param_names, 0)
+
+        for chunk_start in range(0, len(shard_samples), chunk_size):
+            chunk = shard_samples[chunk_start : chunk_start + chunk_size]
+            chunk_idx = chunk_start // chunk_size
+
+            for name in param_names:
+                for s in chunk:
+                    samples_flat = s.samples[name].flatten()
+                    if not np.all(np.isfinite(samples_flat)):
+                        n_excluded[name] += 1
+                        continue
+                    shard_mean = float(np.mean(samples_flat))
+                    shard_var = float(np.var(samples_flat, ddof=1))
+                    shard_stats[name].append((shard_mean, shard_var))
+
+            del chunk
+            gc.collect()
+            logger.debug(f"Accumulated chunk {chunk_idx + 1}/{n_chunks}")
+
+        # Pass 2: filter degenerate shards, then precision-weight
+        rng = np.random.default_rng(42)
+        combined_samples_dict: dict[str, np.ndarray] = {}
+        for name in param_names:
+            stats = shard_stats[name]
+            if not stats:
+                logger.warning(
+                    f"Hierarchical CMC: all shards excluded for '{name}'"
+                )
+                combined_samples_dict[name] = rng.normal(
+                    loc=0.0, scale=1.0, size=(n_chains, n_samples)
+                )
+                continue
+
+            if n_excluded[name] > 0:
+                logger.warning(
+                    f"Hierarchical CMC: {n_excluded[name]} non-finite shards "
+                    f"excluded for '{name}'"
+                )
+
+            means_arr = np.array([m for m, _ in stats])
+            vars_arr = np.array([v for _, v in stats])
+
+            # Degenerate-shard exclusion: shards with variance < 1e-6 * median
+            # indicate stuck chains that would dominate precision weighting.
+            if len(vars_arr) >= 3:
+                median_var = np.median(vars_arr)
+                if median_var > 0:
+                    degenerate_mask = vars_arr < (median_var * 1e-6)
+                    n_degenerate = int(np.sum(degenerate_mask))
+                    if 0 < n_degenerate < len(vars_arr):
+                        logger.warning(
+                            f"Hierarchical CMC: {n_degenerate} degenerate "
+                            f"shard(s) for '{name}' (var < 1e-6 * median); "
+                            f"excluding"
+                        )
+                        keep = ~degenerate_mask
+                        means_arr = means_arr[keep]
+                        vars_arr = vars_arr[keep]
+
+            # Precision-weighted combination on filtered data
+            precisions = 1.0 / np.maximum(vars_arr, 1e-10)
+            prec_sum = float(np.sum(precisions))
+            combined_variance = max(1.0 / prec_sum, 1e-12) if prec_sum > 0 else 1.0
+            combined_mean = (
+                float(np.sum(precisions * means_arr) / prec_sum)
+                if prec_sum > 0
+                else 0.0
+            )
+            combined_std = np.sqrt(combined_variance)
+            combined_samples_dict[name] = rng.normal(
+                loc=combined_mean,
+                scale=combined_std,
+                size=(n_chains, n_samples),
+            )
+
+        # Combine extra fields from the first chunk for metadata
+        combined_extra: dict = {}
+        first_chunk = shard_samples[:min(chunk_size, len(shard_samples))]
+        for key in first_chunk[0].extra_fields.keys():
+            all_extra = [
+                s.extra_fields.get(key) for s in first_chunk if key in s.extra_fields
+            ]
+            if all_extra:
+                try:
+                    if all_extra[0].ndim == 0:
+                        combined_extra[key] = np.stack(all_extra, axis=0)
+                    else:
+                        combined_extra[key] = np.concatenate(all_extra, axis=0)
+                except (ValueError, TypeError):
+                    combined_extra[key] = all_extra[0]
+
+        from homodyne.optimization.cmc.sampler import MCMCSamples
+
+        return MCMCSamples(
+            samples=combined_samples_dict,
+            param_names=param_names,
+            n_chains=n_chains,
+            n_samples=n_samples,
+            extra_fields=combined_extra,
+            num_shards=sum(getattr(s, "num_shards", 1) for s in shard_samples),
+        )
+
+    # For deprecated methods with large K, fall back to chunked recursion
+    # (these methods don't support moment accumulation).
     if len(shard_samples) > chunk_size:
         import gc
 
         logger.info(
-            f"Hierarchical combination: {len(shard_samples)} shards "
-            f"in chunks of {chunk_size}"
+            f"Hierarchical combination (chunked recursion): {len(shard_samples)} shards "
+            f"in chunks of {chunk_size} (method={method!r})"
         )
         intermediate_results = []
         n_chunks = (len(shard_samples) + chunk_size - 1) // chunk_size
         for i in range(0, len(shard_samples), chunk_size):
             chunk = shard_samples[i : i + chunk_size]
-            # P2-R5-02: Derive a distinct seed per chunk so that each
-            # _combine_shard_chunk call draws independent samples from
-            # the combined Gaussian, rather than all starting from seed 42.
             chunk_idx = i // chunk_size
             chunk_result = _combine_shard_chunk(chunk, method, chunk_seed=chunk_idx)
             intermediate_results.append(chunk_result)
-
-            # Clear chunk references and force GC to reduce peak memory
-            # Each shard is ~100KB, so freeing chunk_size shards saves ~50MB
             del chunk
             gc.collect()
-
             logger.debug(f"Combined chunk {i // chunk_size + 1}/{n_chunks}")
-
-        # Recursively combine intermediate results
         return combine_shard_samples(intermediate_results, method, chunk_size)
 
     return _combine_shard_chunk(shard_samples, method)

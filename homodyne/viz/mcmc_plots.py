@@ -355,26 +355,30 @@ def plot_kl_divergence_matrix(
         label=f"Threshold ({threshold})",
     )
 
-    # Annotate cells with KL values
+    # Annotate cells with KL values.  For large matrices (>20 shards) text
+    # annotations would be illegible and O(n²) ax.text() calls degrade render
+    # performance significantly; skip text but keep the red-border highlights
+    # for problematic off-diagonal cells, which remain readable at any scale.
+    _ANNOTATION_THRESHOLD = 20
+    _annotate = num_shards <= _ANNOTATION_THRESHOLD
     for i in range(num_shards):
         for j in range(num_shards):
             kl_val = kl_matrix[i, j]
 
-            # Choose text color based on background
-            text_color = "white" if kl_val > threshold else "black"
+            if _annotate:
+                # Choose text color based on background
+                text_color = "white" if kl_val > threshold else "black"
+                _text = ax.text(  # noqa: F841 - Text object kept for reference
+                    j,
+                    i,
+                    f"{kl_val:.2f}",
+                    ha="center",
+                    va="center",
+                    color=text_color,
+                    fontsize=9,
+                )
 
-            # Add text annotation
-            _text = ax.text(  # noqa: F841 - Text object kept for reference
-                j,
-                i,
-                f"{kl_val:.2f}",
-                ha="center",
-                va="center",
-                color=text_color,
-                fontsize=9,
-            )
-
-            # Highlight problematic shards (KL > threshold)
+            # Highlight problematic off-diagonal shards (KL > threshold)
             if kl_val > threshold and i != j:
                 ax.add_patch(
                     plt.Rectangle(
@@ -1015,20 +1019,22 @@ def plot_cmc_summary_dashboard(
             )
             plt.colorbar(im, ax=ax_kl, label="KL Divergence")
 
-            # Annotate cells
+            # Annotate cells (skip text for >20 shards — O(n²) and illegible)
+            _annotate = num_shards <= 20
             for i in range(num_shards):
                 for j in range(num_shards):
                     kl_val = kl_matrix[i, j]
-                    text_color = "white" if kl_val > threshold else "black"
-                    ax_kl.text(
-                        j,
-                        i,
-                        f"{kl_val:.2f}",
-                        ha="center",
-                        va="center",
-                        color=text_color,
-                        fontsize=7,
-                    )
+                    if _annotate:
+                        text_color = "white" if kl_val > threshold else "black"
+                        ax_kl.text(
+                            j,
+                            i,
+                            f"{kl_val:.2f}",
+                            ha="center",
+                            va="center",
+                            color=text_color,
+                            fontsize=7,
+                        )
 
             ax_kl.set_xticks(np.arange(num_shards))
             ax_kl.set_yticks(np.arange(num_shards))
@@ -1628,8 +1634,13 @@ def generate_mcmc_diagnostic_report(
     >>> print(paths["trace"])  # Path to trace plot
     >>> print(paths["posterior"])  # Path to posterior plot
     """
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    from homodyne.utils.path_validation import PathValidationError, get_safe_output_dir
+
+    try:
+        output_dir = get_safe_output_dir(output_dir)
+    except (PathValidationError, PermissionError) as e:
+        logger.error(f"Invalid MCMC diagnostic output directory: {e}")
+        return {}
 
     paths: dict[str, Path] = {}
 
@@ -1721,6 +1732,8 @@ def print_mcmc_summary(result: Any) -> None:  # MCMCResult type
     --------
     >>> print_mcmc_summary(result)
     """
+    import math
+
     logger.info("=" * 60)
     logger.info("MCMC Results Summary")
     logger.info("=" * 60)
@@ -1777,13 +1790,23 @@ def print_mcmc_summary(result: Any) -> None:  # MCMCResult type
         if result.r_hat is not None:
             logger.info("  R-hat (target < 1.1):")
             for name, value in result.r_hat.items():
-                status = "pass" if value < 1.1 else "FAIL"
+                if not math.isfinite(value):
+                    status = "N/A"
+                elif value < 1.1:
+                    status = "pass"
+                else:
+                    status = "FAIL"
                 logger.info("    %20s: %.4f %s", name, value, status)
 
         if result.effective_sample_size is not None:
             logger.info("  ESS (target > 100):")
             for name, value in result.effective_sample_size.items():
-                status = "pass" if value > 100 else "FAIL"
+                if not math.isfinite(value):
+                    status = "N/A"
+                elif value > 100:
+                    status = "pass"
+                else:
+                    status = "FAIL"
                 logger.info("    %20s: %.1f %s", name, value, status)
 
     logger.info("=" * 60)

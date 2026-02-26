@@ -685,8 +685,6 @@ def shard_data_angle_balanced(
         angle_counts.append(len(indices))
 
     # Calculate target points per shard per angle (proportional allocation)
-    total_points = sum(angle_counts)
-    _ = total_points // num_shards  # For reference in comments
 
     # Track how many points we've used from each angle
     angle_positions = [0] * n_phi

@@ -186,7 +186,8 @@ class TestComputeScalingFactors:
 
         # Center should fall back to midpoint of bounds.
         assert scalings["D0"].center == pytest.approx((1e3 + 1e5) / 2)
-        assert scalings["D0"].use_log_space is False
+        # use_log_space was removed from ParameterScaling (Round 5 refactor);
+        # homodyne uses purely linear z-space scaling for all parameters.
 
 
 class TestTransformInitialValuesToZ:
@@ -304,7 +305,12 @@ class TestGradientBalancing:
         assert normalized_ratio < original_ratio / 100
 
     def test_d0_uses_linear_scaling(self):
-        """Test D0 uses linear scaling (no log-space)."""
+        """Test D0 uses linear scaling (ParameterScaling is always linear z-space)."""
         ps = ParameterSpace.from_defaults("laminar_flow")
         scalings = compute_scaling_factors(ps, n_phi=1, analysis_mode="laminar_flow")
-        assert scalings["D0"].use_log_space is False
+        # use_log_space was removed from ParameterScaling in Round 5 refactor;
+        # homodyne exclusively uses linear z-space scaling for all parameters.
+        # Verify D0 scaling exists and has valid linear-space attributes.
+        assert "D0" in scalings
+        assert scalings["D0"].scale > 0
+        assert scalings["D0"].low < scalings["D0"].high

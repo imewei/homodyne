@@ -227,13 +227,12 @@ class PjitBackend(CMCBackend):
                 shard_results.append(samples)
 
         # Combine results from all shards
+        # P2-R6-01: Use config.combination_method directly; CMCConfig always
+        # has this field (defaults to "robust_consensus_mc"). The stale
+        # "weighted_gaussian" fallback was misleading and incorrect.
         combined = combine_shard_samples(
             shard_results,
-            method=(
-                config.combination_method
-                if hasattr(config, "combination_method")
-                else "weighted_gaussian"
-            ),
+            method=config.combination_method,
         )
 
         elapsed = time.time() - start_time

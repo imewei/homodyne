@@ -49,9 +49,11 @@ class CMCConfig:
     num_shards : int | str
         Number of data shards. "auto" calculates from data size.
     max_points_per_shard : int | str
-        Maximum points per shard. "auto" calculates optimally.
-        Default: 100K points/shard. For typical 3M point, 3-angle laminar
-        flow datasets, this produces 18-30 shards (not 150+ as with 20K).
+        Maximum points per shard. "auto" calculates optimally based on
+        dataset size, analysis mode, and angle count (see
+        ``_resolve_max_points_per_shard``).
+        Default: "auto". Typical auto values: 5–20K for laminar_flow,
+        10–20K for static (scales with dataset size).
     backend_name : str
         Execution backend: "auto", "multiprocessing", "pjit", "pbs".
     enable_checkpoints : bool

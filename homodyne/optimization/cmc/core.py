@@ -1203,9 +1203,14 @@ def _fit_mcmc_jax_impl(
     actual_grid_dt = (
         (time_grid_np[1] - time_grid_np[0]) if len(time_grid_np) > 1 else dt_used
     )
-    if abs(actual_grid_dt - dt_used) > 1e-6:
+    # P2-R6-08: Use relative tolerance; absolute 1e-6 is too tight for large dt
+    # (e.g. dt=1.5s gives float rounding ~2e-16 which compares fine) and too
+    # loose for small dt (e.g. dt=1e-5s capped to 100K grid gives ~0.01s).
+    _grid_rel_diff = abs(actual_grid_dt - dt_used) / max(dt_used, 1e-15)
+    if _grid_rel_diff > 1e-6:
         run_logger.warning(
-            f"[CMC] Grid spacing {actual_grid_dt:.6g}s differs from config dt={dt_used:.6g}s"
+            f"[CMC] Grid spacing {actual_grid_dt:.6g}s differs from config dt={dt_used:.6g}s "
+            f"(relative diff={_grid_rel_diff:.2e})"
         )
 
     phi_indices_arr = jnp.array(prepared.phi_indices)

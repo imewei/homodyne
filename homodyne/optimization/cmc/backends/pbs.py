@@ -138,20 +138,16 @@ class PBSBackend(CMCBackend):
         -------
         bool
             True if PBS commands are accessible.
+
+        Notes
+        -----
+        P2-R6-06: Previously ran bare ``qsub`` with no arguments, which exits
+        non-zero on all PBS/Torque versions (missing jobscript), so this method
+        always returned False on valid clusters. Now checks for the presence of
+        the qsub binary via shutil.which, which is sufficient to determine
+        availability without triggering an error submission.
         """
-        try:
-            qsub_path = shutil.which("qsub")
-            if not qsub_path:
-                return False
-            result = subprocess.run(  # noqa: S603 - qsub_path from shutil.which is trusted
-                [qsub_path],
-                capture_output=True,
-                timeout=5,
-                check=False,
-            )
-            return result.returncode == 0
-        except Exception:
-            return False
+        return shutil.which("qsub") is not None
 
     def run(
         self,
@@ -226,13 +222,12 @@ class PBSBackend(CMCBackend):
             shard_results = self._load_results(result_files)
 
         # Combine samples
+        # P2-R6-01: Use config.combination_method directly; CMCConfig always
+        # has this field (defaults to "robust_consensus_mc"). The stale
+        # "weighted_gaussian" fallback was misleading and incorrect.
         combined = combine_shard_samples(
             shard_results,
-            method=(
-                config.combination_method
-                if hasattr(config, "combination_method")
-                else "weighted_gaussian"
-            ),
+            method=config.combination_method,
         )
 
         logger.info("PBSBackend: All jobs completed successfully")
@@ -452,7 +447,9 @@ class PBSBackend(CMCBackend):
             data = np.load(path, allow_pickle=False)
 
             # Reconstruct samples dict from prefixed arrays
-            param_names = list(data["param_names"])
+            # P3-R6-01: .tolist() converts numpy string scalars to Python str,
+            # matching the convention in io.py and downstream string comparisons.
+            param_names = data["param_names"].tolist()
             samples_dict = {
                 name: data[f"sample_{name}"]
                 for name in param_names

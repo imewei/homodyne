@@ -335,7 +335,9 @@ def create_diagnostics_dict(
         "divergence_rate": divergence_rate,
         "max_r_hat": max(r_hat_values) if r_hat_values else np.nan,
         "min_ess_bulk": min(ess_values) if ess_values else np.nan,
-        "min_ess_tail": min(ess_tail.values()) if ess_tail else np.nan,
+        "min_ess_tail": min(
+            (v for v in ess_tail.values() if not np.isnan(v)), default=np.nan
+        ),
         "all_r_hat_ok": all(v <= DEFAULT_MAX_RHAT for v in r_hat_values),
         "all_ess_ok": all(v >= DEFAULT_MIN_ESS for v in ess_values),
         "warnings": warnings,

@@ -10,6 +10,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Float64 must be enabled BEFORE the first JAX import (project rule #8).
+os.environ.setdefault("JAX_ENABLE_X64", "1")
+
 import numpy as np
 import pytest
 

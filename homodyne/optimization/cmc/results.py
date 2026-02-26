@@ -261,9 +261,12 @@ class CMCResult:
                 # Skip _z parameters - they are z-space samples, not original-space values
 
         # Compute covariance (requires at least 2 samples)
+        # P2-R6-03: Guard against param_names entries absent from samples
+        # (e.g. deterministic sites not returned by get_samples, failed shards).
+        present_names = [n for n in param_names if n in mcmc_samples.samples]
         all_samples = np.column_stack(
-            [mcmc_samples.samples[name].flatten() for name in param_names]
-        )
+            [mcmc_samples.samples[name].flatten() for name in present_names]
+        ) if present_names else np.zeros((0, 0))
         if all_samples.shape[0] < 2:
             # Not enough samples for covariance - return zeros
             covariance = np.zeros((all_samples.shape[1], all_samples.shape[1]))
