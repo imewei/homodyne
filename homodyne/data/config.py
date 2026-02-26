@@ -195,8 +195,13 @@ def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
             raise XPCSConfigurationError(f"Empty or invalid YAML file: {config_path}")
 
         logger.debug(f"Loaded YAML configuration from: {config_path}")
-        # Type assertion to help mypy
-        assert isinstance(config_data, dict)
+        # Validate root is a dict — assert is stripped with -O flag and raises
+        # AssertionError (wrong type). Use a proper domain exception instead.
+        if not isinstance(config_data, dict):
+            raise XPCSConfigurationError(
+                f"YAML file must contain a mapping at root level, got "
+                f"{type(config_data).__name__}: {config_path}"
+            )
         return config_data
 
     except yaml_module.YAMLError as e:
@@ -228,8 +233,13 @@ def load_json_config(config_path: str | Path) -> dict[str, Any]:
 
         logger.debug(f"Loaded JSON configuration from: {config_path}")
         logger.info("Consider migrating to YAML format for improved readability")
-        # Type assertion to help mypy
-        assert isinstance(config_data, dict)
+        # Validate root is a dict — assert is stripped with -O flag and raises
+        # AssertionError (wrong type). Use a proper domain exception instead.
+        if not isinstance(config_data, dict):
+            raise XPCSConfigurationError(
+                f"JSON file must contain an object at root level, got "
+                f"{type(config_data).__name__}: {config_path}"
+            )
         return config_data
 
     except json.JSONDecodeError as e:

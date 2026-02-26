@@ -37,7 +37,11 @@ def set_mode(mode: str) -> bool:
         print(f"Valid modes: {', '.join(VALID_MODES)}", file=sys.stderr)
         return False
 
-    CONFIG_FILE.write_text(mode + "\n")
+    try:
+        CONFIG_FILE.write_text(mode + "\n")
+    except OSError as e:
+        print(f"Error: Cannot write XLA mode config to {CONFIG_FILE}: {e}", file=sys.stderr)
+        return False
     print(f"✓ XLA mode set to: {mode}")
 
     # Show what this means

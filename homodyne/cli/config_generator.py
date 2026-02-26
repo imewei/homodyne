@@ -27,6 +27,7 @@ except ImportError:
     HAS_RUAMEL = False
 
 from homodyne.config.manager import ConfigManager
+from homodyne.utils.path_validation import PathValidationError, validate_save_path
 
 
 def _yaml_escape_string(s: str) -> str:
@@ -287,6 +288,18 @@ def interactive_builder() -> dict[str, Any]:
 
     # Get template
     template_path = get_template_path(mode)
+
+    # Validate output path before creating directories to prevent path traversal.
+    try:
+        output_path = validate_save_path(
+            output_path,
+            allowed_extensions=(".yaml", ".yml"),
+            require_parent_exists=False,
+            allow_absolute=True,
+        )
+    except (PathValidationError, ValueError) as e:
+        print(f"Error: Invalid output path — {e}", file=sys.stderr)
+        return {}
 
     # Save configuration with comment preservation
     output_path.parent.mkdir(parents=True, exist_ok=True)

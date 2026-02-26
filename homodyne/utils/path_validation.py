@@ -224,7 +224,7 @@ def _sanitize_log_path(path: str, max_length: int = 50) -> str:
         Sanitized path safe for logging.
     """
     # Remove potentially dangerous characters for log injection
-    sanitized = path.replace("\n", "\\n").replace("\r", "\\r")
+    sanitized = path.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
 
     # Truncate if too long (hide potentially sensitive deep paths)
     if len(sanitized) > max_length:

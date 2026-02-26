@@ -1895,7 +1895,9 @@ class XPCSDataLoader:
         except ImportError as e:
             logger.warning(f"Quality control system not available: {e}")
             return None
-        except Exception as e:
+        except (ValueError, KeyError, AttributeError, TypeError) as e:
+            # Narrowed from broad Exception: only catch configuration/setup errors.
+            # MemoryError, SystemExit, KeyboardInterrupt must propagate.
             logger.error(f"Failed to initialize quality control: {e}")
             return None
 
@@ -2007,7 +2009,10 @@ class XPCSDataLoader:
                 f"Preprocessing pipeline not available: {e}. Using original data.",
             )
             return data
-        except Exception as e:
+        except (ValueError, KeyError, IndexError, RuntimeError) as e:
+            # Narrowed from broad Exception: only catch expected processing errors.
+            # Programming bugs (AttributeError, TypeError) and system errors
+            # (MemoryError, KeyboardInterrupt) must propagate without swallowing.
             logger.error(f"Unexpected error in preprocessing pipeline: {e}")
 
             # Check fallback setting

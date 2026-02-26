@@ -555,16 +555,23 @@ def _compute_data_statistics(data: dict[str, Any], report: DataQualityReport) ->
                     "shape": arr.shape,
                     "dtype": str(arr.dtype),
                     "mean": float(np.mean(arr)),
-                    "std": float(np.std(arr)),
+                    "std": float(np.nanstd(arr)) if arr.size > 0 else 0.0,
                     "min": float(np.min(arr)),
                     "max": float(np.max(arr)),
                     "finite_fraction": float(np.sum(np.isfinite(arr)) / arr.size),
                     # sum/first/last are used by _identify_changed_components
                     # as a change-detection fingerprint. Must be stored here or
                     # incremental validation always falls back to full re-validation.
-                    "sum": float(np.sum(arr)) if arr.size > 0 else 0.0,
-                    "first": float(arr.flat[0]) if arr.size > 0 else 0.0,
-                    "last": float(arr.flat[-1]) if arr.size > 0 else 0.0,
+                    # Use nan-safe reductions so NaN-containing arrays still produce
+                    # stable, finite fingerprints (np.sum/std propagate NaN →
+                    # np.nan != np.nan is True → cache miss on every call).
+                    "sum": float(np.nansum(arr)) if arr.size > 0 else 0.0,
+                    "first": (
+                        float(arr.flat[0]) if arr.size > 0 and np.isfinite(arr.flat[0]) else 0.0
+                    ),
+                    "last": (
+                        float(arr.flat[-1]) if arr.size > 0 and np.isfinite(arr.flat[-1]) else 0.0
+                    ),
                 }
 
         report.data_statistics = stats
@@ -945,10 +952,16 @@ def _compute_data_hash(data: dict[str, Any]) -> str:
             # Use shape and checksum for arrays
             arr = np.asarray(value)
             if arr.size > 0:
-                # More robust hash: shape + sum + std + first/last/middle values
+                # More robust hash: shape + sum + std + first/last/middle values.
+                # Use nan-safe reductions: np.sum/std return NaN for arrays with
+                # non-finite values, making np.nan != np.nan always True → every
+                # hash comparison differs → persistent cache miss. np.nansum/nanstd
+                # produce stable finite fingerprints for NaN-containing arrays.
+                _first = arr.flat[0] if np.isfinite(arr.flat[0]) else 0.0
+                _last = arr.flat[-1] if np.isfinite(arr.flat[-1]) else 0.0
                 fingerprint = (
-                    f"{key}:{arr.shape}:{np.sum(arr):.15g}:"
-                    f"{np.std(arr):.15g}:{arr.flat[0]:.15g}:{arr.flat[-1]:.15g}"
+                    f"{key}:{arr.shape}:{np.nansum(arr):.15g}:"
+                    f"{np.nanstd(arr):.15g}:{float(_first):.15g}:{float(_last):.15g}"
                 )
                 hash_data.append(fingerprint)
             else:
@@ -1030,9 +1043,11 @@ def _identify_changed_components(
                 # Richer change detection: shape + sum + std + first + last
                 # Matches the fingerprint stored by _compute_data_statistics.
                 if arr.size > 0:
+                    _first = float(arr.flat[0]) if np.isfinite(arr.flat[0]) else 0.0
+                    _last = float(arr.flat[-1]) if np.isfinite(arr.flat[-1]) else 0.0
                     current_signature = (
-                        f"{arr.shape}:{np.sum(arr):.15g}:{np.std(arr):.15g}"
-                        f":{arr.flat[0]:.15g}:{arr.flat[-1]:.15g}"
+                        f"{arr.shape}:{np.nansum(arr):.15g}:{np.nanstd(arr):.15g}"
+                        f":{_first:.15g}:{_last:.15g}"
                     )
                 else:
                     current_signature = f"{arr.shape}:0"

@@ -444,6 +444,14 @@ class AnalysisSummaryLogger:
                 "memory_peak_gb": record.memory_peak_gb,
             }
 
+        # Sanitize metrics so NaN/Inf floats (which can occur in degenerate
+        # runs) do not cause json.dump to fail or produce invalid JSON output.
+        # Import lazily to avoid circular dependency (logging ← json_utils).
+        try:
+            from homodyne.io.json_utils import json_safe as _json_safe
+        except ImportError:
+            _json_safe = lambda x: x  # noqa: E731 — fallback if io not available
+
         return {
             "run_id": self.run_id,
             "analysis_mode": self.analysis_mode,
@@ -451,7 +459,7 @@ class AnalysisSummaryLogger:
             "total_runtime_s": total_runtime,
             "config_summary": self._config_summary,  # T054
             "phases": phases_dict,
-            "metrics": self._metrics,
+            "metrics": _json_safe(self._metrics),
             "output_files": [str(p) for p in self._output_files],
             "warning_count": self._warning_count,
             "error_count": self._error_count,
