@@ -418,7 +418,14 @@ class StratifiedResidualFunction:
         for residual.py). The closures capture stable values (t1_unique, q, L, dt)
         while physical_params is passed as an explicit argument.
         """
-        dt_value = self._chunk_dt if self._chunk_dt is not None else 0.001
+        if self._chunk_dt is None:
+            self.logger.warning(
+                "StratifiedResidualFunction: dt not set (chunk_dt is None); "
+                "using dt=0.001 s as fallback. Physics factors may be incorrect."
+            )
+            dt_value = 0.001
+        else:
+            dt_value = self._chunk_dt
 
         # Per-angle scaling: physical_params, phi, contrast, offset all vary
         def _g2_per_angle(

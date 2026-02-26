@@ -2020,12 +2020,12 @@ class NLSQWrapper(NLSQAdapterBase):
                             gtol=1e-6,
                             ftol=1e-6,
                             max_nfev=5000,
-                            verbose=2,
+                            verbose=0,
                             stability="auto",
                         )
                         info = {}
 
-                    logger.info("🔍 NLSQ Result Analysis:")
+                    logger.info("NLSQ Result Analysis:")
                     logger.info(f"  p0 (initial):  {validated_params}")
                     logger.info(f"  popt (fitted): {popt}")
                     logger.info(
@@ -2043,7 +2043,7 @@ class NLSQWrapper(NLSQAdapterBase):
 
                     if params_unchanged:
                         logger.warning(
-                            "⚠️  Optimization failure: Parameters unchanged from initial guess!\n"
+                            "Optimization failure: Parameters unchanged from initial guess!\n"
                             "   This suggests curve_fit returned immediately without optimizing.\n"
                             "   Possible causes: (1) Already at optimum, (2) Singular Jacobian, (3) Bounds too tight"
                         )
@@ -2051,7 +2051,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     if uncertainties_zero:
                         zero_unc_indices = np.where(np.abs(np.diag(pcov)) < 1e-15)[0]
                         logger.warning(
-                            f"⚠️  Degenerate covariance: Zero uncertainties for parameters at indices {zero_unc_indices}\n"
+                            f"Degenerate covariance: Zero uncertainties for parameters at indices {zero_unc_indices}\n"
                             f"   pcov diagonal: {np.diag(pcov)}\n"
                             f"   This indicates singular/ill-conditioned Jacobian matrix.\n"
                             f"   Affected parameters may not have been optimized properly."
@@ -2238,7 +2238,10 @@ class NLSQWrapper(NLSQAdapterBase):
                         ", ".join(clips),
                     )
             if final_jtj is not None:
-                pcov = np.linalg.pinv(final_jtj, rcond=1e-10)
+                n_diag_data = len(final_residuals)
+                n_diag_params = len(popt)
+                s2_diag = float(np.sum(final_residuals**2)) / max(n_diag_data - n_diag_params, 1)
+                pcov = s2_diag * np.linalg.pinv(final_jtj, rcond=1e-10)
                 diagnostics_payload["jtj_condition"] = (
                     float(np.linalg.cond(final_jtj)) if final_jtj.size > 0 else None
                 )
@@ -2257,13 +2260,13 @@ class NLSQWrapper(NLSQAdapterBase):
         optimization_improved = cost_reduction > 0.05
 
         if optimization_ran and optimization_improved:
-            status_indicator = "✅ SUCCESS"
+            status_indicator = "SUCCESS"
             status_msg = "Optimization succeeded"
         elif optimization_ran and not optimization_improved:
-            status_indicator = "⚠️ MARGINAL"
+            status_indicator = "MARGINAL"
             status_msg = "Optimization ran but minimal improvement"
         else:
-            status_indicator = "❌ FAILED"
+            status_indicator = "FAILED"
             status_msg = "Optimization failed (0 iterations, no cost reduction)"
 
         logger.info(
@@ -2468,7 +2471,7 @@ class NLSQWrapper(NLSQAdapterBase):
 
                     # DEBUG: Check pcov for singular/degenerate covariance
                     logger.info("=" * 80)
-                    logger.info("🔍 NLSQ curve_fit RESULT DIAGNOSTICS")
+                    logger.info("NLSQ curve_fit RESULT DIAGNOSTICS")
                     logger.info("=" * 80)
                     logger.info(f"  Initial params (p0):  {current_params}")
                     logger.info(f"  Fitted params (popt): {popt}")
@@ -2484,7 +2487,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     if np.any(zero_unc_mask):
                         zero_indices = np.where(zero_unc_mask)[0]
                         logger.warning(
-                            f"⚠️  ZERO UNCERTAINTIES detected for parameters at indices: {zero_indices}"
+                            f"ZERO UNCERTAINTIES detected for parameters at indices: {zero_indices}"
                         )
                         logger.warning(
                             "   This indicates singular/ill-conditioned Jacobian matrix!"
@@ -3164,7 +3167,7 @@ class NLSQWrapper(NLSQAdapterBase):
         # Not user-configurable — this ensures deterministic data ordering
         # for consistent NLSQ convergence across runs.
         shuffle_seed = 42
-        rng = np.random.RandomState(shuffle_seed)
+        rng = np.random.RandomState(shuffle_seed)  # noqa: NPY002 — keep for reproducibility
         perm = rng.permutation(len(phi_stratified))
         phi_stratified = phi_stratified[perm]
         t1_stratified = t1_stratified[perm]
@@ -4091,12 +4094,13 @@ class NLSQWrapper(NLSQAdapterBase):
         if params is None:
             return  # Cannot update without parameters
         if loss < self.best_loss:
+            prev_best = self.best_loss
             self.best_params = params.copy()
             self.best_loss = loss
             self.best_batch_idx = batch_idx
             logger.info(
                 f"New best loss: {loss:.6e} at batch {batch_idx} "
-                f"(improved from {self.best_loss:.6e})"
+                f"(improved from {prev_best:.6e})"
             )
 
     def _fit_with_streaming_optimizer(
@@ -4965,7 +4969,7 @@ class NLSQWrapper(NLSQAdapterBase):
             xtol=opt_xtol,  # Parameter tolerance (from config)
             gtol=opt_gtol,  # Gradient tolerance (from config)
             max_nfev=opt_max_nfev,  # Max function evaluations (from config)
-            verbose=2,  # Show progress
+            verbose=0,  # Suppress NLSQ internal output (use structured logging)
         )
 
         optimization_time = time.perf_counter() - optimization_start
@@ -5029,8 +5033,8 @@ class NLSQWrapper(NLSQAdapterBase):
                         )
 
                     logger.warning(
-                        f"⚠️  Parameter '{param_name}' violated bounds: "
-                        f"{original_value:.6e} ∉ [{lower_bounds[i]:.6e}, {upper_bounds[i]:.6e}]"
+                        f"Parameter '{param_name}' violated bounds: "
+                        f"{original_value:.6e} not in [{lower_bounds[i]:.6e}, {upper_bounds[i]:.6e}]"
                     )
                     logger.warning(f"    Clipped to: {popt[i]:.6e} (bounds enforced)")
 
@@ -5320,7 +5324,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     logger.warning("=" * 80)
                     logger.warning("SHEAR COLLAPSE WARNING")
                     logger.warning(
-                        f"gamma_dot_t0 = {gamma_dot_t0_value:.2e} s⁻¹ is effectively zero"
+                        f"gamma_dot_t0 = {gamma_dot_t0_value:.2e} s^-1 is effectively zero"
                     )
                     logger.warning(
                         "The model has effectively collapsed to static_isotropic mode."
@@ -5507,7 +5511,15 @@ class NLSQWrapper(NLSQAdapterBase):
         # Extract physics constants from data (v2.14.1+: Full homodyne physics)
         q_val = float(data.q)
         L_val = float(data.L)
-        dt_val = float(getattr(data, "dt", cfg_dict.get("dt", 0.001)))
+        dt_raw = getattr(data, "dt", cfg_dict.get("dt", None))
+        if dt_raw is None:
+            logger.warning(
+                "_fit_with_stratified_least_squares (OOC): dt not found in data or config; "
+                "using dt=0.001 s as fallback."
+            )
+            dt_val = 0.001
+        else:
+            dt_val = float(dt_raw)
 
         # Extract global unique time arrays for meshgrid construction.
         # IMPORTANT: t1 and t2 must remain separate — merging them into a single
@@ -7890,10 +7902,10 @@ class NLSQWrapper(NLSQAdapterBase):
                 logger.warning("=" * 80)
                 logger.warning("SHEAR COLLAPSE WARNING")
                 logger.warning(
-                    f"gamma_dot_t0 = {gamma_dot_t0_value:.2e} s⁻¹ is effectively zero"
+                    f"gamma_dot_t0 = {gamma_dot_t0_value:.2e} s^-1 is effectively zero"
                 )
                 logger.warning("")
-                logger.warning("This means the shear contribution to g₁ is negligible.")
+                logger.warning("This means the shear contribution to g1 is negligible.")
                 logger.warning(
                     "The model has effectively collapsed to static_isotropic mode."
                 )

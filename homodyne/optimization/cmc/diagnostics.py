@@ -993,6 +993,19 @@ def detect_bimodal(
     """
     samples_2d = samples.reshape(-1, 1)
 
+    # GaussianMixture requires at least n_components (2) samples.
+    # Return a non-bimodal result for degenerate inputs rather than raising.
+    if len(samples_2d) < 2:
+        sample_val = float(samples_2d[0, 0]) if len(samples_2d) == 1 else 0.0
+        return BimodalResult(
+            is_bimodal=False,
+            weights=(1.0, 0.0),
+            means=(sample_val, sample_val),
+            stds=(0.0, 0.0),
+            separation=0.0,
+            relative_separation=0.0,
+        )
+
     gmm = GaussianMixture(n_components=2, random_state=42, n_init=3)
     gmm.fit(samples_2d)
 

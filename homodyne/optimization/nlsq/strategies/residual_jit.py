@@ -306,6 +306,7 @@ class StratifiedResidualFunctionJIT:
             physical_params = params_all[2:]
 
         # Compute theoretical g2 using vectorized computation
+        # NOTE: Warning for dt=None is emitted in __call__ (outside JIT trace)
         dt_value = self.dt if self.dt is not None else 0.001
         if self.use_fixed_scaling or self.per_angle_scaling:
             # Vectorize over phi with corresponding contrast/offset
@@ -460,6 +461,11 @@ class StratifiedResidualFunctionJIT:
             Residuals as JAX array (n_chunks * max_chunk_size,) with zeros for padding
             Note: Padding zeros don't affect optimization but increase array size
         """
+        if self.dt is None:
+            self.logger.warning(
+                "StratifiedResidualFunctionJIT: dt is None; "
+                "using dt=0.001 s as fallback. Physics factors may be incorrect."
+            )
         params_jax = jnp.asarray(params, dtype=jnp.float64)
         residuals_jax = self._residual_fn_jit(params_jax)
         return cast(

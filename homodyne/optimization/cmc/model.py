@@ -977,10 +977,16 @@ def xpcs_model_reparameterized(
 
         log_D_ref_loc = reparam_vals.get("log_D_ref", 10.0)  # ~exp(10) ≈ 22K
         log_D_ref_scale = reparam_uncs.get("log_D_ref", 1.0)
-        # Prior tempering: widen by sqrt(K)
+        # Prior tempering: widen by sqrt(K), capped at 10 log-units.
+        # D0 = exp(log_D_ref) * t_ref^(-alpha); a ±10 deviation in log space
+        # spans exp(-10)..exp(10) ≈ 4.5e-5..22026 relative to the reference,
+        # covering any physically plausible diffusion coefficient. Without a
+        # cap, large K (e.g. 1000) gives scale≈31.6 log-units, spanning 27
+        # orders of magnitude and destroying NUTS warmup efficiency.
+        log_D_ref_scale_tempered = min(log_D_ref_scale * prior_scale, 10.0)
         log_D_ref = numpyro.sample(
             "log_D_ref",
-            dist.Normal(loc=log_D_ref_loc, scale=log_D_ref_scale * prior_scale),
+            dist.Normal(loc=log_D_ref_loc, scale=log_D_ref_scale_tempered),
         )
         D_ref = jnp.exp(log_D_ref)
 
@@ -1020,10 +1026,12 @@ def xpcs_model_reparameterized(
             # Sample log_gamma_ref where gamma_ref = gamma_dot_t0 * t_ref^beta
             log_gamma_ref_loc = reparam_vals.get("log_gamma_ref", -5.0)
             log_gamma_ref_scale = reparam_uncs.get("log_gamma_ref", 1.0)
+            # Cap at 10 log-units (same rationale as log_D_ref_scale_tempered above).
+            log_gamma_ref_scale_tempered = min(log_gamma_ref_scale * prior_scale, 10.0)
             log_gamma_ref = numpyro.sample(
                 "log_gamma_ref",
                 dist.Normal(
-                    loc=log_gamma_ref_loc, scale=log_gamma_ref_scale * prior_scale
+                    loc=log_gamma_ref_loc, scale=log_gamma_ref_scale_tempered
                 ),
             )
             # Recover gamma_dot_t0 = exp(log_gamma_ref) * t_ref^(-beta)

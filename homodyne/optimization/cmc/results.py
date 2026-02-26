@@ -408,19 +408,33 @@ class CMCResult:
             elif not np.all(np.isfinite(self.samples[param])):
                 warnings.append(f"Non-finite values in parameter: {param}")
 
-        # Check for contrast/offset parameters
+        # Check for contrast/offset parameters — only in individual mode.
+        # auto mode uses "contrast"/"offset" sites (not indexed), and
+        # constant/constant_averaged modes have no sampled contrast/offset sites.
+        # Checking for contrast_0..N in those modes produces spurious warnings.
         if n_phi is None:
-            # Infer from samples
+            # Infer from samples (only count indexed per-angle sites)
             contrast_params = [p for p in self.param_names if p.startswith("contrast_")]
-            n_phi = len(contrast_params) if contrast_params else 1
+            n_phi = len(contrast_params) if contrast_params else 0
 
-        for i in range(n_phi):
-            contrast_name = f"contrast_{i}"
-            offset_name = f"offset_{i}"
-            if contrast_name not in self.samples:
-                warnings.append(f"Missing per-angle parameter: {contrast_name}")
-            if offset_name not in self.samples:
-                warnings.append(f"Missing per-angle parameter: {offset_name}")
+        if n_phi > 0:
+            # Individual mode: verify all indexed per-angle sites are present
+            for i in range(n_phi):
+                contrast_name = f"contrast_{i}"
+                offset_name = f"offset_{i}"
+                if contrast_name not in self.samples:
+                    warnings.append(f"Missing per-angle parameter: {contrast_name}")
+                if offset_name not in self.samples:
+                    warnings.append(f"Missing per-angle parameter: {offset_name}")
+        elif "contrast" not in self.samples and "contrast_0" not in self.samples:
+            # Neither auto-mode site nor individual-mode site found;
+            # only warn if the mode actually expects sampled contrast/offset
+            if self.analysis_mode not in ("constant", "constant_averaged"):
+                warnings.append(
+                    "No contrast/offset sites found in posterior samples. "
+                    "Expected 'contrast'/'offset' (auto mode) or 'contrast_0'/'offset_0' "
+                    "(individual mode). Use constant/constant_averaged mode if scaling is fixed."
+                )
 
         # Check diagnostic values
         max_r_hat = max(self.r_hat.values()) if self.r_hat else float("nan")
