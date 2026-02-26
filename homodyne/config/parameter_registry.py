@@ -265,8 +265,13 @@ class ParameterRegistry:
         KeyError
             If parameter name is unknown
         """
-        # Handle per-angle parameter names (e.g., contrast_0 -> contrast)
-        base_name = name.split("_")[0] if "_" in name else name
+        # Try exact name first
+        if name in self._PARAMETERS:
+            return self._PARAMETERS[name]
+
+        # Strip per-angle numeric suffix (e.g., contrast_0 -> contrast, offset_12 -> offset)
+        import re
+        base_name = re.sub(r"_\d+$", "", name)
 
         if base_name not in self._PARAMETERS:
             raise KeyError(
@@ -565,7 +570,7 @@ class ParameterRegistry:
             return "static_isotropic"
         elif "static" in mode_lower:
             return "static"
-        elif "laminar" in mode_lower or "flow" in mode_lower:
+        elif "laminar" in mode_lower:
             return "laminar_flow"
         else:
             raise ValueError(

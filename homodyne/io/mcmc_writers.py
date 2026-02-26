@@ -11,6 +11,7 @@ from typing import Any, Literal
 import numpy as np
 
 from homodyne.config.parameter_names import get_physical_param_names
+from homodyne.io.json_utils import json_safe as _json_safe
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -94,15 +95,15 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
                 convergence_dict["all_chains_converged"] = bool(
                     all(v < 1.1 for v in r_hat_values)
                 )
-                convergence_dict["min_r_hat"] = float(min(r_hat_values))
-                convergence_dict["max_r_hat"] = float(max(r_hat_values))
+                convergence_dict["min_r_hat"] = _json_safe(float(min(r_hat_values)))
+                convergence_dict["max_r_hat"] = _json_safe(float(max(r_hat_values)))
         else:
             r_hat = np.asarray(result.r_hat)
             convergence_dict = param_dict["convergence"]
             assert isinstance(convergence_dict, dict)
             convergence_dict["all_chains_converged"] = bool(np.all(r_hat < 1.1))
-            convergence_dict["min_r_hat"] = float(np.min(r_hat))
-            convergence_dict["max_r_hat"] = float(np.max(r_hat))
+            convergence_dict["min_r_hat"] = _json_safe(float(np.min(r_hat)))
+            convergence_dict["max_r_hat"] = _json_safe(float(np.max(r_hat)))
 
     if (
         hasattr(result, "effective_sample_size")
@@ -115,33 +116,33 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
             if ess_values:
                 convergence_dict = param_dict["convergence"]
                 assert isinstance(convergence_dict, dict)
-                convergence_dict["min_ess"] = float(min(ess_values))
+                convergence_dict["min_ess"] = _json_safe(float(min(ess_values)))
         else:
             ess = np.asarray(result.effective_sample_size)
             convergence_dict = param_dict["convergence"]
             assert isinstance(convergence_dict, dict)
-            convergence_dict["min_ess"] = float(np.min(ess))
+            convergence_dict["min_ess"] = _json_safe(float(np.min(ess)))
 
     if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
         convergence_dict = param_dict["convergence"]
         assert isinstance(convergence_dict, dict)
-        convergence_dict["acceptance_rate"] = float(result.acceptance_rate)
+        convergence_dict["acceptance_rate"] = _json_safe(float(result.acceptance_rate))
 
     # Add scaling parameters (contrast, offset)
     if hasattr(result, "mean_contrast"):
         parameters_dict = param_dict["parameters"]
         assert isinstance(parameters_dict, dict)
         parameters_dict["contrast"] = {
-            "mean": float(result.mean_contrast),
-            "std": float(getattr(result, "std_contrast", 0.0)),
+            "mean": _json_safe(float(result.mean_contrast)),
+            "std": _json_safe(float(getattr(result, "std_contrast", 0.0))),
         }
 
     if hasattr(result, "mean_offset"):
         parameters_dict = param_dict["parameters"]
         assert isinstance(parameters_dict, dict)
         parameters_dict["offset"] = {
-            "mean": float(result.mean_offset),
-            "std": float(getattr(result, "std_offset", 0.0)),
+            "mean": _json_safe(float(result.mean_offset)),
+            "std": _json_safe(float(getattr(result, "std_offset", 0.0))),
         }
 
     # Add physical parameters
@@ -185,8 +186,8 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
         for i, name in enumerate(param_names):
             if i < len(mean_params_arr):
                 parameters_dict[name] = {
-                    "mean": float(mean_params_arr[i]),
-                    "std": float(std_params_arr[i]) if i < len(std_params_arr) else 0.0,
+                    "mean": _json_safe(float(mean_params_arr[i])),
+                    "std": _json_safe(float(std_params_arr[i])) if i < len(std_params_arr) else 0.0,
                 }
 
     return param_dict
@@ -234,7 +235,7 @@ def create_mcmc_analysis_dict(
             max_r_hat = max(r_hat_values) if r_hat_values else None
         else:
             r_hat = np.asarray(result.r_hat)
-            max_r_hat = np.max(r_hat)
+            max_r_hat = float(np.max(r_hat))
 
         if max_r_hat is not None:
             if max_r_hat < 1.05:
@@ -294,7 +295,7 @@ def create_mcmc_analysis_dict(
             "n_time_points": n_time_points,
             "total_data_points": total_data_points,
             "q_value": (
-                float(data.get("wavevector_q_list", [0.0])[0])
+                _json_safe(float(data.get("wavevector_q_list", [0.0])[0]))
                 if data.get("wavevector_q_list") is not None
                 else 0.0
             ),
@@ -303,11 +304,11 @@ def create_mcmc_analysis_dict(
             "n_samples": getattr(result, "n_samples", 0),
             "n_warmup": getattr(result, "n_warmup", 0),
             "n_chains": getattr(result, "n_chains", 1),
-            "execution_time": float(
+            "execution_time": _json_safe(float(
                 getattr(
                     result, "execution_time", getattr(result, "computation_time", 0.0)
                 )
-            ),
+            )),
         },
     }
 
@@ -383,8 +384,8 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
                 per_param.append(
                     {
                         "name": param_name,
-                        "r_hat": float(r_hat_val) if r_hat_val is not None else None,
-                        "ess": float(ess_val) if ess_val is not None else None,
+                        "r_hat": _json_safe(float(r_hat_val)) if r_hat_val is not None else None,
+                        "ess": _json_safe(float(ess_val)) if ess_val is not None else None,
                         "converged": bool(r_hat_val is not None and r_hat_val < 1.1),
                         "deterministic": param_name in deterministic_params,
                     }
@@ -422,8 +423,8 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
                     per_param.append(
                         {
                             "name": name,
-                            "r_hat": float(r_hat[i]),
-                            "ess": float(ess_val),
+                            "r_hat": _json_safe(float(r_hat[i])),
+                            "ess": _json_safe(float(ess_val)),
                             "converged": bool(r_hat[i] < 1.1),
                             "deterministic": name in deterministic_params,
                         }
@@ -440,8 +441,8 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
 
     # Sampling efficiency
     if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
-        diagnostics_dict["sampling_efficiency"]["acceptance_rate"] = float(
-            result.acceptance_rate
+        diagnostics_dict["sampling_efficiency"]["acceptance_rate"] = _json_safe(
+            float(result.acceptance_rate)
         )
         diagnostics_dict["sampling_efficiency"]["target_acceptance"] = 0.80
 
@@ -458,7 +459,7 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
         ess = np.asarray(result.ess)
         total_samples = result.n_samples * getattr(result, "n_chains", 1)
         if total_samples > 0:
-            ess_ratio = float(np.mean(ess) / total_samples)
+            ess_ratio = _json_safe(float(np.mean(ess) / total_samples))
             diagnostics_dict["posterior_checks"]["effective_sample_size_ratio"] = (
                 ess_ratio
             )
@@ -490,8 +491,8 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
                 fallback_entries.append(
                     {
                         "name": name,
-                        "r_hat": float(r_hat_val) if r_hat_val is not None else None,
-                        "ess": float(ess_val) if ess_val is not None else None,
+                        "r_hat": _json_safe(float(r_hat_val)) if r_hat_val is not None else None,
+                        "ess": _json_safe(float(ess_val)) if ess_val is not None else None,
                         "converged": bool(
                             r_hat_val is not None
                             and r_hat_val
@@ -536,10 +537,10 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
 
             if acceptance_rates:
                 shard_summary["acceptance_rate_stats"] = {
-                    "mean": float(np.mean(acceptance_rates)),
-                    "min": float(np.min(acceptance_rates)),
-                    "max": float(np.max(acceptance_rates)),
-                    "std": float(np.std(acceptance_rates)),
+                    "mean": _json_safe(float(np.mean(acceptance_rates))),
+                    "min": _json_safe(float(np.min(acceptance_rates))),
+                    "max": _json_safe(float(np.max(acceptance_rates))),
+                    "std": _json_safe(float(np.std(acceptance_rates))),
                 }
 
             diagnostics_dict["cmc_specific"]["shard_summary"] = shard_summary
@@ -561,15 +562,15 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
                 if "n_shards_total" in cmc_diag:
                     overall_metrics["n_shards_total"] = int(cmc_diag["n_shards_total"])
                 if "weighted_product_std" in cmc_diag:
-                    overall_metrics["weighted_product_std"] = float(
+                    overall_metrics["weighted_product_std"] = _json_safe(float(
                         cmc_diag["weighted_product_std"]
-                    )
+                    ))
                 if "combination_time" in cmc_diag:
-                    overall_metrics["combination_time"] = float(
+                    overall_metrics["combination_time"] = _json_safe(float(
                         cmc_diag["combination_time"]
-                    )
+                    ))
                 if "success_rate" in cmc_diag:
-                    overall_metrics["success_rate"] = float(cmc_diag["success_rate"])
+                    overall_metrics["success_rate"] = _json_safe(float(cmc_diag["success_rate"]))
 
                 diagnostics_dict["cmc_specific"]["overall_diagnostics"] = (
                     overall_metrics

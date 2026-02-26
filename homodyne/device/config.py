@@ -182,7 +182,11 @@ def detect_hardware() -> HardwareConfig:
         if nodefile and os.path.exists(nodefile):
             try:
                 with open(nodefile) as f:
-                    num_nodes = len(set(f.read().splitlines()))
+                    # Strip whitespace and skip blank lines before deduplication;
+                    # PBS nodefiles often contain a trailing newline or blank lines.
+                    num_nodes = len(
+                        {line.strip() for line in f.read().splitlines() if line.strip()}
+                    )
                 logger.info(f"PBS cluster detected: {num_nodes} nodes")
             except Exception as e:
                 logger.warning(f"Failed to parse PBS_NODEFILE: {e}")

@@ -70,10 +70,9 @@ def detect_cpu_info() -> dict[str, Any]:
             with open("/proc/cpuinfo") as f:
                 cpuinfo = f.read()
                 for line in cpuinfo.split("\n"):
-                    if "model name" in line:
+                    if "model name" in line and info["cpu_brand"] == "Unknown":
                         info["cpu_brand"] = line.split(":")[1].strip()
-                        break
-                    if "flags" in line or "Features" in line:
+                    elif ("flags" in line or "Features" in line) and not info["supports_avx"]:
                         flags = line.split(":")[1].strip().split()
                         info["supports_avx"] = "avx" in flags
                         info["supports_avx512"] = any(
@@ -226,8 +225,10 @@ def _set_cpu_environment_variables(
 
     # OpenMP configuration
     os.environ["OMP_NUM_THREADS"] = str(num_threads)
-    os.environ["OMP_PROC_BIND"] = "true"
-    os.environ["OMP_PLACES"] = "cores"
+    if "OMP_PROC_BIND" not in os.environ:
+        os.environ["OMP_PROC_BIND"] = "true"
+    if "OMP_PLACES" not in os.environ:
+        os.environ["OMP_PLACES"] = "cores"
     env_vars["OMP_NUM_THREADS"] = str(num_threads)
 
     # Intel MKL configuration (if Intel CPU)
