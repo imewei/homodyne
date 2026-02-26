@@ -230,7 +230,12 @@ class PhiAngleFilter:
         }
 
         for min_angle, max_angle in self.target_ranges:
-            mask = (phi_angles_array >= min_angle) & (phi_angles_array <= max_angle)
+            # Mirror the wrapped-range logic from filter_angles_for_optimization:
+            # when min > max the range spans the ±180° boundary and must use |.
+            if min_angle > max_angle:
+                mask = (phi_angles_array >= min_angle) | (phi_angles_array <= max_angle)
+            else:
+                mask = (phi_angles_array >= min_angle) & (phi_angles_array <= max_angle)
             count = np.sum(mask)
             angles_in_range: np.ndarray | list[float] = (
                 phi_angles_array[mask] if count > 0 else []
@@ -348,7 +353,16 @@ if HAS_JAX:
         optimization_mask = jnp.zeros(len(phi_angles_jax), dtype=bool)
 
         for min_angle, max_angle in target_ranges:
-            range_mask = (phi_angles_jax >= min_angle) & (phi_angles_jax <= max_angle)
+            # Handle wrapped ranges (e.g., [170, -170]) spanning ±180° boundary,
+            # mirroring the logic in filter_angles_for_optimization.
+            if min_angle > max_angle:
+                range_mask = (phi_angles_jax >= min_angle) | (
+                    phi_angles_jax <= max_angle
+                )
+            else:
+                range_mask = (phi_angles_jax >= min_angle) & (
+                    phi_angles_jax <= max_angle
+                )
             optimization_mask = optimization_mask | range_mask
 
         # Get indices and filtered angles

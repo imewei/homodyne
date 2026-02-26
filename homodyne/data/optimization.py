@@ -958,18 +958,6 @@ def optimize_for_method_advanced(
         return result
 
 
-# Import guard for new dependencies
-try:
-    import time  # noqa: F811 - Re-import check for dependency verification
-    from collections import (  # noqa: F811 - Re-import check for dependency verification
-        deque,
-    )
-
-    HAS_ADVANCED_DEPS = True
-except ImportError:
-    HAS_ADVANCED_DEPS = False
-    logger.warning("Advanced optimization features may have limited functionality")
-
 # Export main classes and functions
 __all__ = [
     "DatasetInfo",

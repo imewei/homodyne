@@ -37,6 +37,7 @@ Authors: Homodyne Development Team
 Institution: Argonne National Laboratory
 """
 
+import copy
 import hashlib
 import json
 import time
@@ -717,8 +718,10 @@ class PreprocessingPipeline:
 
         logger.debug(f"Applying normalization: {method.value}")
 
+        # Deep-copy non-ndarray values (lists, dicts, etc.) so that downstream
+        # mutations of e.g. "filters_applied" lists do not corrupt the original dict.
         normalized_data = {
-            k: (np.array(v) if isinstance(v, np.ndarray) else v)
+            k: (np.array(v) if isinstance(v, np.ndarray) else copy.deepcopy(v))
             for k, v in data.items()
         }
 
@@ -741,7 +744,9 @@ class PreprocessingPipeline:
                 c2_matrix = c2_exp[i]
                 mean_val = np.mean(c2_matrix)
                 std_val = np.std(c2_matrix)
-                if std_val != 0:
+                # Use epsilon guard instead of exact float equality: std_val near
+                # zero (subnormal) would pass != 0 but cause overflow on division.
+                if abs(std_val) > np.finfo(np.float64).eps:
                     normalized_data["c2_exp"][i] = (c2_matrix - mean_val) / std_val
                 else:
                     logger.warning(
@@ -821,8 +826,10 @@ class PreprocessingPipeline:
         c2_exp = data["c2_exp"]
         logger.debug(f"Applying noise reduction: {method.value}")
 
+        # Deep-copy non-ndarray values (lists, dicts, etc.) so that downstream
+        # mutations of e.g. "filters_applied" lists do not corrupt the original dict.
         denoised_data = {
-            k: (np.array(v) if isinstance(v, np.ndarray) else v)
+            k: (np.array(v) if isinstance(v, np.ndarray) else copy.deepcopy(v))
             for k, v in data.items()
         }
 
