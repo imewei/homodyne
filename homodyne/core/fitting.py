@@ -523,6 +523,7 @@ class UnifiedHomodyneEngine:
         phi: np.ndarray,
         q: float,
         L: float,
+        dt: float | None = None,
     ) -> float:
         """Compute likelihood for unified homodyne model.
 
@@ -542,7 +543,7 @@ class UnifiedHomodyneEngine:
         """
         try:
             # Compute theoretical g1
-            g1_theory = self.theory_engine.compute_g1(params, t1, t2, phi, q, L)
+            g1_theory = self.theory_engine.compute_g1(params, t1, t2, phi, q, L, dt=dt)
             g1_squared = g1_theory**2
 
             # Apply scaling: c2_fitted = c2_theory * contrast + offset
@@ -737,7 +738,7 @@ if JAX_AVAILABLE:
 
         # Process chunks using scan for memory efficiency
         def process_chunk(
-            carry: tuple[Any, Any, Any, Any, int],
+            carry: tuple[Any, Any, Any, Any, Any],
             chunk_data: tuple[Any, Any],
         ) -> tuple[tuple[Any, Any, Any, Any, int], None]:
             theory_chunk, exp_chunk = chunk_data
@@ -754,7 +755,7 @@ if JAX_AVAILABLE:
             return (sum_theory_sq, sum_theory, sum_exp, sum_theory_exp, n_data), None
 
         # Initialize accumulators
-        carry_init = (0.0, 0.0, 0.0, 0.0, 0.0)
+        carry_init = (0.0, 0.0, 0.0, 0.0, 0)
 
         # Process all chunks
         (

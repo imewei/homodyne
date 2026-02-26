@@ -147,7 +147,7 @@ def calculate_diffusion_coefficient(
         time_array[jnp.minimum(1, time_array.shape[0] - 1)] - time_array[0]
     )
     epsilon = jnp.maximum(dt_inferred * 0.5, 1e-8)
-    time_safe = jnp.maximum(time_array, epsilon)
+    time_safe = jnp.where(time_array > epsilon, time_array, epsilon)
 
     # Compute diffusion coefficient
     D_t = D0 * (time_safe**alpha) + D_offset
@@ -190,9 +190,10 @@ def calculate_shear_rate(
         1e-5,
     )
 
-    # Replace near-zero values with dt floor, matching calculate_diffusion_coefficient
-    # This provides a continuous floor instead of exact-zero equality check
-    time_safe = jnp.maximum(time_array, dt)
+    # Replace near-zero values with dt/2 floor, matching calculate_diffusion_coefficient
+    # This provides a continuous floor at the midpoint instead of exact-zero equality check
+    epsilon = jnp.maximum(dt * 0.5, 1e-5)
+    time_safe = jnp.where(time_array > epsilon, time_array, epsilon)
 
     gamma_t = gamma_dot_0 * (time_safe**beta) + gamma_dot_offset
     # Ensure positive values — use jnp.where (not jnp.maximum) to preserve gradients.
@@ -232,8 +233,9 @@ def calculate_shear_rate_cmc(
         1e-5,
     )
 
-    # Replace t=0 with dt
-    time_safe = jnp.where(time_array == 0.0, dt, time_array)
+    # Replace near-zero values with dt/2 floor (symmetric with calculate_shear_rate)
+    epsilon = jnp.maximum(dt * 0.5, 1e-5)
+    time_safe = jnp.where(time_array < epsilon, epsilon, time_array)
 
     gamma_t = gamma_dot_0 * (time_safe**beta) + gamma_dot_offset
     # Ensure positive values — use jnp.where (not jnp.maximum) to preserve gradients.

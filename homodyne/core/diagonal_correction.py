@@ -473,8 +473,9 @@ def _interpolation_correction_numpy(
             if interp_method == "linear":
                 c2_corrected[i, i] = np.mean(y_points)
             elif interp_method == "cubic":
-                # For cubic, need more points - fall back to linear for edges
-                c2_corrected[i, i] = np.mean(y_points)
+                raise NotImplementedError(
+                    "Cubic diagonal correction is not yet implemented. Use method='linear'."
+                )
             else:
                 c2_corrected[i, i] = np.mean(y_points)
         elif i == 0:

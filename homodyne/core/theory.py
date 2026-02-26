@@ -31,6 +31,7 @@ try:
     from homodyne.core.physics_utils import safe_len
 except ImportError:
     jax_available = False
+    safe_len = len
     logger = get_logger(__name__)
     logger.error("Could not import JAX backend - theory computations disabled")
 
@@ -131,6 +132,7 @@ class TheoryEngine:
             L: Sample-detector distance
             contrast: Contrast parameter
             offset: Baseline offset
+            dt: Time step in seconds. Required.
 
         Returns:
             g2 correlation function

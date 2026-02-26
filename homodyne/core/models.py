@@ -424,28 +424,33 @@ class CombinedModel(
         """
         import jax
 
-        # Define single-point g1 computation
-        def compute_g1_single(
-            t1_val: jnp.ndarray, t2_val: jnp.ndarray, phi_val: jnp.ndarray
-        ) -> jnp.ndarray:
-            g1 = self.compute_g1(
-                params,
-                jnp.array([t1_val]),
-                jnp.array([t2_val]),
-                jnp.array([phi_val]),
-                q,
-                L,
-                dt,
+        # Cache the vmap'd function on first call to avoid JIT retrace overhead.
+        # The closure captures `self` — same instance across calls preserves
+        # function identity for JAX's trace cache.
+        if not hasattr(self, "_cached_g1_vmap"):
+
+            def _compute_g1_single(
+                params_inner, t1_val, t2_val, phi_val, q_inner, L_inner, dt_inner
+            ):
+                g1 = self.compute_g1(
+                    params_inner,
+                    jnp.array([t1_val]),
+                    jnp.array([t2_val]),
+                    jnp.array([phi_val]),
+                    q_inner,
+                    L_inner,
+                    dt_inner,
+                )
+                return g1.flatten()[0]
+
+            self._cached_g1_vmap = jax.vmap(
+                _compute_g1_single,
+                in_axes=(None, 0, 0, 0, None, None, None),
             )
-            return g1.flatten()[0]
 
-        # Vectorize over batch dimension
-        compute_g1_vmap = jax.vmap(
-            compute_g1_single,
-            in_axes=(0, 0, 0),
+        result: jnp.ndarray = self._cached_g1_vmap(
+            params, t1_batch, t2_batch, phi_batch, q, L, dt
         )
-
-        result: jnp.ndarray = compute_g1_vmap(t1_batch, t2_batch, phi_batch)
         return result
 
     @log_calls(include_args=False)
