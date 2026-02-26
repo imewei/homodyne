@@ -328,8 +328,9 @@ class TheoryEngine:
 
         # Rough performance estimates (operations per point)
         ops_per_point = {
+            "static": 10,  # Diffusion only
             "static_isotropic": 10,  # Diffusion only
-            "static_anisotropic": 10,  # Diffusion only
+            "static_anisotropic": 15,  # Diffusion with anisotropy
             "laminar_flow": 50,  # Full model with shear
         }
 

@@ -598,27 +598,36 @@ class MinimalLogger:
         created_file: Path | None = None
         if file_path:
             file_path = Path(file_path)
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            created_file = file_path
+            try:
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                logger = logging.getLogger(self._root_logger_name)
+                logger.warning(
+                    f"Cannot create log directory {file_path.parent}: {e}. "
+                    "File logging disabled."
+                )
+                file_path = None  # Skip file handler, continue with console-only
+            if file_path is not None:
+                created_file = file_path
 
-            max_bytes = int(max_size_mb * 1024 * 1024)
-            if max_bytes > 0:
-                file_handler: logging.Handler = RotatingFileHandler(
-                    file_path,
-                    maxBytes=max_bytes,
-                    backupCount=backup_count,
+                max_bytes = int(max_size_mb * 1024 * 1024)
+                if max_bytes > 0:
+                    file_handler: logging.Handler = RotatingFileHandler(
+                        file_path,
+                        maxBytes=max_bytes,
+                        backupCount=backup_count,
+                    )
+                else:
+                    file_handler = logging.FileHandler(file_path)
+                file_handler._homodyne_managed = True  # type: ignore[attr-defined]
+                file_handler.setLevel(_resolve_level(file_level) or root_level)
+                file_handler.setFormatter(
+                    logging.Formatter(
+                        DEFAULT_FORMAT_DETAILED,
+                        datefmt="%Y-%m-%d %H:%M:%S",
+                    )
                 )
-            else:
-                file_handler = logging.FileHandler(file_path)
-            file_handler._homodyne_managed = True  # type: ignore[attr-defined]
-            file_handler.setLevel(_resolve_level(file_level) or root_level)
-            file_handler.setFormatter(
-                logging.Formatter(
-                    DEFAULT_FORMAT_DETAILED,
-                    datefmt="%Y-%m-%d %H:%M:%S",
-                )
-            )
-            root_logger.addHandler(file_handler)
+                root_logger.addHandler(file_handler)
 
         # Default suppression for external libraries (FR-005)
         # These are applied first, then user overrides can override them

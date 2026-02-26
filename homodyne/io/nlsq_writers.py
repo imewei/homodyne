@@ -48,24 +48,27 @@ def save_nlsq_json_files(
     - analysis_results_nlsq.json: Analysis summary and fit quality
     - convergence_metrics.json: Convergence diagnostics and device info
     """
-    # Save parameters.json
-    param_file = output_dir / "parameters.json"
-    with open(param_file, "w") as f:
-        json.dump(param_dict, f, indent=2, default=json_serializer)
-    # T056: Log file path and write completion
-    logger.debug(f"Saved parameters to {param_file}")
+    try:
+        # Save parameters.json
+        param_file = output_dir / "parameters.json"
+        with open(param_file, "w") as f:
+            json.dump(param_dict, f, indent=2, default=json_serializer)
+        # T056: Log file path and write completion
+        logger.debug(f"Saved parameters to {param_file}")
 
-    # Save analysis_results_nlsq.json
-    analysis_file = output_dir / "analysis_results_nlsq.json"
-    with open(analysis_file, "w") as f:
-        json.dump(analysis_dict, f, indent=2, default=json_serializer)
-    logger.debug(f"Saved analysis results to {analysis_file}")
+        # Save analysis_results_nlsq.json
+        analysis_file = output_dir / "analysis_results_nlsq.json"
+        with open(analysis_file, "w") as f:
+            json.dump(analysis_dict, f, indent=2, default=json_serializer)
+        logger.debug(f"Saved analysis results to {analysis_file}")
 
-    # Save convergence_metrics.json
-    convergence_file = output_dir / "convergence_metrics.json"
-    with open(convergence_file, "w") as f:
-        json.dump(convergence_dict, f, indent=2, default=json_serializer)
-    logger.debug(f"Saved convergence metrics to {convergence_file}")
+        # Save convergence_metrics.json
+        convergence_file = output_dir / "convergence_metrics.json"
+        with open(convergence_file, "w") as f:
+            json.dump(convergence_dict, f, indent=2, default=json_serializer)
+        logger.debug(f"Saved convergence metrics to {convergence_file}")
+    except OSError as e:
+        raise OSError(f"Failed to write NLSQ JSON files to {output_dir}: {e}") from e
 
     # T058a: Log file sizes after write completion
     total_size_kb = (

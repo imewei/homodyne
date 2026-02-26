@@ -231,7 +231,7 @@ def create_mcmc_analysis_dict(
 
     if hasattr(result, "r_hat") and result.r_hat is not None:
         if isinstance(result.r_hat, dict):
-            r_hat_values = [v for v in result.r_hat.values() if v is not None]
+            r_hat_values = [v for v in result.r_hat.values() if v is not None and np.isfinite(v)]
             max_r_hat = max(r_hat_values) if r_hat_values else None
         else:
             r_hat = np.asarray(result.r_hat)
@@ -264,7 +264,7 @@ def create_mcmc_analysis_dict(
 
     if ess_source_analysis is not None:
         if isinstance(ess_source_analysis, dict):
-            ess_values = [v for v in ess_source_analysis.values() if v is not None]
+            ess_values = [v for v in ess_source_analysis.values() if v is not None and np.isfinite(v)]
             min_ess = min(ess_values) if ess_values else None
         else:
             ess = np.asarray(ess_source_analysis)
@@ -456,8 +456,11 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
         )
 
     if hasattr(result, "tree_depth_warnings"):
-        diagnostics_dict["sampling_efficiency"]["tree_depth_warnings"] = int(
-            result.tree_depth_warnings
+        import math
+
+        _tdw = result.tree_depth_warnings
+        diagnostics_dict["sampling_efficiency"]["tree_depth_warnings"] = (
+            int(_tdw) if (isinstance(_tdw, (int, float)) and math.isfinite(float(_tdw))) else 0
         )
 
     # Posterior checks

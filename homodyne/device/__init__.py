@@ -114,7 +114,7 @@ def _configure_cpu_optimal(
             )
 
             logger.info(
-                f"✓ CPU configuration successful with {cpu_config['threads_configured']} threads",
+                f"[OK] CPU configuration successful with {cpu_config['threads_configured']} threads",
             )
 
         else:
@@ -138,7 +138,7 @@ def _configure_cpu_optimal(
                 },
             )
 
-            logger.info("✓ Basic CPU configuration completed")
+            logger.info("[OK] Basic CPU configuration completed")
 
     except Exception as e:
         logger.error(f"CPU configuration failed: {e}")
