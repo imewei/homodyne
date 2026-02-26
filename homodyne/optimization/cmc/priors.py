@@ -539,11 +539,13 @@ def build_init_values_dict(
     # Compute data-driven estimates if needed
     data_estimates: dict[str, float] = {}
     if use_data_estimation and (not has_contrast or not has_offset):
-        # Mypy doesn't infer non-None from use_data_estimation boolean
-        assert c2_data is not None
-        assert t1 is not None
-        assert t2 is not None
-        assert phi_indices is not None
+        # Type narrowing: use_data_estimation guards non-None above, so these
+        # are guaranteed non-None here. Use assert for mypy (safe: condition
+        # is logically unreachable, but protects against future refactors).
+        assert c2_data is not None  # noqa: S101 — type narrowing
+        assert t1 is not None  # noqa: S101 — type narrowing
+        assert t2 is not None  # noqa: S101 — type narrowing
+        assert phi_indices is not None  # noqa: S101 — type narrowing
 
         contrast_bounds = parameter_space.get_bounds("contrast")
         offset_bounds = parameter_space.get_bounds("offset")
@@ -779,10 +781,19 @@ def validate_init_values_order(
     actual_names = list(init_values.keys())
 
     if actual_names != expected_names:
-        # Find first mismatch for helpful error message
-        for i, (actual, expected) in enumerate(
-            zip(actual_names, expected_names, strict=True)
-        ):
+        # P2-R5-04: Check length BEFORE per-element comparison.
+        # Previously used zip(..., strict=True) which raises a generic
+        # "zip() has arguments with different lengths" error on length mismatch,
+        # obscuring the informative message below.  Check length first.
+        if len(actual_names) != len(expected_names):
+            raise ValueError(
+                f"Parameter count mismatch!\n"
+                f"Expected {len(expected_names)} params: {expected_names}\n"
+                f"Actual {len(actual_names)} params: {actual_names}"
+            )
+
+        # Same length: find first positional mismatch
+        for i, (actual, expected) in enumerate(zip(actual_names, expected_names, strict=False)):
             if actual != expected:
                 raise ValueError(
                     f"Parameter order mismatch at position {i}!\n"
@@ -791,13 +802,6 @@ def validate_init_values_order(
                     f"Full expected: {expected_names}\n"
                     f"Full actual: {actual_names}"
                 )
-
-        # Length mismatch
-        raise ValueError(
-            f"Parameter count mismatch!\n"
-            f"Expected {len(expected_names)} params: {expected_names}\n"
-            f"Actual {len(actual_names)} params: {actual_names}"
-        )
 
 
 # =============================================================================
@@ -982,6 +986,13 @@ def extract_nlsq_values_for_cmc(
         # Use laminar flow ONLY if scaling count is small (2-3 angles max without ambiguity)
         # For n_params >= 9, check the analysis_mode hint from model_kwargs if available
         analysis_mode_hint = getattr(nlsq_result, "analysis_mode", None)
+        # n_params=9 is ambiguous: could be static-individual (3 angles) or laminar_flow (auto_averaged)
+        if n_params == 9 and analysis_mode_hint is None:
+            logger.warning(
+                "Ambiguous n_params=9: could be static-individual (3 angles) or "
+                "laminar_flow auto_averaged. Defaulting to laminar_flow. "
+                "Pass analysis_mode_hint to disambiguate."
+            )
         if analysis_mode_hint == "static" or (
             analysis_mode_hint is None and is_likely_static_individual
         ):

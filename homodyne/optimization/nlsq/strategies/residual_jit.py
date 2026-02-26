@@ -398,7 +398,7 @@ class StratifiedResidualFunctionJIT:
         # CRITICAL FIX (2026-01-15): Compare actual time VALUES, not indices.
         # t1_indices and t2_indices reference DIFFERENT arrays (t1_unique vs t2_unique),
         # so comparing indices is wrong. Must compare the actual t1_chunk and t2_chunk values.
-        non_diagonal = t1_chunk != t2_chunk
+        non_diagonal = jnp.abs(t1_chunk - t2_chunk) > 1e-15
         residuals_masked = jnp.where(mask_chunk & non_diagonal, residuals_raw, 0.0)
 
         return residuals_masked
@@ -414,21 +414,27 @@ class StratifiedResidualFunctionJIT:
             Flattened residuals INCLUDING padding (will be filtered in __call__)
             Shape: (n_chunks * max_chunk_size,) with zeros for padded values
         """
-        # Vectorize over chunks (first dimension)
-        vmap_fn = jax.vmap(
-            lambda phi, t1, t2, g2, mask: self._compute_single_chunk_residuals(
-                phi, t1, t2, g2, mask, params
-            ),
-            in_axes=(0, 0, 0, 0, 0),  # vmap over first dim of all arrays
-        )
+        # Cache vmap'd function to avoid JIT retrace on every call.
+        # params is passed as an explicit unbatched argument (in_axes=None for the
+        # last axis) instead of via closure capture. A new lambda (new Python object
+        # identity) is created each call when params is captured by closure, forcing
+        # JAX to retrace the vmap'd function on every optimizer iteration.
+        if not hasattr(self, "_cached_chunk_vmap"):
+            self._cached_chunk_vmap = jax.vmap(
+                lambda phi, t1, t2, g2, mask, p: self._compute_single_chunk_residuals(
+                    phi, t1, t2, g2, mask, p
+                ),
+                in_axes=(0, 0, 0, 0, 0, None),  # params (p) not batched
+            )
 
         # Compute residuals for all chunks in parallel
-        residuals_padded = vmap_fn(
+        residuals_padded = self._cached_chunk_vmap(
             self.phi_padded,
             self.t1_padded,
             self.t2_padded,
             self.g2_padded,
             self.mask,
+            params,
         )  # Shape: (n_chunks, max_chunk_size)
 
         # Flatten residuals (padding is already masked to zero in _compute_single_chunk_residuals)

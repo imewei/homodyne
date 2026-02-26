@@ -194,13 +194,14 @@ def validate_bounds(
             f"got lower={len(lower)}, upper={len(upper)}"
         )
 
-    # Check for invalid bounds (lower >= upper)
-    invalid_mask = lower >= upper
+    # Check for invalid bounds (lower > upper); equal bounds are allowed
+    # for parameters that are fixed (lower == upper == fixed_value).
+    invalid_mask = lower > upper
     if np.any(invalid_mask):
         invalid_indices = np.where(invalid_mask)[0]
         raise ValueError(
             f"Invalid bounds at indices {invalid_indices}: "
-            f"lower >= upper. Lower: {lower[invalid_indices]}, Upper: {upper[invalid_indices]}"
+            f"lower > upper. Lower: {lower[invalid_indices]}, Upper: {upper[invalid_indices]}"
         )
 
     return (np.asarray(lower, dtype=float), np.asarray(upper, dtype=float))

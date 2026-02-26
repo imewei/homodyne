@@ -76,8 +76,9 @@ def save_samples_npz(
     # Count per-angle parameters to get n_phi
     n_phi = sum(1 for name in result.param_names if name.startswith("contrast_"))
 
-    # Save to npz
-    np.savez(
+    # Save to compressed npz (P2-R5-01: same fix as nlsq_writers.py P2-17)
+    # Float64 posterior samples compress ~5-10x via zlib deflate.
+    np.savez_compressed(
         output_path,
         # Schema version
         schema_version=np.array(SAMPLES_SCHEMA_VERSION),
@@ -231,7 +232,7 @@ def save_fitted_data_npz(
     c2_fitted_5pct = c2_fitted - 1.645 * c2_fitted_std  # ~90% CI
     c2_fitted_95pct = c2_fitted + 1.645 * c2_fitted_std
 
-    np.savez(
+    np.savez_compressed(
         output_path,
         # Core data (NLSQ parity)
         c2_exp=c2_exp,
@@ -313,7 +314,7 @@ def save_diagnostics_json(
         n_warmup=result.n_warmup,
         n_samples=result.n_samples,
         warmup_time=result.warmup_time,
-        sampling_time=result.execution_time - result.warmup_time,
+        sampling_time=max(0.0, result.execution_time - result.warmup_time),
         num_shards=result.num_shards,
     )
 

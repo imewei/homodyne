@@ -273,7 +273,7 @@ class PBSBackend(CMCBackend):
 
     def _save_shard(self, shard: PreparedData, path: Path) -> None:
         """Save shard data for PBS worker."""
-        np.savez(
+        np.savez_compressed(
             path,
             data=shard.data,
             t1=shard.t1,
@@ -372,8 +372,13 @@ class PBSBackend(CMCBackend):
                 if status == "C":  # Completed
                     completed.add(job_id)
                     logger.debug(f"Job {job_id} completed")
-                elif status == "E":  # Error
-                    raise RuntimeError(f"PBS job {job_id} failed")
+                elif status == "E":  # Exiting: PBS/Torque epilogue/cleanup (normal)
+                    # P1-R5-02: PBS "E" means "Exiting" (job completing normally),
+                    # NOT "Error". Every successful PBS job passes through "E" state
+                    # during its teardown/epilogue phase. Treating it as failure
+                    # aborts every successful CMC job. Wait for the job to leave
+                    # qstat entirely (returncode != 0 in _get_job_status -> "C").
+                    pass
 
             pending_jobs -= completed
 
@@ -389,7 +394,12 @@ class PBSBackend(CMCBackend):
         Returns
         -------
         str
-            Job status: Q (queued), R (running), C (complete), E (error).
+            Job status per PBS/Torque conventions:
+            Q = queued, R = running, E = exiting (epilogue/cleanup, normal
+            completion phase), C = completed (returned when job no longer
+            appears in qstat output). Note: there is no "error" job_state in
+            standard PBS/Torque; failures are detected via exit_status in
+            qstat -f output, not via job_state.
         """
         try:
             qstat_path = shutil.which("qstat") or "qstat"
@@ -405,12 +415,26 @@ class PBSBackend(CMCBackend):
                 # Job no longer in queue - assume completed
                 return "C"
 
-            # Parse status from output
+            # Parse status and exit_status from output
+            state = None
+            exit_status = None
             for line in result.stdout.split("\n"):
-                if "job_state" in line:
-                    return line.split("=")[1].strip()
+                stripped = line.strip()
+                if "job_state" in stripped:
+                    state = stripped.split("=")[-1].strip()
+                if "exit_status" in stripped:
+                    try:
+                        exit_status = int(stripped.split("=")[-1].strip())
+                    except ValueError:
+                        pass
 
-            return "C"  # Assume completed if can't parse
+            if state is None:
+                return "C"  # Assume completed if can't parse
+
+            if state == "C" and exit_status is not None and exit_status != 0:
+                logger.warning(f"PBS job {job_id} completed with non-zero exit_status={exit_status}")
+
+            return state
 
         except subprocess.TimeoutExpired:
             logger.warning(f"qstat timeout for job {job_id}")
@@ -448,11 +472,16 @@ class PBSBackend(CMCBackend):
                     field_name = key[6:]  # Remove "extra_" prefix
                     extra_fields[field_name] = data[key]
 
+            # Derive actual chain/sample counts from array shape (not serialized metadata)
+            first_param = next(iter(samples_dict.values()), None)
+            actual_n_chains = first_param.shape[0] if first_param is not None else int(data["n_chains"])
+            actual_n_samples = first_param.shape[1] if first_param is not None and first_param.ndim >= 2 else int(data["n_samples"])
+
             samples = MCMCSamples(
                 samples=samples_dict,
                 param_names=param_names,
-                n_chains=int(data["n_chains"]),
-                n_samples=int(data["n_samples"]),
+                n_chains=actual_n_chains,
+                n_samples=actual_n_samples,
                 extra_fields=extra_fields,
             )
             results.append(samples)

@@ -196,7 +196,11 @@ def combine_shard_samples(
         n_chunks = (len(shard_samples) + chunk_size - 1) // chunk_size
         for i in range(0, len(shard_samples), chunk_size):
             chunk = shard_samples[i : i + chunk_size]
-            chunk_result = _combine_shard_chunk(chunk, method)
+            # P2-R5-02: Derive a distinct seed per chunk so that each
+            # _combine_shard_chunk call draws independent samples from
+            # the combined Gaussian, rather than all starting from seed 42.
+            chunk_idx = i // chunk_size
+            chunk_result = _combine_shard_chunk(chunk, method, chunk_seed=chunk_idx)
             intermediate_results.append(chunk_result)
 
             # Clear chunk references and force GC to reduce peak memory
@@ -215,6 +219,7 @@ def combine_shard_samples(
 def _combine_shard_chunk(
     shard_samples: list[MCMCSamples],
     method: str,
+    chunk_seed: int = 0,
 ) -> MCMCSamples:
     """Combine a chunk of shard samples (internal helper).
 
@@ -266,7 +271,9 @@ def _combine_shard_chunk(
         # Uses trimmed statistics to handle heterogeneous shards
         # "auto" resolves to robust_consensus_mc (the default)
         combined_samples: dict[str, np.ndarray] = {}
-        rng = np.random.default_rng(42)
+        # P2-R5-02: Incorporate chunk_seed so hierarchical combination passes
+        # produce independent samples per chunk (not all seeded identically at 42).
+        rng = np.random.default_rng(42 + chunk_seed)
 
         for name in param_names:
             # Compute per-shard posterior mean and variance
@@ -381,7 +388,9 @@ def _combine_shard_chunk(
         # CORRECT Consensus Monte Carlo (Scott et al., 2016):
         # Combine posterior moments, then generate new samples
         combined_samples = {}
-        rng = np.random.default_rng(42)  # Deterministic for reproducibility
+        # P2-R5-02: Use chunk_seed offset so hierarchical combination chunks
+        # draw independent samples (not all from the same RNG state).
+        rng = np.random.default_rng(42 + chunk_seed)  # Deterministic + chunk-unique
 
         for name in param_names:
             # Compute per-shard posterior mean and variance
@@ -524,6 +533,7 @@ def combine_shard_samples_bimodal(
     modal_params: list[str],
     co_occurrence: dict[str, Any],
     method: str = "consensus_mc",
+    chunk_seed: int = 0,
 ) -> tuple[MCMCSamples, BimodalConsensusResult]:
     """Combine shard samples using mode-aware consensus.
 
@@ -566,7 +576,7 @@ def combine_shard_samples_bimodal(
     param_names = shard_samples[0].param_names
     n_chains = shard_samples[0].n_chains
     n_samples = shard_samples[0].n_samples
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(42 + chunk_seed)
 
     # Index bimodal detections by (shard, param) for fast lookup
     bimodal_index: dict[tuple[int, str], dict[str, Any]] = {}

@@ -755,10 +755,22 @@ def run_nuts_sampling(
             )
         )
 
-    # Create init strategy with z-space values for scaled model
-    init_strategy = create_init_strategy(
-        full_init, param_names_with_sigma, z_space_values=z_space_init
-    )
+    # Create init strategy for NUTS kernel.
+    # P1-R5-01: NLSQ-informed models ("auto"/"constant_averaged" per_angle_mode)
+    # sample in original parameter space — their NumPyro sites are named "D0",
+    # "alpha", etc., NOT "D0_z", "alpha_z". Passing z_space_values with z-space
+    # site names causes init_to_value to silently ignore all entries (no site name
+    # match), falling back to init_to_median and discarding the NLSQ warm-start.
+    # For these modes, use the original-space full_init directly.
+    nlsq_prior_config = model_kwargs.get("nlsq_prior_config")
+    if nlsq_prior_config is not None and per_angle_mode in ("auto", "constant_averaged"):
+        # Original-space initialization for NLSQ-informed models
+        init_strategy = create_init_strategy(full_init, param_names_with_sigma)
+    else:
+        # Z-space initialization for scaled models
+        init_strategy = create_init_strategy(
+            full_init, param_names_with_sigma, z_space_values=z_space_init
+        )
 
     # =========================================================================
     # PREFLIGHT: Validate initial log density and finiteness
@@ -767,10 +779,10 @@ def run_nuts_sampling(
     # spending wall-clock hours running many CMC shards.
     sigma_init = float(max(model_kwargs.get("noise_scale", 0.1), 1e-6))
 
-    # P1-5: NLSQ-informed models (averaged, constant_averaged) sample parameters
-    # with original-space names ("D0", "alpha", ...) NOT z-space names ("D0_z").
-    # The preflight must use matching names or NumPyro silently ignores them.
-    nlsq_prior_config = model_kwargs.get("nlsq_prior_config")
+    # P1-5 / P1-R5-01: NLSQ-informed models (averaged, constant_averaged) sample
+    # parameters with original-space names ("D0", "alpha", ...) NOT z-space names
+    # ("D0_z"). Both the preflight and init_strategy must use matching names.
+    # nlsq_prior_config was read above when building init_strategy.
     if nlsq_prior_config is not None and per_angle_mode in (
         "auto",
         "constant_averaged",
@@ -1121,6 +1133,14 @@ def run_nuts_sampling(
     warmup_time = total_time * warmup_ratio
     sampling_time = total_time * (1 - warmup_ratio)
 
+    # Compute mean tree depth from NUTS num_steps (tree_depth = log2(num_steps))
+    mean_tree_depth = 0.0
+    if "num_steps" in extra_fields:
+        num_steps_arr = np.asarray(extra_fields["num_steps"])
+        finite_steps = num_steps_arr[np.isfinite(num_steps_arr) & (num_steps_arr > 0)]
+        if finite_steps.size > 0:
+            mean_tree_depth = float(np.mean(np.log2(finite_steps)))
+
     stats = SamplingStats(
         warmup_time=warmup_time,
         sampling_time=sampling_time,
@@ -1132,6 +1152,7 @@ def run_nuts_sampling(
         step_size_max=step_size_max,
         inverse_mass_matrix_summary=inv_mass_summary,
         plan=plan,
+        tree_depth=mean_tree_depth,
     )
 
     run_logger.info(
@@ -1141,10 +1162,13 @@ def run_nuts_sampling(
     )
 
     # Create MCMCSamples object
+    # Derive actual chain count from first sample array (not from config)
+    first_param_samples = next(iter(samples_np.values()), None)
+    actual_n_chains = first_param_samples.shape[0] if first_param_samples is not None else config.num_chains
     mcmc_samples = MCMCSamples(
         samples=samples_np,
         param_names=[k for k in samples_np.keys() if k != "obs"],
-        n_chains=config.num_chains,
+        n_chains=actual_n_chains,
         n_samples=num_samples,  # Use actual samples count (may be adaptive)
         extra_fields=extra_fields,
     )

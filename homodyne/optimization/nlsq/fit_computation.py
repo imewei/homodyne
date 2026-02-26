@@ -125,7 +125,8 @@ def compute_g2_batch(
         # compute_g2_scaled may return different shapes, so flatten and reshape
         return g2.reshape(n_t1, n_t2)
 
-    # Vectorize over phi angles
+    # Note: vmap wrapper is recreated per call since the closure captures varying params.
+    # This is acceptable for post-processing (not in optimization hot path).
     compute_all_angles = jax.vmap(compute_single_angle)
     return compute_all_angles(phi_angles)
 
@@ -184,6 +185,8 @@ def compute_g2_batch_with_per_angle_scaling(
         # Reshape to ensure consistent (n_t1, n_t2) output
         return g2.reshape(n_t1, n_t2)
 
+    # Note: vmap wrapper is recreated per call since the closure captures varying params.
+    # This is acceptable for post-processing (not in optimization hot path).
     compute_all_angles = jax.vmap(compute_single_angle_scaled, in_axes=(0, 0, 0))
     return compute_all_angles(phi_angles, contrasts, offsets)
 
@@ -409,7 +412,14 @@ def compute_theoretical_fits(
     # Extract metadata
     L = metadata["L"]
     dt_value = metadata.get("dt")
-    dt = float(dt_value) if dt_value is not None else 0.1
+    if dt_value is not None:
+        dt = float(dt_value)
+    else:
+        logger.warning(
+            "dt not found in metadata - falling back to dt=0.1 s. "
+            "Verify metadata contains 'dt' for correct physics."
+        )
+        dt = 0.1
     q = metadata["q"]
 
     if q is None:

@@ -857,7 +857,7 @@ class NLSQWrapper(NLSQAdapterBase):
             OptimizationResult with converged parameters and diagnostics
 
         Raises:
-            ValueError: If bounds are invalid (lower >= upper) or if per_angle_scaling=False
+            ValueError: If bounds are invalid (lower > upper) or if per_angle_scaling=False
         """
         import time
 
@@ -1057,11 +1057,11 @@ class NLSQWrapper(NLSQAdapterBase):
             # Validate bounds consistency
             if nlsq_bounds is not None:
                 lower, upper = nlsq_bounds
-                if np.any(lower >= upper):
-                    invalid_indices = np.where(lower >= upper)[0]
+                if np.any(lower > upper):
+                    invalid_indices = np.where(lower > upper)[0]
                     raise ValueError(
                         f"Invalid bounds at indices {invalid_indices}: "
-                        f"lower >= upper. Lower: {lower[invalid_indices]}, Upper: {upper[invalid_indices]}"
+                        f"lower > upper. Lower: {lower[invalid_indices]}, Upper: {upper[invalid_indices]}"
                     )
 
             # Get physical parameter names for this analysis mode
@@ -1555,11 +1555,11 @@ class NLSQWrapper(NLSQAdapterBase):
         # Step 5: Validate bounds consistency (FR-006)
         if nlsq_bounds is not None:
             lower, upper = nlsq_bounds
-            if np.any(lower >= upper):
-                invalid_indices = np.where(lower >= upper)[0]
+            if np.any(lower > upper):
+                invalid_indices = np.where(lower > upper)[0]
                 raise ValueError(
                     f"Invalid bounds at indices {invalid_indices}: "
-                    f"lower >= upper. Bounds must satisfy lower < upper elementwise. "
+                    f"lower > upper. Bounds must satisfy lower <= upper elementwise. "
                     f"Lower: {lower[invalid_indices]}, Upper: {upper[invalid_indices]}",
                 )
 
@@ -3820,7 +3820,7 @@ class NLSQWrapper(NLSQAdapterBase):
             NLSQ-compatible bounds tuple or None for unbounded optimization
 
         Raises:
-            ValueError: If bounds are invalid (lower >= upper)
+            ValueError: If bounds are invalid (lower > upper)
         """
         # Handle None bounds (unbounded optimization)
         if homodyne_bounds is None:
@@ -3833,12 +3833,12 @@ class NLSQWrapper(NLSQAdapterBase):
         lower = np.asarray(lower)
         upper = np.asarray(upper)
 
-        # Validate bounds: lower < upper elementwise
-        if np.any(lower >= upper):
-            invalid_indices = np.where(lower >= upper)[0]
+        # Validate bounds: lower <= upper elementwise (allow equal for fixed params)
+        if np.any(lower > upper):
+            invalid_indices = np.where(lower > upper)[0]
             raise ValueError(
-                f"Invalid bounds: lower >= upper at indices {invalid_indices}. "
-                f"Lower bounds must be strictly less than upper bounds.",
+                f"Invalid bounds: lower > upper at indices {invalid_indices}. "
+                f"Bounds must satisfy lower <= upper elementwise.",
             )
 
         # NLSQ uses the same (lower, upper) tuple format as homodyne

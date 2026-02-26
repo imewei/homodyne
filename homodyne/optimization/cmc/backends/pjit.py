@@ -120,6 +120,15 @@ class PjitBackend(CMCBackend):
         """
         from homodyne.optimization.cmc.sampler import run_nuts_sampling
 
+        # P1-R5-03: Fail explicitly when analysis_mode is None rather than
+        # silently defaulting to "laminar_flow" which uses the wrong physics model
+        # for static datasets (7 physical params instead of 3).
+        if analysis_mode is None:
+            raise ValueError(
+                "analysis_mode must be explicitly set ('static' or 'laminar_flow'); "
+                "got None. Pass analysis_mode to PjitBackend.run()."
+            )
+
         start_time = time.time()
 
         if shards is None or len(shards) <= 1:
@@ -149,7 +158,7 @@ class PjitBackend(CMCBackend):
                         if model_kwargs.get("time_grid") is not None
                         else None
                     ),
-                    "analysis_mode": analysis_mode or "laminar_flow",
+                    "analysis_mode": analysis_mode,
                     "parameter_space": parameter_space,
                     "n_phi": prepared_data.n_phi,
                     "noise_scale": model_kwargs.get("noise_scale", 0.1),
@@ -158,7 +167,7 @@ class PjitBackend(CMCBackend):
                 initial_values=initial_values,
                 parameter_space=parameter_space,
                 n_phi=prepared_data.n_phi,
-                analysis_mode=analysis_mode or "laminar_flow",
+                analysis_mode=analysis_mode,
                 rng_key=rng_key,
                 progress_bar=progress_bar,
             )
@@ -201,7 +210,7 @@ class PjitBackend(CMCBackend):
                             if model_kwargs.get("time_grid") is not None
                             else None
                         ),
-                        "analysis_mode": analysis_mode or "laminar_flow",
+                        "analysis_mode": analysis_mode,
                         "parameter_space": parameter_space,
                         "n_phi": shard.n_phi,
                         "noise_scale": model_kwargs.get("noise_scale", 0.1),
@@ -210,7 +219,7 @@ class PjitBackend(CMCBackend):
                     initial_values=initial_values,
                     parameter_space=parameter_space,
                     n_phi=shard.n_phi,
-                    analysis_mode=analysis_mode or "laminar_flow",
+                    analysis_mode=analysis_mode,
                     rng_key=rng_key,
                     progress_bar=progress_bar,
                 )

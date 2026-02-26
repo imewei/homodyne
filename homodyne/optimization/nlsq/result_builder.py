@@ -14,6 +14,8 @@ from typing import Any
 
 import numpy as np
 
+from homodyne.utils.logging import get_logger
+
 
 @dataclass
 class QualityMetrics:
@@ -119,7 +121,13 @@ def normalize_nlsq_result(
     """
     # Case 1: Dict (from StreamingOptimizer or advanced functions)
     if isinstance(result, dict):
-        popt = np.asarray(result.get("x", result.get("popt")))
+        popt_raw = result.get("x", result.get("popt"))
+        if popt_raw is None:
+            raise KeyError(
+                f"Result dict has neither 'x' nor 'popt' key. "
+                f"Available keys: {list(result.keys())}"
+            )
+        popt = np.asarray(popt_raw)
         pcov = np.asarray(result.get("pcov", np.eye(len(popt))))
         info = {
             "streaming_diagnostics": result.get("streaming_diagnostics", {}),
@@ -172,10 +180,10 @@ def normalize_nlsq_result(
 
         pcov_raw = getattr(result, "pcov", None)
         if pcov_raw is None:
-            if logger:
-                logger.warning(
-                    "No pcov attribute in result object. Using identity matrix."
-                )
+            _logger = logger or get_logger(__name__)
+            _logger.warning(
+                "No pcov attribute in result object. Using identity matrix."
+            )
             pcov = np.eye(len(popt))
         else:
             pcov = np.asarray(pcov_raw)
@@ -415,7 +423,7 @@ class ResultBuilder:
             try:
                 residuals = residual_fn(xdata, *self.parameters)
                 quality = compute_quality_metrics(residuals, self.n_data, n_params)
-            except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError):
+            except (ValueError, RuntimeError, TypeError):
                 # Fallback if residual computation fails
                 quality = QualityMetrics(
                     chi_squared=float(self.info.get("fun", 0.0)),

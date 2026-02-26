@@ -548,9 +548,12 @@ def optimize_single_angle(
                 "Initial parameters and bounds must be finite float64 values"
             )
 
+        # TRF method requires non-degenerate intervals (lower < upper) for all parameters.
+        # Fixed parameters (lower == upper) must be handled by the caller before passing to sequential.
         if not np.all(lower_bounds < upper_bounds):
             raise ValueError(
-                "Sequential optimizer requires strict lower < upper bounds for all parameters"
+                "Sequential optimizer requires strict lower < upper bounds for all parameters. "
+                "Fixed parameters (lower == upper) should be removed before sequential optimization."
             )
 
         logger.debug(
@@ -601,7 +604,16 @@ def optimize_single_angle(
                 n_residuals = len(residual_values)
                 n_params = len(initial_params)
                 s2 = (residual_values @ residual_values) / max(n_residuals - n_params, 1)
-                cov = np.linalg.inv(jac.T @ jac) * s2
+                try:
+                    cov = np.linalg.inv(jac.T @ jac) * s2
+                except np.linalg.LinAlgError:
+                    try:
+                        cov = np.linalg.pinv(jac.T @ jac) * s2
+                        logger.warning(
+                            "Singular J^T J — used pinv fallback for covariance"
+                        )
+                    except np.linalg.LinAlgError:
+                        cov = np.eye(len(initial_params))
             else:
                 raise ValueError("No Jacobian available")
         except (np.linalg.LinAlgError, ValueError):
