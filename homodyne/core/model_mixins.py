@@ -442,10 +442,6 @@ class OptimizationRecommendationMixin:
             device_info = capabilities["device_info"]
             if device_info.get("available", False):
                 devices = device_info.get("devices", [])
-                if any("gpu" in str(d).lower() for d in devices):
-                    recommendations.append(
-                        "GPU acceleration available for large-scale optimization",
-                    )
                 if len(devices) > 1:
                     recommendations.append(
                         f"{len(devices)} compute devices available for parallel optimization",

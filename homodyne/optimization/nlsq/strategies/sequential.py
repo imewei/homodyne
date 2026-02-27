@@ -932,7 +932,7 @@ def optimize_per_angle_sequential(
             optimizer_kwargs,
             n_params=len(free_params),
             parameter_names=(
-                [n for n, m in zip(parameter_names, free_mask) if m]
+                [n for n, m in zip(parameter_names, free_mask, strict=False) if m]
                 if parameter_names is not None
                 else None
             ),

@@ -1554,17 +1554,17 @@ class DataQualityController:
             >= self.quality_config.excellent_threshold
         ):
             recommendations.append(
-                "✓ Excellent data quality achieved - ready for analysis",
+                "Excellent data quality achieved - ready for analysis",
             )
         elif final_result.metrics.overall_score >= self.quality_config.warn_threshold:
-            recommendations.append("✓ Good data quality - proceed with confidence")
+            recommendations.append("Good data quality - proceed with confidence")
         elif final_result.metrics.overall_score >= self.quality_config.pass_threshold:
             recommendations.append(
-                "⚠ Acceptable data quality - monitor results carefully",
+                "Acceptable data quality - monitor results carefully",
             )
         else:
             recommendations.append(
-                "❌ Poor data quality - consider reprocessing or different parameters",
+                "Poor data quality - consider reprocessing or different parameters",
             )
 
         # Process improvement recommendations
@@ -1583,7 +1583,7 @@ class DataQualityController:
         if bottleneck_stages:
             stage_names = [result.stage.value for result in bottleneck_stages]
             recommendations.append(
-                f"⚠ Quality issues in stages: {', '.join(stage_names)}",
+                f"Quality issues in stages: {', '.join(stage_names)}",
             )
 
         return recommendations

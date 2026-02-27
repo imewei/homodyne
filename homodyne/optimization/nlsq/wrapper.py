@@ -4921,7 +4921,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 )
 
             logger.info(
-                f"✓ Gradient sanity check passed (gradient magnitude: {gradient_estimate:.6e})"
+                f"Gradient sanity check passed (gradient magnitude: {gradient_estimate:.6e})"
             )
 
         except (ValueError, RuntimeError, np.linalg.LinAlgError) as e:

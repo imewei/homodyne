@@ -637,12 +637,12 @@ def generate_nlsq_plots(
     # Color scaling configuration
     # Don't set explicit vmin/vmax here - let _resolve_color_limits compute
     # per-panel percentile-based limits to show structure in both exp and fit data
-    _c2_min = min(np.min(c2_exp), np.min(c2_fit_display))  # noqa: F841
-    _c2_max = max(np.max(c2_exp), np.max(c2_fit_display))  # noqa: F841
+    _c2_min = min(float(np.nanmin(c2_exp)), float(np.nanmin(c2_fit_display)))  # noqa: F841
+    _c2_max = max(float(np.nanmax(c2_exp)), float(np.nanmax(c2_fit_display)))  # noqa: F841
 
     logger.debug(
-        f"C2 data range: exp=[{np.min(c2_exp):.4f}, {np.max(c2_exp):.4f}], "
-        f"fit=[{np.min(c2_fit_display):.4f}, {np.max(c2_fit_display):.4f}]"
+        f"C2 data range: exp=[{float(np.nanmin(c2_exp)):.4f}, {float(np.nanmax(c2_exp)):.4f}], "
+        f"fit=[{float(np.nanmin(c2_fit_display)):.4f}, {float(np.nanmax(c2_fit_display)):.4f}]"
     )
 
     # Pass percentile settings but NOT fixed vmin/vmax - let each panel auto-scale

@@ -104,7 +104,7 @@ def _create_residual_function(
     # This maps each data point's phi to the corresponding contrast/offset via
     # searchsorted, avoiding shape mismatch when g1 is flat 1D (n_points,).
     phi_unique_sorted = jnp.array(
-        sorted(set(float(p) for p in np.asarray(data.phi)))
+        sorted({float(p) for p in np.asarray(data.phi)})
     )
 
     # Determine parameter names

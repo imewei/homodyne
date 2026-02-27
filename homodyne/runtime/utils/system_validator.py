@@ -1431,11 +1431,11 @@ Examples:
         if args.json:
             print(json.dumps(asdict(result), indent=2))
         else:
-            status = "✅ PASS" if result.success else "❌ FAIL"
+            status = "[PASS]" if result.success else "[FAIL]"
             print(f"{status} {result.name}: {result.message}")
             if result.warnings:
                 for warning in result.warnings:
-                    print(f"⚠️  {warning}")
+                    print(f"[WARN] {warning}")
             if result.remediation:
                 print("\n🔧 Remediation:")
                 for fix in result.remediation:
