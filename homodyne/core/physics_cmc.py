@@ -79,9 +79,10 @@ class ShardGrid(NamedTuple):
     Attributes
     ----------
     time_safe : jnp.ndarray, shape (G,)
-        ``jnp.maximum(time_grid, epsilon)`` where epsilon = max(dt/2, 1e-8).
-        Avoids the t=0 singularity for t^alpha / t^beta power laws.
-        Fixed per shard.
+        ``jnp.where(time_grid > epsilon, time_grid, epsilon)`` where
+        epsilon = max(dt/2, 1e-8). Uses gradient-safe ``jnp.where`` floor
+        per CLAUDE.md Rule 7. Avoids the t=0 singularity for t^alpha /
+        t^beta power laws. Fixed per shard.
     idx1 : jnp.ndarray, shape (N,), dtype int
         ``searchsorted(time_grid, t1)`` clipped to [0, G-1].
         Maps each t1 observation to its nearest time_grid index.
@@ -126,7 +127,18 @@ def precompute_shard_grid(
     ShardGrid
         Pre-computed (time_safe, idx1, idx2) ready for NUTS.
     """
+    if dt is None:
+        logger.warning(
+            "CMC precompute_shard_grid: dt not provided; falling back to 0.001 s (1 kHz). "
+            "Pass dt explicitly for correct physics factors."
+        )
     dt_safe = float(dt) if dt is not None else 1e-3
+
+    if dt_safe <= 0:
+        raise ValueError(
+            f"precompute_shard_grid: dt must be positive, got {dt_safe}. "
+            "Check shard_config['dt'] — frame interval cannot be zero or negative."
+        )
 
     # Build time_safe: apply singularity floor once
     # This is identical to what calculate_diffusion_coefficient and
@@ -163,7 +175,7 @@ def _compute_g1_diffusion_from_idx(
     """Diffusion g1 using pre-computed indices and time_safe.
 
     Replaces ``_compute_g1_diffusion_elementwise`` in the NUTS hot path.
-    Skips ``searchsorted`` and the ``jnp.maximum(time_grid, epsilon)`` floor —
+    Skips ``searchsorted`` and the ``jnp.where`` singularity floor —
     both are shard-constant and were pre-computed in ``precompute_shard_grid``.
 
     Parameters
@@ -173,7 +185,7 @@ def _compute_g1_diffusion_from_idx(
     idx1, idx2 : (N,) int
         Pre-computed ``searchsorted`` indices for t1/t2 → time_grid.
     time_safe : (G,)
-        ``jnp.maximum(time_grid, epsilon)`` — pre-computed per shard.
+        ``jnp.where(time_grid > epsilon, time_grid, epsilon)`` — pre-computed per shard.
     wavevector_q_squared_half_dt : scalar
         Pre-computed factor 0.5 * q² * dt.
 
@@ -616,11 +628,14 @@ def compute_g1_diffusion(
 
     dt_value: float
     if dt is None:
-        # FALLBACK: Estimate from time array (NOT RECOMMENDED)
-        time_array = t1
-        dt_value = (
-            float(time_array[1] - time_array[0]) if time_array.shape[0] > 1 else 1.0
+        # FALLBACK: Do NOT estimate dt from t1[1]-t1[0] — CMC paired data is
+        # not monotonic (shards are shuffled), so the difference between
+        # consecutive elements is meaningless. Fall back to 1e-3 s (1 kHz).
+        logger.warning(
+            "CMC compute_g1_diffusion: dt not provided; falling back to 0.001 s (1 kHz). "
+            "Pass dt explicitly for correct physics factors."
         )
+        dt_value = 1e-3
     else:
         dt_value = dt
 
