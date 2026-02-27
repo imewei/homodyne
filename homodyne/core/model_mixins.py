@@ -40,7 +40,7 @@ class _PhysicsModelProtocol(Protocol):
     parameter_names: list[str]
 
     def get_default_parameters(self) -> jnp.ndarray: ...
-    def get_parameter_bounds(self) -> tuple[jnp.ndarray, jnp.ndarray]: ...
+    def get_parameter_bounds(self) -> list[tuple[float, float]]: ...
     def compute_g2(
         self,
         params: jnp.ndarray,
@@ -206,7 +206,7 @@ class BenchmarkingMixin:
         test_t2 = jnp.array([1.0, 1.1, 1.2])
         test_phi = jnp.array([0.0, 45.0, 90.0])
         test_q = 0.01
-        test_L = 1000.0
+        test_L = 1e6  # 1 mm in Angstroms, center of valid range [1e5, 1e8]
         test_contrast = 0.8
         test_offset = 1.0
         test_dt = 0.001  # Required dt parameter
@@ -333,7 +333,7 @@ class BenchmarkingMixin:
         test_t2 = jnp.array([1.0])
         test_phi = jnp.array([0.0])
         test_q = 0.01
-        test_L = 1000.0
+        test_L = 1e6  # 1 mm in Angstroms, center of valid range [1e5, 1e8]
         test_contrast = 0.8
         test_offset = 1.0
 

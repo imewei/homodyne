@@ -381,6 +381,8 @@ def _basic_correction_numpy(c2_mat: np.ndarray) -> np.ndarray:
     This is the fastest method and matches pyXPCSViewer's implementation.
     """
     size = c2_mat.shape[0]
+    if size <= 1:
+        return c2_mat.copy()
 
     # Extract side band: off-diagonal elements adjacent to main diagonal
     idx_upper = np.arange(size - 1)

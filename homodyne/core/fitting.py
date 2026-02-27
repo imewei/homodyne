@@ -525,10 +525,17 @@ class UnifiedHomodyneEngine:
         L: float,
         dt: float | None = None,
     ) -> float:
-        """Compute likelihood for unified homodyne model.
+        """Compute negative log-likelihood for unified homodyne model.
 
-        This is the core likelihood function used by both VI+JAX and MCMC+JAX
-        to minimize: Exp - (contrast * Theory + offset)
+        This is the core likelihood function used by both VI+JAX and MCMC+JAX.
+        Assumes Gaussian measurement noise with known uncertainties (sigma).
+        The return value is the negative log-likelihood:
+
+            NLL = 0.5 * sum((data - fitted)^2 / sigma^2) + 0.5 * sum(log(2*pi*sigma^2))
+
+        The first term is 0.5 * chi-squared; the second is the normalization
+        constant.  Minimizing NLL is equivalent to maximizing the Gaussian
+        likelihood.
 
         Args:
             params: Physical parameters
@@ -537,9 +544,10 @@ class UnifiedHomodyneEngine:
             sigma: Measurement uncertainties
             t1, t2, phi: Time and angle grids
             q, L: Experimental parameters
+            dt: Time step in seconds (optional)
 
         Returns:
-            Negative log-likelihood value
+            Negative log-likelihood value (not chi-squared)
         """
         try:
             # Compute theoretical g1
@@ -702,9 +710,9 @@ if JAX_AVAILABLE:
             return jax.scipy.linalg.solve_triangular(L.T, z, lower=False)
 
         def svd_solve() -> Any:
-            return jnp.linalg.lstsq(design_matrix, target_vector, rcond=regularization)[
-                0
-            ]
+            # Solve regularized normal equations via SVD (preserves L2 penalty)
+            rhs = design_matrix.T @ target_vector
+            return jnp.linalg.lstsq(gram_matrix_reg, rhs, rcond=None)[0]
 
         # Use Cholesky for well-conditioned, SVD for ill-conditioned
         params = jax.lax.cond(
@@ -720,7 +728,6 @@ if JAX_AVAILABLE:
     def solve_least_squares_chunked_jax(
         theory_chunks: jnp.ndarray,
         exp_chunks: jnp.ndarray,
-        chunk_indices: jnp.ndarray | None = None,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Memory-efficient chunked solver for large datasets.
 
@@ -730,7 +737,6 @@ if JAX_AVAILABLE:
         Args:
             theory_chunks: Theory values, shape (n_chunks, chunk_size)
             exp_chunks: Experimental values, shape (n_chunks, chunk_size)
-            chunk_indices: Optional chunk indices for weighted processing
 
         Returns:
             Tuple of (contrast, offset)
@@ -759,7 +765,16 @@ if JAX_AVAILABLE:
         # lax.scan requires consistent carry dtypes across iterations.
         # chunk_size = theory_chunk.shape[0] is a JAX int32; adding a Python
         # int(0) creates a dtype mismatch that can cause XLA failures.
-        carry_init = (0.0, 0.0, 0.0, 0.0, jnp.array(0, dtype=jnp.int32))
+        # P1-R7-03: Use jnp.array for ALL carry elements, not just the int.
+        # lax.scan requires consistent carry dtypes across iterations; Python
+        # float(0.0) can cause dtype promotion issues with JAX traced values.
+        carry_init = (
+            jnp.array(0.0, dtype=jnp.float64),  # sum_theory_sq
+            jnp.array(0.0, dtype=jnp.float64),  # sum_theory
+            jnp.array(0.0, dtype=jnp.float64),  # sum_exp
+            jnp.array(0.0, dtype=jnp.float64),  # sum_theory_exp
+            jnp.array(0, dtype=jnp.int32),       # n_data (already fixed in R6)
+        )
 
         # Process all chunks
         (
@@ -816,7 +831,6 @@ else:
     def solve_least_squares_chunked_jax(  # type: ignore[misc]
         theory_chunks: np.ndarray,
         exp_chunks: np.ndarray,
-        chunk_indices: np.ndarray | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """NumPy fallback for chunked least squares."""
         # Accumulate normal equation components

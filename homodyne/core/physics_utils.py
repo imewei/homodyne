@@ -146,7 +146,7 @@ def calculate_diffusion_coefficient(
     dt_inferred = jnp.abs(
         time_array[jnp.minimum(1, time_array.shape[0] - 1)] - time_array[0]
     )
-    epsilon = jnp.maximum(dt_inferred * 0.5, 1e-8)
+    epsilon = jnp.where(dt_inferred * 0.5 > 1e-8, dt_inferred * 0.5, 1e-8)
     time_safe = jnp.where(time_array > epsilon, time_array, epsilon)
 
     # Compute diffusion coefficient
@@ -183,16 +183,19 @@ def calculate_shear_rate(
     # This ensures smooth continuity: γ̇(dt), γ̇(dt), γ̇(2dt), ...
     #
     # Avoid Python `if shape[0] > 1` which causes JIT recompilation per unique
-    # array length. For n==1, index 0 is used twice → dt=0, but jnp.maximum
-    # with 1e-5 keeps it safe.
-    dt = jnp.maximum(
+    # array length. For n==1, index 0 is used twice → inferred dt=0, but the
+    # jnp.where guard below keeps it safe with a 1e-8 floor.
+    dt = jnp.where(
+        jnp.abs(time_array[jnp.minimum(1, time_array.shape[0] - 1)] - time_array[0]) > 1e-8,
         jnp.abs(time_array[jnp.minimum(1, time_array.shape[0] - 1)] - time_array[0]),
-        1e-5,
+        1e-8,
     )
 
     # Replace near-zero values with dt/2 floor, matching calculate_diffusion_coefficient
-    # This provides a continuous floor at the midpoint instead of exact-zero equality check
-    epsilon = jnp.maximum(dt * 0.5, 1e-5)
+    # This provides a continuous floor at the midpoint instead of exact-zero equality check.
+    # Floor = 1e-8 matches calculate_diffusion_coefficient — both are power-law t^exponent
+    # and have the same singularity structure at t=0.
+    epsilon = jnp.where(dt * 0.5 > 1e-8, dt * 0.5, 1e-8)
     time_safe = jnp.where(time_array > epsilon, time_array, epsilon)
 
     gamma_t = gamma_dot_0 * (time_safe**beta) + gamma_dot_offset
@@ -223,19 +226,18 @@ def calculate_shear_rate_cmc(
     """
     # Infer dt from time grid.
     # Avoid Python `if shape[0] > 1` which causes JIT recompilation per unique
-    # array length. For n==1, index 0 is used twice → dt=0, but jnp.maximum
-    # with 1e-5 keeps it safe (same floor as before).
+    # array length. For n==1, index 0 is used twice → dt=0, but the jnp.where
+    # guard below keeps it safe with a 1e-8 floor.
     # CRITICAL FIX: Ensure dt > 0 to prevent 0^(negative beta) = infinity
     # CMC element-wise data can have consecutive zeros: t[0]=0, t[1]=0 → dt=0
     # This causes NaN when beta < 0 in gamma_t = gamma_dot_0 * (time_safe**beta)
-    dt = jnp.maximum(
-        jnp.abs(time_array[jnp.minimum(1, time_array.shape[0] - 1)] - time_array[0]),
-        1e-5,
-    )
+    dt_raw = jnp.abs(time_array[jnp.minimum(1, time_array.shape[0] - 1)] - time_array[0])
+    dt = jnp.where(dt_raw > 1e-8, dt_raw, 1e-8)
 
-    # Replace near-zero values with dt/2 floor (symmetric with calculate_shear_rate)
-    epsilon = jnp.maximum(dt * 0.5, 1e-5)
-    time_safe = jnp.where(time_array < epsilon, epsilon, time_array)
+    # Replace near-zero values with dt/2 floor, matching calculate_diffusion_coefficient.
+    # Floor = 1e-8 matches the non-CMC shear variant and the diffusion function.
+    epsilon = jnp.where(dt * 0.5 > 1e-8, dt * 0.5, 1e-8)
+    time_safe = jnp.where(time_array > epsilon, time_array, epsilon)
 
     gamma_t = gamma_dot_0 * (time_safe**beta) + gamma_dot_offset
     # Ensure positive values — use jnp.where (not jnp.maximum) to preserve gradients.
@@ -248,13 +250,14 @@ def create_time_integral_matrix(
 ) -> jnp.ndarray:
     r"""Create time integral matrix using trapezoidal numerical integration.
 
-    RESTORED (Nov 2025): Back to working implementation from homodyne-analysis/kernels.py
-    The dt scaling happens in wavevector_q_squared_half_dt, NOT in this cumsum.
+    Computes the full N x N matrix of pairwise trapezoidal integral differences
+    via broadcasting. The dt scaling happens in wavevector_q_squared_half_dt,
+    NOT in this cumsum.
 
-    Algorithm (from working version):
+    Algorithm:
 
     1. Trapezoidal integration: cumsum[i] = Sum(k=0 to i-1) 0.5 * (f[k] + f[k+1])
-    2. Compute difference matrix: matrix[i,j] = abs(cumsum[i] - cumsum[j])
+    2. Compute full difference matrix: matrix[i,j] = smooth_abs(cumsum[i] - cumsum[j])
     3. The dt factor is applied via wavevector_q_squared_half_dt = 0.5 * q^2 * dt
 
     This gives: matrix[i,j] = number of integration steps.
@@ -262,17 +265,8 @@ def create_time_integral_matrix(
 
     Benefits over simple cumsum:
     - Reduces oscillations from discretization by ~50%
-    - Second-order accuracy (O(dt²)) vs. first-order (O(dt))
+    - Second-order accuracy (O(dt^2)) vs. first-order (O(dt))
     - Eliminates checkerboard artifacts in diagonal-corrected results
-
-    Memory optimisation (Feb 2026):
-    The output is symmetric: matrix[i,j] = matrix[j,i]. The physical inputs
-    (D_t, gamma_t) are non-negative so cumsum is monotonically non-decreasing,
-    meaning cumsum[i] - cumsum[j] >= 0 for i >= j. We therefore compute only the
-    lower triangle (where the difference is non-negative and no abs is needed),
-    apply the smooth-abs approximation once, then mirror to fill the upper triangle.
-    This halves the number of sqrt evaluations and eliminates one N×N temporary
-    compared to the naive full outer-product approach.
 
     Args:
         time_dependent_array: f(t) evaluated at discrete time points

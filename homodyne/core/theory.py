@@ -132,11 +132,25 @@ class TheoryEngine:
             L: Sample-detector distance
             contrast: Contrast parameter
             offset: Baseline offset
-            dt: Time step in seconds. Required.
+            dt: Time step in seconds. Required — unlike compute_g1, there is no
+                dt estimation fallback for g2 because sinc_prefactor requires an
+                exact dt. Pass dt explicitly from configuration.
 
         Returns:
             g2 correlation function
+
+        Raises:
+            ValueError: If dt is None.
         """
+        # Fail fast at the API boundary with a clear message rather than letting
+        # CombinedModel.compute_g2 raise a cryptic TypeError from an inner layer.
+        if dt is None:
+            raise ValueError(
+                "TheoryEngine.compute_g2 requires an explicit dt (time step in seconds). "
+                "Pass dt from configuration, e.g. dt=config.dt. "
+                "Unlike compute_g1, there is no estimation fallback for compute_g2."
+            )
+
         # Validate inputs
         self._validate_computation_inputs(params, q, L)
         self._validate_scaling_parameters(contrast, offset)
@@ -474,9 +488,11 @@ def compute_g2_theory(
     analysis_mode: str = "laminar_flow",
     dt: float | None = None,
 ) -> Any:
-    """Direct computation of g2 theory with minimal overhead.
+    """Direct computation of g2 theory. Convenience wrapper for one-off calculations.
 
-    Convenience function for simple theory calculations.
+    Note: Creates a new TheoryEngine per call (includes model init overhead, logger
+    I/O, and jnp.array construction). For repeated calls (e.g. parameter sweeps),
+    create a single TheoryEngine instance and call engine.compute_g2() directly.
 
     Args:
         params: Physical parameters
@@ -486,7 +502,7 @@ def compute_g2_theory(
         L: Sample-detector distance
         contrast, offset: Scaling parameters
         analysis_mode: Analysis mode
-        dt: Time step (if None, will be estimated from t1)
+        dt: Time step in seconds. Required for g2 (no estimation fallback).
 
     Returns:
         g2 correlation function

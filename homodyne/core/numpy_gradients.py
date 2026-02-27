@@ -110,7 +110,7 @@ def _validate_function(func: Callable, x: np.ndarray, name: str = "function") ->
         result = func(x)
     except NumericalStabilityError:
         raise  # Don't re-wrap our own error
-    except Exception as e:
+    except (ValueError, ArithmeticError, FloatingPointError, OverflowError) as e:
         raise NumericalStabilityError(f"{name} evaluation failed: {e}") from e
     if not np.isfinite(result).all():
         raise NumericalStabilityError(f"{name} returned non-finite values")
@@ -195,7 +195,7 @@ def _complex_step_derivative(
         try:
             f_complex = func(x_complex)
             gradient[i] = np.imag(f_complex) / h[i]
-        except Exception as e:
+        except (ValueError, ArithmeticError, FloatingPointError, OverflowError, TypeError) as e:
             # Fallback to central differences if complex evaluation fails
             logger.warning(f"Complex-step failed for parameter {i}: {e}")
             gradient[i] = _central_difference_single(func, x.real, i, h[i])
@@ -434,7 +434,7 @@ def _adaptive_gradient(
             config.min_step,
             config.max_step,
         )
-    except Exception as e:
+    except (ValueError, ArithmeticError, FloatingPointError, OverflowError) as e:
         warnings_list.append(f"Step size estimation failed: {e}")
         h_optimal = np.full_like(x, DEFAULT_STEP)
 
@@ -446,7 +446,7 @@ def _adaptive_gradient(
             step_sizes = h_optimal
             total_function_calls += n_params
             method_used = DifferentiationMethod.COMPLEX_STEP
-        except Exception as e:
+        except (ValueError, ArithmeticError, FloatingPointError, OverflowError, TypeError) as e:
             warnings_list.append(f"Complex-step differentiation failed: {e}")
             complex_step_success = False
     else:
@@ -477,7 +477,7 @@ def _adaptive_gradient(
                     2 * config.richardson_terms,
                     None,
                 )
-            except Exception as e:
+            except (ValueError, ArithmeticError, FloatingPointError, OverflowError) as e:
                 deriv = _central_difference_single(func, x, i, h_optimal[i])
                 warning = f"Richardson extrapolation failed for param {i}: {e}"
                 return i, deriv, 0.0, h_optimal[i], 2, warning
@@ -551,7 +551,7 @@ def _chunked_gradient_computation(
             config.min_step,
             config.max_step,
         )
-    except Exception as e:
+    except (ValueError, ArithmeticError, FloatingPointError, OverflowError) as e:
         warnings_list.append(f"Step size estimation failed: {e}")
         h_optimal = np.full_like(x, DEFAULT_STEP)
 
@@ -622,7 +622,7 @@ def _process_parameter_chunk(
 
             method_used = DifferentiationMethod.COMPLEX_STEP
 
-        except Exception as e:
+        except (ValueError, ArithmeticError, FloatingPointError, OverflowError, TypeError) as e:
             chunk_warnings.append(f"Complex-step failed for chunk: {e}")
             # Fallback to Richardson extrapolation
             method_used = DifferentiationMethod.RICHARDSON
@@ -639,7 +639,7 @@ def _process_parameter_chunk(
                     chunk_gradient[i] = deriv
                     chunk_error_estimates[i] = error_est
                     chunk_function_calls += 2 * config.richardson_terms
-                except Exception as e2:
+                except (ValueError, ArithmeticError, FloatingPointError, OverflowError) as e2:
                     chunk_warnings.append(
                         f"Richardson failed for param {param_idx}: {e2}",
                     )
@@ -666,7 +666,7 @@ def _process_parameter_chunk(
                 chunk_gradient[i] = deriv
                 chunk_error_estimates[i] = error_est
                 chunk_function_calls += 2 * config.richardson_terms
-            except Exception as e:
+            except (ValueError, ArithmeticError, FloatingPointError, OverflowError) as e:
                 chunk_warnings.append(f"Richardson failed for param {param_idx}: {e}")
                 chunk_gradient[i] = _central_difference_single(
                     func,
@@ -753,7 +753,7 @@ def _richardson_gradient(
                 config.richardson_terms,
             )
             return i, deriv, error_est, None
-        except Exception as e:
+        except (ValueError, ArithmeticError, FloatingPointError, OverflowError) as e:
             # Fallback to central differences
             deriv = _central_difference_single(func, x, i, h[i])
             return (
@@ -931,7 +931,7 @@ def _compute_hessian_finite_diff(
             config.min_step,
             config.max_step,
         )
-    except Exception:
+    except (ValueError, ArithmeticError, np.linalg.LinAlgError):
         logger.debug(
             "Step-size estimation failed in Hessian computation, using default step"
         )
@@ -1031,7 +1031,7 @@ def validate_gradient_accuracy(
 
             results[method] = result
 
-        except Exception as e:
+        except (ValueError, ArithmeticError, FloatingPointError, OverflowError, TypeError) as e:
             results[method] = {"success": False, "error": str(e), "method": method}
 
     return results

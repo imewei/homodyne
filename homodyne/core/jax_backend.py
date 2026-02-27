@@ -6,14 +6,14 @@ for homodyne scattering analysis. Provides JIT-compiled functions with automatic
 differentiation capabilities for optimization.
 
 This module provides JAX-based computational kernels
-that offer superior performance, GPU/TPU support, and automatic differentiation
+that offer superior performance and automatic differentiation
 for gradient-based optimization methods.
 
 Key Features:
 - JIT compilation for optimal performance
 - Automatic differentiation (grad, hessian) for optimization
-- Vectorized operations with vmap/pmap for parallelization
-- GPU/TPU acceleration when available
+- Vectorized operations with vmap for parallelization
+- CPU-only: optimized for multi-core NUMA architectures (no GPU/TPU)
 - Memory-efficient operations for large correlation matrices
 - Numerical stability enhancements
 
@@ -156,6 +156,8 @@ def _get_array_hash_key(arr: "jnp.ndarray") -> tuple | None:
     Returns None if the array is a traced abstract value (inside JIT context).
     """
     try:
+        if arr.size == 0:
+            return (arr.shape, arr.dtype, 0, 0.0, 0.0, 0.0)
         if arr.ndim == 0:
             return (1, float(arr), float(arr), str(arr.dtype))
         n = len(arr)
@@ -891,13 +893,12 @@ def compute_g1_diffusion(
     t1, t2 = get_cached_meshgrid(t1, t2)
 
     # Use dt from configuration (REQUIRED for correct physics)
-    # If dt not provided, estimate from time array as fallback
+    # If dt not provided, estimate from time array as fallback.
+    # P2-R7-02: After get_cached_meshgrid, t1 is always 2D, so the 1D branch
+    # was dead code. Only the 2D case is needed.
     if dt is None:
-        # FALLBACK: Estimate from time array
-        if t1.ndim == 2:
-            time_array = t1[:, 0]
-        else:
-            time_array = t1
+        # FALLBACK: Estimate from 2D meshgrid (first column = unique t1 values)
+        time_array = t1[:, 0]
         dt_value = (
             float(time_array[1] - time_array[0]) if time_array.shape[0] > 1 else 1.0
         )
@@ -963,7 +964,7 @@ def compute_g1_total(
     phi: jnp.ndarray,
     q: float,
     L: float,
-    dt: float,
+    dt: float | None,
 ) -> jnp.ndarray:
     """Wrapper function that computes total g1 using configuration dt.
 
@@ -1027,7 +1028,7 @@ def compute_g2_scaled(
     L: float,
     contrast: float,
     offset: float,
-    dt: float,
+    dt: float | None,
 ) -> jnp.ndarray:
     """Wrapper function that computes g2 using configuration dt.
 
@@ -1517,18 +1518,16 @@ def _get_performance_recommendations() -> list[str]:
             recommendations.append("[OK] NumPy gradients available as fallback")
 
     if JAX_AVAILABLE:
+        # P2-R7-04: This is a CPU-only package — no GPU/TPU detection.
+        # Report CPU device count for parallel processing hints only.
         try:
             import jax
 
-            devices = jax.devices()
+            devices = jax.devices("cpu")
             if len(devices) > 1:
                 recommendations.append(
-                    f"[INFO] {len(devices)} compute devices available for parallel processing",
+                    f"[INFO] {len(devices)} CPU devices available for parallel processing",
                 )
-            if any("gpu" in str(d).lower() for d in devices):
-                recommendations.append("[INFO] GPU device detected")
-            if any("tpu" in str(d).lower() for d in devices):
-                recommendations.append("[INFO] TPU device detected")
         except Exception:
             logger.debug("Device inspection failed; proceeding without device hints")
 
