@@ -57,9 +57,12 @@ def plot_experimental_data(
 
     # Extract time extent for imshow if time arrays are available
     if t1 is not None and t2 is not None:
-        t1_min, t1_max = float(np.min(t1)), float(np.max(t1))
-        t2_min, t2_max = float(np.min(t2)), float(np.max(t2))
-        extent = [t1_min, t1_max, t2_min, t2_max]  # [xmin, xmax, ymin, ymax] = [t1, t2]
+        t1_min, t1_max = float(np.nanmin(t1)), float(np.nanmax(t1))
+        t2_min, t2_max = float(np.nanmin(t2)), float(np.nanmax(t2))
+        if all(np.isfinite(v) for v in [t1_min, t1_max, t2_min, t2_max]):
+            extent = [t1_min, t1_max, t2_min, t2_max]
+        else:
+            extent = None
         xlabel = "t₁ (s)"
         ylabel = "t₂ (s)"
         logger.debug(f"Using time extent: t1=[{t1_min:.3f}, {t1_max:.3f}], t2=[{t2_min:.3f}, {t2_max:.3f}] seconds")
@@ -149,10 +152,10 @@ def _plot_3d_experimental_data(
         cbar = plt.colorbar(im, ax=ax, label="C₂", shrink=0.9)
         cbar.ax.tick_params(labelsize=9)
 
-        # Calculate and display key statistics
-        mean_val = np.mean(angle_data)
-        max_val = np.max(angle_data)
-        min_val = np.min(angle_data)
+        # Calculate and display key statistics (use nan-safe variants for masked pixels)
+        mean_val = float(np.nanmean(angle_data))
+        max_val = float(np.nanmax(angle_data))
+        min_val = float(np.nanmin(angle_data))
 
         stats_text = f"Mean: {mean_val:.4f}\nRange: [{min_val:.4f}, {max_val:.4f}]"
         ax.text(

@@ -39,12 +39,12 @@ def compute_diagonal_overlay_stats(
     solver_diag = _diag(c2_solver)
     posthoc_diag = _diag(c2_posthoc)
 
-    raw_var = float(np.var(raw_diag))
-    solver_var = float(np.var(solver_diag))
-    posthoc_var = float(np.var(posthoc_diag))
+    raw_var = float(np.nanvar(raw_diag))
+    solver_var = float(np.nanvar(solver_diag))
+    posthoc_var = float(np.nanvar(posthoc_diag))
 
-    solver_rmse = float(np.sqrt(np.mean((solver_diag - raw_diag) ** 2)))
-    posthoc_rmse = float(np.sqrt(np.mean((posthoc_diag - raw_diag) ** 2)))
+    solver_rmse = float(np.sqrt(np.nanmean((solver_diag - raw_diag) ** 2)))
+    posthoc_rmse = float(np.sqrt(np.nanmean((posthoc_diag - raw_diag) ** 2)))
 
     return DiagonalOverlayResult(
         phi_index=phi_index,

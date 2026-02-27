@@ -434,7 +434,7 @@ def plot_convergence_diagnostics(
     metrics: list[str] | None = None,
     figsize: tuple[float, float] | None = None,
     rhat_threshold: float = 1.1,
-    ess_threshold: float = 100.0,
+    ess_threshold: float = 400.0,
     show: bool = False,
     save_path: str | Path | None = None,
     dpi: int = 150,
@@ -454,8 +454,8 @@ def plot_convergence_diagnostics(
         Figure size (width, height). If None, auto-calculated
     rhat_threshold : float, default=1.1
         R-hat threshold for convergence (standard: 1.1)
-    ess_threshold : float, default=100.0
-        ESS threshold for adequate sampling (standard: 100)
+    ess_threshold : float, default=400.0
+        ESS threshold for adequate sampling (standard: 400)
     show : bool, default=False
         If True, display the figure interactively
     save_path : str or Path, optional
@@ -498,8 +498,8 @@ def plot_convergence_diagnostics(
     fig, axes = plt.subplots(num_metrics, 1, figsize=figsize, squeeze=False)
     axes = axes.flatten()
 
-    # Extract parameter names
-    num_params = len(result.mean_params)
+    # Extract parameter names (guard against None mean_params from failed CMC runs)
+    num_params = len(result.mean_params) if result.mean_params is not None else 0
     if result.analysis_mode == "static":
         param_names = ["D0", "alpha", "D_offset"][:num_params]
     elif result.analysis_mode == "laminar_flow":
@@ -1128,11 +1128,11 @@ def plot_cmc_summary_dashboard(
                     patch.set_facecolor("lightblue")
 
                 ax_conv.axhline(
-                    y=100,
+                    y=400,
                     color="red",
                     linestyle="--",
                     linewidth=2,
-                    label="ESS threshold (100)",
+                    label="ESS threshold (400)",
                 )
                 ax_conv.set_ylabel("Effective Sample Size", fontsize=9)
                 ax_conv.set_title(
@@ -1206,7 +1206,8 @@ def plot_cmc_summary_dashboard(
             )
 
     # Panel 4: Posterior histograms (bottom row)
-    num_hist_params = min(2, len(result.mean_params))
+    _n_hist_params_total = len(result.mean_params) if result.mean_params is not None else 0
+    num_hist_params = min(2, _n_hist_params_total)
     for i in range(num_hist_params):
         ax_hist = fig.add_subplot(gs[2, i])
 
@@ -1800,11 +1801,11 @@ def print_mcmc_summary(result: Any) -> None:  # MCMCResult type
                 logger.info("    %20s: %.4f %s", name, value, status)
 
         if result.effective_sample_size is not None:
-            logger.info("  ESS (target > 100):")
+            logger.info("  ESS (target > 400):")
             for name, value in result.effective_sample_size.items():
                 if not math.isfinite(value):
                     status = "N/A"
-                elif value > 100:
+                elif value > 400:
                     status = "pass"
                 else:
                     status = "FAIL"

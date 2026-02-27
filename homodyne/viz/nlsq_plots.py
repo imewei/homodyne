@@ -188,7 +188,7 @@ def plot_simulated_data(
 
         c2_result = np.array(c2_phi[0])
         logger.debug(
-            f"  C₂ shape: {c2_result.shape}, range: [{c2_result.min():.4f}, {c2_result.max():.4f}]",
+            f"  C₂ shape: {c2_result.shape}, range: [{float(np.nanmin(c2_result)):.4f}, {float(np.nanmax(c2_result)):.4f}]",
         )
         c2_simulated_list.append(c2_result)
 
@@ -197,8 +197,10 @@ def plot_simulated_data(
     logger.info(f"Generated simulated C₂ with shape: {c2_simulated.shape}")
 
     # Compute global color scale
-    c2_min = float(c2_simulated.min())
-    c2_max = float(c2_simulated.max())
+    c2_min = float(np.nanmin(c2_simulated))
+    c2_max = float(np.nanmax(c2_simulated))
+    if not np.isfinite(c2_min) or not np.isfinite(c2_max):
+        c2_min, c2_max = 1.0, 1.5
     vmin = max(1.0, c2_min)
     vmax = min(1.6, c2_max)
 
@@ -237,9 +239,9 @@ def plot_simulated_data(
         cbar = plt.colorbar(im, ax=ax, label="C₂", shrink=0.9)
         cbar.ax.tick_params(labelsize=9)
 
-        mean_val = np.mean(c2_simulated[idx])
-        max_val = np.max(c2_simulated[idx])
-        min_val = np.min(c2_simulated[idx])
+        mean_val = np.nanmean(c2_simulated[idx])
+        max_val = np.nanmax(c2_simulated[idx])
+        min_val = np.nanmin(c2_simulated[idx])
 
         stats_text = f"Mean: {mean_val:.4f}\nRange: [{min_val:.4f}, {max_val:.4f}]"
         ax.text(
@@ -435,7 +437,7 @@ def generate_and_plot_fitted_simulations(
         c2_result = np.array(c2_phi[0])
         c2_fitted_list.append(c2_result)
 
-        logger.debug(f"  C₂ range: [{c2_result.min():.4f}, {c2_result.max():.4f}]")
+        logger.debug(f"  C₂ range: [{float(np.nanmin(c2_result)):.4f}, {float(np.nanmax(c2_result)):.4f}]")
 
     c2_fitted = np.array(c2_fitted_list)
 
@@ -513,9 +515,9 @@ def generate_and_plot_fitted_simulations(
         cbar = plt.colorbar(im, ax=ax, label="C₂", shrink=0.9)
         cbar.ax.tick_params(labelsize=9)
 
-        mean_val = np.mean(c2_fitted[i])
-        max_val = np.max(c2_fitted[i])
-        min_val = np.min(c2_fitted[i])
+        mean_val = float(np.nanmean(c2_fitted[i]))
+        max_val = float(np.nanmax(c2_fitted[i]))
+        min_val = float(np.nanmin(c2_fitted[i]))
 
         stats_text = f"Mean: {mean_val:.4f}\nRange: [{min_val:.4f}, {max_val:.4f}]"
         ax.text(
@@ -941,17 +943,17 @@ def _resolve_color_limits(
     percentile_max = opts.get("percentile_max", 99.0)
 
     # Always use percentile-based limits if not explicitly set
-    # This ensures we see the structure in the data regardless of absolute range
+    # Use nan-safe variants so masked/dead-pixel data does not yield NaN limits.
     if matrix.size > 0:
         if vmin is None:
-            vmin = float(np.percentile(matrix, percentile_min))
+            vmin = float(np.nanpercentile(matrix, percentile_min))
         if vmax is None:
-            vmax = float(np.percentile(matrix, percentile_max))
+            vmax = float(np.nanpercentile(matrix, percentile_max))
 
-    # Fallback only for empty data
-    if vmin is None:
+    # Fallback only for empty data or all-NaN data
+    if vmin is None or not np.isfinite(vmin):
         vmin = 1.0
-    if vmax is None:
+    if vmax is None or not np.isfinite(vmax):
         vmax = 1.5
 
     # Guard against degenerate range (constant/flat data) which causes imshow

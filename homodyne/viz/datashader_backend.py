@@ -282,9 +282,9 @@ def plot_c2_heatmap_fast(
     auto_vmax = vmax
     if adaptive and c2_data.size > 0:
         if vmin is None:
-            auto_vmin = float(np.percentile(c2_data, percentile_min))
+            auto_vmin = float(np.nanpercentile(c2_data, percentile_min))
         if vmax is None:
-            auto_vmax = float(np.percentile(c2_data, percentile_max))
+            auto_vmax = float(np.nanpercentile(c2_data, percentile_max))
 
     vmin_use = auto_vmin if auto_vmin is not None else 1.0
     vmax_use = auto_vmax if auto_vmax is not None else 1.5
@@ -415,12 +415,12 @@ def plot_c2_comparison_fast(
         # This ensures both panels have proper color representation
         # and avoids block artifacts from narrow fit ranges
         if vmin_shared is None:
-            vmin_exp = float(np.percentile(c2_exp, percentile_min))
-            vmin_fit = float(np.percentile(c2_fit, percentile_min))
+            vmin_exp = float(np.nanpercentile(c2_exp, percentile_min))
+            vmin_fit = float(np.nanpercentile(c2_fit, percentile_min))
             vmin_shared = min(vmin_exp, vmin_fit)
         if vmax_shared is None:
-            vmax_exp = float(np.percentile(c2_exp, percentile_max))
-            vmax_fit = float(np.percentile(c2_fit, percentile_max))
+            vmax_exp = float(np.nanpercentile(c2_exp, percentile_max))
+            vmax_fit = float(np.nanpercentile(c2_fit, percentile_max))
             vmax_shared = max(vmax_exp, vmax_fit)
 
     # Fallback only if adaptive scaling couldn't compute values (empty data)
