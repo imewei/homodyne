@@ -77,7 +77,7 @@ def cleanup_completion_files() -> list[tuple[str, str]]:
                 file_path.unlink()
                 removed_files.append(("Shell completion", file_path.name))
             except Exception as e:
-                print(f"   ⚠️  Failed to remove {file_path.name}: {e}")
+                print(f"   [WARN] Failed to remove {file_path.name}: {e}")
 
     return removed_files
 
@@ -189,7 +189,7 @@ def cleanup_activate_script_hooks() -> list[tuple[str, str]]:
                 cleaned.append(("Activate hook", script_name))
 
         except OSError as e:
-            print(f"   ⚠️  Failed to clean {script_name}: {e}")
+            print(f"   [WARN] Failed to clean {script_name}: {e}")
 
     return cleaned
 
@@ -210,7 +210,7 @@ def cleanup_gpu_files() -> list[tuple[str, str]]:
                 file_path.unlink()
                 removed_files.append(("GPU setup", file_path.name))
             except Exception as e:
-                print(f"   ⚠️  Failed to remove {file_path.name}: {e}")
+                print(f"   [WARN] Failed to remove {file_path.name}: {e}")
 
     return removed_files
 
@@ -234,7 +234,7 @@ def cleanup_advanced_features() -> list[tuple[str, str]]:
                 file_path.unlink()
                 removed_files.append(("Activation/CLI", file_path.name))
             except Exception as e:
-                print(f"   ⚠️  Failed to remove {file_path.name}: {e}")
+                print(f"   [WARN] Failed to remove {file_path.name}: {e}")
 
     return removed_files
 
@@ -249,7 +249,7 @@ def cleanup_xla_config() -> list[tuple[str, str]]:
             xla_config_file.unlink()
             removed_files.append(("XLA config", xla_config_file.name))
         except Exception as e:
-            print(f"   ⚠️  Failed to remove {xla_config_file.name}: {e}")
+            print(f"   [WARN] Failed to remove {xla_config_file.name}: {e}")
 
     return removed_files
 
@@ -270,7 +270,7 @@ def cleanup_xla_activation_scripts() -> list[tuple[str, str]]:
                 file_path.unlink()
                 removed_files.append(("XLA activation", file_path.name))
             except Exception as e:
-                print(f"   ⚠️  Failed to remove {file_path.name}: {e}")
+                print(f"   [WARN] Failed to remove {file_path.name}: {e}")
 
     return removed_files
 
@@ -301,7 +301,7 @@ def cleanup_old_system_files() -> list[tuple[str, str]]:
                 file_path.unlink()
                 removed_files.append(("Old system file", file_path.name))
             except Exception as e:
-                print(f"   ⚠️  Failed to remove {file_path.name}: {e}")
+                print(f"   [WARN] Failed to remove {file_path.name}: {e}")
 
     return removed_files
 
@@ -386,7 +386,7 @@ def interactive_cleanup() -> list[tuple[str, str]]:
         return all_removed
 
     except (KeyboardInterrupt, EOFError):
-        print("\n⚠️  Interactive cleanup cancelled by user")
+        print("\n[WARN] Interactive cleanup cancelled by user")
         return []
 
 
@@ -398,11 +398,11 @@ def cleanup_all_files() -> bool:
     print("═" * 70)
     print("🧹 Homodyne Cleanup - Shell Completion System")
     print("═" * 70)
-    print(f"🖥️  Platform: {system}")
+    print(f"Platform: {system}")
     print(f"📦 Environment: {'Virtual Environment' if is_venv else 'System Python'}")
 
     if not is_venv:
-        print("\n⚠️  Not running in a virtual environment")
+        print("\n[WARN] Not running in a virtual environment")
         print("   Cleanup only works in virtual environments")
         print("   System installations don't create extra files")
         return False
@@ -440,22 +440,22 @@ def cleanup_all_files() -> bool:
                         dir_path.rmdir()
                         all_removed.append(("Empty directory", dir_path.name))
                 except Exception as exc:
-                    print(f"   ⚠️ Could not remove {dir_path}: {exc}")
+                    print(f"   [WARN] Could not remove {dir_path}: {exc}")
 
-        print("\n📊 Cleanup Summary:")
+        print("\nCleanup Summary:")
         if all_removed:
-            print(f"   ✅ Successfully removed {len(all_removed)} items:")
+            print(f"   [OK] Successfully removed {len(all_removed)} items:")
             for file_type, name in all_removed:
                 print(f"      • {file_type}: {name}")
-            print("   🔄 Restart shell or reactivate environment to complete cleanup")
+            print("   Restart shell or reactivate environment to complete cleanup")
         else:
-            print("   ✨ No homodyne files found to remove")
-            print("   📝 Environment is already clean")
+            print("   No homodyne files found to remove")
+            print("   Environment is already clean")
 
         return True
 
     except Exception as e:
-        print(f"❌ Failed to clean up files: {e}")
+        print(f"[FAIL] Failed to clean up files: {e}")
         return False
 
 
@@ -467,11 +467,11 @@ def show_dry_run() -> bool:
     print("═" * 70)
     print("🧹 Homodyne Cleanup - DRY RUN")
     print("═" * 70)
-    print(f"🖥️  Platform: {system}")
+    print(f"Platform: {system}")
     print(f"📦 Environment: {'Virtual Environment' if is_venv else 'System Python'}")
 
     if not is_venv:
-        print("\n⚠️  Not running in a virtual environment")
+        print("\n[WARN] Not running in a virtual environment")
         print("   Cleanup only works in virtual environments")
         print("   System installations don't create extra files")
         return False
@@ -574,16 +574,16 @@ def show_dry_run() -> bool:
         if file_path.exists():
             files_to_remove.append((file_type, name))
 
-    print("\n📊 Dry Run Results:")
+    print("\nDry Run Results:")
     if files_to_remove:
         print(f"   📋 Would remove {len(files_to_remove)} items:")
         for file_type, name in files_to_remove:
             print(f"      • {file_type}: {name}")
-        print("   🔄 Would clean up empty directories")
+        print("   Would clean up empty directories")
         print("\n💡 To actually remove these files, run without --dry-run")
     else:
-        print("   ✨ No homodyne files found to remove")
-        print("   📝 Environment is already clean")
+        print("   No homodyne files found to remove")
+        print("   Environment is already clean")
 
     return True
 
@@ -601,25 +601,25 @@ def main() -> int:
             print("═" * 70)
 
             if not is_virtual_environment():
-                print("\n⚠️  Not in a virtual environment - nothing to clean")
+                print("\n[WARN] Not in a virtual environment - nothing to clean")
                 return 0
 
             removed_files = interactive_cleanup()
 
-            print("\n📊 Cleanup Results:")
+            print("\nCleanup Results:")
             if removed_files:
-                print(f"   ✅ Removed {len(removed_files)} items:")
+                print(f"   [OK] Removed {len(removed_files)} items:")
                 for file_type, name in removed_files:
                     print(f"      • {file_type}: {name}")
             else:
-                print("   ✨ No files were removed")
+                print("   No files were removed")
 
             success = True
         else:
             # Add confirmation prompt for non-interactive cleanup
             if not args.force:
                 print(
-                    "\n⚠️  This will remove all homodyne shell completion and setup files:",
+                    "\n[WARN] This will remove all homodyne shell completion and setup files:",
                 )
                 print(
                     "   • Shell completion scripts and aliases (hm, hconfig, hm-nlsq, etc.)",
@@ -653,7 +653,7 @@ def main() -> int:
 
         print("\n" + "═" * 70)
         if success:
-            print("✅ Homodyne cleanup completed!")
+            print("[OK] Homodyne cleanup completed!")
             if not args.interactive:
                 print("\n💡 What was cleaned:")
                 print("   ├─ Shell completion scripts (bash/zsh/fish)")
@@ -665,14 +665,14 @@ def main() -> int:
                     "   ├─ XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)"
                 )
                 print("   └─ Legacy system files")
-            print("\n🔄 Next steps:")
+            print("\nNext steps:")
             print("   • Restart your shell session")
             print("   • Or reactivate your virtual environment")
             print("   • Run 'pip uninstall homodyne' to complete removal")
             print("\n🔧 To restore shell completion and setup files:")
             print("   homodyne-post-install --interactive")
         else:
-            print("⚠️  Cleanup had some issues")
+            print("[WARN] Cleanup had some issues")
             print("\n💡 Troubleshooting:")
             print("   • Make sure you're in a virtual environment")
             print("   • Try: homodyne-cleanup --interactive")
@@ -682,10 +682,10 @@ def main() -> int:
         return 0 if success else 1
 
     except KeyboardInterrupt:
-        print("\n⚠️  Cleanup cancelled by user")
+        print("\n[WARN] Cleanup cancelled by user")
         return 1
     except Exception as e:
-        print(f"\n❌ Unexpected error during cleanup: {e}")
+        print(f"\n[FAIL] Unexpected error during cleanup: {e}")
         print("💡 Please report this issue if it persists")
         return 1
 
