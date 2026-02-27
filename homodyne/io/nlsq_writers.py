@@ -48,35 +48,36 @@ def save_nlsq_json_files(
     - analysis_results_nlsq.json: Analysis summary and fit quality
     - convergence_metrics.json: Convergence diagnostics and device info
     """
+    param_file = output_dir / "parameters.json"
+    analysis_file = output_dir / "analysis_results_nlsq.json"
+    convergence_file = output_dir / "convergence_metrics.json"
+
     try:
         # Save parameters.json
-        param_file = output_dir / "parameters.json"
         with open(param_file, "w") as f:
             json.dump(param_dict, f, indent=2, default=json_serializer)
         # T056: Log file path and write completion
         logger.debug(f"Saved parameters to {param_file}")
 
         # Save analysis_results_nlsq.json
-        analysis_file = output_dir / "analysis_results_nlsq.json"
         with open(analysis_file, "w") as f:
             json.dump(analysis_dict, f, indent=2, default=json_serializer)
         logger.debug(f"Saved analysis results to {analysis_file}")
 
         # Save convergence_metrics.json
-        convergence_file = output_dir / "convergence_metrics.json"
         with open(convergence_file, "w") as f:
             json.dump(convergence_dict, f, indent=2, default=json_serializer)
         logger.debug(f"Saved convergence metrics to {convergence_file}")
+
+        # T058a: Log file sizes after all writes succeed (inside try to catch stat errors)
+        total_size_kb = (
+            param_file.stat().st_size
+            + analysis_file.stat().st_size
+            + convergence_file.stat().st_size
+        ) / 1024
+        logger.info(f"Saved 3 JSON files to {output_dir} (total: {total_size_kb:.1f} KB)")
     except OSError as e:
         raise OSError(f"Failed to write NLSQ JSON files to {output_dir}: {e}") from e
-
-    # T058a: Log file sizes after write completion
-    total_size_kb = (
-        param_file.stat().st_size
-        + analysis_file.stat().st_size
-        + convergence_file.stat().st_size
-    ) / 1024
-    logger.info(f"Saved 3 JSON files to {output_dir} (total: {total_size_kb:.1f} KB)")
 
 
 def save_nlsq_npz_file(
@@ -155,9 +156,16 @@ def save_nlsq_npz_file(
     if c2_solver is not None:
         save_dict["c2_solver_scaled"] = c2_solver
 
-    np.savez_compressed(npz_file, **save_dict)
+    try:
+        np.savez_compressed(npz_file, **save_dict)
+    except OSError as e:
+        raise OSError(f"Failed to write NPZ file to {npz_file}: {e}") from e
 
     # T058a: Log file path and file size after write completion
-    file_size_mb = npz_file.stat().st_size / (1024 * 1024)
     n_arrays = 10 + (1 if c2_solver is not None else 0)
-    logger.info(f"Saved NPZ file with {n_arrays} arrays to {npz_file} ({file_size_mb:.2f} MB)")
+    try:
+        file_size_mb = npz_file.stat().st_size / (1024 * 1024)
+        size_str = f"{file_size_mb:.2f} MB"
+    except OSError:
+        size_str = "size unknown"
+    logger.info(f"Saved NPZ file with {n_arrays} arrays to {npz_file} ({size_str})")

@@ -692,12 +692,11 @@ def install_advanced_features() -> bool:
         # Install CLI commands for advanced features
         bin_dir = venv_path / "bin"
 
-        # System validator command
+        # System validator command — use the installed package rather than a
+        # hardcoded absolute path so the script survives venv relocation.
         validator_cmd = bin_dir / "homodyne-validate"
-        validator_content = f"""#!/usr/bin/env python3
-import sys
-sys.path.insert(0, "{homodyne_src_dir / "homodyne" / "runtime" / "utils"}")
-from system_validator import main
+        validator_content = """#!/usr/bin/env python3
+from homodyne.runtime.utils.system_validator import main
 if __name__ == "__main__":
     main()
 """
@@ -776,23 +775,23 @@ def interactive_setup() -> tuple[bool, list[str]]:
 
     if install_completion and shell_type:
         if install_shell_completion(shell_type):
-            results.append(f"✅ {shell_type.title()} completion")
+            results.append(f"[OK] {shell_type.title()} completion")
         else:
-            results.append(f"❌ {shell_type.title()} completion failed")
+            results.append(f"[FAIL] {shell_type.title()} completion failed")
 
     if configure_xla:
         if configure_xla_mode(xla_mode):
-            results.append("✅ XLA configuration")
+            results.append("[OK] XLA configuration")
         else:
-            results.append("❌ XLA configuration failed")
+            results.append("[FAIL] XLA configuration failed")
 
     if install_advanced:
         if install_advanced_features():
-            results.append("✅ Advanced features")
+            results.append("[OK] Advanced features")
         else:
-            results.append("❌ Advanced features failed")
+            results.append("[FAIL] Advanced features failed")
 
-    return len([r for r in results if r.startswith("✅")]) > 0, results
+    return len([r for r in results if r.startswith("[OK]")]) > 0, results
 
 
 def show_installation_summary(interactive_results: list[str] | None = None) -> None:

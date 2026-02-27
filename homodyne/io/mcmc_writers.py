@@ -91,7 +91,6 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
             ]
             if r_hat_values:
                 convergence_dict = param_dict["convergence"]
-                assert isinstance(convergence_dict, dict)
                 convergence_dict["all_chains_converged"] = bool(
                     all(v < 1.1 for v in r_hat_values)
                 )
@@ -99,11 +98,17 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
                 convergence_dict["max_r_hat"] = _json_safe(float(max(r_hat_values)))
         else:
             r_hat = np.asarray(result.r_hat)
+            finite_rhat = r_hat[np.isfinite(r_hat)]
             convergence_dict = param_dict["convergence"]
-            assert isinstance(convergence_dict, dict)
-            convergence_dict["all_chains_converged"] = bool(np.all(r_hat < 1.1))
-            convergence_dict["min_r_hat"] = _json_safe(float(np.min(r_hat)))
-            convergence_dict["max_r_hat"] = _json_safe(float(np.max(r_hat)))
+            convergence_dict["all_chains_converged"] = bool(
+                np.all(finite_rhat < 1.1) if finite_rhat.size > 0 else False
+            )
+            convergence_dict["min_r_hat"] = _json_safe(
+                float(np.min(finite_rhat)) if finite_rhat.size > 0 else None
+            )
+            convergence_dict["max_r_hat"] = _json_safe(
+                float(np.max(finite_rhat)) if finite_rhat.size > 0 else None
+            )
 
     if (
         hasattr(result, "effective_sample_size")
@@ -115,23 +120,20 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
             ]
             if ess_values:
                 convergence_dict = param_dict["convergence"]
-                assert isinstance(convergence_dict, dict)
                 convergence_dict["min_ess"] = _json_safe(float(min(ess_values)))
         else:
             ess = np.asarray(result.effective_sample_size)
+            finite_ess = ess[np.isfinite(ess)]
             convergence_dict = param_dict["convergence"]
-            assert isinstance(convergence_dict, dict)
-            convergence_dict["min_ess"] = _json_safe(float(np.min(ess)))
+            convergence_dict["min_ess"] = _json_safe(float(np.min(finite_ess))) if finite_ess.size > 0 else None
 
     if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
         convergence_dict = param_dict["convergence"]
-        assert isinstance(convergence_dict, dict)
         convergence_dict["acceptance_rate"] = _json_safe(float(result.acceptance_rate))
 
     # Add scaling parameters (contrast, offset)
     if hasattr(result, "mean_contrast"):
         parameters_dict = param_dict["parameters"]
-        assert isinstance(parameters_dict, dict)
         parameters_dict["contrast"] = {
             "mean": _json_safe(float(result.mean_contrast)),
             "std": _json_safe(float(getattr(result, "std_contrast", 0.0))),
@@ -139,7 +141,6 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
 
     if hasattr(result, "mean_offset"):
         parameters_dict = param_dict["parameters"]
-        assert isinstance(parameters_dict, dict)
         parameters_dict["offset"] = {
             "mean": _json_safe(float(result.mean_offset)),
             "std": _json_safe(float(getattr(result, "std_offset", 0.0))),
@@ -182,7 +183,6 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
             )
 
         parameters_dict = param_dict["parameters"]
-        assert isinstance(parameters_dict, dict)
         for i, name in enumerate(param_names):
             if i < len(mean_params_arr):
                 parameters_dict[name] = {
@@ -235,7 +235,8 @@ def create_mcmc_analysis_dict(
             max_r_hat = max(r_hat_values) if r_hat_values else None
         else:
             r_hat = np.asarray(result.r_hat)
-            max_r_hat = float(np.max(r_hat))
+            finite_rhat_analysis = r_hat[np.isfinite(r_hat)]
+            max_r_hat = float(np.max(finite_rhat_analysis)) if finite_rhat_analysis.size > 0 else None
 
         if max_r_hat is not None:
             if max_r_hat < 1.05:
@@ -268,7 +269,8 @@ def create_mcmc_analysis_dict(
             min_ess = min(ess_values) if ess_values else None
         else:
             ess = np.asarray(ess_source_analysis)
-            min_ess = np.min(ess)
+            finite_ess = ess[np.isfinite(ess)]
+            min_ess = float(np.min(finite_ess)) if finite_ess.size > 0 else None
 
         if min_ess is not None and min_ess < 400:
             warnings.append(f"Low effective sample size (min ESS={min_ess:.0f})")
@@ -295,8 +297,8 @@ def create_mcmc_analysis_dict(
             "n_time_points": n_time_points,
             "total_data_points": total_data_points,
             "q_value": (
-                _json_safe(float(data.get("wavevector_q_list", [0.0])[0]))
-                if data.get("wavevector_q_list") is not None
+                _json_safe(float(data["wavevector_q_list"][0]))
+                if data.get("wavevector_q_list")
                 else 0.0
             ),
         },
@@ -360,7 +362,7 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
     # Convergence diagnostics
     if hasattr(result, "r_hat") and result.r_hat is not None:
         if isinstance(result.r_hat, dict):
-            r_hat_values = [v for v in result.r_hat.values() if v is not None]
+            r_hat_values = [v for v in result.r_hat.values() if v is not None and np.isfinite(v)]
             if r_hat_values:
                 diagnostics_dict["convergence"]["all_chains_converged"] = bool(
                     all(v < 1.1 for v in r_hat_values)
@@ -394,8 +396,9 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
                 diagnostics_dict["convergence"]["per_parameter_diagnostics"] = per_param
         else:
             r_hat = np.asarray(result.r_hat)
+            finite_rhat = r_hat[np.isfinite(r_hat)]
             diagnostics_dict["convergence"]["all_chains_converged"] = bool(
-                np.all(r_hat < 1.1)
+                np.all(finite_rhat < 1.1) if finite_rhat.size > 0 else False
             )
             diagnostics_dict["convergence"]["r_hat_threshold"] = 1.1
 

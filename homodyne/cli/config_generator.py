@@ -200,7 +200,7 @@ def generate_config(
     with open(template_path) as f:
         config: dict[str, Any] = yaml.safe_load(f)
 
-    print(f"✓ Generated {mode} configuration: {output_path}")
+    print(f"OK: Generated {mode} configuration: {output_path}")
     print(f"  Template: {template_path.name}")
     print(f"  Mode: {mode}")
     print("\nNext steps:")
@@ -243,7 +243,7 @@ def interactive_builder() -> dict[str, Any]:
         else:
             print("Invalid choice. Please enter 1 or 2.")
 
-    print(f"\n✓ Selected mode: {mode}")
+    print(f"\nOK: Selected mode: {mode}")
     print()
 
     # Sample information
@@ -276,7 +276,7 @@ def interactive_builder() -> dict[str, Any]:
     # Check overwrite
     if output_path.exists():
         overwrite = (
-            input(f"\n⚠ File exists: {output_path}\nOverwrite? [y/N]: ").strip().lower()
+            input(f"\nWARNING: File exists: {output_path}\nOverwrite? [y/N]: ").strip().lower()
         )
         if overwrite != "y":
             print("Configuration not saved.")
@@ -306,68 +306,72 @@ def interactive_builder() -> dict[str, Any]:
 
     result_config: dict[str, Any]
 
-    if HAS_RUAMEL:
-        # Use ruamel.yaml to preserve comments while modifying values
-        yaml_handler = YAML()
-        yaml_handler.preserve_quotes = True
-        yaml_handler.width = 4096  # Prevent line wrapping
+    try:
+        if HAS_RUAMEL:
+            # Use ruamel.yaml to preserve comments while modifying values
+            yaml_handler = YAML()
+            yaml_handler.preserve_quotes = True
+            yaml_handler.width = 4096  # Prevent line wrapping
 
-        with open(template_path) as f:
-            config = yaml_handler.load(f)
+            with open(template_path) as f:
+                config = yaml_handler.load(f)
 
-        # Customize configuration
-        config["experimental_data"]["file_path"] = data_file
+            # Customize configuration
+            config["experimental_data"]["file_path"] = data_file
 
-        if "output" not in config:
-            config["output"] = {}
-        config["output"]["output_folder"] = output_dir
-        config["output"]["sample_name"] = sample_name
-        config["output"]["experiment_id"] = experiment_id
+            if "output" not in config:
+                config["output"] = {}
+            config["output"]["output_folder"] = output_dir
+            config["output"]["sample_name"] = sample_name
+            config["output"]["experiment_id"] = experiment_id
 
-        with open(output_path, "w") as f:
-            yaml_handler.dump(config, f)
+            with open(output_path, "w") as f:
+                yaml_handler.dump(config, f)
 
-        # Load for return value with proper type
-        with open(output_path) as f:
-            result_config = yaml.safe_load(f)
-    else:
-        # Fallback: use text replacement to preserve comments
-        with open(template_path) as f:
-            content = f.read()
+            # Load for return value with proper type
+            with open(output_path) as f:
+                result_config = yaml.safe_load(f)
+        else:
+            # Fallback: use text replacement to preserve comments
+            with open(template_path) as f:
+                content = f.read()
 
-        # Replace key values using simple text substitution
-        # Escape user inputs to prevent YAML injection (e.g., colons, quotes, hashes)
-        safe_data_file = _yaml_escape_string(data_file)
-        safe_output_dir = _yaml_escape_string(output_dir)
-        safe_sample_name = _yaml_escape_string(sample_name)
-        safe_experiment_id = _yaml_escape_string(experiment_id)
+            # Replace key values using simple text substitution
+            # Escape user inputs to prevent YAML injection (e.g., colons, quotes, hashes)
+            safe_data_file = _yaml_escape_string(data_file)
+            safe_output_dir = _yaml_escape_string(output_dir)
+            safe_sample_name = _yaml_escape_string(sample_name)
+            safe_experiment_id = _yaml_escape_string(experiment_id)
 
-        content = content.replace(
-            'file_path: "./data/sample/experiment.hdf"',
-            f'file_path: "{safe_data_file}"',
-        )
-        content = content.replace(
-            'directory: "./results"', f'directory: "{safe_output_dir}"'
-        )
-
-        # Add sample name and experiment_id if not present
-        if "sample_name:" not in content:
-            # Insert after directory line in output section
             content = content.replace(
-                f'directory: "{safe_output_dir}"',
-                f'directory: "{safe_output_dir}"\n  sample_name: "{safe_sample_name}"\n  experiment_id: "{safe_experiment_id}"',
+                'file_path: "./data/sample/experiment.hdf"',
+                f'file_path: "{safe_data_file}"',
+            )
+            content = content.replace(
+                'directory: "./results"', f'directory: "{safe_output_dir}"'
             )
 
-        with open(output_path, "w") as f:
-            f.write(content)
+            # Add sample name and experiment_id if not present
+            if "sample_name:" not in content:
+                # Insert after directory line in output section
+                content = content.replace(
+                    f'directory: "{safe_output_dir}"',
+                    f'directory: "{safe_output_dir}"\n  sample_name: "{safe_sample_name}"\n  experiment_id: "{safe_experiment_id}"',
+                )
 
-        # Load config for return value
-        with open(template_path) as f:
-            result_config = yaml.safe_load(f)
+            with open(output_path, "w") as f:
+                f.write(content)
+
+            # Load config for return value
+            with open(template_path) as f:
+                result_config = yaml.safe_load(f)
+    except OSError as e:
+        print(f"Error: Cannot write configuration to {output_path}: {e}", file=sys.stderr)
+        return {}
 
     print()
     print("=" * 70)
-    print(f"✓ Configuration saved: {output_path}")
+    print(f"OK: Configuration saved: {output_path}")
     print("=" * 70)
     print()
     print("Configuration summary:")
@@ -405,7 +409,7 @@ def validate_config(config_path: Path) -> bool:
 
     # Check file exists
     if not config_path.exists():
-        print(f"✗ Configuration file not found: {config_path}")
+        print(f"ERROR: Configuration file not found: {config_path}")
         return False
 
     # Try loading with ConfigManager
@@ -414,10 +418,10 @@ def validate_config(config_path: Path) -> bool:
         config = config_mgr.config
 
         if config is None:
-            print("✗ Configuration is empty or failed to load")
+            print("ERROR: Configuration is empty or failed to load")
             return False
 
-        print("✓ Configuration loaded successfully")
+        print("OK: Configuration loaded successfully")
         print()
 
         # Display key information
@@ -434,9 +438,9 @@ def validate_config(config_path: Path) -> bool:
             # Check if data file exists
             data_path = Path(data_file)
             if data_path.exists():
-                print("    ✓ Data file exists")
+                print("    OK: Data file exists")
             else:
-                print("    ⚠ Data file not found")
+                print("    WARNING: Data file not found")
 
         # Parameters
         initial_parameters = config.get("initial_parameters")
@@ -453,7 +457,7 @@ def validate_config(config_path: Path) -> bool:
 
         print()
         print("=" * 70)
-        print("✓ Configuration is valid")
+        print("OK: Configuration is valid")
         print()
         print("Next steps:")
         print(f"  Run analysis: homodyne --config {config_path}")
@@ -462,7 +466,7 @@ def validate_config(config_path: Path) -> bool:
         return True
 
     except Exception as e:
-        print("✗ Configuration validation failed:")
+        print("ERROR: Configuration validation failed:")
         print(f"  {type(e).__name__}: {e}")
         print()
         print("Common issues:")
@@ -499,7 +503,7 @@ def main() -> int:
             print("\n\nInteractive builder cancelled.")
             return 1
         except Exception as e:
-            print(f"\n✗ Error: {e}")
+            print(f"\nError: {e}")
             return 1
 
     # Generate mode (requires --mode)
@@ -512,10 +516,10 @@ def main() -> int:
             generate_config(args.mode, args.output, force=args.force)
             return 0
         except FileExistsError as e:
-            print(f"✗ {e}")
+            print(f"ERROR: {e}")
             return 1
         except Exception as e:
-            print(f"✗ Error generating configuration: {e}")
+            print(f"Error generating configuration: {e}")
             return 1
 
     # No mode specified

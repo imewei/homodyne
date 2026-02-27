@@ -169,16 +169,21 @@ class NumericalValidator:
                     jnp.sum(violations_lower) + jnp.sum(violations_upper)
                 )
 
-                violation_info = []
-                for i in range(len(param_array)):
-                    if violations_lower[i]:
-                        violation_info.append(
-                            f"param[{i}]={float(param_array[i])} < lower={float(lower[i])}"
-                        )
-                    elif violations_upper[i]:
-                        violation_info.append(
-                            f"param[{i}]={float(param_array[i])} > upper={float(upper[i])}"
-                        )
+                # Collect violation indices via vectorized jnp.where, then do a
+                # single device-to-host transfer rather than one per element.
+                lower_indices = np.asarray(jnp.where(violations_lower)[0])
+                upper_indices = np.asarray(jnp.where(violations_upper)[0])
+                param_np = np.asarray(param_array)
+                lower_np = np.asarray(lower)
+                upper_np = np.asarray(upper)
+
+                violation_info = [
+                    f"param[{i}]={param_np[i]:.6g} < lower={lower_np[i]:.6g}"
+                    for i in lower_indices[:5]
+                ] + [
+                    f"param[{i}]={param_np[i]:.6g} > upper={upper_np[i]:.6g}"
+                    for i in upper_indices[: max(0, 5 - len(lower_indices))]
+                ]
 
                 # Note: Bounds violations are often clipped automatically by optimizer
                 # This is more of a warning condition than a hard error

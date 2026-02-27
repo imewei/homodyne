@@ -341,7 +341,7 @@ def _configure_device(args: argparse.Namespace) -> dict[str, Any]:
 
     if device_config.get("configuration_successful"):
         device_type = device_config.get("device_type", "")
-        logger.info(f"✓ Device configured: {str(device_type).upper()}")
+        logger.info(f"OK: Device configured: {str(device_type).upper()}")
     else:
         logger.warning("Device configuration failed, using defaults")
 
@@ -356,7 +356,7 @@ def _load_configuration(args: argparse.Namespace) -> ConfigManager:
         # Try to load from file
         if args.config.exists():
             config = ConfigManager(str(args.config))
-            logger.info(f"✓ Configuration loaded: {args.config}")
+            logger.info(f"OK: Configuration loaded: {args.config}")
         else:
             # Create default configuration
             logger.info("Configuration file not found, using defaults")
@@ -470,13 +470,6 @@ def _apply_cli_overrides(config: ConfigManager, args: argparse.Namespace) -> Non
     if args.cmc_num_shards is not None:
         sharding_section["num_shards"] = args.cmc_num_shards
 
-    per_shard["num_samples"] = args.n_samples
-    per_shard["num_warmup"] = args.n_warmup
-    per_shard["num_chains"] = args.n_chains
-
-    # Ensure CMC per-shard MCMC picks up CLI overrides too
-    cmc_section = config.config["optimization"].setdefault("cmc", {})
-    per_shard = cmc_section.setdefault("per_shard_mcmc", {})
     per_shard["num_samples"] = args.n_samples
     per_shard["num_warmup"] = args.n_warmup
     per_shard["num_chains"] = args.n_chains
@@ -705,7 +698,7 @@ def _load_data(args: argparse.Namespace, config: ConfigManager) -> dict[str, Any
             c2_exp = data["c2_exp"]
             data_size = c2_exp.size if hasattr(c2_exp, "size") else len(c2_exp)
 
-        logger.info(f"✓ Data loaded successfully: {data_size:,} data points")
+        logger.info(f"OK: Data loaded successfully: {data_size:,} data points")
         return data
 
     except FileNotFoundError as e:
@@ -1615,7 +1608,7 @@ def _run_optimization(
 
         optimization_time = time.perf_counter() - start_time
         logger.info(
-            f"✓ {method.upper()} optimization completed in {optimization_time:.3f}s",
+            f"OK: {method.upper()} optimization completed in {optimization_time:.3f}s",
         )
 
         return result
@@ -1819,7 +1812,7 @@ def _save_results(
                 arrays_to_save["samples_params"] = result.samples_params
             np.savez_compressed(output_file, **arrays_to_save)
 
-        logger.info(f"✓ Results saved: {output_file}")
+        logger.info(f"OK: Results saved: {output_file}")
 
     except Exception as e:
         logger.warning(f"Failed to save results: {e}")
@@ -1876,7 +1869,7 @@ def _handle_plotting(
             if config:
                 data_with_config["config"] = config
             _plot_experimental_data(data_with_config, plots_dir)
-            logger.info(f"✓ Experimental data plots saved to: {plots_dir}")
+            logger.info(f"OK: Experimental data plots saved to: {plots_dir}")
         except Exception as e:
             logger.warning(f"Failed to generate experimental data plots: {e}")
 
@@ -1900,7 +1893,7 @@ def _handle_plotting(
                 plots_dir,
                 data,
             )
-            logger.info(f"✓ Simulated data plots saved to: {plots_dir}")
+            logger.info(f"OK: Simulated data plots saved to: {plots_dir}")
         except Exception as e:
             logger.warning(f"Failed to generate simulated data plots: {e}")
             logger.debug("Simulated data plotting error:", exc_info=True)
@@ -1909,7 +1902,7 @@ def _handle_plotting(
     if save_plots:
         try:
             _plot_fit_comparison(result, data, plots_dir)
-            logger.info(f"✓ Fit comparison plots saved to: {plots_dir}")
+            logger.info(f"OK: Fit comparison plots saved to: {plots_dir}")
         except Exception as e:
             logger.warning(f"Failed to generate fit comparison plots: {e}")
 
@@ -2619,7 +2612,7 @@ def save_nlsq_results(
         output_dir=nlsq_dir,
     )
 
-    logger.info(f"✓ NLSQ results saved successfully to {nlsq_dir}")
+    logger.info(f"OK: NLSQ results saved successfully to {nlsq_dir}")
     logger.info("  - 3 JSON files (parameters, analysis results, convergence metrics)")
     logger.info("  - 1 NPZ file (10 arrays: experimental + theoretical + residuals)")
 
@@ -2962,7 +2955,7 @@ def save_mcmc_results(
     total_json_kb = sum(f.stat().st_size for f in json_files) / 1024
     total_npz_mb = sum(f.stat().st_size for f in npz_files) / (1024 * 1024)
 
-    logger.info(f"✓ {method_name.upper()} results saved successfully to {method_dir}")
+    logger.info(f"OK: {method_name.upper()} results saved successfully to {method_dir}")
     if (
         method_name == "cmc"
         and hasattr(result, "per_shard_diagnostics")

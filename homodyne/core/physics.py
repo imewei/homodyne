@@ -47,10 +47,10 @@ class ValidationResult:
     def __str__(self) -> str:
         """String representation for logging."""
         if self.valid:
-            return f"✓ {self.message}"
+            return f"OK {self.message}"
         else:
             violations_str = "\n  - ".join(self.violations)
-            return f"✗ {self.message}\n  - {violations_str}"
+            return f"FAIL {self.message}\n  - {violations_str}"
 
 
 class PhysicsConstants:

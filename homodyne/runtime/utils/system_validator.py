@@ -11,6 +11,7 @@ Version: 2.3.0 (CPU-only architecture, GPU validation removed)
 
 import json
 import os
+import shlex
 import shutil
 import subprocess  # nosec B404
 import sys
@@ -263,11 +264,13 @@ class SystemValidator:
                                 break
 
                     # Create a test script to source completion (force reload for zsh)
+                    # Use shlex.quote() to prevent path injection in the inline script.
+                    quoted_path = shlex.quote(target_completion_file)
                     if use_zsh:
                         test_script = f"""#!/usr/bin/env zsh
 # Force reload by unsetting the loaded flag
 unset _HOMODYNE_ZSH_COMPLETION_LOADED
-source {target_completion_file} 2>/dev/null || exit 1
+source {quoted_path} 2>/dev/null || exit 1
 # Test if core aliases were created
 alias hm >/dev/null 2>&1 && echo "core_alias_works" || echo "core_alias_missing"
 alias hconfig >/dev/null 2>&1 && echo "config_alias_works" || echo "config_alias_missing"
@@ -276,7 +279,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 """
                     else:
                         test_script = f"""#!/bin/bash
-source {target_completion_file} 2>/dev/null || exit 1
+source {quoted_path} 2>/dev/null || exit 1
 # Test if core aliases were created
 alias hm >/dev/null 2>&1 && echo "core_alias_works" || echo "core_alias_missing"
 alias hconfig >/dev/null 2>&1 && echo "config_alias_works" || echo "config_alias_missing"
@@ -982,19 +985,26 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                 details["h5py_version"] = h5py.__version__
                 details["h5py_import"] = "success"
 
-                # Test basic HDF5 operations (create temp file)
+                # Test basic HDF5 operations (create temp file).
+                # Use mkstemp + explicit unlink instead of NamedTemporaryFile(delete=True)
+                # to avoid a TOCTOU race: h5py needs the file closed before it can
+                # open it on some platforms, and delete=True removes it on __exit__.
                 import tempfile
 
                 try:
-                    with tempfile.NamedTemporaryFile(
-                        suffix=".hdf5",
-                        delete=True,
-                    ) as tmp:
-                        with h5py.File(tmp.name, "w") as f:
+                    tmp_fd, tmp_name = tempfile.mkstemp(suffix=".hdf5")
+                    try:
+                        os.close(tmp_fd)
+                        with h5py.File(tmp_name, "w") as f:
                             f.create_dataset("test", data=[1, 2, 3])
-                        with h5py.File(tmp.name, "r") as f:
+                        with h5py.File(tmp_name, "r") as f:
                             _ = f["test"][:]
                         details["hdf5_readwrite"] = "success"
+                    finally:
+                        try:
+                            os.unlink(tmp_name)
+                        except OSError:
+                            pass
                 except Exception as e:
                     details["hdf5_readwrite"] = "failed"
                     warnings.append(f"HDF5 file operations failed: {e}")
@@ -1166,12 +1176,12 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             results[result.name] = result
             self.results.append(result)
 
-            status = "✅ PASS" if result.success else "❌ FAIL"
+            status = "[PASS]" if result.success else "[FAIL]"
             self.log(f"{status}: {result.name} - {result.message}")
 
             if result.warnings:
                 for warning in result.warnings:
-                    self.log(f"⚠️  WARNING: {warning}")
+                    self.log(f"[WARN] {warning}")
 
         return results
 
@@ -1193,12 +1203,12 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             results[result.name] = result
             self.results.append(result)
 
-            status = "✅ PASS" if result.success else "❌ FAIL"
+            status = "[PASS]" if result.success else "[FAIL]"
             self.log(f"{status}: {result.name} - {result.message}")
 
             if result.warnings:
                 for warning in result.warnings:
-                    self.log(f"⚠️  WARNING: {warning}")
+                    self.log(f"[WARN] {warning}")
 
         return results
 
@@ -1270,20 +1280,11 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
         # Header
         report.append("=" * 80)
-        report.append("🔍 HOMODYNE SYSTEM VALIDATION REPORT")
+        report.append("HOMODYNE SYSTEM VALIDATION REPORT")
         report.append("=" * 80)
 
         # Health Score
         health_score = self.calculate_health_score()
-        health_emoji = (
-            "🟢"
-            if health_score >= 90
-            else "🟡"
-            if health_score >= 70
-            else "🟠"
-            if health_score >= 50
-            else "🔴"
-        )
         health_status = (
             "Excellent"
             if health_score >= 90
@@ -1296,31 +1297,31 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             )
         )
         report.append(
-            f"\n{health_emoji} Health Score: {health_score}/100 ({health_status})"
+            f"\nHealth Score: {health_score}/100 ({health_status})"
         )
 
         # Summary
         passed = sum(1 for r in self.results if r.success)
         total = len(self.results)
-        report.append(f"📊 Summary: {passed}/{total} tests passed")
+        report.append(f"Summary: {passed}/{total} tests passed")
 
         if passed == total:
-            report.append("🎉 All systems operational!")
+            report.append("All systems operational!")
         else:
-            report.append("⚠️  Some issues detected - see details below")
+            report.append("[WARN] Some issues detected - see details below")
 
         # Environment info
         if self.environment_info:
-            report.append("\n🖥️  Environment:")
+            report.append("\nEnvironment:")
             for key, value in self.environment_info.items():
                 report.append(f"   {key}: {value}")
 
         # Test results
-        report.append("\n📋 Test Results:")
+        report.append("\nTest Results:")
         report.append("-" * 40)
 
         for result in self.results:
-            status = "✅ PASS" if result.success else "❌ FAIL"
+            status = "[PASS]" if result.success else "[FAIL]"
             report.append(f"\n{status} {result.name}")
             report.append(f"   Message: {result.message}")
             report.append(f"   Time: {result.execution_time:.3f}s")
@@ -1328,12 +1329,12 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             if result.warnings:
                 report.append("   Warnings:")
                 for warning in result.warnings:
-                    report.append(f"     ⚠️  {warning}")
+                    report.append(f"     [WARN] {warning}")
 
             if result.remediation:
                 report.append("   Remediation:")
                 for fix in result.remediation:
-                    report.append(f"     🔧 {fix}")
+                    report.append(f"     [FIX] {fix}")
 
             if result.details and self.verbose:
                 report.append("   Details:")
@@ -1346,23 +1347,23 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                         report.append(f"     {key}: {value}")
 
         # Recommendations
-        report.append("\n💡 Recommendations:")
+        report.append("\nRecommendations:")
 
         failed_tests = [r for r in self.results if not r.success]
         if failed_tests:
-            report.append("   🔧 Fix failed tests:")
+            report.append("   Fix failed tests:")
             for test in failed_tests:
-                report.append(f"     • {test.name}: {test.message}")
+                report.append(f"     - {test.name}: {test.message}")
 
         warnings_count = sum(len(r.warnings or []) for r in self.results)
         if warnings_count > 0:
             report.append(
-                f"   ⚠️  Address {warnings_count} warnings for optimal performance",
+                f"   Address {warnings_count} warnings for optimal performance",
             )
 
         if passed == total:
-            report.append("   🚀 Your homodyne installation is ready!")
-            report.append("   📖 Check documentation for usage examples")
+            report.append("   Your homodyne installation is ready!")
+            report.append("   Check documentation for usage examples")
 
         report.append("\n" + "=" * 80)
 

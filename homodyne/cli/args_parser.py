@@ -436,7 +436,8 @@ def validate_args(args: argparse.Namespace) -> bool:
         return False
 
     # Check config file exists if provided and not default
-    if args.config != Path("./homodyne_config.yaml") and not args.config.exists():
+    DEFAULT_CONFIG = Path("./homodyne_config.yaml").resolve()
+    if args.config.resolve() != DEFAULT_CONFIG and not args.config.exists():
         print(f"Error: Configuration file not found: {args.config}")
         return False
 
