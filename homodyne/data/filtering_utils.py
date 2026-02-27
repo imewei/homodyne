@@ -217,7 +217,7 @@ class XPCSDataFilter:
 
         except ValueError:
             raise  # Don't swallow intentional ValueError (e.g., stride guard)
-        except Exception as e:
+        except (RuntimeError, IndexError, TypeError) as e:
             error_msg = f"Data filtering failed: {str(e)}"
             logger.error(error_msg)
             result.errors.append(error_msg)
@@ -260,14 +260,24 @@ class XPCSDataFilter:
 
         # Statistics
         selected_count = np.sum(mask)
-        result.filter_statistics["q_range"] = {
-            "q_min": q_min,
-            "q_max": q_max,
-            "selected_count": int(selected_count),
-            "data_q_min": float(np.min(dqlist)),
-            "data_q_max": float(np.max(dqlist)),
-            "selection_fraction": float(selected_count / len(dqlist)),
-        }
+        if len(dqlist) > 0:
+            result.filter_statistics["q_range"] = {
+                "q_min": q_min,
+                "q_max": q_max,
+                "selected_count": int(selected_count),
+                "data_q_min": float(np.min(dqlist)),
+                "data_q_max": float(np.max(dqlist)),
+                "selection_fraction": float(selected_count / len(dqlist)),
+            }
+        else:
+            result.filter_statistics["q_range"] = {
+                "q_min": q_min,
+                "q_max": q_max,
+                "selected_count": 0,
+                "data_q_min": None,
+                "data_q_max": None,
+                "selection_fraction": 0.0,
+            }
 
         logger.debug(
             f"Q-range filtering: {selected_count}/{len(dqlist)} points selected",
@@ -298,23 +308,36 @@ class XPCSDataFilter:
         logger.debug(f"Applying phi-range filtering: [{phi_min}, {phi_max}]")
 
         # Create mask
-        mask = np.ones(len(dphilist), dtype=bool)
-
-        if phi_min is not None:
-            mask &= dphilist >= phi_min
-        if phi_max is not None:
-            mask &= dphilist <= phi_max
+        if phi_min is not None and phi_max is not None and phi_min > phi_max:
+            # Wrapped range crossing ±180° boundary: use OR logic
+            mask = (dphilist >= phi_min) | (dphilist <= phi_max)
+        else:
+            mask = np.ones(len(dphilist), dtype=bool)
+            if phi_min is not None:
+                mask &= dphilist >= phi_min
+            if phi_max is not None:
+                mask &= dphilist <= phi_max
 
         # Statistics
         selected_count = np.sum(mask)
-        result.filter_statistics["phi_range"] = {
-            "phi_min": phi_min,
-            "phi_max": phi_max,
-            "selected_count": int(selected_count),
-            "data_phi_min": float(np.min(dphilist)),
-            "data_phi_max": float(np.max(dphilist)),
-            "selection_fraction": float(selected_count / len(dphilist)),
-        }
+        if len(dphilist) > 0:
+            result.filter_statistics["phi_range"] = {
+                "phi_min": phi_min,
+                "phi_max": phi_max,
+                "selected_count": int(selected_count),
+                "data_phi_min": float(np.min(dphilist)),
+                "data_phi_max": float(np.max(dphilist)),
+                "selection_fraction": float(selected_count / len(dphilist)),
+            }
+        else:
+            result.filter_statistics["phi_range"] = {
+                "phi_min": phi_min,
+                "phi_max": phi_max,
+                "selected_count": 0,
+                "data_phi_min": None,
+                "data_phi_max": None,
+                "selection_fraction": 0.0,
+            }
 
         logger.debug(
             f"Phi-range filtering: {selected_count}/{len(dphilist)} points selected",
@@ -367,7 +390,7 @@ class XPCSDataFilter:
             "threshold": quality_threshold,
             "selected_count": int(selected_count),
             "quality_scores": score_stats,
-            "selection_fraction": float(selected_count / len(correlation_matrices)),
+            "selection_fraction": float(selected_count / len(correlation_matrices)) if len(correlation_matrices) > 0 else 0.0,
         }
 
         logger.debug(

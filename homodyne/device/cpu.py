@@ -72,12 +72,14 @@ def detect_cpu_info() -> dict[str, Any]:
                 for line in cpuinfo.split("\n"):
                     if "model name" in line and info["cpu_brand"] == "Unknown":
                         info["cpu_brand"] = line.split(":")[1].strip()
-                    elif ("flags" in line or "Features" in line) and not info["supports_avx"]:
+                    elif "flags" in line or "Features" in line:
                         flags = line.split(":")[1].strip().split()
-                        info["supports_avx"] = "avx" in flags
-                        info["supports_avx512"] = any(
-                            "avx512" in flag for flag in flags
-                        )
+                        if not info["supports_avx"]:
+                            info["supports_avx"] = "avx" in flags
+                        if not info["supports_avx512"]:
+                            info["supports_avx512"] = any(
+                                "avx512" in flag for flag in flags
+                            )
 
         # Detect NUMA topology
         try:

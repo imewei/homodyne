@@ -639,8 +639,7 @@ class ParameterSpace:
         """Return a copy of the ParameterSpace with BetaScaled priors on bounded params."""
 
         new_priors: dict[str, PriorDistribution] = {}
-        for param_name in self.parameter_names:
-            prior = self.priors[param_name]
+        for param_name, prior in self.priors.items():
             has_finite_bounds = np.isfinite(prior.min_val) and np.isfinite(
                 prior.max_val
             )
@@ -803,7 +802,7 @@ class ParameterSpace:
         target_delta = d0_prior.mu / max(center_mu, 1e-6)
         target_delta = float(np.clip(target_delta, 1e-3, 5.0))
         delta_loc = (
-            float(np.log(np.expm1(target_delta))) if target_delta > 1e-3 else -5.0
+            float(np.log(np.expm1(target_delta))) if target_delta >= 1e-3 else -5.0
         )
         delta_scale = float(max(0.5, abs(d0_prior.sigma) / max(center_mu, 1e-6)))
 

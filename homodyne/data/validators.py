@@ -64,7 +64,7 @@ def validate_frame_range(
     errors: list[str] = []
 
     if start_frame is not None and end_frame is not None:
-        if start_frame >= end_frame:
+        if end_frame != -1 and start_frame >= end_frame:
             errors.append(
                 f"start_frame ({start_frame}) must be less than end_frame ({end_frame})"
             )

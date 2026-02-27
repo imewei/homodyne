@@ -247,34 +247,34 @@ class MemoryMapManager:
 
         file_path = str(file_path)
 
+        # Acquire lock to check/register the file, then release before yielding
+        # so callers don't hold the lock during potentially long I/O operations.
         with self._lock:
-            # Check if already open
             if file_path in self._open_maps:
                 self._access_counts[file_path] += 1
                 self._last_access[file_path] = time.time()
-                yield self._open_maps[file_path]
-                return
+                hdf_file = self._open_maps[file_path]
+            else:
+                # Clean up old mappings if needed
+                self._cleanup_old_mappings()
 
-            # Clean up old mappings if needed
-            self._cleanup_old_mappings()
+                try:
+                    hdf_file = h5py.File(
+                        file_path,
+                        mode,
+                        rdcc_nbytes=int(self.buffer_size_mb * 1024 * 1024),
+                    )
+                    self._open_maps[file_path] = hdf_file
+                    self._access_counts[file_path] = 1
+                    self._last_access[file_path] = time.time()
+                    logger.debug(f"Opened memory-mapped HDF5: {file_path}")
+                except OSError as e:
+                    logger.error(f"Failed to open memory-mapped HDF5 {file_path}: {e}")
+                    raise
 
-            try:
-                # Open with memory mapping
-                hdf_file = h5py.File(
-                    file_path,
-                    mode,
-                    rdcc_nbytes=int(self.buffer_size_mb * 1024 * 1024),
-                )
-                self._open_maps[file_path] = hdf_file
-                self._access_counts[file_path] = 1
-                self._last_access[file_path] = time.time()
-
-                logger.debug(f"Opened memory-mapped HDF5: {file_path}")
-                yield hdf_file
-
-            except OSError as e:
-                logger.error(f"Failed to open memory-mapped HDF5 {file_path}: {e}")
-                raise
+        # Yield outside the lock — callers can use the file handle without
+        # blocking other threads from registering/opening files.
+        yield hdf_file
 
     def _cleanup_old_mappings(self) -> None:
         """Clean up old memory mappings to stay under limits."""
@@ -583,7 +583,11 @@ class MultiLevelCache:
         self._access_frequencies: dict[str, deque] = {}  # For frequency analysis
 
         # Cache hierarchy paths
-        self._cache_base_path = Path.cwd() / ".homodyne_cache"
+        _xdg_cache = os.environ.get("XDG_CACHE_HOME", "")
+        if _xdg_cache:
+            self._cache_base_path = Path(_xdg_cache) / "homodyne"
+        else:
+            self._cache_base_path = Path.home() / ".cache" / "homodyne"
         self._ssd_cache_path = self._cache_base_path / "ssd"
         self._hdd_cache_path = self._cache_base_path / "hdd"
 

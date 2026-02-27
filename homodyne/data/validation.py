@@ -505,8 +505,8 @@ def _validate_statistical_properties(
             return
 
         # Check for reasonable statistical properties
-        mean_correlation = np.mean(c2_exp)
-        std_correlation = np.std(c2_exp)
+        mean_correlation = np.nanmean(c2_exp)
+        std_correlation = np.nanstd(c2_exp)
 
         if mean_correlation < 0.5 or mean_correlation > 2.0:
             report.add_issue(
@@ -554,10 +554,10 @@ def _compute_data_statistics(data: dict[str, Any], report: DataQualityReport) ->
                 stats[key] = {
                     "shape": arr.shape,
                     "dtype": str(arr.dtype),
-                    "mean": float(np.mean(arr)),
+                    "mean": float(np.nanmean(arr)) if arr.size > 0 else 0.0,
                     "std": float(np.nanstd(arr)) if arr.size > 0 else 0.0,
-                    "min": float(np.min(arr)),
-                    "max": float(np.max(arr)),
+                    "min": float(np.nanmin(arr)) if arr.size > 0 else 0.0,
+                    "max": float(np.nanmax(arr)) if arr.size > 0 else 0.0,
                     "finite_fraction": float(np.sum(np.isfinite(arr)) / arr.size),
                     # sum/first/last are used by _identify_changed_components
                     # as a change-detection fingerprint. Must be stored here or

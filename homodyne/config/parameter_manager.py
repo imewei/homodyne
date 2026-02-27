@@ -119,10 +119,11 @@ class ParameterManager:
                 "type": "TruncatedNormal",
             },
             # Physical parameters - shear flow
-            # UPDATED: gamma_dot_t0 [1e-10, 1.0] → [1e-6, 0.5] - Realistic shear rates for XPCS
+            # gamma_dot_t0 upper bound aligned with ParameterRegistry (10000.0)
+            # Supports high-shear regime; lower bound 1e-6 (quasi-static limit)
             "gamma_dot_t0": {
                 "min": 1e-6,
-                "max": 0.5,
+                "max": 1e4,
                 "name": "gamma_dot_t0",
                 "type": "TruncatedNormal",
             },
@@ -132,18 +133,18 @@ class ParameterManager:
                 "name": "beta",
                 "type": "TruncatedNormal",
             },
-            # UPDATED: gamma_dot_t_offset [1e-10, 1.0] → [-0.1, 0.1] - Allow negative, tighter range
+            # gamma_dot_t_offset: aligned with ParameterRegistry (lower_bound=0.01).
+            # Negative values are flagged as physically suspicious by physics validators.
             "gamma_dot_t_offset": {
-                "min": -0.1,
-                "max": 0.1,
+                "min": 0.01,
+                "max": 100.0,
                 "name": "gamma_dot_t_offset",
                 "type": "TruncatedNormal",
             },
-            # UPDATED: phi0 [-π, π] rad → [-10, 10] deg - Tighter bounds for MCMC convergence
-            # Assumes flow alignment within ±10° of primary axis (typical for laminar flow XPCS)
+            # phi0 in radians, consistent with physics model and ParameterRegistry
             "phi0": {
-                "min": -10.0,
-                "max": 10.0,
+                "min": -3.141592653589793,   # -pi
+                "max": 3.141592653589793,    # +pi
                 "name": "phi0",
                 "type": "TruncatedNormal",
             },

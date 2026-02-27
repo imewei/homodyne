@@ -866,6 +866,11 @@ class XPCSDataLoader:
             # Load correlation data from exchange/C2T_all
             c2t_group = f["exchange/C2T_all"]
             c2_keys = list(c2t_group.keys())
+            if not c2_keys:
+                raise ValueError(
+                    f"APS old-format HDF5 file contains no correlation matrices "
+                    f"in 'exchange/C2T_all': {hdf_path}"
+                )
 
             # Check if quality-based filtering is enabled (requires loading all matrices)
             filtering_config = self.config.get("data_filtering", {})
@@ -1601,12 +1606,6 @@ class XPCSDataLoader:
             1D time array: [0, dt, 2*dt, ..., (N-1)*dt]
         """
         dt = self.analyzer_config.get("dt", 1.0)
-        start_frame = self.analyzer_config.get("start_frame", 1)
-        end_frame = self.analyzer_config.get("end_frame", matrix_size + start_frame - 1)
-
-        # Handle sentinel value: end_frame=-1 means "use all frames"
-        if end_frame < 0:
-            end_frame = matrix_size + start_frame - 1
 
         # Create 1D time array starting from 0
         # Last point at index (N-1), not N

@@ -470,7 +470,7 @@ def _validate_parameter_values_fallback(config: dict[str, Any]) -> list[str]:
     start_frame = analyzer.get("start_frame")
     end_frame = analyzer.get("end_frame")
     if start_frame is not None and end_frame is not None:
-        if start_frame >= end_frame:
+        if end_frame != -1 and start_frame >= end_frame:
             errors.append(
                 f"start_frame ({start_frame}) must be less than end_frame ({end_frame})"
             )
@@ -563,12 +563,12 @@ def _validate_parameter_warnings(config: dict[str, Any]) -> list[str]:
     # Warn about very large frame ranges
     start_frame = analyzer.get("start_frame", 1)
     end_frame = analyzer.get("end_frame", 1000)
-    frame_count = end_frame - start_frame + 1
-
-    if frame_count > 10000:
-        warnings.append(
-            f"Large frame range ({frame_count} frames) may result in long processing time",
-        )
+    if end_frame != -1:
+        frame_count = end_frame - start_frame + 1
+        if frame_count > 10000:
+            warnings.append(
+                f"Large frame range ({frame_count} frames) may result in long processing time",
+            )
 
     # Warn about very small dt values
     dt = analyzer.get("dt")

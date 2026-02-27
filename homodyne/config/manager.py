@@ -130,6 +130,14 @@ class ConfigManager:
             logger.info(f"Configuration loaded from: {self.config_file}")
 
             # Display version information if available
+            if self.config is None:
+                logger.warning(
+                    "Configuration file '%s' is empty or null; using defaults",
+                    self.config_file,
+                )
+                self.config = self._get_default_config()
+                return
+
             if isinstance(self.config, dict) and "metadata" in self.config:
                 version = self.config["metadata"].get("config_version", "Unknown")
                 logger.info(f"Configuration version: {version}")
@@ -263,8 +271,12 @@ class ConfigManager:
 
         optimization = self.config.get("optimization", {})
         angle_filtering = optimization.get("angle_filtering", {})
-        # Type assertion to help mypy
-        assert isinstance(angle_filtering, dict)
+        if not isinstance(angle_filtering, dict):
+            logger.warning(
+                "optimization.angle_filtering must be a dict, ignoring (got %s)",
+                type(angle_filtering).__name__,
+            )
+            return {"enabled": False}
         return angle_filtering
 
     def _get_parameter_manager(self) -> Any:
@@ -323,8 +335,10 @@ class ConfigManager:
         This method uses a cached ParameterManager for ~14x speedup on repeated calls.
         """
         bounds = self._get_parameter_manager().get_parameter_bounds(parameter_names)
-        # Type assertion to help mypy
-        assert isinstance(bounds, list)
+        if not isinstance(bounds, list):
+            raise TypeError(
+                f"ParameterManager.get_parameter_bounds returned {type(bounds).__name__}, expected list"
+            )
         return bounds
 
     def get_active_parameters(self) -> list[str]:
@@ -349,8 +363,10 @@ class ConfigManager:
         This method uses a cached ParameterManager for ~14x speedup on repeated calls.
         """
         params = self._get_parameter_manager().get_active_parameters()
-        # Type assertion to help mypy
-        assert isinstance(params, list)
+        if not isinstance(params, list):
+            raise TypeError(
+                f"ParameterManager.get_active_parameters returned {type(params).__name__}, expected list"
+            )
         return params
 
     def get_initial_parameters(
@@ -846,9 +862,9 @@ class ConfigManager:
 
         # Validate min_points_for_cmc
         min_points = cmc_config.get("min_points_for_cmc", 0)
-        if not isinstance(min_points, int) or min_points < 0:
+        if not isinstance(min_points, int) or min_points < 1:
             raise ValueError(
-                f"min_points_for_cmc must be a positive integer, got: {min_points}"
+                f"min_points_for_cmc must be a positive integer (>= 1), got: {min_points}"
             )
 
         # Validate sharding
@@ -1001,6 +1017,7 @@ class ConfigManager:
             "analysis_mode",
             "analyzer_parameters",
             "experimental_data",
+            "parameter_space",
             "optimization",
             "output",
             "logging",

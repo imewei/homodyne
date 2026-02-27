@@ -68,7 +68,7 @@ PARAMETER_DESCRIPTIONS = {
 # UTILITY FUNCTIONS
 # =============================================================================
 
-AnalysisMode = Literal["static_isotropic", "laminar_flow"]
+AnalysisMode = Literal["static", "static_isotropic", "laminar_flow"]
 
 
 def get_parameter_names(analysis_mode: AnalysisMode) -> list[str]:

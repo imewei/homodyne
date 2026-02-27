@@ -23,6 +23,7 @@ Addresses code review finding of 8x parameter name duplication.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
@@ -270,7 +271,6 @@ class ParameterRegistry:
             return self._PARAMETERS[name]
 
         # Strip per-angle numeric suffix (e.g., contrast_0 -> contrast, offset_12 -> offset)
-        import re
         base_name = re.sub(r"_\d+$", "", name)
 
         if base_name not in self._PARAMETERS:
@@ -579,22 +579,15 @@ class ParameterRegistry:
             )
 
 
-# Module-level singleton accessor
-_registry: ParameterRegistry | None = None
-
-
 def get_registry() -> ParameterRegistry:
     """Get the global ParameterRegistry instance.
 
     Returns
     -------
     ParameterRegistry
-        Singleton registry instance
+        Singleton registry instance (guaranteed by ParameterRegistry.__new__)
     """
-    global _registry
-    if _registry is None:
-        _registry = ParameterRegistry()
-    return _registry
+    return ParameterRegistry()
 
 
 # Convenience functions that delegate to the singleton

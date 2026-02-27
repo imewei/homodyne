@@ -759,7 +759,7 @@ class PreprocessingPipeline:
                 c2_matrix = c2_exp[i]
                 min_val = np.min(c2_matrix)
                 max_val = np.max(c2_matrix)
-                if max_val != min_val:
+                if max_val - min_val > np.finfo(float).eps * max(abs(max_val), 1.0):
                     normalized_data["c2_exp"][i] = (c2_matrix - min_val) / (
                         max_val - min_val
                     )
@@ -774,7 +774,7 @@ class PreprocessingPipeline:
             for i in range(len(c2_exp)):
                 c2_matrix = c2_exp[i]
                 q25, q75 = np.percentile(c2_matrix, percentile_range)
-                if q75 != q25:
+                if q75 - q25 > np.finfo(float).eps * max(abs(q75), 1.0):
                     median_val = np.median(c2_matrix)
                     normalized_data["c2_exp"][i] = (c2_matrix - median_val) / (
                         q75 - q25
