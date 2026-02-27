@@ -79,8 +79,15 @@ def _create_residual_function(
     g2_exp = jnp.asarray(data.g2)
     q = float(data.q)
     L = float(data.L)
-    # Ensure dt is a float, defaulting to 1.0 if missing (consistent with other modules)
-    dt = float(data.dt) if hasattr(data, "dt") and data.dt is not None else 1.0
+    # Ensure dt is a float; warn if missing so callers know they're using an assumed value
+    if hasattr(data, "dt") and data.dt is not None:
+        dt = float(data.dt)
+    else:
+        logger.warning(
+            "data.dt is missing or None; using dt=1.0 for gradient diagnostics. "
+            "Gradient norms will be correct only if the true frame interval is 1.0 s."
+        )
+        dt = 1.0
 
     # Get per-angle scaling parameters
     if hasattr(data, "per_angle_scaling_solver"):
@@ -92,6 +99,13 @@ def _create_residual_function(
         n_phi = len(np.unique(phi))
         contrasts = jnp.ones(n_phi) * 0.5
         offsets = jnp.ones(n_phi) * 1.0
+
+    # Build sorted unique phi array for searchsorted indexing inside residual_fn.
+    # This maps each data point's phi to the corresponding contrast/offset via
+    # searchsorted, avoiding shape mismatch when g1 is flat 1D (n_points,).
+    phi_unique_sorted = jnp.array(
+        sorted(set(float(p) for p in np.asarray(data.phi)))
+    )
 
     # Determine parameter names
     if "static" in analysis_mode.lower():
@@ -113,8 +127,13 @@ def _create_residual_function(
         # Compute g1 using physics model
         g1 = compute_g1_total(params, t1, t2, phi, q, L, dt)
 
-        # Apply per-angle scaling
-        g2_theory = offsets[:, None, None] + contrasts[:, None, None] * jnp.square(g1)
+        # Apply per-angle scaling via searchsorted indexing.
+        # g1 is flat 1D (n_points,), so we map each point's phi to its
+        # contrast/offset index rather than broadcasting with [:, None, None].
+        phi_idx = jnp.searchsorted(phi_unique_sorted, phi)
+        contrast_per_point = contrasts[phi_idx]
+        offset_per_point = offsets[phi_idx]
+        g2_theory = offset_per_point + contrast_per_point * jnp.square(g1)
 
         # Compute residuals
         residuals = (g2_theory - g2_exp).reshape(-1)
@@ -388,8 +407,8 @@ def print_gradient_report(
     for name, grad in diag["gradient_norms"].items():
         ratio = grad / baseline_grad
         bar_length = int(min(50, np.log10(max(ratio, 0.1)) * 10 + 25))
-        bar = "█" * max(0, bar_length)
-        logger.info(f"{name:18s}: {grad:>12.2e}  {ratio:>8.1f}× median  {bar}")
+        bar = "#" * max(0, bar_length)
+        logger.info(f"{name:18s}: {grad:>12.2e}  {ratio:>8.1f}x median  {bar}")
 
     # Log diagnosis
     logger.info("\n" + "-" * 80)

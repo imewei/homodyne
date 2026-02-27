@@ -134,6 +134,7 @@ class CMCResult:
     n_samples: int = 2000
     n_warmup: int = 500
     analysis_mode: str = "static"
+    per_angle_mode: str = "auto"  # Per-angle scaling mode (auto/constant/constant_averaged/individual)
     num_shards: int = 1  # Number of shards combined (for correct divergence rate)
 
     # Compatibility fields
@@ -180,6 +181,7 @@ class CMCResult:
         stats: SamplingStats,
         analysis_mode: str,
         n_warmup: int = 500,
+        min_ess: float | None = None,
     ) -> CMCResult:
         """Create CMCResult from MCMC samples.
 
@@ -193,6 +195,9 @@ class CMCResult:
             Analysis mode used.
         n_warmup : int
             Number of warmup samples.
+        min_ess : float | None
+            Minimum effective sample size for convergence checks.
+            If None, uses ``DEFAULT_MIN_ESS`` from diagnostics module.
 
         Returns
         -------
@@ -200,10 +205,14 @@ class CMCResult:
             Complete result object.
         """
         from homodyne.optimization.cmc.diagnostics import (
+            DEFAULT_MIN_ESS,
             check_convergence,
             compute_ess,
             compute_r_hat,
         )
+
+        if min_ess is None:
+            min_ess = DEFAULT_MIN_ESS
 
         # Compute diagnostics
         r_hat = compute_r_hat(mcmc_samples.samples)
@@ -217,6 +226,7 @@ class CMCResult:
             divergences=stats.num_divergent,
             n_samples=mcmc_samples.n_samples,
             n_chains=mcmc_samples.n_chains,
+            min_ess=min_ess,
             num_shards=getattr(mcmc_samples, "num_shards", 1),
         )
 
@@ -428,8 +438,11 @@ class CMCResult:
                     warnings.append(f"Missing per-angle parameter: {offset_name}")
         elif "contrast" not in self.samples and "contrast_0" not in self.samples:
             # Neither auto-mode site nor individual-mode site found;
-            # only warn if the mode actually expects sampled contrast/offset
-            if self.analysis_mode not in ("constant", "constant_averaged"):
+            # only warn if the mode actually expects sampled contrast/offset.
+            # analysis_mode vocabulary is "static"/"laminar_flow" (not "constant"),
+            # so check per_angle_mode (which tracks the scaling strategy) instead.
+            if self.analysis_mode not in ("constant", "constant_averaged") and \
+               getattr(self, 'per_angle_mode', None) not in ("constant", "constant_averaged"):
                 warnings.append(
                     "No contrast/offset sites found in posterior samples. "
                     "Expected 'contrast'/'offset' (auto mode) or 'contrast_0'/'offset_0' "
@@ -437,8 +450,10 @@ class CMCResult:
                 )
 
         # Check diagnostic values
-        max_r_hat = max(self.r_hat.values()) if self.r_hat else float("nan")
-        min_ess = min(self.ess_bulk.values()) if self.ess_bulk else 0.0
+        _r_hat_finite = [v for v in self.r_hat.values() if np.isfinite(v)]
+        _ess_finite = [v for v in self.ess_bulk.values() if np.isfinite(v)]
+        max_r_hat = max(_r_hat_finite) if _r_hat_finite else float("nan")
+        min_ess = min(_ess_finite) if _ess_finite else 0.0
 
         if max_r_hat > 1.1:
             warnings.append(f"High R-hat detected: {max_r_hat:.3f} > 1.1")
@@ -630,9 +645,19 @@ def compute_fitted_c2(
             f"fixed_offsets arrays (shape ({n_phi},)) from the original model_kwargs."
         )
 
-    # Map phi to indices
-    # CRITICAL FIX: Clip indices to valid range to prevent out-of-bounds access
-    phi_indices = np.clip(np.searchsorted(phi_unique, phi), 0, n_phi - 1)
+    # Map phi to indices using nearest-neighbor matching (consistent with
+    # data_prep.extract_phi_info). Raw searchsorted silently assigns points to the
+    # wrong angle when phi values have float precision differences.
+    if n_phi <= 256:
+        phi_indices = np.argmin(
+            np.abs(phi[:, None] - phi_unique[None, :]), axis=1
+        ).astype(np.int32)
+    else:
+        idx = np.searchsorted(phi_unique, phi)
+        idx = np.clip(idx, 0, n_phi - 1)
+        left = np.clip(idx - 1, 0, n_phi - 1)
+        use_left = np.abs(phi - phi_unique[left]) < np.abs(phi - phi_unique[idx])
+        phi_indices = np.where(use_left, left, idx).astype(np.int32)
 
     # Apply scaling: gather the right phi row from g1 per data point.
     # g1 shape is (n_phi, n_points); phi_indices maps each point to its phi row.

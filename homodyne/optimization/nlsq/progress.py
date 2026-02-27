@@ -381,14 +381,14 @@ class MultiStartProgressTracker:
             new_best_str = " [NEW BEST]" if is_new_best else ""
             logger.info(
                 f"Start {start_idx + 1:3d}/{self.n_starts} [{status:6s}] | "
-                f"χ²={chi_squared:.4e} | best={self._best_chi_squared:.4e}"
+                f"chi2={chi_squared:.4e} | best={self._best_chi_squared:.4e}"
                 f"{new_best_str}{time_str}"
             )
         elif self.verbose >= 1 and is_new_best:
             # Log new best even at verbose=1
             logger.info(
                 f"New best at start {start_idx + 1}/{self.n_starts}: "
-                f"χ²={chi_squared:.4e}"
+                f"chi2={chi_squared:.4e}"
             )
 
         # Log failures at verbose >= 1
@@ -413,7 +413,7 @@ class MultiStartProgressTracker:
                 f"({success_rate:.0f}%), {self._failed} failed"
             )
             logger.info(
-                f"Best result: χ²={self._best_chi_squared:.4e} at start {self._best_start_idx}"
+                f"Best result: chi2={self._best_chi_squared:.4e} at start {self._best_start_idx}"
             )
             logger.info(f"Timing: total={elapsed:.1f}s, avg={avg_time:.1f}s/start")
 

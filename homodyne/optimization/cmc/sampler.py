@@ -222,8 +222,11 @@ def _compute_mcmc_safe_d0(
         idx_high = 3 * n // 4
         integral_estimate = abs(cumsum[idx_high] - cumsum[idx_low])
 
-        # Compute g1 = exp(-0.5 * q^2 * dt * integral)
-        prefactor = 0.5 * q**2 * dt
+        # Compute g1 = exp(-q^2 * dt * integral)
+        # Physics: g1 = exp(-q² ∫D(t)dt). The homodyne 0.5 factor appears on g1²,
+        # not in the log of g1 directly. Using the full q² gives a correct estimate
+        # of the ISF decay rate for the safety guard.
+        prefactor = q**2 * dt
         log_g1 = -prefactor * integral_estimate
         log_g1_clipped = max(log_g1, -700.0)  # Prevent underflow
         g1_estimate = np.exp(log_g1_clipped)
@@ -947,7 +950,12 @@ def run_nuts_sampling(
     # CONVERGENCE CHECK (Jan 2026): Early divergence rate detection
     # High divergence rates indicate NUTS is struggling with the posterior geometry.
     # The 28.4% divergence rate in the 3-angle failure case signals unreliable posteriors.
-    total_samples = num_samples * config.num_chains
+    # Use actual chain count from samples array (may differ from config if init fails).
+    _first_sample = next(iter(samples_np.values()), None)
+    _actual_chains_for_div = (
+        _first_sample.shape[0] if _first_sample is not None else config.num_chains
+    )
+    total_samples = num_samples * _actual_chains_for_div
     if total_samples > 0:
         divergence_rate = num_divergent / total_samples
         if divergence_rate > DIVERGENCE_RATE_CRITICAL:

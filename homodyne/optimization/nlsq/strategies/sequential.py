@@ -319,7 +319,7 @@ def _select_jacobian_sample(subset: AngleSubset, sample_size: int) -> dict[str, 
         idx = slice(None)
         scale = 1.0
     else:
-        idx = np.linspace(0, subset.n_points - 1, size, dtype=int)
+        idx = np.linspace(0, subset.n_points - 1, size).astype(int)
         scale = np.sqrt(subset.n_points / float(size))
 
     return {
@@ -918,19 +918,52 @@ def optimize_per_angle_sequential(
     # Split data by angle
     subsets = split_data_by_angle(phi, t1, t2, g2_exp)
 
+    # Strip fixed parameters (lower == upper) before passing to TRF solver
+    lower_bounds, upper_bounds = bounds
+    free_params, free_lower, free_upper, free_mask = strip_fixed_parameters(
+        initial_params, lower_bounds, upper_bounds
+    )
+    free_bounds = (free_lower, free_upper)
+
+    # Re-normalize optimizer kwargs for the reduced (free) parameter count
+    has_fixed = np.any(~free_mask)
+    if has_fixed:
+        optimizer_kwargs = _normalize_least_squares_kwargs(
+            optimizer_kwargs,
+            n_params=len(free_params),
+            parameter_names=(
+                [n for n, m in zip(parameter_names, free_mask) if m]
+                if parameter_names is not None
+                else None
+            ),
+        )
+        # Wrap residual_func to expand free params back to full params
+        # before evaluation, since residual_func uses hard-coded slicing
+        # that expects the full parameter vector
+        _original_residual = residual_func
+
+        def residual_func(params, *args, **kwargs):
+            full_params = restore_fixed_parameters(params, initial_params, free_mask)
+            return _original_residual(full_params, *args, **kwargs)
+
     # Optimize each angle
     per_angle_results = []
     for subset in subsets:
         result = optimize_single_angle(
             subset,
             residual_func,
-            initial_params,
-            bounds,
+            free_params if has_fixed else initial_params,
+            free_bounds if has_fixed else bounds,
             **optimizer_kwargs,
         )
+        # Restore fixed parameters into the result
+        if has_fixed:
+            result["parameters"] = restore_fixed_parameters(
+                result["parameters"], initial_params, free_mask
+            )
         per_angle_results.append(result)
 
-        status = "✓" if result["success"] else "✗"
+        status = "OK" if result["success"] else "FAIL"
         logger.info(
             f"  {status} Angle {result['phi_angle']:6.2f}°: "
             f"cost={result['cost']:.4f}, "

@@ -1136,7 +1136,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 )
 
             logger.info(
-                f"✓ Parameter validation passed: {len(validated_params)} parameters"
+                f"Parameter validation passed: {len(validated_params)} parameters"
             )
 
             # Step: Re-run unified strategy selection with EFFECTIVE parameter count
@@ -5125,15 +5125,16 @@ class NLSQWrapper(NLSQAdapterBase):
         logger.info("=" * 80)
 
         # Check for optimization failure
-        if not params_changed or cost_reduction < 0.01:
+        if not params_changed and cost_reduction < 0.001:
             logger.warning(
-                "Optimization may have failed:\n"
-                f"  Parameters changed: {params_changed}\n"
+                "Optimization may have failed: parameters unchanged and cost unchanged\n"
                 f"  Cost reduction: {cost_reduction * 100:.2f}%\n"
-                "This may indicate:\n"
-                "  - Initial parameters already optimal\n"
-                "  - Optimization converged immediately\n"
-                "  - Problem with gradient computation"
+                "This may indicate a problem with gradient computation"
+            )
+        elif cost_reduction < 0.01:
+            logger.debug(
+                f"Cost reduction < 1% ({cost_reduction * 100:.2f}%): "
+                "initial parameters may already be near-optimal"
             )
 
         # =====================================================================
@@ -8036,13 +8037,13 @@ class NLSQWrapper(NLSQAdapterBase):
 
         # Get available system memory
         mem = psutil.virtual_memory()
-        available_gb = mem.available / 1e9
+        available_gb = mem.available / (1024**3)
 
         # Estimate memory for stratified LS
         estimated_bytes = self._estimate_memory_for_stratified_ls(
             n_points, n_params, n_chunks
         )
-        estimated_gb = estimated_bytes / 1e9
+        estimated_gb = estimated_bytes / (1024**3)
 
         # Decision logic
         # Use streaming if:

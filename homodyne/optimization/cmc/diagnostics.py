@@ -448,8 +448,9 @@ def log_analysis_summary(
     max_rhat = max(r_hat_values) if r_hat_values else np.nan
     min_ess = min(ess_values) if ess_values else np.nan
 
-    # For CMC, total transitions = n_shards × n_samples × n_chains
-    total_transitions = n_shards * n_samples * n_chains
+    # For CMC, only successful shards contribute divergences to the total.
+    # Using n_shards (total) would undercount the rate when some shards failed.
+    total_transitions = shards_succeeded * n_samples * n_chains
     div_rate = divergences / total_transitions if total_transitions > 0 else 0
     success_rate = shards_succeeded / n_shards if n_shards > 0 else 0
 
@@ -473,7 +474,7 @@ def log_analysis_summary(
     )
     logger.info(
         f"  ESS (min): {min_ess:.0f} "
-        f"{'[OK]' if min_ess >= 100 else '[FAIL]'}"
+        f"{'[OK]' if min_ess >= DEFAULT_MIN_ESS else '[FAIL]'}"
     )
     logger.info(f"  Divergences: {divergences} ({div_rate:.1%})")
 

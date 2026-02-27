@@ -427,7 +427,10 @@ class PBSBackend(CMCBackend):
                 return "C"  # Assume completed if can't parse
 
             if state == "C" and exit_status is not None and exit_status != 0:
-                logger.warning(f"PBS job {job_id} completed with non-zero exit_status={exit_status}")
+                logger.error(
+                    f"PBS job {job_id} failed with exit_status={exit_status}. "
+                    "Result file will be absent; shard will be treated as failed."
+                )
 
             return state
 
@@ -440,9 +443,14 @@ class PBSBackend(CMCBackend):
         from homodyne.optimization.cmc.sampler import MCMCSamples
 
         results = []
+        missing = [str(p) for p in result_files if not p.exists()]
+        if missing:
+            raise RuntimeError(
+                f"{len(missing)}/{len(result_files)} PBS result file(s) not found "
+                f"(shard worker(s) failed or timed out): {missing[:5]}"
+                + (" ..." if len(missing) > 5 else "")
+            )
         for path in result_files:
-            if not path.exists():
-                raise RuntimeError(f"Result file not found: {path}")
 
             data = np.load(path, allow_pickle=False)
 

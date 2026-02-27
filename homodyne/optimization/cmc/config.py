@@ -99,8 +99,10 @@ class CMCConfig:
           May suffer from parameter absorption degeneracy with many angles.
 
     constant_scaling_threshold : int
-        n_phi threshold for auto mode to use constant scaling.
-        When n_phi >= threshold, uses constant mode. Default: 3.
+        n_phi threshold for auto mode's per-angle strategy.
+        When n_phi >= threshold, auto mode samples averaged contrast/offset
+        (single value broadcast to all angles). When n_phi < threshold,
+        auto mode falls back to individual per-angle sampling. Default: 3.
     """
 
     # Enable settings

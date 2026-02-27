@@ -16,6 +16,8 @@ import numpy as np
 
 from homodyne.utils.logging import get_logger
 
+logger = get_logger(__name__)
+
 
 @dataclass
 class QualityMetrics:
@@ -233,8 +235,13 @@ def determine_convergence_status(
             return "max_iter"
         return "failed"
 
-    # Infer from quality
-    if quality_metrics.reduced_chi_squared < 10.0:
+    # Infer from quality (no explicit success flag available)
+    if quality_metrics.reduced_chi_squared < 5.0:
+        logger.warning(
+            f"Convergence inferred from reduced_chi_squared="
+            f"{quality_metrics.reduced_chi_squared:.4f} < 5.0 "
+            f"(no explicit success flag in optimizer info)"
+        )
         return "converged"
 
     return "failed"

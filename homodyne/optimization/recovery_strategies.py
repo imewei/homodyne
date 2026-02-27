@@ -50,15 +50,18 @@ class RecoveryStrategyApplicator:
     >>> # modified_params has 5% random noise added
     """
 
-    def __init__(self, max_retries: int = 2):
+    def __init__(self, max_retries: int = 2, seed: int = 42):
         """Initialize recovery strategy applicator.
 
         Parameters
         ----------
         max_retries : int, optional
             Maximum retry attempts, by default 2
+        seed : int, optional
+            RNG seed for reproducible perturbations, by default 42
         """
         self.max_retries = max_retries
+        self._rng = np.random.default_rng(seed)
 
     def get_recovery_strategy(
         self,
@@ -184,8 +187,7 @@ class RecoveryStrategyApplicator:
         np.ndarray
             Perturbed parameters
         """
-        rng = np.random.default_rng()
-        perturbation = rng.standard_normal(params.shape) * perturbation_fraction
+        perturbation = self._rng.standard_normal(params.shape) * perturbation_fraction
         # Additive fallback for zero-valued params (multiplicative would leave them at zero)
         scale = np.where(np.abs(params) > 1e-30, np.abs(params), 1.0)
         perturbed = params + perturbation * scale

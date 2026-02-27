@@ -271,7 +271,14 @@ def prepare_mcmc_data(
     # This is consistent with NLSQ strategies that mask/filter diagonal residuals.
     if filter_diagonal:
         n_before = len(data)
-        non_diagonal_mask = t1 != t2
+        # Use epsilon-based comparison instead of exact equality to handle float
+        # rounding errors in time arrays derived from integer frame indices.
+        # Epsilon = 1 ppm of the smallest time step (or 1e-12 fallback).
+        _t_unique = np.unique(np.concatenate([t1, t2]))
+        _diffs = np.diff(_t_unique)
+        _dt_min = float(_diffs[_diffs > 0].min()) if _diffs.size > 0 and np.any(_diffs > 0) else 1.0
+        _diag_eps = max(_dt_min * 1e-6, 1e-12)
+        non_diagonal_mask = np.abs(t1 - t2) > _diag_eps
         data = data[non_diagonal_mask]
         t1 = t1[non_diagonal_mask]
         t2 = t2[non_diagonal_mask]

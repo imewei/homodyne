@@ -306,6 +306,8 @@ class CMAESWrapperConfig:
         """
         # NLSQConfig might not have all fields if it's an older version or partial
         # Use getattr with defaults where appropriate or access directly if we are sure
+        _pop_batch = getattr(config, "cmaes_population_batch_size", None)
+        _data_chunk = getattr(config, "cmaes_data_chunk_size", None)
         return cls(
             # CMA-ES global search settings
             preset=getattr(config, "cmaes_preset", "cmaes"),
@@ -316,9 +318,9 @@ class CMAESWrapperConfig:
             tol_x=getattr(config, "cmaes_tol_x", 1e-8),
             restart_strategy=getattr(config, "cmaes_restart_strategy", "bipop"),
             max_restarts=getattr(config, "cmaes_max_restarts", 9),
-            population_batch_size=getattr(config, "cmaes_population_batch_size", None),
-            data_chunk_size=getattr(config, "cmaes_data_chunk_size", None),
-            auto_memory=getattr(config, "cmaes_population_batch_size", None) is None,
+            population_batch_size=_pop_batch,
+            data_chunk_size=_data_chunk,
+            auto_memory=_pop_batch is None and _data_chunk is None,
             memory_limit_gb=getattr(config, "cmaes_memory_limit_gb", 8.0),
             # NLSQ TRF refinement settings
             refine_with_nlsq=getattr(config, "cmaes_refine_with_nlsq", True),
@@ -986,7 +988,10 @@ class CMAESWrapper:
                 diagnostics["refined_chi_squared"] = best_chi_squared
 
                 # Calculate improvement percentage
-                improvement = (cmaes_chi_squared - best_chi_squared) / cmaes_chi_squared
+                if cmaes_chi_squared > 0.0:
+                    improvement = (cmaes_chi_squared - best_chi_squared) / cmaes_chi_squared
+                else:
+                    improvement = 0.0
                 diagnostics["chi_squared_improvement"] = improvement
 
                 # Add refinement timing if available

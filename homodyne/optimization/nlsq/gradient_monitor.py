@@ -307,8 +307,10 @@ class GradientCollapseMonitor:
             self.consecutive_count += 1
         else:
             self.consecutive_count = 0
+            # Re-arm detection after recovery so future collapses are tracked
+            self.collapse_detected = False
 
-        # Trigger collapse detection
+        # Trigger collapse detection (re-arms after recovery)
         if self.consecutive_count >= self.config.consecutive_triggers:
             if not self.collapse_detected:
                 self.collapse_detected = True
@@ -349,6 +351,7 @@ class GradientCollapseMonitor:
                         else:
                             # Reset consecutive count when gradient recovers
                             self._watch_consecutive_counts[param_idx] = 0
+                            self._watch_collapse_detected[param_idx] = False
 
                         # Check for collapse (consecutive triggers threshold)
                         if (

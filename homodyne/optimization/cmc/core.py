@@ -631,9 +631,11 @@ def _fit_mcmc_jax_impl(
     run_identifier = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
     run_logger = with_context(logger, run=run_identifier, analysis="cmc")
 
-    # Normalize analysis mode
+    # Normalize analysis mode to canonical strings
     if "static" in analysis_mode.lower():
         analysis_mode = "static"
+    elif "laminar" in analysis_mode.lower():
+        analysis_mode = "laminar_flow"
 
     run_logger.info(
         f"Starting CMC analysis: {len(data):,} points, mode={analysis_mode}, q={q:.4f}"
@@ -800,7 +802,7 @@ def _fit_mcmc_jax_impl(
     # (D0 ~ 1e4, gamma_dot_t0 ~ 1e-3) and NUTS struggles to adapt without
     # good initial values. Cold-start runs showed 28% divergence rates vs <5%
     # with NLSQ warm-start.
-    no_warmstart = nlsq_result is None and initial_values is None
+    no_warmstart = nlsq_result is None and not initial_values
     if no_warmstart and analysis_mode == "laminar_flow":
         require_warmstart = config.require_nlsq_warmstart
         if require_warmstart:
@@ -1433,6 +1435,7 @@ def _fit_mcmc_jax_impl(
         stats=final_stats,
         analysis_mode=analysis_mode,
         n_warmup=actual_n_warmup,
+        min_ess=config.min_ess,
     )
 
     # =========================================================================

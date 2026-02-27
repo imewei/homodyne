@@ -109,10 +109,13 @@ class BatchStatistics:
         Returns
         -------
         float
-            Success rate (0.0 to 1.0) from recent batches
+            Success rate (0.0 to 1.0) from recent batches. Returns 1.0 when
+            no batches have been recorded yet (optimistic prior) so that quality
+            gates do not falsely reject the first batch. Callers that need to
+            distinguish "no data yet" should check BatchStatistics.total_batches.
         """
         if not self.buffer:
-            return 0.0
+            return 1.0
 
         successes = sum(1 for batch in self.buffer if batch["success"])
         return successes / len(self.buffer)

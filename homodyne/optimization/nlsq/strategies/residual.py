@@ -589,7 +589,7 @@ class StratifiedResidualFunction:
         # the JIT path in residual_jit.py which compares values not indices.
         # Diagonal points are autocorrelation artifacts, not physics.
         residuals = jnp.where(
-            self.t1_values_all != self.t2_values_all, residuals, 0.0
+            jnp.abs(self.t1_values_all - self.t2_values_all) > 1e-15, residuals, 0.0
         )
 
         return residuals

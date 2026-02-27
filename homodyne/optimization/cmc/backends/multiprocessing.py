@@ -692,9 +692,12 @@ def _run_shard_worker(
             model_kwargs["shard_grid"] = precompute_shard_grid(
                 _time_grid, _t1, _t2, _dt
             )
-    except Exception:
+    except Exception as _exc:
         # Non-fatal: fall back to legacy compute_g1_total path in model.py
-        pass
+        worker_logger.warning(
+            f"precompute_shard_grid failed (using legacy path): "
+            f"{type(_exc).__name__}: {_exc}"
+        )
 
     # Heartbeat thread to emit liveness updates back to the parent.
     # Optimization: Use Event.wait(timeout) instead of busy-wait loop.
@@ -1083,6 +1086,14 @@ class MultiprocessingBackend(CMCBackend):
             ps_dict = parameter_space._config_dict
         else:
             ps_dict = model_kwargs.get("config_dict", {})
+            if not ps_dict:
+                run_logger.error(
+                    "ParameterSpace._config_dict is absent and no 'config_dict' in "
+                    "model_kwargs. Workers will reconstruct ParameterSpace from an "
+                    "empty dict (default bounds). This may produce unconstrained or "
+                    "incorrect NUTS proposals. Ensure ParameterSpace exposes "
+                    "_config_dict or pass config_dict in model_kwargs."
+                )
 
         # Place shared data in shared memory to avoid per-shard pickling.
         # Wrap in try-except so partially-created blocks are cleaned up on failure.
@@ -1423,7 +1434,7 @@ class MultiprocessingBackend(CMCBackend):
                                     "success": False,
                                     "shard_idx": shard_idx,
                                     "error": f"Runtime timeout after {proc_elapsed:.0f}s (limit: {per_shard_timeout}s)",
-                                    "error_category": "runtime_timeout",
+                                    "error_category": "timeout",
                                     "duration": proc_elapsed,
                                 }
                             )

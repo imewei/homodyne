@@ -98,7 +98,13 @@ class CheckpointManager:
         self.enable_compression = enable_compression
 
         # Create checkpoint directory if it doesn't exist
-        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise NLSQCheckpointError(
+                f"Cannot create checkpoint directory '{self.checkpoint_dir}': {e}",
+                error_context={"checkpoint_dir": str(self.checkpoint_dir)},
+            ) from e
 
         # T059: Log checkpoint manager initialization
         logger.debug(
@@ -220,7 +226,7 @@ class CheckpointManager:
 
             return checkpoint_path
 
-        except Exception as e:
+        except (OSError, ValueError, TypeError, RuntimeError) as e:
             raise NLSQCheckpointError(
                 f"Failed to save checkpoint at batch {batch_idx}: {e}",
                 error_context={
