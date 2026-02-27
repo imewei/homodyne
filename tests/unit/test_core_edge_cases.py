@@ -160,7 +160,7 @@ class TestParameterValidationEdgeCases:
         result_valid = ValidationResult(
             valid=True, parameters_checked=3, message="All valid"
         )
-        assert "✓" in str(result_valid)
+        assert "OK" in str(result_valid)
 
         # Invalid case
         result_invalid = ValidationResult(
@@ -169,7 +169,7 @@ class TestParameterValidationEdgeCases:
             parameters_checked=3,
             message="Validation failed",
         )
-        assert "✗" in str(result_invalid)
+        assert "FAIL" in str(result_invalid)
         assert "param_0" in str(result_invalid)
 
     @pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX required for tracer test")

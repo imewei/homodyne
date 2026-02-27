@@ -233,6 +233,7 @@ class TestCMCConfigOverride:
 
         mock_result = Mock()
         mock_result.is_cmc_result.return_value = False
+        mock_result.inference_data = None  # Prevent diagnostic plot generation
         mock_fit_mcmc.return_value = mock_result
 
         # Import here to use mocked dependencies
@@ -249,6 +250,8 @@ class TestCMCConfigOverride:
             n_chains=2,
             output_dir=Path("/tmp/test"),
             dense_mass_matrix=False,  # Required by _build_mcmc_runtime_kwargs
+            no_nlsq_warmstart=True,  # Skip NLSQ warm-start (not under test)
+            nlsq_result=None,
         )
 
         # Run optimization
@@ -288,6 +291,7 @@ class TestCMCConfigOverride:
 
         mock_result = Mock()
         mock_result.is_cmc_result.return_value = False
+        mock_result.inference_data = None  # Prevent diagnostic plot generation
         mock_fit_mcmc.return_value = mock_result
 
         from homodyne.cli.commands import _run_optimization
@@ -303,6 +307,8 @@ class TestCMCConfigOverride:
             n_chains=2,
             output_dir=Path("/tmp/test"),
             dense_mass_matrix=False,  # Required by _build_mcmc_runtime_kwargs
+            no_nlsq_warmstart=True,  # Skip NLSQ warm-start (not under test)
+            nlsq_result=None,
         )
 
         # Run optimization
@@ -350,6 +356,7 @@ class TestCMCDiagnosticPlotGeneration:
         mock_result = Mock()
         mock_result.is_cmc_result.return_value = True  # This is a CMC result
         mock_result.cmc_diagnostics = {"success_rate": 0.95}
+        mock_result.inference_data = Mock()  # Explicitly truthy: test verifies this triggers plot call
         mock_fit_mcmc.return_value = mock_result
 
         from homodyne.cli.commands import _run_optimization
@@ -365,6 +372,8 @@ class TestCMCDiagnosticPlotGeneration:
             n_chains=2,
             output_dir=Path("/tmp/test"),
             dense_mass_matrix=False,  # Required by _build_mcmc_runtime_kwargs
+            no_nlsq_warmstart=True,  # Skip NLSQ warm-start (not under test)
+            nlsq_result=None,
         )
 
         # Run optimization
@@ -424,6 +433,8 @@ class TestCMCDiagnosticPlotGeneration:
             n_chains=2,
             output_dir=Path("/tmp/test"),
             dense_mass_matrix=False,
+            no_nlsq_warmstart=True,  # Skip NLSQ warm-start (not under test)
+            nlsq_result=None,
         )
 
         # Run optimization
@@ -480,6 +491,8 @@ class TestCMCDiagnosticPlotGeneration:
             n_chains=2,
             output_dir=Path("/tmp/test"),
             dense_mass_matrix=False,
+            no_nlsq_warmstart=True,  # Skip NLSQ warm-start (not under test)
+            nlsq_result=None,
         )
 
         # Run optimization

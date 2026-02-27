@@ -91,7 +91,7 @@ class TestParameterBounds:
         assert "gamma_dot_t0" in pm._default_bounds
         bounds = pm._default_bounds["gamma_dot_t0"]
         assert bounds["min"] == 1e-6
-        assert bounds["max"] == 0.5
+        assert bounds["max"] == 1e4  # aligned with ParameterRegistry upper_bound
 
     def test_default_bounds_for_beta(self):
         """Test default bounds for beta parameter."""
@@ -103,11 +103,13 @@ class TestParameterBounds:
 
     def test_default_bounds_for_phi0(self):
         """Test default bounds for phi0 parameter."""
+        import math
+
         pm = ParameterManager()
         assert "phi0" in pm._default_bounds
         bounds = pm._default_bounds["phi0"]
-        assert bounds["min"] == -10.0
-        assert bounds["max"] == 10.0
+        assert abs(bounds["min"] - (-math.pi)) < 1e-10  # -pi radians
+        assert abs(bounds["max"] - math.pi) < 1e-10  # +pi radians
 
     def test_bounds_have_correct_structure(self):
         """Test that bounds have required keys."""

@@ -301,12 +301,12 @@ class TestDetermineConvergenceStatus:
         """Test convergence inference from good quality."""
         info = {}  # No success flag
         metrics = QualityMetrics(
-            chi_squared=1.0, reduced_chi_squared=5.0, quality_flag="marginal"
+            chi_squared=1.0, reduced_chi_squared=4.0, quality_flag="marginal"
         )
 
         status = determine_convergence_status(info, metrics)
 
-        assert status == "converged"  # reduced_chi_squared < 10
+        assert status == "converged"  # reduced_chi_squared < 5.0
 
     def test_infer_from_quality_failed(self):
         """Test failure inference from poor quality."""
