@@ -6423,9 +6423,6 @@ class NLSQWrapper(NLSQAdapterBase):
             logger.warning(
                 "  Without this, gradient cancellation will collapse gamma_dot_t0."
             )
-            logger.warning(
-                "  See: docs/analysis/nlsq-divergence-root-cause-20260101.md"
-            )
             logger.warning("=" * 60)
             enable_hierarchical = True
 
