@@ -501,7 +501,9 @@ def numerical_error_types():
 
 # Resolve NLSQNumericalError once at import time (used by MockNumericalValidator).
 try:
-    from homodyne.optimization.exceptions import NLSQNumericalError as _NLSQNumericalError  # noqa: I001
+    from homodyne.optimization.exceptions import (
+        NLSQNumericalError as _NLSQNumericalError,
+    )  # noqa: I001
 except ImportError:
 
     class _NLSQNumericalError(Exception):  # type: ignore[no-redef]
@@ -586,7 +588,10 @@ class MockNumericalValidator:
             )
         bounds_to_check = bounds or self.bounds
         if bounds_to_check is not None:
-            lower, upper = np.asarray(bounds_to_check[0]), np.asarray(bounds_to_check[1])
+            lower, upper = (
+                np.asarray(bounds_to_check[0]),
+                np.asarray(bounds_to_check[1]),
+            )
             violations_lower = param_array < lower
             violations_upper = param_array > upper
             if np.any(violations_lower) or np.any(violations_upper):
@@ -707,5 +712,3 @@ def numerical_validation_context():
             raise
 
     return validation_context
-
-

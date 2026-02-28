@@ -356,7 +356,9 @@ class TestCMCDiagnosticPlotGeneration:
         mock_result = Mock()
         mock_result.is_cmc_result.return_value = True  # This is a CMC result
         mock_result.cmc_diagnostics = {"success_rate": 0.95}
-        mock_result.inference_data = Mock()  # Explicitly truthy: test verifies this triggers plot call
+        mock_result.inference_data = (
+            Mock()
+        )  # Explicitly truthy: test verifies this triggers plot call
         mock_fit_mcmc.return_value = mock_result
 
         from homodyne.cli.commands import _run_optimization

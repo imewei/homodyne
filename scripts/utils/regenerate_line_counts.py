@@ -56,10 +56,7 @@ def count_dir(dirpath: Path, *, recursive: bool = True) -> int:
 
 def file_counts(dirpath: Path) -> dict[str, int]:
     """Map filename -> line count for .py files directly in *dirpath*."""
-    return {
-        f.name: count_lines(f)
-        for f in sorted(dirpath.glob("*.py"))
-    }
+    return {f.name: count_lines(f) for f in sorted(dirpath.glob("*.py"))}
 
 
 def generate_summary_table() -> str:
@@ -85,7 +82,8 @@ def generate_summary_table() -> str:
 
     # Root package files
     root_total = sum(
-        count_lines(f) for f in PKG_DIR.glob("*.py")
+        count_lines(f)
+        for f in PKG_DIR.glob("*.py")
         if f.name not in ("post_install.py", "uninstall_scripts.py")
     )
 
@@ -120,9 +118,7 @@ def generate_summary_table() -> str:
     for name, count, desc in rows:
         pct = count / grand_total * 100
         lines.append(f"| {name} | {count:,} | {pct:.1f}% | {desc} |")
-    lines.append(
-        f"| **Total** | **~{round(grand_total, -2):,}** | | |"
-    )
+    lines.append(f"| **Total** | **~{round(grand_total, -2):,}** | | |")
     return "\n".join(lines)
 
 
@@ -153,14 +149,18 @@ def generate_report() -> str:
                 parts.append(f"    {fname:<38s} {lc:>6,}")
 
             # Sub-subdirectories (strategies/, backends/, validation/)
-            inner_subdirs = NLSQ_SUBDIRS if sd == "nlsq" else CMC_SUBDIRS if sd == "cmc" else []
+            inner_subdirs = (
+                NLSQ_SUBDIRS if sd == "nlsq" else CMC_SUBDIRS if sd == "cmc" else []
+            )
             for isd in inner_subdirs:
                 isdpath = sdpath / isd
                 if not isdpath.exists():
                     continue
                 isd_total = count_dir(isdpath)
                 parts.append(f"    {isd}/  ({isd_total:,} lines)")
-                for fname, lc in sorted(file_counts(isdpath).items(), key=lambda x: -x[1]):
+                for fname, lc in sorted(
+                    file_counts(isdpath).items(), key=lambda x: -x[1]
+                ):
                     parts.append(f"      {fname:<36s} {lc:>6,}")
 
         parts.append("")

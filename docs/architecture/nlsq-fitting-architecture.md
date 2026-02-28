@@ -610,9 +610,9 @@ ______________________________________________________________________
 - `per_angle_scaling = True`
 - `enable = True` (AntiDegeneracyConfig.enable, default True)
 
-Note: `n_phi >= constant_scaling_threshold` (default: 3) determines the per-angle **mode**
-(auto_averaged vs individual), not whether the system activates. The system activates for
-any laminar_flow run with per-angle scaling enabled.
+Note: `n_phi >= constant_scaling_threshold` (default: 3) determines the per-angle
+**mode** (auto_averaged vs individual), not whether the system activates. The system
+activates for any laminar_flow run with per-angle scaling enabled.
 
 ### Root Problem: Structural Degeneracy
 
@@ -968,22 +968,22 @@ ______________________________________________________________________
 | File | Purpose | |------|---------| | `core.py` | Entry points: `fit_nlsq_jax()`,
 `fit_nlsq_multistart()` (line ~1402) | | `multistart.py` | Lower-level
 `run_multistart_nlsq()` (called by `fit_nlsq_multistart()`) | | `cmaes_wrapper.py` |
-CMA-ES global optimization:
-`CMAESWrapper`, `fit_with_cmaes()` | | `config.py` | `NLSQConfig` with CMA-ES and
-refinement settings | | `memory.py` | `select_nlsq_strategy()`, memory estimation (6.5×
-factor) | | `adapter.py` | NLSQAdapter with model caching | | `wrapper.py` | NLSQWrapper
-with full feature set + 3-attempt recovery | | `strategies/chunking.py` |
-`create_angle_stratified_data()`, `should_use_stratification()` | |
-`strategies/residual.py` | `StratifiedResidualFunction` (Python-callable) | |
-`strategies/residual_jit.py` | `StratifiedResidualFunctionJIT` (JIT-compiled) | |
-`strategies/executors.py` | StandardExecutor, LargeDatasetExecutor, StreamingExecutor |
-| `anti_degeneracy_controller.py` | 5-layer defense orchestration | |
-`fourier_reparam.py` | Layer 1: Fourier parameter compression | | `hierarchical.py` |
-Layer 2: Alternating physical/per-angle stages | | `adaptive_regularization.py` | Layer
-3: CV-based regularization | | `gradient_monitor.py` | Layer 4: Runtime collapse
-detection | | `shear_weighting.py` | Layer 5: Angle-dependent loss weighting | |
-`multistart.py` | Multi-start optimization with LHS | | `result_builder.py` | Result
-construction and quality assessment |
+CMA-ES global optimization: `CMAESWrapper`, `fit_with_cmaes()` | | `config.py` |
+`NLSQConfig` with CMA-ES and refinement settings | | `memory.py` |
+`select_nlsq_strategy()`, memory estimation (6.5× factor) | | `adapter.py` | NLSQAdapter
+with model caching | | `wrapper.py` | NLSQWrapper with full feature set + 3-attempt
+recovery | | `strategies/chunking.py` | `create_angle_stratified_data()`,
+`should_use_stratification()` | | `strategies/residual.py` |
+`StratifiedResidualFunction` (Python-callable) | | `strategies/residual_jit.py` |
+`StratifiedResidualFunctionJIT` (JIT-compiled) | | `strategies/executors.py` |
+StandardExecutor, LargeDatasetExecutor, StreamingExecutor | |
+`anti_degeneracy_controller.py` | 5-layer defense orchestration | | `fourier_reparam.py`
+| Layer 1: Fourier parameter compression | | `hierarchical.py` | Layer 2: Alternating
+physical/per-angle stages | | `adaptive_regularization.py` | Layer 3: CV-based
+regularization | | `gradient_monitor.py` | Layer 4: Runtime collapse detection | |
+`shear_weighting.py` | Layer 5: Angle-dependent loss weighting | | `multistart.py` |
+Multi-start optimization with LHS | | `result_builder.py` | Result construction and
+quality assessment |
 
 ______________________________________________________________________
 

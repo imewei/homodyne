@@ -157,8 +157,9 @@ g2(phi, t1, t2) = offset + contrast * [g1(phi, t1, t2)]^2
 
 ### Integration Method
 
-All integrals are computed via **numerical cumulative trapezoid** on the discrete time grid.
-No closed-form integral formulas are used in the implementation (see MEMORY.md critical rule).
+All integrals are computed via **numerical cumulative trapezoid** on the discrete time
+grid. No closed-form integral formulas are used in the implementation (see MEMORY.md
+critical rule).
 
 ______________________________________________________________________
 
@@ -170,23 +171,15 @@ ______________________________________________________________________
 
 Static class with reference values for XPCS experiments:
 
-| Category | Constant | Value | Unit |
-|----------|----------|-------|------|
-| X-ray wavelengths | `WAVELENGTH_CU_KA` | 1.54 | A |
-| | `WAVELENGTH_8KEV` | 1.55 | A |
-| | `WAVELENGTH_12KEV` | 1.03 | A |
-| | `WAVELENGTH_15KEV` | 0.83 | A |
-| Q-range | `Q_MIN_TYPICAL` | 1e-4 | A^-1 |
-| | `Q_MAX_TYPICAL` | 1.0 | A^-1 |
-| Time scales | `TIME_MIN_XPCS` | 1e-6 | s |
-| | `TIME_MAX_XPCS` | 1e3 | s |
-| Diffusion | `DIFFUSION_MIN` / `MAX` | 1.0 / 1e6 | A^2/s |
-| Shear rates | `SHEAR_RATE_MIN` / `MAX` | 1e-5 / 1.0 | s^-1 |
-| Exponent bounds | `ALPHA_MIN` / `MAX` | -2.0 / 2.0 | dimensionless |
-| | `BETA_MIN` / `MAX` | -2.0 / 2.0 | dimensionless |
-| Numerical | `EPS` | 1e-12 | |
-| | `MAX_EXP_ARG` | 700.0 | |
-| | `MIN_POSITIVE` | 1e-100 | |
+| Category | Constant | Value | Unit | |----------|----------|-------|------| | X-ray
+wavelengths | `WAVELENGTH_CU_KA` | 1.54 | A | | | `WAVELENGTH_8KEV` | 1.55 | A | | |
+`WAVELENGTH_12KEV` | 1.03 | A | | | `WAVELENGTH_15KEV` | 0.83 | A | | Q-range |
+`Q_MIN_TYPICAL` | 1e-4 | A^-1 | | | `Q_MAX_TYPICAL` | 1.0 | A^-1 | | Time scales |
+`TIME_MIN_XPCS` | 1e-6 | s | | | `TIME_MAX_XPCS` | 1e3 | s | | Diffusion |
+`DIFFUSION_MIN` / `MAX` | 1.0 / 1e6 | A^2/s | | Shear rates | `SHEAR_RATE_MIN` / `MAX` |
+1e-5 / 1.0 | s^-1 | | Exponent bounds | `ALPHA_MIN` / `MAX` | -2.0 / 2.0 | dimensionless
+| | | `BETA_MIN` / `MAX` | -2.0 / 2.0 | dimensionless | | Numerical | `EPS` | 1e-12 | |
+| | `MAX_EXP_ARG` | 700.0 | | | | `MIN_POSITIVE` | 1e-100 | |
 
 ### Parameter Bounds
 
@@ -211,14 +204,13 @@ def parameter_bounds() -> dict[str, list[tuple[float, float]]]:
 
 ### Validation Functions
 
-| Function | Purpose |
-|----------|---------|
-| `validate_parameters_detailed(params, bounds, names)` | Per-parameter violation report; skips JAX tracers |
-| `validate_parameters(params, bounds)` | Legacy boolean wrapper |
-| `clip_parameters(params, bounds)` | Clips to bounds, logs clipped values |
-| `get_default_parameters(model_type)` | Sensible defaults per model type |
-| `validate_experimental_setup(q, L, wavelength)` | Range checks for experimental geometry |
-| `estimate_correlation_time(D0, alpha, q)` | Estimates tau ~ 1/(q^2 * D0) |
+| Function | Purpose | |----------|---------| |
+`validate_parameters_detailed(params, bounds, names)` | Per-parameter violation report;
+skips JAX tracers | | `validate_parameters(params, bounds)` | Legacy boolean wrapper | |
+`clip_parameters(params, bounds)` | Clips to bounds, logs clipped values | |
+`get_default_parameters(model_type)` | Sensible defaults per model type | |
+`validate_experimental_setup(q, L, wavelength)` | Range checks for experimental geometry
+| | `estimate_correlation_time(D0, alpha, q)` | Estimates tau ~ 1/(q^2 * D0) |
 
 ### ValidationResult Dataclass
 
@@ -231,8 +223,8 @@ class ValidationResult:
     message: str               # Summary: "OK ..." or "FAIL ..."
 ```
 
-**JAX tracer safety:** `validate_parameters_detailed()` detects JAX tracers by checking if the
-type string contains `"Tracer"` and skips validation during JIT compilation.
+**JAX tracer safety:** `validate_parameters_detailed()` detects JAX tracers by checking
+if the type string contains `"Tracer"` and skips validation during JIT compilation.
 
 ______________________________________________________________________
 
@@ -270,11 +262,8 @@ class PhysicsModelBase(ABC):
 
 ### DiffusionModel
 
-| Property | Value |
-|----------|-------|
-| Name | `"anomalous_diffusion"` |
-| Parameters | `["D0", "alpha", "D_offset"]` (3) |
-| Defaults | `[100.0, 0.0, 10.0]` |
+| Property | Value | |----------|-------| | Name | `"anomalous_diffusion"` | |
+Parameters | `["D0", "alpha", "D_offset"]` (3) | | Defaults | `[100.0, 0.0, 10.0]` |
 
 ```python
 def compute_g1(params, t1, t2, phi, q, L, dt):
@@ -283,11 +272,9 @@ def compute_g1(params, t1, t2, phi, q, L, dt):
 
 ### ShearModel
 
-| Property | Value |
-|----------|-------|
-| Name | `"time_dependent_shear"` |
-| Parameters | `["gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"]` (4) |
-| Defaults | `[1.0, 0.0, 0.0, 0.0]` |
+| Property | Value | |----------|-------| | Name | `"time_dependent_shear"` | |
+Parameters | `["gamma_dot_t0", "beta", "gamma_dot_t_offset", "phi0"]` (4) | | Defaults |
+`[1.0, 0.0, 0.0, 0.0]` |
 
 ```python
 def compute_g1(params, t1, t2, phi, q, L, dt):
@@ -311,11 +298,11 @@ class CombinedModel(
 **Analysis mode mapping:**
 
 | Input Mode | Internal Name | Parameters | Behavior |
-|------------|---------------|------------|----------|
-| `"static"` | `"static_diffusion"` | 3 | Diffusion only |
-| `"static_isotropic"` | `"static_diffusion"` | 3 | Explicit isotropic |
-| `"static_anisotropic"` | `"static_diffusion"` | 3 | Still isotropic (diffusion has no anisotropy) |
-| `"laminar_flow"` | `"laminar_flow_complete"` | 7 | Full diffusion + shear |
+|------------|---------------|------------|----------| | `"static"` |
+`"static_diffusion"` | 3 | Diffusion only | | `"static_isotropic"` |
+`"static_diffusion"` | 3 | Explicit isotropic | | `"static_anisotropic"` |
+`"static_diffusion"` | 3 | Still isotropic (diffusion has no anisotropy) | |
+`"laminar_flow"` | `"laminar_flow_complete"` | 7 | Full diffusion + shear |
 
 **Key methods:**
 
@@ -376,13 +363,10 @@ def from_config(cls, q: float, L: float, dt: float, validate: bool = True):
 
 **Validation (in `_validate()`):**
 
-| Check | Range | Severity |
-|-------|-------|----------|
-| Positivity | q > 0, L > 0, dt > 0 | Error |
-| Finiteness | All values finite | Error |
-| q range | [1e-4, 1.0] A^-1 | Warning |
-| L range | [1e5, 1e8] A (10 um to 10 mm) | Warning |
-| dt range | [1e-6, 1e3] s | Warning |
+| Check | Range | Severity | |-------|-------|----------| | Positivity | q > 0, L > 0,
+dt > 0 | Error | | Finiteness | All values finite | Error | | q range | [1e-4, 1.0] A^-1
+| Warning | | L range | [1e5, 1e8] A (10 um to 10 mm) | Warning | | dt range | \[1e-6,
+1e3\] s | Warning |
 
 **JIT-safe unpacking:**
 
@@ -411,7 +395,9 @@ def get_cached_meshgrid(t1, t2) -> tuple[jnp.ndarray, jnp.ndarray]
 
 **Cache key:** `(len(t1), t1[0], t1[-1], dtype, len(t2), t2[0], t2[-1], dtype)`
 
-**Note:** The actual key structure is nested: `(t1_key, t2_key)` where each component key is `(n, float(arr[0]), float(arr[-1]), str(dtype))`. The flat representation above is a conceptual summary.
+**Note:** The actual key structure is nested: `(t1_key, t2_key)` where each component
+key is `(n, float(arr[0]), float(arr[-1]), str(dtype))`. The flat representation above
+is a conceptual summary.
 
 **Skip conditions:** Large arrays (n > 2000), JAX traced values (inside JIT).
 
@@ -426,9 +412,8 @@ def _compute_g1_diffusion_core(params, t1, t2, wavevector_q_squared_half_dt, dt,
 **Dual-mode dispatch (determined by `t1.ndim`):**
 
 | Mode | t1.ndim | Shape In | Shape Out | Used By |
-|------|---------|----------|-----------|---------|
-| Element-wise | 1 | (N,) | (N,) | CMC shards |
-| Matrix | 2 | (n_t, n_t) | (n_t, n_t) | NLSQ |
+|------|---------|----------|-----------|---------| | Element-wise | 1 | (N,) | (N,) |
+CMC shards | | Matrix | 2 | (n_t, n_t) | (n_t, n_t) | NLSQ |
 
 **Algorithm (both modes):**
 
@@ -475,7 +460,8 @@ def _compute_g1_shear_core(params, t1, t2, phi, sinc_prefactor, dt, time_grid=No
    g1_shear = vmap(_sinc2_for_one_phi)(phi_array)  → shape (n_phi, n_t, n_t)
 ```
 
-**Memory design:** `vmap` over angles keeps peak memory at O(n_t^2) instead of O(n_phi * n_t^2).
+**Memory design:** `vmap` over angles keeps peak memory at O(n_t^2) instead of O(n_phi
+\* n_t^2).
 
 ### Core Kernel: g1 Total
 
@@ -515,14 +501,18 @@ return g2                                  # No output clipping
 
 ### Public Wrapper Functions
 
-| Function | Pre-computes | Delegates To |
-|----------|-------------|-------------|
-| `compute_g1_diffusion(params, t1, t2, q, dt)` | meshgrid, wq_dt | `_compute_g1_diffusion_core` |
-| `compute_g1_shear(params, t1, t2, phi, q, L, dt)` | meshgrid, sinc_pre | `_compute_g1_shear_core` |
-| `compute_g1_total(params, t1, t2, phi, q, L, dt)` | meshgrid, wq_dt, sinc_pre | `_compute_g1_total_core` |
-| `compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset, dt)` | wq_dt, sinc_pre | `_compute_g2_scaled_core` |
-| `compute_g2_scaled_with_factors(params, ..., wq_dt, sinc_pre, ...)` | None (pre-computed) | `_compute_g2_scaled_core` |
-| `compute_chi_squared(params, data, sigma, ...)` | wq_dt, sinc_pre | `_compute_g2_scaled_core` |
+| Function | Pre-computes | Delegates To | |----------|-------------|-------------| |
+`compute_g1_diffusion(params, t1, t2, q, dt)` | meshgrid, wq_dt |
+`_compute_g1_diffusion_core` | | `compute_g1_shear(params, t1, t2, phi, q, L, dt)` |
+meshgrid, sinc_pre | `_compute_g1_shear_core` | |
+`compute_g1_total(params, t1, t2, phi, q, L, dt)` | meshgrid, wq_dt, sinc_pre |
+`_compute_g1_total_core` | |
+`compute_g2_scaled(params, t1, t2, phi, q, L, contrast, offset, dt)` | wq_dt, sinc_pre |
+`_compute_g2_scaled_core` | |
+`compute_g2_scaled_with_factors(params, ..., wq_dt, sinc_pre, ...)` | None
+(pre-computed) | `_compute_g2_scaled_core` | |
+`compute_chi_squared(params, data, sigma, ...)` | wq_dt, sinc_pre |
+`_compute_g2_scaled_core` |
 
 ### Automatic Differentiation (Module-Level)
 
@@ -552,30 +542,36 @@ execution contexts. All paths must produce identical results for the same inputs
 
 ### Shadow-Copy Registry
 
-| Computation | jax_backend.py | physics_nlsq.py | physics_cmc.py (precomp) | physics_cmc.py (legacy) | physics_utils.py |
+| Computation | jax_backend.py | physics_nlsq.py | physics_cmc.py (precomp) |
+physics_cmc.py (legacy) | physics_utils.py |
 |-------------|---------------|-----------------|------------------------|------------------------|-----------------|
-| **D(t)** | (inline) | (inline) | (inline) | (inline) | `calculate_diffusion_coefficient` |
-| **gamma_dot(t)** | (inline) | (inline) | (inline) | (inline) | `calculate_shear_rate` |
-| **g1_diff** | `_compute_g1_diffusion_core` | `_compute_g1_diffusion_meshgrid` | `_compute_g1_diffusion_from_idx` | `_compute_g1_diffusion_elementwise` | - |
-| **g1_shear** | `_compute_g1_shear_core` | `_compute_g1_shear_meshgrid` | `_compute_g1_shear_from_idx` | `_compute_g1_shear_elementwise` | - |
-| **g1_total** | `_compute_g1_total_core` | `_compute_g1_total_meshgrid` | `_compute_g1_total_with_precomputed` | `_compute_g1_total_elementwise` | - |
-| **g2_scaled** | `_compute_g2_scaled_core` | `_compute_g2_scaled_meshgrid` | (in model.py) | (in model.py) | - |
+| **D(t)** | (inline) | (inline) | (inline) | (inline) |
+`calculate_diffusion_coefficient` | | **gamma_dot(t)** | (inline) | (inline) | (inline)
+| (inline) | `calculate_shear_rate` | | **g1_diff** | `_compute_g1_diffusion_core` |
+`_compute_g1_diffusion_meshgrid` | `_compute_g1_diffusion_from_idx` |
+`_compute_g1_diffusion_elementwise` | - | | **g1_shear** | `_compute_g1_shear_core` |
+`_compute_g1_shear_meshgrid` | `_compute_g1_shear_from_idx` |
+`_compute_g1_shear_elementwise` | - | | **g1_total** | `_compute_g1_total_core` |
+`_compute_g1_total_meshgrid` | `_compute_g1_total_with_precomputed` |
+`_compute_g1_total_elementwise` | - | | **g2_scaled** | `_compute_g2_scaled_core` |
+`_compute_g2_scaled_meshgrid` | (in model.py) | (in model.py) | - |
 
 ### Why Shadow Copies Exist
 
 | Path | Optimized For | Data Layout | Memory Profile |
-|------|---------------|-------------|----------------|
-| **jax_backend** | General/dispatcher | Both modes | Depends on caller |
-| **physics_nlsq** | NLSQ optimizer | Meshgrid (n_t, n_t) | O(n_phi * n_t^2) — quadratic |
-| **physics_cmc (precomp)** | NUTS leapfrog (Feb 2026) | Pre-indexed (N,) | O(N) — linear |
-| **physics_cmc (legacy)** | NUTS leapfrog (pre-Feb 2026) | Element-wise (N,) | O(N + G*log(G)) per step |
-| **physics_utils** | Base D(t)/gamma(t) only | 1D array | O(G) |
+|------|---------------|-------------|----------------| | **jax_backend** |
+General/dispatcher | Both modes | Depends on caller | | **physics_nlsq** | NLSQ
+optimizer | Meshgrid (n_t, n_t) | O(n_phi * n_t^2) — quadratic | | **physics_cmc
+(precomp)** | NUTS leapfrog (Feb 2026) | Pre-indexed (N,) | O(N) — linear | |
+**physics_cmc (legacy)** | NUTS leapfrog (pre-Feb 2026) | Element-wise (N,) | O(N +
+G\*log(G)) per step | | **physics_utils** | Base D(t)/gamma(t) only | 1D array | O(G) |
 
 ### NLSQ-Specific Path
 
 **File:** `homodyne/core/physics_nlsq.py` (480 lines)
 
-Meshgrid-only implementation. Time arrays are 2D: `t1[:, 0]` extracts unique times (indexing="ij").
+Meshgrid-only implementation. Time arrays are 2D: `t1[:, 0]` extracts unique times
+(indexing="ij").
 
 ```python
 @jit
@@ -638,15 +634,16 @@ Only pays O(N * log(G)) once during shard initialization.
 
 **File:** `homodyne/core/physics_utils.py` (369 lines)
 
-| Function | Signature | JIT | Purpose |
-|----------|-----------|-----|---------|
-| `safe_exp(x, max_val=700.0)` | `jnp.ndarray -> jnp.ndarray` | Yes | Overflow-protected exponential |
-| `safe_sinc(x)` | `jnp.ndarray -> jnp.ndarray` | Yes | UNNORMALIZED sinc with Taylor near zero |
-| `calculate_diffusion_coefficient(t, D0, alpha, D_offset)` | `-> jnp.ndarray` | Yes | D(t) with singularity floor |
-| `calculate_shear_rate(t, gamma0, beta, offset)` | `-> jnp.ndarray` | Yes | gamma_dot(t) |
-| `calculate_shear_rate_cmc(t, gamma0, beta, offset)` | `-> jnp.ndarray` | Yes | CMC variant with dt=0 guard |
-| `create_time_integral_matrix(f)` | `-> jnp.ndarray` | Yes | 2D integral matrix via cumsum |
-| `trapezoid_cumsum(values)` | `-> jnp.ndarray` | No | 1D cumulative trapezoidal sum |
+| Function | Signature | JIT | Purpose | |----------|-----------|-----|---------| |
+`safe_exp(x, max_val=700.0)` | `jnp.ndarray -> jnp.ndarray` | Yes | Overflow-protected
+exponential | | `safe_sinc(x)` | `jnp.ndarray -> jnp.ndarray` | Yes | UNNORMALIZED sinc
+with Taylor near zero | | `calculate_diffusion_coefficient(t, D0, alpha, D_offset)` |
+`-> jnp.ndarray` | Yes | D(t) with singularity floor | |
+`calculate_shear_rate(t, gamma0, beta, offset)` | `-> jnp.ndarray` | Yes | gamma_dot(t)
+| | `calculate_shear_rate_cmc(t, gamma0, beta, offset)` | `-> jnp.ndarray` | Yes | CMC
+variant with dt=0 guard | | `create_time_integral_matrix(f)` | `-> jnp.ndarray` | Yes |
+2D integral matrix via cumsum | | `trapezoid_cumsum(values)` | `-> jnp.ndarray` | No |
+1D cumulative trapezoidal sum |
 
 ### Consistency Invariants (Verified Across All 5 Paths)
 
@@ -712,12 +709,15 @@ def compute_averaged_scaling(
 
 ### The 4 Per-Angle Modes
 
-| Mode | Scaling Params | How Scaling is Handled | Total Params (laminar_flow, 23 angles) |
+| Mode | Scaling Params | How Scaling is Handled | Total Params (laminar_flow, 23
+angles) |
 |------|---------------|------------------------|----------------------------------------|
-| **auto** | 2 (averaged) | Quantile estimate per angle, average, optimize 2 averaged values | **9** (7 physical + 2 optimized) |
-| **constant** | 0 (fixed) | Quantile estimate per angle, average, fix at averaged values | **7** (physical only) |
-| **individual** | 2 * n_phi | Optimize all per-angle contrast/offset independently | **53** (7 + 46) |
-| **fourier** | 2*K + 2 | Truncated Fourier series (K=2) for angular variation | **17** (7 + 10) |
+| **auto** | 2 (averaged) | Quantile estimate per angle, average, optimize 2 averaged
+values | **9** (7 physical + 2 optimized) | | **constant** | 0 (fixed) | Quantile
+estimate per angle, average, fix at averaged values | **7** (physical only) | |
+**individual** | 2 * n_phi | Optimize all per-angle contrast/offset independently |
+**53** (7 + 46) | | **fourier** | 2\*K + 2 | Truncated Fourier series (K=2) for angular
+variation | **17** (7 + 10) |
 
 **`auto` mode (default for n_phi >= 3):**
 
@@ -730,9 +730,9 @@ def compute_averaged_scaling(
 ```
 
 **Performance note:** `estimate_per_angle_scaling()` uses vectorized `np.bincount()` and
-`np.searchsorted()` for grouped operations. Pre-sorts data by phi_indices once and reuses
-for all angles (3-5x speedup on 20+ angles). Falls back to midpoint bounds when
-insufficient data (<100 points per angle).
+`np.searchsorted()` for grouped operations. Pre-sorts data by phi_indices once and
+reuses for all angles (3-5x speedup on 20+ angles). Falls back to midpoint bounds when
+insufficient data (\<100 points per angle).
 
 ______________________________________________________________________
 
@@ -748,8 +748,8 @@ log_g1_bounded = jnp.clip(log_g1, -700.0, 0.0)     # -700 → exp(-700) ~ 1e-304
 g1 = jnp.exp(log_g1_bounded)                         # 0 → exp(0) = 1.0
 ```
 
-Previous code clipped g1 directly, creating a ~16% artificial plateau. Log-space clipping
-preserves the natural decay shape.
+Previous code clipped g1 directly, creating a ~16% artificial plateau. Log-space
+clipping preserves the natural decay shape.
 
 ### Gradient-Safe Floors (CLAUDE.md Rule 7)
 
@@ -761,8 +761,8 @@ g1_bounded = jnp.where(g1_total > epsilon, g1_total, epsilon)
 g1_bounded = jnp.maximum(g1_total, epsilon)
 ```
 
-Applied to: g1_total, D(t), gamma_dot(t), time_safe, contrast in LS solver.
-Critical for NLSQ Jacobian computation and NUTS leapfrog integration.
+Applied to: g1_total, D(t), gamma_dot(t), time_safe, contrast in LS solver. Critical for
+NLSQ Jacobian computation and NUTS leapfrog integration.
 
 ### Smooth Absolute Value
 
@@ -786,8 +786,8 @@ def safe_sinc(x):
     return jnp.where(jnp.abs(x) < 1e-4, near_zero, far)
 ```
 
-The hard switch from sin(x)/x to 1.0 at |x| = EPS created gradient discontinuities
-that caused spurious NUTS rejections near gamma_dot_t0 ~ 0.
+The hard switch from sin(x)/x to 1.0 at |x| = EPS created gradient discontinuities that
+caused spurious NUTS rejections near gamma_dot_t0 ~ 0.
 
 ### Singularity Floor for Power Laws
 
@@ -798,12 +798,13 @@ epsilon = jnp.where(dt_inferred * 0.5 > 1e-8, dt_inferred * 0.5, 1e-8)
 time_safe = jnp.where(time_array > epsilon, time_array, epsilon)
 ```
 
-Uses dt/2 to preserve monotonicity: D(dt/2) < D(dt) for alpha > 0.
-The computation is done without Python `if` to avoid JIT recompilation per unique array length.
+Uses dt/2 to preserve monotonicity: D(dt/2) < D(dt) for alpha > 0. The computation is
+done without Python `if` to avoid JIT recompilation per unique array length.
 
 ### Float64 Requirement
 
 `JAX_ENABLE_X64=1` must be set before the first JAX import. Set in:
+
 - `homodyne/__init__.py` (package import)
 - `cli/main.py` (CLI entry)
 - `optimization/cmc/backends/multiprocessing.py` (spawn-mode workers)
@@ -832,13 +833,12 @@ hessian_chi2  = hessian(compute_chi_squared, argnums=0)
 Production-grade numerical differentiation with 6 methods:
 
 | Method | Formula | Error Order | Function Evals/Param |
-|--------|---------|-------------|---------------------|
-| `forward` | `(f(x+h) - f(x)) / h` | O(h) | 1 |
-| `backward` | `(f(x) - f(x-h)) / h` | O(h) | 1 |
-| `central` | `(f(x+h) - f(x-h)) / 2h` | O(h^2) | 2 |
-| `complex_step` | `Im(f(x + ih)) / h` | Machine precision | 1 |
-| `richardson` | Central + Neville extrapolation | O(h^8) | 8 (4 terms) |
-| `adaptive` (default) | Auto-selects method per parameter | Best available | 2-8 |
+|--------|---------|-------------|---------------------| | `forward` |
+`(f(x+h) - f(x)) / h` | O(h) | 1 | | `backward` | `(f(x) - f(x-h)) / h` | O(h) | 1 | |
+`central` | `(f(x+h) - f(x-h)) / 2h` | O(h^2) | 2 | | `complex_step` |
+`Im(f(x + ih)) / h` | Machine precision | 1 | | `richardson` | Central + Neville
+extrapolation | O(h^8) | 8 (4 terms) | | `adaptive` (default) | Auto-selects method per
+parameter | Best available | 2-8 |
 
 **Adaptive step size estimation:**
 
@@ -849,8 +849,8 @@ h_optimal = (2 * eps * |f| / |f''|) ^ (1/3)
 h_bounded = clip(h_optimal, [1e-15, 1e-3])
 ```
 
-**Parallel execution:** `ThreadPoolExecutor(max_workers=min(8, n_params))` for independent
-Richardson extrapolation per parameter (2-4x speedup on multi-core).
+**Parallel execution:** `ThreadPoolExecutor(max_workers=min(8, n_params))` for
+independent Richardson extrapolation per parameter (2-4x speedup on multi-core).
 
 **Public API:**
 
@@ -867,16 +867,20 @@ def numpy_hessian(func, argnums=0, config=None) -> Callable
 **File:** `homodyne/core/model_mixins.py` (520 lines)
 
 **GradientCapabilityMixin:**
+
 - `get_gradient_function()` — Returns JAX `gradient_g2` or NumPy fallback
 - `get_hessian_function()` — Returns JAX `hessian_g2` or NumPy fallback
 - `supports_gradients()` — `jax_available or numpy_gradients_available`
-- `get_best_gradient_method()` — `"jax_native"` / `"numpy_fallback"` / `"none_available"`
+- `get_best_gradient_method()` — `"jax_native"` / `"numpy_fallback"` /
+  `"none_available"`
 
 **BenchmarkingMixin:**
+
 - `benchmark_gradient_performance()` — Timing comparison of available methods
 - `validate_gradient_accuracy()` — Checks gradients are finite and reasonable magnitude
 
 **OptimizationRecommendationMixin:**
+
 - `get_optimization_recommendations()` — Method suggestions based on backend + mode
 - `get_model_info()` — Comprehensive model capabilities dict
 
@@ -995,8 +999,8 @@ ______________________________________________________________________
 
 ### Purpose
 
-User-friendly API with validation, error handling, and performance monitoring.
-Wraps `CombinedModel` with input checking and backend fallback.
+User-friendly API with validation, error handling, and performance monitoring. Wraps
+`CombinedModel` with input checking and backend fallback.
 
 ```python
 class TheoryEngine:
@@ -1094,15 +1098,18 @@ class FitResult:
     analysis_mode: str
 ```
 
-**Note:** Additional fields exist that are not shown above: `contrast_error`, `offset_error`, `residual_std`, `max_residual`, `fit_iterations`.
+**Note:** Additional fields exist that are not shown above: `contrast_error`,
+`offset_error`, `residual_std`, `max_residual`, `fit_iterations`.
 
 ### JIT-Compiled Least Squares Solvers
 
 | Solver | Input | Output | Method | Use Case |
-|--------|-------|--------|--------|----------|
-| `solve_least_squares_jax` | theory_batch, exp_batch | (contrast[], offset[]) | 2x2 normal equations | Per-angle contrast/offset |
-| `solve_least_squares_general_jax` | design_matrix, target, lambda | coefficients | Cholesky or SVD | N-parameter LS |
-| `solve_least_squares_chunked_jax` | theory_chunks, exp_chunks | (contrast[], offset[]) | lax.scan accumulation | Memory-efficient batching |
+|--------|-------|--------|--------|----------| | `solve_least_squares_jax` |
+theory_batch, exp_batch | (contrast[], offset[]) | 2x2 normal equations | Per-angle
+contrast/offset | | `solve_least_squares_general_jax` | design_matrix, target, lambda |
+coefficients | Cholesky or SVD | N-parameter LS | | `solve_least_squares_chunked_jax` |
+theory_chunks, exp_chunks | (contrast[], offset[]) | lax.scan accumulation |
+Memory-efficient batching |
 
 **Singular matrix handling:** Falls back to `(1.0, 1.0)` when `|det| <= 1e-12`.
 
@@ -1120,11 +1127,10 @@ def apply_diagonal_correction_batch(c2_matrices, method="basic", backend="auto",
     """Batch (n_phi, N, N). Uses vmap for JAX backend."""
 ```
 
-| Method | Algorithm | Speed |
-|--------|-----------|-------|
-| **basic** | Average adjacent off-diagonal neighbors | Fastest |
-| **statistical** | Median/trimmed-mean in window | Robust to outliers |
-| **interpolation** | Linear interpolation between neighbors | Smoothest |
+| Method | Algorithm | Speed | |--------|-----------|-------| | **basic** | Average
+adjacent off-diagonal neighbors | Fastest | | **statistical** | Median/trimmed-mean in
+window | Robust to outliers | | **interpolation** | Linear interpolation between
+neighbors | Smoothest |
 
 ### UnifiedHomodyneEngine
 
@@ -1248,61 +1254,54 @@ ______________________________________________________________________
 ### Parameter Summary
 
 | Parameter | Symbol | Bounds | Default | Unit | Mode |
-|-----------|--------|--------|---------|------|------|
-| D0 | D0 | [1.0, 1e6] | 100.0 | A^2/s | Both |
-| alpha | alpha | [-2.0, 2.0] | 0.0 | - | Both |
-| D_offset | D_offset | [-1e5, 1e5] | 10.0 | A^2/s | Both |
-| gamma_dot_t0 | gamma0 | [1e-5, 1.0] | 1.0 | s^-1 | laminar_flow |
-| beta | beta | [-2.0, 2.0] | 0.0 | - | laminar_flow |
-| gamma_dot_t_offset | gamma_off | [-1.0, 1.0] | 0.0 | s^-1 | laminar_flow |
-| phi0 | phi0 | [-30.0, 30.0] | 0.0 | deg | laminar_flow |
-| contrast | C | [0.0, 1.0] | 0.5 | - | Both |
-| offset | O | [0.5, 1.5] | 1.0 | - | Both |
+|-----------|--------|--------|---------|------|------| | D0 | D0 | [1.0, 1e6] | 100.0 |
+A^2/s | Both | | alpha | alpha | [-2.0, 2.0] | 0.0 | - | Both | | D_offset | D_offset |
+[-1e5, 1e5] | 10.0 | A^2/s | Both | | gamma_dot_t0 | gamma0 | [1e-5, 1.0] | 1.0 | s^-1 |
+laminar_flow | | beta | beta | [-2.0, 2.0] | 0.0 | - | laminar_flow | |
+gamma_dot_t_offset | gamma_off | [-1.0, 1.0] | 0.0 | s^-1 | laminar_flow | | phi0 | phi0
+| [-30.0, 30.0] | 0.0 | deg | laminar_flow | | contrast | C | [0.0, 1.0] | 0.5 | - |
+Both | | offset | O | [0.5, 1.5] | 1.0 | - | Both |
 
 ### Memory Layout
 
 | Context | Shape Convention | Memory Profile |
-|---------|-----------------|----------------|
-| NLSQ meshgrid | (n_phi, n_t, n_t) | O(n_phi * n_t^2) — 80 GB for 100K pts |
-| CMC element-wise | (N,) paired points | O(N) — 2.4 MB for 3 angles x 100K pts |
-| CMC precomputed grid | (G,) time grid | O(G) ~ 80 KB for 10K grid points |
-| Diagonal correction | (n_phi, N, N) | O(n_phi * N^2) |
+|---------|-----------------|----------------| | NLSQ meshgrid | (n_phi, n_t, n_t) |
+O(n_phi * n_t^2) — 80 GB for 100K pts | | CMC element-wise | (N,) paired points | O(N) —
+2.4 MB for 3 angles x 100K pts | | CMC precomputed grid | (G,) time grid | O(G) ~ 80 KB
+for 10K grid points | | Diagonal correction | (n_phi, N, N) | O(n_phi * N^2) |
 
 ### JIT Compilation Points
 
-| Function | File | Decorator | Purpose |
-|----------|------|-----------|---------|
-| `_compute_g1_diffusion_core` | jax_backend.py | `@jit` | g1 diffusion kernel |
-| `_compute_g1_shear_core` | jax_backend.py | `@jit` | g1 shear kernel |
-| `_compute_g1_total_core` | jax_backend.py | `@jit` | Combined g1 kernel |
-| `_compute_g2_scaled_core` | jax_backend.py | `@jit` | Homodyne equation |
-| `_compute_g1_diffusion_meshgrid` | physics_nlsq.py | `@jit` | NLSQ diffusion |
-| `_compute_g1_shear_meshgrid` | physics_nlsq.py | `@jit` | NLSQ shear |
-| `_compute_g1_total_meshgrid` | physics_nlsq.py | `@jit` | NLSQ combined |
-| `_compute_g2_scaled_meshgrid` | physics_nlsq.py | `@jit` | NLSQ g2 |
-| `_compute_g1_diffusion_from_idx` | physics_cmc.py | `@jit` | CMC precomp diffusion |
-| `_compute_g1_shear_from_idx` | physics_cmc.py | `@jit` | CMC precomp shear |
-| `_compute_g1_total_with_precomputed` | physics_cmc.py | `@jit` | CMC hot path |
-| `safe_sinc` | physics_utils.py | `@jit` | Numerical sinc |
-| `safe_exp` | physics_utils.py | `@jit` | Overflow-safe exp |
-| `calculate_diffusion_coefficient` | physics_utils.py | `@jit` | D(t) evaluation |
-| `calculate_shear_rate` | physics_utils.py | `@jit` | gamma_dot(t) |
-| `solve_least_squares_jax` | fitting.py | `@jit` | 2x2 LS batch solver |
-| `solve_least_squares_general_jax` | fitting.py | `@jit` | N-param LS solver |
-| `solve_least_squares_chunked_jax` | fitting.py | `@jit` | lax.scan LS solver |
-| `_diagonal_correction_jax_core` | diagonal_correction.py | `@jit` | Diagonal fix |
+| Function | File | Decorator | Purpose | |----------|------|-----------|---------| |
+`_compute_g1_diffusion_core` | jax_backend.py | `@jit` | g1 diffusion kernel | |
+`_compute_g1_shear_core` | jax_backend.py | `@jit` | g1 shear kernel | |
+`_compute_g1_total_core` | jax_backend.py | `@jit` | Combined g1 kernel | |
+`_compute_g2_scaled_core` | jax_backend.py | `@jit` | Homodyne equation | |
+`_compute_g1_diffusion_meshgrid` | physics_nlsq.py | `@jit` | NLSQ diffusion | |
+`_compute_g1_shear_meshgrid` | physics_nlsq.py | `@jit` | NLSQ shear | |
+`_compute_g1_total_meshgrid` | physics_nlsq.py | `@jit` | NLSQ combined | |
+`_compute_g2_scaled_meshgrid` | physics_nlsq.py | `@jit` | NLSQ g2 | |
+`_compute_g1_diffusion_from_idx` | physics_cmc.py | `@jit` | CMC precomp diffusion | |
+`_compute_g1_shear_from_idx` | physics_cmc.py | `@jit` | CMC precomp shear | |
+`_compute_g1_total_with_precomputed` | physics_cmc.py | `@jit` | CMC hot path | |
+`safe_sinc` | physics_utils.py | `@jit` | Numerical sinc | | `safe_exp` |
+physics_utils.py | `@jit` | Overflow-safe exp | | `calculate_diffusion_coefficient` |
+physics_utils.py | `@jit` | D(t) evaluation | | `calculate_shear_rate` |
+physics_utils.py | `@jit` | gamma_dot(t) | | `solve_least_squares_jax` | fitting.py |
+`@jit` | 2x2 LS batch solver | | `solve_least_squares_general_jax` | fitting.py | `@jit`
+| N-param LS solver | | `solve_least_squares_chunked_jax` | fitting.py | `@jit` |
+lax.scan LS solver | | `_diagonal_correction_jax_core` | diagonal_correction.py | `@jit`
+| Diagonal fix |
 
 ### Numerical Constants
 
-| Constant | Value | Where Used | Purpose |
-|----------|-------|------------|---------|
-| `EPS` | 1e-12 | physics_utils, jax_backend | Division-by-zero guard |
-| `MAX_EXP_ARG` | 700.0 | safe_exp, log_g1 clip | Overflow prevention |
-| g1 floor | 1e-10 | g1_total_core | Gradient-safe positivity |
-| contrast floor | 1e-6 | LS solver | Gradient-safe positivity |
-| sinc Taylor threshold | 1e-4 | safe_sinc | Smooth gradient transition |
-| Singularity floor | max(dt/2, 1e-8) | time_safe | Power law t=0 protection |
-| Log-space clip | [-700, 0] | all g1 kernels | Underflow/overflow |
+| Constant | Value | Where Used | Purpose | |----------|-------|------------|---------|
+| `EPS` | 1e-12 | physics_utils, jax_backend | Division-by-zero guard | | `MAX_EXP_ARG`
+| 700.0 | safe_exp, log_g1 clip | Overflow prevention | | g1 floor | 1e-10 |
+g1_total_core | Gradient-safe positivity | | contrast floor | 1e-6 | LS solver |
+Gradient-safe positivity | | sinc Taylor threshold | 1e-4 | safe_sinc | Smooth gradient
+transition | | Singularity floor | max(dt/2, 1e-8) | time_safe | Power law t=0
+protection | | Log-space clip | [-700, 0] | all g1 kernels | Underflow/overflow |
 
 ______________________________________________________________________
 
@@ -1310,34 +1309,29 @@ ______________________________________________________________________
 
 ### Core Physics Model (~9,100 lines)
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `core/jax_backend.py` | 1,556 | JIT kernels, AD, caching, vectorization |
-| `core/numpy_gradients.py` | 1,049 | NumPy gradient fallback (6 methods) |
-| `core/fitting.py` | 881 | ParameterSpace, FitResult, LS solvers |
-| `core/physics_cmc.py` | 807 | CMC element-wise + ShardGrid precomp |
-| `core/models.py` | 614 | DiffusionModel, ShearModel, CombinedModel |
-| `core/theory.py` | 567 | TheoryEngine validated API |
-| `core/physics.py` | 553 | PhysicsConstants, bounds, validation |
-| `core/diagonal_correction.py` | 522 | C2 diagonal artifact correction |
-| `core/model_mixins.py` | 520 | Gradient, benchmark, recommendation mixins |
-| `core/homodyne_model.py` | 505 | HomodyneModel unified interface |
-| `core/physics_nlsq.py` | 480 | NLSQ meshgrid physics |
-| `core/physics_factors.py` | 369 | PhysicsFactors pre-computation |
-| `core/physics_utils.py` | 369 | Shared safe_sinc, D(t), gamma(t), integrals |
-| `core/scaling_utils.py` | 335 | Per-angle quantile estimation |
-| `core/backend_api.py` | 192 | Backend selection API |
-| `core/__init__.py` | 80 | Package init and public exports |
-| **Total** | **~9,399** | |
+| File | Lines | Purpose | |------|-------|---------| | `core/jax_backend.py` | 1,556 |
+JIT kernels, AD, caching, vectorization | | `core/numpy_gradients.py` | 1,049 | NumPy
+gradient fallback (6 methods) | | `core/fitting.py` | 881 | ParameterSpace, FitResult,
+LS solvers | | `core/physics_cmc.py` | 807 | CMC element-wise + ShardGrid precomp | |
+`core/models.py` | 614 | DiffusionModel, ShearModel, CombinedModel | | `core/theory.py`
+| 567 | TheoryEngine validated API | | `core/physics.py` | 553 | PhysicsConstants,
+bounds, validation | | `core/diagonal_correction.py` | 522 | C2 diagonal artifact
+correction | | `core/model_mixins.py` | 520 | Gradient, benchmark, recommendation mixins
+| | `core/homodyne_model.py` | 505 | HomodyneModel unified interface | |
+`core/physics_nlsq.py` | 480 | NLSQ meshgrid physics | | `core/physics_factors.py` | 369
+| PhysicsFactors pre-computation | | `core/physics_utils.py` | 369 | Shared safe_sinc,
+D(t), gamma(t), integrals | | `core/scaling_utils.py` | 335 | Per-angle quantile
+estimation | | `core/backend_api.py` | 192 | Backend selection API | |
+`core/__init__.py` | 80 | Package init and public exports | | **Total** | **~9,399** | |
 
 ### Integration Points
 
 | Consumer | Physics File Used | Entry Function |
-|----------|------------------|----------------|
-| NLSQ optimizer | `physics_nlsq.py` | `compute_g2_scaled_with_factors()` |
-| CMC NUTS sampler | `physics_cmc.py` | `compute_g1_total_with_precomputed()` |
-| HomodyneModel | `jax_backend.py` | `compute_g2_scaled_with_factors()` |
-| TheoryEngine | `models.py` → `jax_backend.py` | `CombinedModel.compute_g1()` |
-| CLI simulated data | `homodyne_model.py` | `HomodyneModel.compute_c2()` |
-| Diagonal correction | `diagonal_correction.py` | `apply_diagonal_correction_batch()` |
-| Scaling estimation | `scaling_utils.py` | `estimate_per_angle_scaling()` |
+|----------|------------------|----------------| | NLSQ optimizer | `physics_nlsq.py` |
+`compute_g2_scaled_with_factors()` | | CMC NUTS sampler | `physics_cmc.py` |
+`compute_g1_total_with_precomputed()` | | HomodyneModel | `jax_backend.py` |
+`compute_g2_scaled_with_factors()` | | TheoryEngine | `models.py` → `jax_backend.py` |
+`CombinedModel.compute_g1()` | | CLI simulated data | `homodyne_model.py` |
+`HomodyneModel.compute_c2()` | | Diagonal correction | `diagonal_correction.py` |
+`apply_diagonal_correction_batch()` | | Scaling estimation | `scaling_utils.py` |
+`estimate_per_angle_scaling()` |

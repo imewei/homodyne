@@ -340,12 +340,14 @@ ______________________________________________________________________
 ### Five Model Variants (v2.22.2)
 
 | Model | Purpose | Per-Angle Mode | Params (laminar_flow, 23 angles) |
-|-------|---------|----------------|----------------------------------|
-| `xpcs_model_scaled()` | Gradient-balanced z-space sampling | individual | 54 (46 per-angle + 7 physical + 1 σ) |
-| `xpcs_model_constant()` | Fixed per-angle scaling (not sampled) | constant | 8 (7 physical + 1 σ) |
-| `xpcs_model_averaged()` | Sampled averaged contrast/offset | auto | 10 (2 averaged + 7 physical + 1 σ) |
-| `xpcs_model_constant_averaged()` | Fixed averaged scaling (NLSQ parity) | constant_averaged | 8 (7 physical + 1 σ) |
-| `xpcs_model_reparameterized()` | Reparameterized sampling space | auto + reparam | 10 (2 averaged + 7 physical + 1 σ) |
+|-------|---------|----------------|----------------------------------| |
+`xpcs_model_scaled()` | Gradient-balanced z-space sampling | individual | 54 (46
+per-angle + 7 physical + 1 σ) | | `xpcs_model_constant()` | Fixed per-angle scaling (not
+sampled) | constant | 8 (7 physical + 1 σ) | | `xpcs_model_averaged()` | Sampled
+averaged contrast/offset | auto | 10 (2 averaged + 7 physical + 1 σ) | |
+`xpcs_model_constant_averaged()` | Fixed averaged scaling (NLSQ parity) |
+constant_averaged | 8 (7 physical + 1 σ) | | `xpcs_model_reparameterized()` |
+Reparameterized sampling space | auto + reparam | 10 (2 averaged + 7 physical + 1 σ) |
 
 ### Per-Angle Mode Selection (v2.22.2)
 
@@ -394,11 +396,11 @@ ______________________________________________________________________
 **Key Distinction: Five Model Modes**
 
 | Mode | Scaling Behavior | Values Sampled? | Params (laminar_flow) |
-|------|------------------|-----------------|-----------------------|
-| `auto` (n_phi ≥ 3) | Single averaged contrast/offset | **Yes** (sampled) | 10 |
-| `auto` + reparam | Single averaged + log-space transforms | **Yes** (sampled) | 10 |
-| `constant` | Per-angle from quantile estimation | **No** (fixed per-angle) | 8 |
-| `constant_averaged` | Averaged from quantile estimation | **No** (fixed averaged) | 8 |
+|------|------------------|-----------------|-----------------------| | `auto` (n_phi ≥
+3\) | Single averaged contrast/offset | **Yes** (sampled) | 10 | | `auto` + reparam |
+Single averaged + log-space transforms | **Yes** (sampled) | 10 | | `constant` |
+Per-angle from quantile estimation | **No** (fixed per-angle) | 8 | |
+`constant_averaged` | Averaged from quantile estimation | **No** (fixed averaged) | 8 |
 | `individual` | Per-angle contrast/offset | **Yes** (sampled per-angle) | 8 + 2×n_phi |
 
 ### xpcs_model_scaled() Structure
@@ -475,8 +477,8 @@ else:
 
 ### xpcs_model_averaged() Structure (v2.22.2)
 
-The averaged model **samples** a single averaged contrast and offset, then broadcasts to all angles.
-This is the default model for `auto` mode (n_phi >= 3).
+The averaged model **samples** a single averaged contrast and offset, then broadcasts to
+all angles. This is the default model for `auto` mode (n_phi >= 3).
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -502,8 +504,8 @@ This is the default model for `auto` mode (n_phi >= 3).
 
 ### xpcs_model_constant_averaged() Structure (v2.22.2)
 
-Uses **fixed** averaged contrast/offset (not sampled). Provides exact NLSQ parity
-when warm-start is available. Selected automatically when both CMC and NLSQ use "auto" mode
+Uses **fixed** averaged contrast/offset (not sampled). Provides exact NLSQ parity when
+warm-start is available. Selected automatically when both CMC and NLSQ use "auto" mode
 with NLSQ warm-start present.
 
 ```
@@ -531,7 +533,8 @@ with NLSQ warm-start present.
 
 ### xpcs_model_reparameterized() Structure (v2.22.2)
 
-Transforms correlated parameters to orthogonal sampling space for better NUTS exploration:
+Transforms correlated parameters to orthogonal sampling space for better NUTS
+exploration:
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -1087,8 +1090,8 @@ ______________________________________________________________________
 
 | Dataset Size | Base Size | After Scaling | max_shards | Est. Shards |
 |--------------|-----------|---------------|------------|-------------| | < 2M | 8K |
-4.8K | 2,000 | ~400 | | 2M - 50M | 5K | 3K | 2,000 | 600-16K | | 50M - 100M | 5K | 3K
-| 10,000 | 10K-20K | | 100M - 1B | 8K | 4.8K | 50,000 | 20K-50K | | 1B+ | 10K | 6K |
+4.8K | 2,000 | ~400 | | 2M - 50M | 5K | 3K | 2,000 | 600-16K | | 50M - 100M | 5K | 3K |
+10,000 | 10K-20K | | 100M - 1B | 8K | 4.8K | 50,000 | 20K-50K | | 1B+ | 10K | 6K |
 100,000 | 100K+ |
 
 **Minimum shard size: 3,000 points** (reparameterization fixes bimodal posteriors)
@@ -1096,8 +1099,8 @@ ______________________________________________________________________
 #### Static Mode
 
 | Dataset Size | max_points_per_shard | Est. Shards |
-|--------------|---------------------|-------------| | < 50M | 10K | ~5K | | 50M -
-100M | 15K | ~3K-7K | | 100M+ | 20K | ~5K+ |
+|--------------|---------------------|-------------| | < 50M | 10K | ~5K | | 50M - 100M
+| 15K | ~3K-7K | | 100M+ | 20K | ~5K+ |
 
 **Minimum shard size: 5,000 points**
 
@@ -1113,78 +1116,69 @@ Extreme scale support |
 **Individual per-angle mode** (23 angles):
 
 | Mode | Physical Params | Per-Angle Params | Total |
-|------|----------------|------------------|-------|
-| static | 3: D₀, alpha, D_offset | 46: contrast + offset | 49 + sigma |
-| laminar_flow | 7: + gamma_dot_t0, beta, gamma_dot_t_offset, phi0 | 46: contrast + offset | 53 + sigma |
+|------|----------------|------------------|-------| | static | 3: D₀, alpha, D_offset |
+46: contrast + offset | 49 + sigma | | laminar_flow | 7: + gamma_dot_t0, beta,
+gamma_dot_t_offset, phi0 | 46: contrast + offset | 53 + sigma |
 
 **Auto mode** (averaged scaling, default for n_phi >= 3):
 
 | Mode | Physical Params | Averaged Scaling | Total |
-|------|----------------|------------------|-------|
-| static | 3 | 2: avg_contrast + avg_offset | 5 + sigma |
-| laminar_flow | 7 | 2: avg_contrast + avg_offset | 9 + sigma |
+|------|----------------|------------------|-------| | static | 3 | 2: avg_contrast +
+avg_offset | 5 + sigma | | laminar_flow | 7 | 2: avg_contrast + avg_offset | 9 + sigma |
 
 **Constant / constant_averaged modes** (fixed scaling, not sampled):
 
-| Mode | Physical Params | Scaling | Total |
-|------|----------------|---------|-------|
-| static | 3 | Fixed (0 sampled) | 3 + sigma |
-| laminar_flow | 7 | Fixed (0 sampled) | 7 + sigma |
+| Mode | Physical Params | Scaling | Total | |------|----------------|---------|-------|
+| static | 3 | Fixed (0 sampled) | 3 + sigma | | laminar_flow | 7 | Fixed (0 sampled) |
+7 + sigma |
 
 ### CMC Configuration Defaults (v2.22.2)
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| min_points_for_cmc | 100,000 | Auto-enable threshold |
-| sharding_strategy | "random" | "stratified" or "random" |
-| backend_name | "auto" | → "multiprocessing" |
-| num_warmup | 500 | NUTS warmup iterations (pre-adaptive) |
-| num_samples | 1500 | NUTS sampling iterations (pre-adaptive) |
-| num_chains | 4 | Parallel chains |
-| target_accept_prob | 0.85 | NUTS target acceptance. For laminar_flow mode, automatically elevated to 0.9 if configured value is below 0.9. |
-| max_r_hat | 1.1 | Convergence threshold |
-| min_ess | 400.0 | Minimum effective sample size |
-| max_divergence_rate | 0.10 | Quality filter threshold |
-| require_nlsq_warmstart | False | Enforce NLSQ warm-start |
-| combination_method | "robust_consensus_mc" | Robust CMC with MAD outlier filtering |
-| per_shard_timeout | 3600 | 1 hour max per shard |
-| heartbeat_timeout | 600 | 10 min - terminate unresponsive workers |
-| min_points_per_shard | 10,000 | Config field default; actual enforced minimum in code is MIN_SHARD_SIZE_LAMINAR=3000 |
-| min_points_per_param | 1,500 | Minimum points per parameter per shard |
-| max_parameter_cv | 1.0 | Heterogeneity abort threshold |
-| heterogeneity_abort | True | Abort on high heterogeneity |
-| adaptive_sampling | True | Scale warmup/samples based on shard size |
-| max_tree_depth | 10 | NUTS depth (max 2^depth leapfrog steps) |
-| min_warmup | 100 | Minimum warmup even for small datasets |
-| min_samples | 200 | Minimum samples even for small datasets |
-| use_nlsq_informed_priors | True | Build TruncatedNormal priors from NLSQ |
-| nlsq_prior_width_factor | 2.0 | Width = NLSQ_std x factor (~95.4% coverage) |
-| prior_tempering | True | Scale priors by 1/K per shard (Scott et al.) |
-| reparameterization_d_total | True | Sample D_total = D0 + D_offset |
-| reparameterization_log_gamma | True | Sample log(gamma_dot_t0) |
-| bimodal_min_weight | 0.2 | Minimum weight for GMM bimodal detection |
-| bimodal_min_separation | 0.5 | Minimum relative separation for bimodal |
-| enable_jax_profiling | False | Enable jax.profiler tracing |
-| seed | 42 | Base seed for PRNG key generation |
+| Parameter | Default | Description | |-----------|---------|-------------| |
+min_points_for_cmc | 100,000 | Auto-enable threshold | | sharding_strategy | "random" |
+"stratified" or "random" | | backend_name | "auto" | → "multiprocessing" | | num_warmup
+| 500 | NUTS warmup iterations (pre-adaptive) | | num_samples | 1500 | NUTS sampling
+iterations (pre-adaptive) | | num_chains | 4 | Parallel chains | | target_accept_prob |
+0.85 | NUTS target acceptance. For laminar_flow mode, automatically elevated to 0.9 if
+configured value is below 0.9. | | max_r_hat | 1.1 | Convergence threshold | | min_ess |
+400.0 | Minimum effective sample size | | max_divergence_rate | 0.10 | Quality filter
+threshold | | require_nlsq_warmstart | False | Enforce NLSQ warm-start | |
+combination_method | "robust_consensus_mc" | Robust CMC with MAD outlier filtering | |
+per_shard_timeout | 3600 | 1 hour max per shard | | heartbeat_timeout | 600 | 10 min -
+terminate unresponsive workers | | min_points_per_shard | 10,000 | Config field default;
+actual enforced minimum in code is MIN_SHARD_SIZE_LAMINAR=3000 | | min_points_per_param
+| 1,500 | Minimum points per parameter per shard | | max_parameter_cv | 1.0 |
+Heterogeneity abort threshold | | heterogeneity_abort | True | Abort on high
+heterogeneity | | adaptive_sampling | True | Scale warmup/samples based on shard size |
+| max_tree_depth | 10 | NUTS depth (max 2^depth leapfrog steps) | | min_warmup | 100 |
+Minimum warmup even for small datasets | | min_samples | 200 | Minimum samples even for
+small datasets | | use_nlsq_informed_priors | True | Build TruncatedNormal priors from
+NLSQ | | nlsq_prior_width_factor | 2.0 | Width = NLSQ_std x factor (~95.4% coverage) | |
+prior_tempering | True | Scale priors by 1/K per shard (Scott et al.) | |
+reparameterization_d_total | True | Sample D_total = D0 + D_offset | |
+reparameterization_log_gamma | True | Sample log(gamma_dot_t0) | | bimodal_min_weight |
+0.2 | Minimum weight for GMM bimodal detection | | bimodal_min_separation | 0.5 |
+Minimum relative separation for bimodal | | enable_jax_profiling | False | Enable
+jax.profiler tracing | | seed | 42 | Base seed for PRNG key generation |
 
 ______________________________________________________________________
 
 ## Key Files Reference
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| **core.py** | ~1566 | Main orchestration, shard size selection, runtime estimation |
-| **data_prep.py** | ~848 | Validation, sharding (stratified & random), noise estimation |
-| **sampler.py** | ~1326 | NUTS sampling, SamplingPlan, preflight checks, adaptive scaling |
-| **model.py** | ~1168 | 5 model variants (scaled, constant, averaged, constant_averaged, reparameterized) |
-| **priors.py** | ~1100 | Prior distributions, NLSQ-informed priors, data-driven estimation |
-| **results.py** | ~789 | CMCResult dataclass, convergence diagnostics, quality flags |
-| **config.py** | ~887 | CMCConfig parsing, validation, defaults, effective mode selection |
-| **diagnostics.py** | ~1269 | R-hat, ESS, bimodal detection, cross-shard analysis |
-| **reparameterization.py** | ~336 | t_ref computation, log-space transforms, ReparamConfig |
-| **backends/base.py** | ~887 | Abstract backend, combine_shard_samples(), robust consensus MC |
-| **backends/multiprocessing.py** | ~1953 | Parallel execution, shared memory, LPT scheduling, worker pool |
-| **io.py** | ~430 | Result serialization (JSON/NPZ) |
+| File | Lines | Purpose | |------|-------|---------| | **core.py** | ~1566 | Main
+orchestration, shard size selection, runtime estimation | | **data_prep.py** | ~848 |
+Validation, sharding (stratified & random), noise estimation | | **sampler.py** | ~1326
+| NUTS sampling, SamplingPlan, preflight checks, adaptive scaling | | **model.py** |
+~1168 | 5 model variants (scaled, constant, averaged, constant_averaged,
+reparameterized) | | **priors.py** | ~1100 | Prior distributions, NLSQ-informed priors,
+data-driven estimation | | **results.py** | ~789 | CMCResult dataclass, convergence
+diagnostics, quality flags | | **config.py** | ~887 | CMCConfig parsing, validation,
+defaults, effective mode selection | | **diagnostics.py** | ~1269 | R-hat, ESS, bimodal
+detection, cross-shard analysis | | **reparameterization.py** | ~336 | t_ref
+computation, log-space transforms, ReparamConfig | | **backends/base.py** | ~887 |
+Abstract backend, combine_shard_samples(), robust consensus MC | |
+**backends/multiprocessing.py** | ~1953 | Parallel execution, shared memory, LPT
+scheduling, worker pool | | **io.py** | ~430 | Result serialization (JSON/NPZ) |
 
 ______________________________________________________________________
 
@@ -1371,13 +1365,12 @@ Root causes identified:
 
 ### CMCConfig Fields Added in v2.20.0
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `max_divergence_rate` | float | 0.10 | Filter shards exceeding this divergence rate |
-| `require_nlsq_warmstart` | bool | False | Require NLSQ warm-start (API-level) |
-| `min_points_per_shard` | int | 10,000 | Config field default; actual enforced minimum in code is MIN_SHARD_SIZE_LAMINAR=3000 |
-| `max_parameter_cv` | float | 1.0 | Heterogeneity abort threshold |
-| `heterogeneity_abort` | bool | True | Abort on high heterogeneity |
+| Field | Type | Default | Description | |-------|------|---------|-------------| |
+`max_divergence_rate` | float | 0.10 | Filter shards exceeding this divergence rate | |
+`require_nlsq_warmstart` | bool | False | Require NLSQ warm-start (API-level) | |
+`min_points_per_shard` | int | 10,000 | Config field default; actual enforced minimum in
+code is MIN_SHARD_SIZE_LAMINAR=3000 | | `max_parameter_cv` | float | 1.0 | Heterogeneity
+abort threshold | | `heterogeneity_abort` | bool | True | Abort on high heterogeneity |
 | `min_points_per_param` | int | 1,500 | Param-aware shard sizing floor |
 
 ### February 2026: Mode-Aware Consensus MC (v2.22.0)
@@ -1532,8 +1525,9 @@ optimization:
 **NLSQ-Informed Priors**
 
 When `nlsq_result` is provided to `fit_mcmc_jax()`, the prior builder constructs
-TruncatedNormal priors centered on NLSQ estimates with width = NLSQ_std x `nlsq_prior_width_factor`
-(default 2.0, ~95.4% coverage). This dramatically reduces warmup time and divergence rates.
+TruncatedNormal priors centered on NLSQ estimates with width = NLSQ_std x
+`nlsq_prior_width_factor` (default 2.0, ~95.4% coverage). This dramatically reduces
+warmup time and divergence rates.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -1551,9 +1545,10 @@ TruncatedNormal priors centered on NLSQ estimates with width = NLSQ_std x `nlsq_
 
 **Prior Tempering (Scott et al. 2016)**
 
-Without tempering, K shards each apply the full prior, producing combined posterior = prior^K x likelihood.
-With tempering, each shard uses prior^(1/K), producing the correct combined posterior = prior x likelihood.
-For Normal(mu, sigma): prior^(1/K) ~ Normal(mu, sigma*sqrt(K)), i.e., widen std by sqrt(num_shards).
+Without tempering, K shards each apply the full prior, producing combined posterior =
+prior^K x likelihood. With tempering, each shard uses prior^(1/K), producing the correct
+combined posterior = prior x likelihood. For Normal(mu, sigma): prior^(1/K) ~ Normal(mu,
+sigma\*sqrt(K)), i.e., widen std by sqrt(num_shards).
 
 Enabled by default via `prior_tempering=True`.
 
@@ -1600,6 +1595,6 @@ View with TensorBoard: `tensorboard --logdir=./profiles/jax`
 ### February 2026: Constant-Averaged Mode & NLSQ Parity (v2.22.2)
 
 When both CMC and NLSQ use "auto" mode and NLSQ warm-start is present,
-`get_effective_per_angle_mode()` automatically upgrades to "constant_averaged".
-This fixes scaling values and reduces the parameter count, preventing
-contrast/offset sampling from absorbing physical parameter signal.
+`get_effective_per_angle_mode()` automatically upgrades to "constant_averaged". This
+fixes scaling values and reduces the parameter count, preventing contrast/offset
+sampling from absorbing physical parameter signal.

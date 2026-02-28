@@ -218,6 +218,8 @@ module = [
     "xarray.*",
     "scipy.*",
     "zstd.*",
+    "ruamel.*",
+    "sklearn.*",
 ]
 ignore_missing_imports = true
 

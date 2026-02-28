@@ -1,6 +1,7 @@
 # Homodyne Data Handler Architecture
 
-Complete documentation of the data loading, configuration, and result writing systems in homodyne.
+Complete documentation of the data loading, configuration, and result writing systems in
+homodyne.
 
 **Version:** 2.22.2 **Last Updated:** February 2026
 
@@ -73,7 +74,9 @@ ______________________________________________________________________
 
 ## 1. Configuration System
 
-**Files:** `config/manager.py`, `config/parameter_manager.py`, `config/parameter_space.py`, `config/parameter_names.py`, `config/parameter_registry.py`, `config/types.py`
+**Files:** `config/manager.py`, `config/parameter_manager.py`,
+`config/parameter_space.py`, `config/parameter_names.py`,
+`config/parameter_registry.py`, `config/types.py`
 
 ### ConfigManager
 
@@ -182,7 +185,8 @@ class ParameterSpace:
         # Returns: bounds dict + PriorDistribution dict + parameter_names list
 ```
 
-Provides bounds and priors for NumPyro MCMC sampling. Constructed from YAML `parameter_space.bounds` section.
+Provides bounds and priors for NumPyro MCMC sampling. Constructed from YAML
+`parameter_space.bounds` section.
 
 ### ParameterRegistry (Singleton)
 
@@ -379,7 +383,8 @@ ______________________________________________________________________
 
 ## 4. Data Filtering
 
-**Files:** `data/filtering_utils.py`, `data/angle_filtering.py`, `data/phi_filtering.py`, `data/validators.py`
+**Files:** `data/filtering_utils.py`, `data/angle_filtering.py`,
+`data/phi_filtering.py`, `data/validators.py`
 
 ### Filtering Pipeline
 
@@ -557,7 +562,9 @@ class QualityLevel(Enum):
     COMPREHENSIVE = "comprehensive"
 ```
 
-These represent **validation intensity levels** (how much validation to perform), not quality scores. Quality scores use thresholds from `QualityControlConfig`: `pass_threshold=50.0`, `warn_threshold=70.0`, `excellent_threshold=85.0` (0-100 scale).
+These represent **validation intensity levels** (how much validation to perform), not
+quality scores. Quality scores use thresholds from `QualityControlConfig`:
+`pass_threshold=50.0`, `warn_threshold=70.0`, `excellent_threshold=85.0` (0-100 scale).
 
 ______________________________________________________________________
 
@@ -733,20 +740,17 @@ def save_nlsq_npz_file(
 
 **Writes `fitted_data.npz`** with 10-11 compressed arrays:
 
-| Array | Shape | Description |
-|-------|-------|-------------|
-| `phi_angles` | `(n_angles,)` | Scattering angles |
-| `c2_exp` | `(n_angles, n_t1, n_t2)` | Experimental correlation data |
-| `c2_theoretical_raw` | `(n_angles, n_t1, n_t2)` | Raw unscaled theoretical fits |
-| `c2_theoretical_scaled` | `(n_angles, n_t1, n_t2)` | Scaled theoretical fits |
-| `c2_solver_scaled` | `(n_angles, n_t1, n_t2)` | Optional solver-evaluated surface |
-| `per_angle_scaling` | `(n_angles, 2)` | Final [contrast, offset] per angle |
-| `per_angle_scaling_solver` | `(n_angles, 2)` | Original solver values |
-| `residuals` | `(n_angles, n_t1, n_t2)` | Experimental - scaled |
-| `residuals_normalized` | `(n_angles, n_t1, n_t2)` | Residuals / (0.05 * experimental) |
-| `t1` | `(n_t1,)` | Time array 1 (seconds) |
-| `t2` | `(n_t2,)` | Time array 2 (seconds) |
-| `q` | `(1,)` | Wavevector magnitude [1/A] |
+| Array | Shape | Description | |-------|-------|-------------| | `phi_angles` |
+`(n_angles,)` | Scattering angles | | `c2_exp` | `(n_angles, n_t1, n_t2)` | Experimental
+correlation data | | `c2_theoretical_raw` | `(n_angles, n_t1, n_t2)` | Raw unscaled
+theoretical fits | | `c2_theoretical_scaled` | `(n_angles, n_t1, n_t2)` | Scaled
+theoretical fits | | `c2_solver_scaled` | `(n_angles, n_t1, n_t2)` | Optional
+solver-evaluated surface | | `per_angle_scaling` | `(n_angles, 2)` | Final \[contrast,
+offset\] per angle | | `per_angle_scaling_solver` | `(n_angles, 2)` | Original solver
+values | | `residuals` | `(n_angles, n_t1, n_t2)` | Experimental - scaled | |
+`residuals_normalized` | `(n_angles, n_t1, n_t2)` | Residuals / (0.05 * experimental) |
+| `t1` | `(n_t1,)` | Time array 1 (seconds) | | `t2` | `(n_t2,)` | Time array 2
+(seconds) | | `q` | `(1,)` | Wavevector magnitude [1/A] |
 
 ______________________________________________________________________
 
@@ -809,19 +813,14 @@ save_all_results(result, output_dir, ...)        # Orchestrator
 
 **samples.npz schema:**
 
-| Array | Shape | Description |
-|-------|-------|-------------|
-| `posterior_samples` | `(n_chains, n_samples, n_params)` | Raw posterior samples |
-| `param_names` | `(n_params,)` | Parameter names in sampling order |
-| `r_hat` | `(n_params,)` | Per-parameter R-hat |
-| `ess_bulk` | `(n_params,)` | Bulk effective sample size |
-| `ess_tail` | `(n_params,)` | Tail effective sample size |
-| `divergences` | `(1,)` | Total divergent transitions |
-| `analysis_mode` | `(1,)` | "static" or "laminar_flow" |
-| `n_phi` | `(1,)` | Number of phi angles |
-| `n_chains` | `(1,)` | Number of chains |
-| `n_samples` | `(1,)` | Samples per chain |
-| `schema_version` | `(2,)` | (1, 0) |
+| Array | Shape | Description | |-------|-------|-------------| | `posterior_samples` |
+`(n_chains, n_samples, n_params)` | Raw posterior samples | | `param_names` |
+`(n_params,)` | Parameter names in sampling order | | `r_hat` | `(n_params,)` |
+Per-parameter R-hat | | `ess_bulk` | `(n_params,)` | Bulk effective sample size | |
+`ess_tail` | `(n_params,)` | Tail effective sample size | | `divergences` | `(1,)` |
+Total divergent transitions | | `analysis_mode` | `(1,)` | "static" or "laminar_flow" |
+| `n_phi` | `(1,)` | Number of phi angles | | `n_chains` | `(1,)` | Number of chains | |
+`n_samples` | `(1,)` | Samples per chain | | `schema_version` | `(2,)` | (1, 0) |
 
 ### JSON Serialization Safety
 
@@ -1015,46 +1014,44 @@ ______________________________________________________________________
 ### Data Shapes at Each Stage
 
 | Stage | wavevector_q_list | phi_angles_list | t1 | t2 | c2_exp |
-|-------|-------------------|-----------------|----|----|--------|
-| Raw loaded | (n_q,) | (n_phi,) | (n_time,) | (n_time,) | (n_phi, n_time, n_time) |
-| After phi filter | (n_q,) | (n_selected,) | (n_time,) | (n_time,) | (n_selected, n_time, n_time) |
-| After t=0 excl | (n_q,) | (n_selected,) | (n_time-1,) | (n_time-1,) | (n_selected, n_time-1, n_time-1) |
+|-------|-------------------|-----------------|----|----|--------| | Raw loaded | (n_q,)
+| (n_phi,) | (n_time,) | (n_time,) | (n_phi, n_time, n_time) | | After phi filter |
+(n_q,) | (n_selected,) | (n_time,) | (n_time,) | (n_selected, n_time, n_time) | | After
+t=0 excl | (n_q,) | (n_selected,) | (n_time-1,) | (n_time-1,) | (n_selected, n_time-1,
+n_time-1) |
 
 ### Configuration Defaults
 
 | Parameter | Section | Default | Description |
-|-----------|---------|---------|-------------|
-| dt | analyzer_parameters | (required) | Time step in seconds |
-| start_frame | analyzer_parameters | 1 | First frame (1-indexed) |
-| end_frame | analyzer_parameters | -1 | Last frame (-1 = all) |
-| apply_diagonal_correction | experimental_data | true | Diagonal correction |
-| phi_range.min | data_filtering | -180 | Minimum phi angle |
-| phi_range.max | data_filtering | 180 | Maximum phi angle |
-| data_filtering.enabled | data_filtering | true | Enable filtering |
+|-----------|---------|---------|-------------| | dt | analyzer_parameters | (required)
+| Time step in seconds | | start_frame | analyzer_parameters | 1 | First frame
+(1-indexed) | | end_frame | analyzer_parameters | -1 | Last frame (-1 = all) | |
+apply_diagonal_correction | experimental_data | true | Diagonal correction | |
+phi_range.min | data_filtering | -180 | Minimum phi angle | | phi_range.max |
+data_filtering | 180 | Maximum phi angle | | data_filtering.enabled | data_filtering |
+true | Enable filtering |
 
 ### Error Types
 
-| Exception | Module | Raised When |
-|-----------|--------|-------------|
-| `XPCSConfigurationError` | data/xpcs_loader | Invalid config structure |
-| `XPCSDependencyError` | data/xpcs_loader | Missing numpy/h5py |
-| `XPCSDataFormatError` | data/xpcs_loader | Unrecognized HDF5 format |
-| `PreprocessingError` | data/preprocessing | Preprocessing stage failure |
-| `PreprocessingConfigurationError` | data/preprocessing | Invalid preprocessing config |
-| `ValueError` | config/manager | Invalid config values |
-| `OSError` | io/nlsq_writers | File write failure |
+| Exception | Module | Raised When | |-----------|--------|-------------| |
+`XPCSConfigurationError` | data/xpcs_loader | Invalid config structure | |
+`XPCSDependencyError` | data/xpcs_loader | Missing numpy/h5py | | `XPCSDataFormatError`
+| data/xpcs_loader | Unrecognized HDF5 format | | `PreprocessingError` |
+data/preprocessing | Preprocessing stage failure | | `PreprocessingConfigurationError` |
+data/preprocessing | Invalid preprocessing config | | `ValueError` | config/manager |
+Invalid config values | | `OSError` | io/nlsq_writers | File write failure |
 
 ### JSON Output Summary
 
-| File | Method | Size | Key Contents |
-|------|--------|------|-------------|
-| parameters.json (NLSQ) | save_nlsq_json_files | ~2 KB | {value, uncertainty} per param |
+| File | Method | Size | Key Contents | |------|--------|------|-------------| |
+parameters.json (NLSQ) | save_nlsq_json_files | ~2 KB | {value, uncertainty} per param |
 | parameters.json (CMC) | create_mcmc_parameters_dict | ~3 KB | {mean, std} per param |
-| analysis_results_*.json | save_nlsq/create_mcmc_analysis | ~3 KB | fit_quality, dataset_info |
-| convergence_metrics.json | save_nlsq_json_files | ~2 KB | convergence status, recovery |
-| diagnostics.json (CMC) | create_mcmc_diagnostics_dict | ~5 KB | per-param R-hat, ESS, shards |
-| fitted_data.npz | save_*_npz_file | 50 KB-500 MB | exp + theoretical + residuals |
-| samples.npz (CMC) | save_samples_npz | 1-100 MB | posterior (chains x samples x params) |
+| analysis_results\_*.json | save_nlsq/create_mcmc_analysis | ~3 KB | fit_quality,
+dataset_info | | convergence_metrics.json | save_nlsq_json_files | ~2 KB | convergence
+status, recovery | | diagnostics.json (CMC) | create_mcmc_diagnostics_dict | ~5 KB |
+per-param R-hat, ESS, shards | | fitted_data.npz | save\_*\_npz_file | 50 KB-500 MB |
+exp + theoretical + residuals | | samples.npz (CMC) | save_samples_npz | 1-100 MB |
+posterior (chains x samples x params) |
 
 ______________________________________________________________________
 
@@ -1062,44 +1059,39 @@ ______________________________________________________________________
 
 ### Data Loading (`homodyne/data/`)
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| **xpcs_loader.py** | ~2107 | Main loader: HDF5 reading, format detection, caching, filtering |
-| **config.py** | ~752 | YAML/JSON config loading and schema validation |
-| **filtering_utils.py** | ~613 | Q-range, phi, quality, and frame-based filtering |
-| **preprocessing.py** | ~1153 | Multi-stage preprocessing pipeline with provenance |
-| **quality_controller.py** | ~1646 | Progressive quality control with auto-repair |
-| **validation.py** | ~1115 | Data quality validation (NaN, shape, range checks) |
-| **performance_engine.py** | ~1502 | Multi-level caching, LRU eviction, thread-safe access |
-| **memory_manager.py** | ~1030 | Dynamic memory monitoring and pressure management |
-| **optimization.py** | ~971 | Size-aware processing strategies (standard/chunked/mmap) |
-| **angle_filtering.py** | ~413 | Angle normalization and filtering utilities |
-| **phi_filtering.py** | ~385 | Vectorized phi angle filtering |
-| **validators.py** | ~296 | Input validation at I/O boundaries |
-| **types.py** | ~44 | Shared data types (prevents circular imports) |
+| File | Lines | Purpose | |------|-------|---------| | **xpcs_loader.py** | ~2107 |
+Main loader: HDF5 reading, format detection, caching, filtering | | **config.py** | ~752
+| YAML/JSON config loading and schema validation | | **filtering_utils.py** | ~613 |
+Q-range, phi, quality, and frame-based filtering | | **preprocessing.py** | ~1153 |
+Multi-stage preprocessing pipeline with provenance | | **quality_controller.py** | ~1646
+| Progressive quality control with auto-repair | | **validation.py** | ~1115 | Data
+quality validation (NaN, shape, range checks) | | **performance_engine.py** | ~1502 |
+Multi-level caching, LRU eviction, thread-safe access | | **memory_manager.py** | ~1030
+| Dynamic memory monitoring and pressure management | | **optimization.py** | ~971 |
+Size-aware processing strategies (standard/chunked/mmap) | | **angle_filtering.py** |
+~413 | Angle normalization and filtering utilities | | **phi_filtering.py** | ~385 |
+Vectorized phi angle filtering | | **validators.py** | ~296 | Input validation at I/O
+boundaries | | **types.py** | ~44 | Shared data types (prevents circular imports) |
 
 ### Configuration (`homodyne/config/`)
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| **manager.py** | ~1296 | ConfigManager: YAML loading, section access, CMC config |
-| **parameter_space.py** | ~895 | ParameterSpace: bounds + priors for MCMC |
-| **parameter_manager.py** | ~809 | ParameterManager: centralized bounds and validation |
-| **parameter_registry.py** | ~632 | ParameterRegistry: singleton for parameter metadata |
-| **types.py** | ~522 | TypedDict definitions for config structures |
-| **parameter_names.py** | ~315 | Parameter name constants and mappings |
-| **physics_validators.py** | ~286 | Physics constraint validation |
+| File | Lines | Purpose | |------|-------|---------| | **manager.py** | ~1296 |
+ConfigManager: YAML loading, section access, CMC config | | **parameter_space.py** |
+~895 | ParameterSpace: bounds + priors for MCMC | | **parameter_manager.py** | ~809 |
+ParameterManager: centralized bounds and validation | | **parameter_registry.py** | ~632
+| ParameterRegistry: singleton for parameter metadata | | **types.py** | ~522 |
+TypedDict definitions for config structures | | **parameter_names.py** | ~315 |
+Parameter name constants and mappings | | **physics_validators.py** | ~286 | Physics
+constraint validation |
 
 ### Result Writing (`homodyne/io/`)
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| **mcmc_writers.py** | ~639 | CMC result dict creation (parameters, analysis, diagnostics) |
-| **nlsq_writers.py** | ~171 | NLSQ result saving (3 JSON + 1 NPZ) |
-| **json_utils.py** | ~114 | NaN/Inf-safe JSON serialization |
+| File | Lines | Purpose | |------|-------|---------| | **mcmc_writers.py** | ~639 | CMC
+result dict creation (parameters, analysis, diagnostics) | | **nlsq_writers.py** | ~171
+| NLSQ result saving (3 JSON + 1 NPZ) | | **json_utils.py** | ~114 | NaN/Inf-safe JSON
+serialization |
 
 ### CMC-Specific I/O (`homodyne/optimization/cmc/`)
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| **io.py** | ~430 | CMC samples NPZ, fitted data NPZ, save_all_results orchestrator |
+| File | Lines | Purpose | |------|-------|---------| | **io.py** | ~430 | CMC samples
+NPZ, fitted data NPZ, save_all_results orchestrator |
