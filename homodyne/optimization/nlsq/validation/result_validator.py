@@ -171,7 +171,7 @@ def validate_covariance(covariance: np.ndarray, n_params: int) -> bool:
 
     # Check symmetry (with tolerance for numerical errors)
     if not np.allclose(covariance, covariance.T, rtol=1e-8, atol=1e-10):
-        max_diff = np.max(np.abs(covariance - covariance.T))
+        max_diff = np.nanmax(np.abs(covariance - covariance.T))
         logger.warning(f"Covariance not symmetric, max diff={max_diff:.2e}")
         return False
 

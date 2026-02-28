@@ -651,9 +651,9 @@ class AntiDegeneracyController:
         offset = params[self.n_phi : 2 * self.n_phi]
         physical = params[2 * self.n_phi :]
 
-        # Compute mean values
-        contrast_mean = np.mean(contrast)
-        offset_mean = np.mean(offset)
+        # Compute mean values (NaN-safe: degenerate optimizations can produce NaN params)
+        contrast_mean = np.nanmean(contrast)
+        offset_mean = np.nanmean(offset)
 
         return np.concatenate([[contrast_mean], [offset_mean], physical])
 
@@ -948,7 +948,7 @@ class AntiDegeneracyController:
             def loss_augmentation(params: np.ndarray, residuals: np.ndarray) -> float:
                 """Add regularization penalty to loss."""
                 # Compute MSE from residuals
-                mse = float(np.mean(residuals**2))
+                mse = float(np.nanmean(residuals**2))
                 n_points = len(residuals)
                 assert self.regularizer is not None
                 return float(

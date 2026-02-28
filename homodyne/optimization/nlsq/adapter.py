@@ -1100,7 +1100,7 @@ class NLSQAdapter(NLSQAdapterBase):
         )
 
         logger.info(
-            "NLSQAdapter.fit completed: chi²=%.6g, reduced_chi²=%.6g, status=%s, time=%.2fs",
+            "NLSQAdapter.fit completed: chi2=%.6g, reduced_chi2=%.6g, status=%s, time=%.2fs",
             opt_result.chi_squared,
             opt_result.reduced_chi_squared,
             opt_result.convergence_status,

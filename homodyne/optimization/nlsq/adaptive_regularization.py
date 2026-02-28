@@ -238,9 +238,9 @@ class AdaptiveRegularizer:
             if self.config.mode == "relative" or (
                 self.config.mode == "auto" and self.n_phi > 5
             ):
-                # CV-based regularization
-                mean_val = np.mean(group_params)
-                std_val = np.std(group_params)
+                # CV-based regularization (NaN-safe: degenerate optimizer steps can yield NaN params)
+                mean_val = np.nanmean(group_params)
+                std_val = np.nanstd(group_params)
 
                 if abs(mean_val) > 1e-10:
                     cv = std_val / abs(mean_val)
@@ -249,17 +249,17 @@ class AdaptiveRegularizer:
 
                 self._last_cv_values[group_idx] = cv
 
-                # L_reg = λ × CV² × MSE × n_points
+                # L_reg = lambda x CV^2 x MSE x n_points
                 group_reg = self.lambda_value * (cv**2) * mse * n_points
 
             else:
                 # Original absolute variance
-                var_val = np.var(group_params)
+                var_val = np.nanvar(group_params)
                 group_reg = self.lambda_value * var_val * n_points
 
                 # Still compute CV for diagnostics
-                mean_val = np.mean(group_params)
-                std_val = np.std(group_params)
+                mean_val = np.nanmean(group_params)
+                std_val = np.nanstd(group_params)
                 if abs(mean_val) > 1e-10:
                     self._last_cv_values[group_idx] = std_val / abs(mean_val)
 
@@ -370,8 +370,8 @@ class AdaptiveRegularizer:
             if n_group < 2:
                 continue
 
-            mean_val = np.mean(group_params)
-            std_val = np.std(group_params)
+            mean_val = np.nanmean(group_params)
+            std_val = np.nanstd(group_params)
 
             if self.config.mode == "relative" or (
                 self.config.mode == "auto" and self.n_phi > 5
@@ -432,8 +432,8 @@ class AdaptiveRegularizer:
                 continue
 
             group_params = params[start:end]
-            mean_val = np.mean(group_params)
-            std_val = np.std(group_params)
+            mean_val = np.nanmean(group_params)
+            std_val = np.nanstd(group_params)
             cv = std_val / (abs(mean_val) + 1e-10)
 
             if cv > self.config.max_cv:
@@ -443,8 +443,8 @@ class AdaptiveRegularizer:
                     "max_cv": self.config.max_cv,
                     "mean": float(mean_val),
                     "std": float(std_val),
-                    "min": float(np.min(group_params)),
-                    "max": float(np.max(group_params)),
+                    "min": float(np.nanmin(group_params)),
+                    "max": float(np.nanmax(group_params)),
                 }
 
         return violations

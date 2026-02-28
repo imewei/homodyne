@@ -423,12 +423,12 @@ class GradientCollapseMonitor:
         if len(self.per_angle_indices) >= 2:
             # Reset contrast to mean
             contrast_indices = self.per_angle_indices[:n_phi]
-            contrast_mean = np.mean(params[contrast_indices])
+            contrast_mean = np.nanmean(params[contrast_indices])
             reset_params[contrast_indices] = contrast_mean
 
             # Reset offset to mean
             offset_indices = self.per_angle_indices[n_phi : 2 * n_phi]
-            offset_mean = np.mean(params[offset_indices])
+            offset_mean = np.nanmean(params[offset_indices])
             reset_params[offset_indices] = offset_mean
 
             logger.info(
@@ -474,11 +474,11 @@ class GradientCollapseMonitor:
             "n_checks": len(self.history),
             "min_ratio": min(ratios),
             "max_ratio": max(ratios),
-            "mean_ratio": float(np.mean(ratios)),
+            "mean_ratio": float(np.nanmean(ratios)),
             "final_ratio": ratios[-1] if ratios else None,
             "min_physical_grad": min(physical_norms),
             "max_physical_grad": max(physical_norms),
-            "mean_physical_grad": float(np.mean(physical_norms)),
+            "mean_physical_grad": float(np.nanmean(physical_norms)),
             "collapse_detected": self.collapse_detected,
             "consecutive_triggers": self.consecutive_count,
             "n_collapse_events": len(self.collapse_events),

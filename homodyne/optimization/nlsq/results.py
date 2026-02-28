@@ -94,7 +94,7 @@ class OptimizationResult:
     def message(self) -> str:
         """Return descriptive message about optimization outcome."""
         if self.convergence_status == "converged":
-            return f"Optimization converged successfully. χ²={self.chi_squared:.6f}"
+            return f"Optimization converged successfully. chi2={self.chi_squared:.6f}"
         elif self.convergence_status == "max_iter":
             return "Optimization stopped: maximum iterations reached"
         else:
