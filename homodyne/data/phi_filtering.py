@@ -337,7 +337,7 @@ if HAS_JAX:
     ) -> tuple[np.ndarray, np.ndarray]:
         """JAX-accelerated version of phi angle filtering.
 
-        This function uses JAX for potentially faster computation on GPU/TPU,
+        This function uses JAX for potentially faster computation,
         but falls back to numpy if JAX is not available.
 
         Args:

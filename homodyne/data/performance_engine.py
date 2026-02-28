@@ -67,7 +67,7 @@ except ImportError:
     HAS_H5PY = False
     h5py = None
 
-# JAX integration for GPU acceleration
+# JAX integration for array acceleration
 F = TypeVar("F", bound=Callable[..., Any])
 try:
     import jax.numpy as jnp

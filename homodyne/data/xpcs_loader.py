@@ -1031,7 +1031,7 @@ class XPCSDataLoader:
             n_phi = len(phi_values)
 
             logger.debug(f"APS-U format: {n_q} q-values, {n_phi} phi-values")
-            logger.debug(f"Q range: {q_values.min():.6f} to {q_values.max():.6f} Å⁻¹")
+            logger.debug(f"Q range: {q_values.min():.6f} to {q_values.max():.6f} A^-1")
             logger.debug(f"Phi values: {phi_values}")
             logger.debug(
                 f"Processed bins: {len(processed_bins)} correlation matrices available",
@@ -1531,7 +1531,7 @@ class XPCSDataLoader:
         scattering_config = self.analyzer_config.get("scattering", {})
         config_q = scattering_config.get("wavevector_q", 0.0054)
 
-        logger.debug(f"Target q-vector: {config_q:.6f} Å⁻¹")
+        logger.debug(f"Target q-vector: {config_q:.6f} A^-1")
 
         # Find closest q-vector to target
         closest_idx = int(np.argmin(np.abs(dqlist - config_q)))
@@ -1677,7 +1677,7 @@ class XPCSDataLoader:
         logger.info(
             f"Cache size: {file_size_mb:.2f} MB, Q-vectors: {cache_metadata['q_count']}, Phi angles: {cache_metadata['phi_count']}",
         )
-        logger.debug(f"Q-vector: {actual_q:.6f} ± {q_variance:.6f} Å⁻¹")
+        logger.debug(f"Q-vector: {actual_q:.6f} +/- {q_variance:.6f} A^-1")
 
     def _validate_cache_q_vector(self, cache_metadata: dict[str, Any]) -> None:
         """Validate that cached q-vector is compatible with current configuration."""

@@ -46,7 +46,7 @@ except ImportError:
     HAS_NUMPY = False
     np = None  # type: ignore[assignment]
 
-# JAX for GPU memory management
+# JAX for array and memory management
 try:
     import jax
     import jax.numpy as jnp
