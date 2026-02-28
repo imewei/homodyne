@@ -474,7 +474,7 @@ def generate_and_plot_fitted_simulations(
         "data_type": "fitted",
         "analysis_mode": analysis_mode,
     }
-    with open(config_file, "w") as f:
+    with open(config_file, "w", encoding="utf-8") as f:
         json.dump(sim_config, f, indent=2, default=_json_serializer)
     logger.info(f"Saved simulation config: {config_file}")
 
