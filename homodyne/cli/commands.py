@@ -873,8 +873,7 @@ def _apply_angle_filtering_for_optimization(
     phi_angles_normalized = normalize_angle_to_symmetric_range(np.asarray(phi_angles))
     phi_angles = np.asarray(phi_angles_normalized)
     logger.info(
-        "Normalized phi angles to [-180, 180] deg range"
-        " (flow direction at 0 deg)"
+        "Normalized phi angles to [-180, 180] deg range (flow direction at 0 deg)"
     )
     logger.debug(f"Original angles: {original_phi_angles}")
     logger.debug(f"Normalized angles: {phi_angles}")

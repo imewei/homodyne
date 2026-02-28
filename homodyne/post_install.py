@@ -388,13 +388,17 @@ def create_xla_activation_scripts(venv_path: Path) -> list[Path]:
 
         # Copy bash/zsh activation script
         xla_bash_dest = activation_dir / "xla_config.bash"
-        xla_bash_dest.write_text(xla_bash_src.read_text(encoding="utf-8"), encoding="utf-8")
+        xla_bash_dest.write_text(
+            xla_bash_src.read_text(encoding="utf-8"), encoding="utf-8"
+        )
         xla_bash_dest.chmod(0o644)
         created_scripts.append(xla_bash_dest)
 
         # Copy fish activation script
         xla_fish_dest = activation_dir / "xla_config.fish"
-        xla_fish_dest.write_text(xla_fish_src.read_text(encoding="utf-8"), encoding="utf-8")
+        xla_fish_dest.write_text(
+            xla_fish_src.read_text(encoding="utf-8"), encoding="utf-8"
+        )
         xla_fish_dest.chmod(0o644)
         created_scripts.append(xla_fish_dest)
 

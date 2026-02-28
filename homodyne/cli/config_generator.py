@@ -276,7 +276,9 @@ def interactive_builder() -> dict[str, Any]:
     # Check overwrite
     if output_path.exists():
         overwrite = (
-            input(f"\nWARNING: File exists: {output_path}\nOverwrite? [y/N]: ").strip().lower()
+            input(f"\nWARNING: File exists: {output_path}\nOverwrite? [y/N]: ")
+            .strip()
+            .lower()
         )
         if overwrite != "y":
             print("Configuration not saved.")
@@ -370,7 +372,9 @@ def interactive_builder() -> dict[str, Any]:
             with open(template_path, encoding="utf-8") as f:
                 result_config = yaml.safe_load(f)
     except OSError as e:
-        print(f"Error: Cannot write configuration to {output_path}: {e}", file=sys.stderr)
+        print(
+            f"Error: Cannot write configuration to {output_path}: {e}", file=sys.stderr
+        )
         return {}
 
     print()

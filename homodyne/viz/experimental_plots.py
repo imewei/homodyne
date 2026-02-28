@@ -65,7 +65,9 @@ def plot_experimental_data(
             extent = None
         xlabel = "t₁ (s)"
         ylabel = "t₂ (s)"
-        logger.debug(f"Using time extent: t1=[{t1_min:.3f}, {t1_max:.3f}], t2=[{t2_min:.3f}, {t2_max:.3f}] seconds")
+        logger.debug(
+            f"Using time extent: t1=[{t1_min:.3f}, {t1_max:.3f}], t2=[{t2_min:.3f}, {t2_max:.3f}] seconds"
+        )
     else:
         extent = None
         xlabel = "t₁ Index"

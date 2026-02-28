@@ -1296,9 +1296,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                 else "Poor"
             )
         )
-        report.append(
-            f"\nHealth Score: {health_score}/100 ({health_status})"
-        )
+        report.append(f"\nHealth Score: {health_score}/100 ({health_status})")
 
         # Summary
         passed = sum(1 for r in self.results if r.success)

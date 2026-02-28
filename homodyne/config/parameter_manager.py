@@ -143,8 +143,8 @@ class ParameterManager:
             },
             # phi0 in radians, consistent with physics model and ParameterRegistry
             "phi0": {
-                "min": -3.141592653589793,   # -pi
-                "max": 3.141592653589793,    # +pi
+                "min": -3.141592653589793,  # -pi
+                "max": 3.141592653589793,  # +pi
                 "name": "phi0",
                 "type": "TruncatedNormal",
             },

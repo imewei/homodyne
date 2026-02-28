@@ -75,7 +75,9 @@ def save_nlsq_json_files(
             + analysis_file.stat().st_size
             + convergence_file.stat().st_size
         ) / 1024
-        logger.info(f"Saved 3 JSON files to {output_dir} (total: {total_size_kb:.1f} KB)")
+        logger.info(
+            f"Saved 3 JSON files to {output_dir} (total: {total_size_kb:.1f} KB)"
+        )
     except OSError as e:
         raise OSError(f"Failed to write NLSQ JSON files to {output_dir}: {e}") from e
 
