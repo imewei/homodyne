@@ -30,7 +30,10 @@ ______________________________________________________________________
 │                              USER ENTRY POINTS                                   │
 │                                                                                  │
 │   fit_nlsq_jax(data, config)     fit_nlsq_multistart()     fit_with_cmaes()     │
-│         (core.py)                  (multistart.py)         (cmaes_wrapper.py)   │
+│         (core.py)                    (core.py)             (cmaes_wrapper.py)   │
+│                                   [line ~1402]                                  │
+│                              (run_multistart_nlsq()                             │
+│                               is in multistart.py)                              │
 │              │                           │                        │              │
 │              │                  Latin Hypercube             CMA-ES Global        │
 │              │                  N starting points           Optimization         │
@@ -435,7 +438,7 @@ ______________________________________________________________________
 ### Memory Estimation
 
 ```
-peak_memory_gb = n_points × n_params × 8 bytes × 6.5× / 1e9
+peak_memory_gib = n_points × n_params × 8 bytes × 6.5 / 1024**3
 
 6.5× Jacobian Overhead Factor (v2.14.0):
 ├─ 1.0× Base Jacobian matrix
@@ -444,7 +447,7 @@ peak_memory_gb = n_points × n_params × 8 bytes × 6.5× / 1e9
 ├─ 1.5× JIT compilation buffers (XLA, remat traces)
 └─ 0.5× Optimizer working memory (QR, trust-region storage)
 
-Example: 23M points × 53 params × 8 × 6.5 = 63.6 GB
+Example: 23M points × 53 params × 8 × 6.5 / 1024**3 ≈ 59.2 GiB
 ```
 
 ### Adaptive Threshold
@@ -465,21 +468,23 @@ Example: 64 GB system × 0.75 = 48 GB threshold
 │                     STRATEGY DECISION TREE                                 │
 │                    select_nlsq_strategy()                                  │
 │                                                                            │
-│                      peak_memory_gb                                        │
-│                           │                                                │
-│              ┌────────────┴────────────┐                                   │
-│         ≤ threshold              > threshold                               │
-│              │                         │                                   │
-│              ▼                         ▼                                   │
-│        n_points?              index_memory > threshold?                    │
-│         │     │                    │           │                           │
-│       <1M    ≥1M                  YES         NO                           │
-│         │     │                    │           │                           │
-│         ▼     ▼                    ▼           ▼                           │
-│    ┌────────┐ ┌────────────┐  ┌─────────────┐ ┌────────────┐               │
-│    │STANDARD│ │OUT_OF_CORE │  │   HYBRID    │ │OUT_OF_CORE │               │
-│    └────────┘ └────────────┘  │  STREAMING  │ └────────────┘               │
-│                               └─────────────┘                              │
+│   Decision is purely memory-based (no n_points branching):                │
+│                                                                            │
+│   1. index_memory > threshold?                                             │
+│              │                                                             │
+│             YES ──────────────────────────────▶ HYBRID_STREAMING          │
+│              │                                  (extreme scale)           │
+│             NO                                                             │
+│              │                                                             │
+│   2. peak_memory > threshold?                                              │
+│              │                                                             │
+│             YES ──────────────────────────────▶ OUT_OF_CORE               │
+│              │                                  (large scale)             │
+│             NO                                                             │
+│              │                                                             │
+│              ▼                                                             │
+│           STANDARD                                                         │
+│           (in-memory)                                                      │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -602,8 +607,12 @@ ______________________________________________________________________
 **Activation Conditions (ALL must be true):**
 
 - `analysis_mode = laminar_flow`
-- `n_phi > 3` (many angles where absorption is problematic)
 - `per_angle_scaling = True`
+- `enable = True` (AntiDegeneracyConfig.enable, default True)
+
+Note: `n_phi >= constant_scaling_threshold` (default: 3) determines the per-angle **mode**
+(auto_averaged vs individual), not whether the system activates. The system activates for
+any laminar_flow run with per-angle scaling enabled.
 
 ### Root Problem: Structural Degeneracy
 
@@ -894,7 +903,11 @@ class OptimizationResult:
     uncertainties: np.ndarray     # sqrt(diag(covariance))
     covariance: np.ndarray        # Full covariance matrix
     chi_squared: float            # Sum of squared residuals
-    reduced_chi_squared: float    # χ² / (n_points - n_params)
+    reduced_chi_squared: float    # χ² / (n_points - n_params_effective)
+    # NOTE (post-Round-10): n_params_effective = 2 * n_phi + n_physical for
+    # auto_averaged mode (e.g., 53 for 23-angle laminar_flow: 2*23 + 7).
+    # The compressed optimizer vector has only 2 + n_physical params (9),
+    # but effective DOF for s² uses the expanded per-angle count (53).
 
     # Status
     success: bool                 # Optimization succeeded
@@ -917,9 +930,9 @@ class OptimizationResult:
 ### Quality Flag Determination
 
 ```
-├─ "good":     reduced_χ² < 2.0 AND converged
-├─ "marginal": reduced_χ² < 5.0 OR partial convergence
-└─ "poor":     reduced_χ² ≥ 5.0 OR failed
+├─ "good":     reduced_χ² < 2.0 AND n_at_bounds == 0
+├─ "marginal": reduced_χ² < 5.0 AND n_at_bounds <= 2
+└─ "poor":     otherwise
 ```
 
 ______________________________________________________________________
@@ -953,7 +966,9 @@ ______________________________________________________________________
 ## Key Files Reference
 
 | File | Purpose | |------|---------| | `core.py` | Entry points: `fit_nlsq_jax()`,
-`fit_nlsq_multistart()` | | `cmaes_wrapper.py` | CMA-ES global optimization:
+`fit_nlsq_multistart()` (line ~1402) | | `multistart.py` | Lower-level
+`run_multistart_nlsq()` (called by `fit_nlsq_multistart()`) | | `cmaes_wrapper.py` |
+CMA-ES global optimization:
 `CMAESWrapper`, `fit_with_cmaes()` | | `config.py` | `NLSQConfig` with CMA-ES and
 refinement settings | | `memory.py` | `select_nlsq_strategy()`, memory estimation (6.5×
 factor) | | `adapter.py` | NLSQAdapter with model caching | | `wrapper.py` | NLSQWrapper

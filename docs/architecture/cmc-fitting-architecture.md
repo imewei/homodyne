@@ -123,6 +123,8 @@ def fit_mcmc_jax(
     output_dir: Path | str | None = None,
     progress_bar: bool = True,
     run_id: str | None = None,
+    nlsq_result: dict | None = None,  # NLSQ warm-start (reduces divergences)
+    **kwargs,                          # Forward compatibility
 ) -> CMCResult
 ```
 
@@ -185,11 +187,17 @@ ______________________________________________________________________
 │   3. Each shard is complete PreparedData with its own phi info             │
 │                                                                            │
 │ Key property: Preserves stratification for balanced angle coverage         │
+│                                                                            │
+│ IMPORTANT: When sharding_strategy='stratified' AND n_phi > 1, the strategy│
+│ is automatically overridden to 'random'. Stratified sharding creates       │
+│ single-angle shards that violate Consensus MC assumptions for global       │
+│ parameters (physical parameters must be globally shared across all shards).│
 └───────────────────────────────────────────────────────────────────────────┘
 
 ┌───────────────────────────────────────────────────────────────────────────┐
 │ RANDOM SHARDING (shard_data_random)                                        │
-│ Used when: Single phi angle but dataset > threshold                        │
+│ Used when: Single phi angle or multi-angle (n_phi > 1) datasets            │
+│ Note: The default sharding_strategy='random' applies here.                │
 │                                                                            │
 │ Algorithm:                                                                 │
 │   1. Shuffle all point indices randomly                                    │
@@ -255,7 +263,7 @@ sufficient data per angle:
 │   ────────────────┼───────────┼───────────────┼─────────────┼─────────────  │
 │   < 2M points     │ 8K        │ 4.8K          │ ~400        │ ~1-2 min    │
 │   2M - 50M        │ 5K        │ 3K            │ 600-16K     │ ~1 min      │
-│   50M - 100M      │ 8K        │ 4.8K          │ 10K-20K     │ ~1 min      │
+│   50M - 100M      │ 5K        │ 3K            │ 10K-20K     │ ~1 min      │
 │   100M - 1B       │ 8K        │ 4.8K          │ 20K-50K     │ <1 min      │
 │   1B+             │ 10K       │ 6K            │ 100K+       │ <1 min      │
 │                                                                            │
@@ -263,13 +271,13 @@ sufficient data per angle:
 └───────────────────────────────────────────────────────────────────────────┘
 
 ┌───────────────────────────────────────────────────────────────────────────┐
-│ STATIC MODE (3 parameters, simple gradients - 10× larger shards OK)       │
+│ STATIC MODE (3 parameters, simple gradients)                               │
 │                                                                            │
 │   Dataset Size    │ max_points_per_shard │ Est. Shards                     │
 │   ────────────────┼──────────────────────┼──────────────                   │
-│   < 50M points    │ 100K                 │ ~500                            │
-│   50M - 100M      │ 80K                  │ ~1K                             │
-│   100M+           │ 50K                  │ ~2K+                            │
+│   < 50M points    │ 10K                  │ ~5K                             │
+│   50M - 100M      │ 15K                  │ ~3K-7K                          │
+│   100M+           │ 20K                  │ ~5K+                            │
 │                                                                            │
 │   MINIMUM ENFORCED: 5,000 points per shard                                │
 └───────────────────────────────────────────────────────────────────────────┘
@@ -329,47 +337,69 @@ ______________________________________________________________________
 
 **File:** `model.py`
 
-### Three Model Variants (v2.18.0)
+### Five Model Variants (v2.22.2)
 
-| Model | Purpose | Per-Angle Mode | |-------|---------|----------------| |
-`xpcs_model()` | Original model with standard parameterization | Legacy | |
-`xpcs_model_scaled()` | Gradient-balanced model with z-space sampling | individual | |
-`xpcs_model_constant()` | Fixed per-angle scaling (not sampled) | auto/constant |
+| Model | Purpose | Per-Angle Mode | Params (laminar_flow, 23 angles) |
+|-------|---------|----------------|----------------------------------|
+| `xpcs_model_scaled()` | Gradient-balanced z-space sampling | individual | 54 (46 per-angle + 7 physical + 1 σ) |
+| `xpcs_model_constant()` | Fixed per-angle scaling (not sampled) | constant | 8 (7 physical + 1 σ) |
+| `xpcs_model_averaged()` | Sampled averaged contrast/offset | auto | 10 (2 averaged + 7 physical + 1 σ) |
+| `xpcs_model_constant_averaged()` | Fixed averaged scaling (NLSQ parity) | constant_averaged | 8 (7 physical + 1 σ) |
+| `xpcs_model_reparameterized()` | Reparameterized sampling space | auto + reparam | 10 (2 averaged + 7 physical + 1 σ) |
 
-### Per-Angle Mode Selection (v2.18.0)
+### Per-Angle Mode Selection (v2.22.2)
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
 │ Per-Angle Mode Decision (get_effective_per_angle_mode)                    │
 │                                                                           │
-│   per_angle_mode = "auto" (default)?                                      │
+│   Priority: nlsq_per_angle_mode > explicit config > auto-selection       │
+│                                                                           │
+│   1. NLSQ warm-start present with per_angle_mode?                        │
+│        ├─ YES + both sides "auto": → "constant_averaged"                 │
+│        │   • Fixes scaling for stability (fewer sampled params)          │
+│        │   • Uses xpcs_model_constant_averaged()                         │
 │        │                                                                  │
-│        ├─ YES: Check n_phi >= constant_scaling_threshold (default: 3)    │
-│        │       ├─ n_phi >= 3: Use CONSTANT → xpcs_model_constant()       │
-│        │       │   • Quantile estimation → AVERAGE → broadcast           │
-│        │       │   • 8 sampled params (7 physical + 1 sigma)             │
-│        │       │                                                         │
-│        │       └─ n_phi < 3: Use INDIVIDUAL → xpcs_model_scaled()        │
-│        │           • Sample per-angle contrast/offset                    │
-│        │           • 8 + 2×n_phi sampled params                          │
+│        └─ YES + explicit mode: → match NLSQ mode                        │
+│            • Ensures parameterization parity                             │
+│                                                                           │
+│   2. per_angle_mode = "auto" (default)?                                   │
+│        ├─ n_phi >= threshold (3): → "auto"                               │
+│        │   • Uses xpcs_model_averaged()                                  │
+│        │   • SAMPLES single averaged contrast + offset                   │
+│        │   • 10 params (2 averaged + 7 physical + 1 sigma)              │
+│        │   • If use_reparameterization=True:                             │
+│        │     Uses xpcs_model_reparameterized() instead                   │
 │        │                                                                  │
-│        └─ NO: Check explicit mode                                        │
-│             ├─ "constant": Use xpcs_model_constant()                     │
-│             │   • Quantile estimation → use directly (not averaged)      │
-│             │   • 8 sampled params (7 physical + 1 sigma)                │
-│             │                                                            │
-│             └─ "individual": Use xpcs_model_scaled()                     │
-│                 • Sample per-angle contrast/offset                       │
-│                 • 8 + 2×n_phi sampled params                             │
+│        └─ n_phi < threshold (3): → "individual"                          │
+│            • Uses xpcs_model_scaled()                                    │
+│            • Samples per-angle contrast/offset                           │
+│            • 8 + 2×n_phi sampled params                                  │
+│                                                                           │
+│   3. Explicit mode:                                                       │
+│        ├─ "constant": xpcs_model_constant()                              │
+│        │   • Fixed per-angle values (not averaged, not sampled)          │
+│        │   • 8 params (7 physical + 1 sigma)                             │
+│        │                                                                  │
+│        ├─ "constant_averaged": xpcs_model_constant_averaged()            │
+│        │   • Fixed averaged values (NLSQ parity, not sampled)            │
+│        │   • 8 params (7 physical + 1 sigma)                             │
+│        │                                                                  │
+│        └─ "individual": xpcs_model_scaled()                              │
+│            • Sample per-angle contrast/offset                            │
+│            • 8 + 2×n_phi sampled params                                  │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key Distinction: Auto vs Constant Mode**
+**Key Distinction: Five Model Modes**
 
-| Mode | Quantile Estimation | Fixed Values Used |
-|------|---------------------|-------------------| | `auto` (n_phi ≥ 3) | Estimate 23
-per-angle → **AVERAGE** → single value | Same value for all angles (NLSQ parity) | |
-`constant` | Estimate 23 per-angle → use **DIRECTLY** | Different value per angle |
+| Mode | Scaling Behavior | Values Sampled? | Params (laminar_flow) |
+|------|------------------|-----------------|-----------------------|
+| `auto` (n_phi ≥ 3) | Single averaged contrast/offset | **Yes** (sampled) | 10 |
+| `auto` + reparam | Single averaged + log-space transforms | **Yes** (sampled) | 10 |
+| `constant` | Per-angle from quantile estimation | **No** (fixed per-angle) | 8 |
+| `constant_averaged` | Averaged from quantile estimation | **No** (fixed averaged) | 8 |
+| `individual` | Per-angle contrast/offset | **Yes** (sampled per-angle) | 8 + 2×n_phi |
 
 ### xpcs_model_scaled() Structure
 
@@ -441,6 +471,93 @@ else:
     # CONSTANT mode: use per-angle estimates directly
     fixed_contrast = np.array([estimates[f"contrast_{i}"] for i in range(n_phi)])
     fixed_offset = np.array([estimates[f"offset_{i}"] for i in range(n_phi)])
+```
+
+### xpcs_model_averaged() Structure (v2.22.2)
+
+The averaged model **samples** a single averaged contrast and offset, then broadcasts to all angles.
+This is the default model for `auto` mode (n_phi >= 3).
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ xpcs_model_averaged() - Sampled Averaged Scaling (auto mode)             │
+│                                                                           │
+│  SAMPLING ORDER (10 parameters total for laminar_flow):                  │
+│                                                                           │
+│  1. AVERAGED SCALING PARAMETERS (FIRST, sampled)                         │
+│     contrast_avg ~ TruncatedNormal (single value, broadcast to n_phi)    │
+│     offset_avg   ~ TruncatedNormal (single value, broadcast to n_phi)    │
+│                                                                           │
+│  2. PHYSICAL PARAMETERS (SECOND)                                         │
+│     Static:       D0, alpha, D_offset                                    │
+│     Laminar flow: + gamma_dot_t0, beta, gamma_dot_t_offset, phi0         │
+│                                                                           │
+│  3. NOISE PARAMETER (THIRD)                                              │
+│     sigma ~ HalfNormal(scale=noise_scale × 3.0)                          │
+│                                                                           │
+│  KEY: 10 params vs 54 for individual mode (laminar_flow, 23 angles)      │
+│  Prevents per-angle parameter absorption degeneracy                      │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+### xpcs_model_constant_averaged() Structure (v2.22.2)
+
+Uses **fixed** averaged contrast/offset (not sampled). Provides exact NLSQ parity
+when warm-start is available. Selected automatically when both CMC and NLSQ use "auto" mode
+with NLSQ warm-start present.
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ xpcs_model_constant_averaged() - Fixed Averaged Scaling (NLSQ parity)   │
+│                                                                           │
+│  REQUIRED INPUTS (not sampled):                                          │
+│    fixed_contrast: jnp.ndarray (n_phi,) → averaged to single value      │
+│    fixed_offset:   jnp.ndarray (n_phi,) → averaged to single value      │
+│                                                                           │
+│  SAMPLING ORDER (8 parameters total):                                    │
+│                                                                           │
+│  1. PHYSICAL PARAMETERS (FIRST)                                          │
+│     Static:       D0, alpha, D_offset                                    │
+│     Laminar flow: + gamma_dot_t0, beta, gamma_dot_t_offset, phi0         │
+│                                                                           │
+│  2. NOISE PARAMETER (SECOND)                                             │
+│     sigma ~ HalfNormal(scale=noise_scale × 3.0)                          │
+│                                                                           │
+│  CRITICAL: Fixes the parameter shift issue where xpcs_model_averaged()   │
+│  samples contrast/offset, introducing extra uncertainty that biases      │
+│  physical parameters. Uses FIXED averaged values for NLSQ parity.        │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+### xpcs_model_reparameterized() Structure (v2.22.2)
+
+Transforms correlated parameters to orthogonal sampling space for better NUTS exploration:
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ xpcs_model_reparameterized() - Reference-Time Reparameterized Sampling   │
+│                                                                           │
+│  REPARAMETERIZATION TRANSFORMS:                                          │
+│    D0, alpha     → log_D_ref, alpha                                      │
+│                     where D_ref = D0 * t_ref^alpha (decorrelates)        │
+│    D_offset      → D_offset_frac = D_offset / (D_ref + D_offset)        │
+│    gamma_dot_t0  → log_gamma_ref                                         │
+│                     where gamma_ref = gamma_dot_t0 * t_ref^beta          │
+│                                                                           │
+│  SAMPLING ORDER (10 parameters total for laminar_flow):                  │
+│                                                                           │
+│  1. AVERAGED SCALING (sampled, as in xpcs_model_averaged)                │
+│  2. REPARAMETERIZED PHYSICAL PARAMETERS                                  │
+│     log_D_ref, alpha, D_offset_frac                                      │
+│     + log_gamma_ref, beta, gamma_dot_t_offset, phi0 (laminar_flow)       │
+│  3. DETERMINISTIC TRANSFORMS (in trace for output)                       │
+│     D0, D_offset, gamma_dot_t0 computed from reparameterized values      │
+│  4. NOISE PARAMETER                                                      │
+│     sigma ~ HalfNormal(scale=noise_scale × 3.0)                          │
+│                                                                           │
+│  EXTRA INPUT: t_ref (reference time, from compute_t_ref(dt, t_max))      │
+│  EXTRA INPUT: reparam_config (ReparamConfig, optional)                    │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Physics Computation
@@ -565,7 +682,8 @@ ______________________________________________________________________
 │   │    kernel = NUTS(                                                          │ │
 │   │        model,                                                              │ │
 │   │        init_strategy=init_to_value(values=z_space_init),                   │ │
-│   │        target_accept_prob=0.85,                                            │ │
+│   │        target_accept_prob=0.85,  # For laminar_flow mode, automatically    │ │
+│   │                                  # elevated to 0.9 if below 0.9            │ │
 │   │        dense_mass=True  # CRITICAL: Learn cross-correlations               │ │
 │   │    )                                                                       │ │
 │   │                                                                            │ │
@@ -831,7 +949,26 @@ class CMCResult:
     n_samples: int = 2000
     n_warmup: int = 500
     analysis_mode: str = "static"
+    per_angle_mode: str = "auto"             # Effective per-angle mode used
+
+    # CMC-specific
     num_shards: int = 1                      # For correct divergence rate
+
+    # Quality & diagnostics
+    covariance: np.ndarray | None = None
+    chi_squared: float | None = None
+    reduced_chi_squared: float | None = None
+    device_info: dict | None = None
+    recovery_actions: list[str] | None = None
+    quality_flag: str | None = None          # "good", "warning", "poor"
+
+    # Legacy per-angle stats
+    mean_params: np.ndarray | None = None
+    std_params: np.ndarray | None = None
+    mean_contrast: np.ndarray | None = None
+    std_contrast: np.ndarray | None = None
+    mean_offset: np.ndarray | None = None
+    std_offset: np.ndarray | None = None
 ```
 
 ### CMCResult.from_mcmc_samples() Workflow
@@ -843,9 +980,9 @@ class CMCResult:
 │  1. Compute R-hat from samples: per-parameter convergence statistic        │
 │  2. Compute ESS (bulk & tail): effective sample size                       │
 │  3. Check convergence thresholds:                                          │
-│     ├─ R-hat < 1.1 ✓                                                       │
-│     ├─ ESS > 100 ✓                                                         │
-│     └─ Divergence rate < 5% ✓                                              │
+│     ├─ R-hat < 1.1                                                         │
+│     ├─ ESS > 400 (min_ess default)                                         │
+│     └─ Divergence rate < 10% (max_divergence_rate default)                 │
 │  4. Aggregate legacy stats (contrast, offset means/stds)                   │
 │  5. Create ArviZ InferenceData for plotting                                │
 │  6. Return CMCResult                                                       │
@@ -859,9 +996,9 @@ class CMCResult:
 ### Convergence Status Determination
 
 ```
-├─ "converged":     All R-hat < 1.1 AND All ESS > 100 AND divergence rate < 5%
-├─ "divergences":   Divergence rate ≥ 5%
-└─ "not_converged": R-hat ≥ 1.1 OR ESS < 100
+├─ "converged":     All R-hat < 1.1 AND All ESS > 400 AND divergence rate < 10%
+├─ "divergences":   Divergence rate >= 10%
+└─ "not_converged": R-hat >= 1.1 OR ESS < 400
 ```
 
 ______________________________________________________________________
@@ -917,7 +1054,7 @@ fit_mcmc_jax() [core.py]
 │       │
 │       └─ Combine results:
 │           ├─ Hierarchical combination for K > 500 shards
-│           └─ combine_shard_samples(shards, method="consensus_mc")
+│           └─ combine_shard_samples(shards, method="robust_consensus_mc")
 │               ├─ Per-param: combine means & variances
 │               ├─ Generate new samples from combined Gaussian
 │               └─ Return combined MCMCSamples
@@ -950,17 +1087,17 @@ ______________________________________________________________________
 
 | Dataset Size | Base Size | After Scaling | max_shards | Est. Shards |
 |--------------|-----------|---------------|------------|-------------| | < 2M | 8K |
-4.8K | 2,000 | ~400 | | 2M - 50M | 5K | 3K | 2,000 | 600-16K | | 50M - 100M | 8K | 4.8K
+4.8K | 2,000 | ~400 | | 2M - 50M | 5K | 3K | 2,000 | 600-16K | | 50M - 100M | 5K | 3K
 | 10,000 | 10K-20K | | 100M - 1B | 8K | 4.8K | 50,000 | 20K-50K | | 1B+ | 10K | 6K |
 100,000 | 100K+ |
 
 **Minimum shard size: 3,000 points** (reparameterization fixes bimodal posteriors)
 
-#### Static Mode (10× larger shards)
+#### Static Mode
 
 | Dataset Size | max_points_per_shard | Est. Shards |
-|--------------|---------------------|-------------| | < 50M | 100K | ~500 | | 50M -
-100M | 80K | ~1K | | 100M+ | 50K | ~2K+ |
+|--------------|---------------------|-------------| | < 50M | 10K | ~5K | | 50M -
+100M | 15K | ~3K-7K | | 100M+ | 20K | ~5K+ |
 
 **Minimum shard size: 5,000 points**
 
@@ -973,44 +1110,81 @@ Extreme scale support |
 
 ### Mode-Specific Parameters
 
-| Mode | Physical Params | Per-Angle Params (23 angles) | Total |
-|------|----------------|------------------------------|-------| | static | 3: D₀, α,
-D_offset | 46: contrast + offset | 49 + σ | | laminar_flow | 7: + γ̇₀, β, γ̇_offset, φ₀
-| 46: contrast + offset | 53 + σ |
+**Individual per-angle mode** (23 angles):
 
-### CMC Configuration Defaults (v2.20.0)
+| Mode | Physical Params | Per-Angle Params | Total |
+|------|----------------|------------------|-------|
+| static | 3: D₀, alpha, D_offset | 46: contrast + offset | 49 + sigma |
+| laminar_flow | 7: + gamma_dot_t0, beta, gamma_dot_t_offset, phi0 | 46: contrast + offset | 53 + sigma |
 
-| Parameter | Default | Description | |-----------|---------|-------------| |
-min_points_for_cmc | 500,000 | Auto-enable threshold | | sharding_strategy |
-"stratified" | "stratified" or "random" | | backend_name | "auto" | → "multiprocessing"
-| | num_warmup | 500 | NUTS warmup iterations | | num_samples | 1500 | NUTS sampling
-iterations | | num_chains | 4 | Parallel chains | | target_accept_prob | 0.85 | NUTS
-target acceptance | | max_r_hat | 1.1 | Convergence threshold | | min_ess | 100.0 |
-Minimum effective sample size | | max_divergence_rate | 0.10 | Quality filter threshold
-| | require_nlsq_warmstart | False | Enforce NLSQ warm-start | | combination_method |
-"consensus_mc" | Shard combination algorithm | | per_shard_timeout | 3600 | 1 hour max
-per shard | | **min_points_per_shard** | 3,000 (laminar) / 5,000 (static) | **NEW**:
-Minimum shard size | | **max_parameter_cv** | 1.0 | **NEW**: Heterogeneity abort
-threshold | | **heterogeneity_abort** | True | **NEW**: Abort on high heterogeneity |
+**Auto mode** (averaged scaling, default for n_phi >= 3):
+
+| Mode | Physical Params | Averaged Scaling | Total |
+|------|----------------|------------------|-------|
+| static | 3 | 2: avg_contrast + avg_offset | 5 + sigma |
+| laminar_flow | 7 | 2: avg_contrast + avg_offset | 9 + sigma |
+
+**Constant / constant_averaged modes** (fixed scaling, not sampled):
+
+| Mode | Physical Params | Scaling | Total |
+|------|----------------|---------|-------|
+| static | 3 | Fixed (0 sampled) | 3 + sigma |
+| laminar_flow | 7 | Fixed (0 sampled) | 7 + sigma |
+
+### CMC Configuration Defaults (v2.22.2)
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| min_points_for_cmc | 100,000 | Auto-enable threshold |
+| sharding_strategy | "random" | "stratified" or "random" |
+| backend_name | "auto" | → "multiprocessing" |
+| num_warmup | 500 | NUTS warmup iterations (pre-adaptive) |
+| num_samples | 1500 | NUTS sampling iterations (pre-adaptive) |
+| num_chains | 4 | Parallel chains |
+| target_accept_prob | 0.85 | NUTS target acceptance. For laminar_flow mode, automatically elevated to 0.9 if configured value is below 0.9. |
+| max_r_hat | 1.1 | Convergence threshold |
+| min_ess | 400.0 | Minimum effective sample size |
+| max_divergence_rate | 0.10 | Quality filter threshold |
+| require_nlsq_warmstart | False | Enforce NLSQ warm-start |
+| combination_method | "robust_consensus_mc" | Robust CMC with MAD outlier filtering |
+| per_shard_timeout | 3600 | 1 hour max per shard |
+| heartbeat_timeout | 600 | 10 min - terminate unresponsive workers |
+| min_points_per_shard | 10,000 | Config field default; actual enforced minimum in code is MIN_SHARD_SIZE_LAMINAR=3000 |
+| min_points_per_param | 1,500 | Minimum points per parameter per shard |
+| max_parameter_cv | 1.0 | Heterogeneity abort threshold |
+| heterogeneity_abort | True | Abort on high heterogeneity |
+| adaptive_sampling | True | Scale warmup/samples based on shard size |
+| max_tree_depth | 10 | NUTS depth (max 2^depth leapfrog steps) |
+| min_warmup | 100 | Minimum warmup even for small datasets |
+| min_samples | 200 | Minimum samples even for small datasets |
+| use_nlsq_informed_priors | True | Build TruncatedNormal priors from NLSQ |
+| nlsq_prior_width_factor | 2.0 | Width = NLSQ_std x factor (~95.4% coverage) |
+| prior_tempering | True | Scale priors by 1/K per shard (Scott et al.) |
+| reparameterization_d_total | True | Sample D_total = D0 + D_offset |
+| reparameterization_log_gamma | True | Sample log(gamma_dot_t0) |
+| bimodal_min_weight | 0.2 | Minimum weight for GMM bimodal detection |
+| bimodal_min_separation | 0.5 | Minimum relative separation for bimodal |
+| enable_jax_profiling | False | Enable jax.profiler tracing |
+| seed | 42 | Base seed for PRNG key generation |
 
 ______________________________________________________________________
 
 ## Key Files Reference
 
-| File | Lines | Purpose | |------|-------|---------| | **core.py** | 807 | Main
-orchestration, shard size selection, runtime estimation | | **data_prep.py** | 622 |
-Validation, sharding (stratified & random), noise estimation | | **sampler.py** | 1084 |
-NUTS sampling, preflight checks, MCMC-safe adjustments | | **model.py** | 373 |
-xpcs_model & xpcs_model_scaled (z-space) | | **scaling.py** | 342 | Gradient balancing
-via ParameterScaling & z-space | | **priors.py** | 791 | Prior distributions,
-data-driven initial value estimation | | **results.py** | 598 | CMCResult dataclass,
-convergence diagnostics | | **config.py** | 477 | CMCConfig parsing, validation,
-defaults | | **diagnostics.py** | 1000+ | R-hat, ESS, bimodal detection, cross-shard
-analysis, mode clustering | | **backends/base.py** | 400+ | Abstract backend,
-combine_shard_samples(), combine_shard_samples_bimodal() | |
-**backends/multiprocessing.py** | 400+ | Parallel execution, worker pool, thread
-management | | **io.py** | 403 | Result serialization (JSON/NPZ) | | **plotting.py** |
-478 | Visualization utilities |
+| File | Lines | Purpose |
+|------|-------|---------|
+| **core.py** | ~1566 | Main orchestration, shard size selection, runtime estimation |
+| **data_prep.py** | ~848 | Validation, sharding (stratified & random), noise estimation |
+| **sampler.py** | ~1326 | NUTS sampling, SamplingPlan, preflight checks, adaptive scaling |
+| **model.py** | ~1168 | 5 model variants (scaled, constant, averaged, constant_averaged, reparameterized) |
+| **priors.py** | ~1100 | Prior distributions, NLSQ-informed priors, data-driven estimation |
+| **results.py** | ~789 | CMCResult dataclass, convergence diagnostics, quality flags |
+| **config.py** | ~887 | CMCConfig parsing, validation, defaults, effective mode selection |
+| **diagnostics.py** | ~1269 | R-hat, ESS, bimodal detection, cross-shard analysis |
+| **reparameterization.py** | ~336 | t_ref computation, log-space transforms, ReparamConfig |
+| **backends/base.py** | ~887 | Abstract backend, combine_shard_samples(), robust consensus MC |
+| **backends/multiprocessing.py** | ~1953 | Parallel execution, shared memory, LPT scheduling, worker pool |
+| **io.py** | ~430 | Result serialization (JSON/NPZ) |
 
 ______________________________________________________________________
 
@@ -1195,15 +1369,16 @@ Root causes identified:
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-### New CMCConfig Fields (v2.20.0)
+### CMCConfig Fields Added in v2.20.0
 
-| Field | Type | Default | Description | |-------|------|---------|-------------| |
-`max_divergence_rate` | float | 0.10 | Filter shards exceeding this divergence rate | |
-`require_nlsq_warmstart` | bool | False | Require NLSQ warm-start (API-level) | |
-`min_points_per_shard` | int | 3,000 (laminar) / 5,000 (static) | **NEW**: Enforced
-minimum shard size | | `max_parameter_cv` | float | 1.0 | **NEW**: Heterogeneity abort
-threshold | | `heterogeneity_abort` | bool | True | **NEW**: Abort on high heterogeneity
-| | `min_points_per_param` | int | 1,500 | **NEW**: Param-aware shard sizing floor |
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `max_divergence_rate` | float | 0.10 | Filter shards exceeding this divergence rate |
+| `require_nlsq_warmstart` | bool | False | Require NLSQ warm-start (API-level) |
+| `min_points_per_shard` | int | 10,000 | Config field default; actual enforced minimum in code is MIN_SHARD_SIZE_LAMINAR=3000 |
+| `max_parameter_cv` | float | 1.0 | Heterogeneity abort threshold |
+| `heterogeneity_abort` | bool | True | Abort on high heterogeneity |
+| `min_points_per_param` | int | 1,500 | Param-aware shard sizing floor |
 
 ### February 2026: Mode-Aware Consensus MC (v2.22.0)
 
@@ -1351,3 +1526,80 @@ optimization:
     validation:
       max_parameter_cv: 1.5   # Relax threshold if physical heterogeneity expected
 ```
+
+### February 2026: NLSQ-Informed Priors & Prior Tempering (v2.22.2)
+
+**NLSQ-Informed Priors**
+
+When `nlsq_result` is provided to `fit_mcmc_jax()`, the prior builder constructs
+TruncatedNormal priors centered on NLSQ estimates with width = NLSQ_std x `nlsq_prior_width_factor`
+(default 2.0, ~95.4% coverage). This dramatically reduces warmup time and divergence rates.
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ NLSQ-Informed Prior Construction (priors.py, v2.22.2)                    │
+│                                                                           │
+│   For each physical parameter:                                           │
+│     center = nlsq_values[param]                                          │
+│     width  = nlsq_uncertainties[param] × width_factor                    │
+│     prior  = TruncatedNormal(center, width, low=lb, high=ub)            │
+│                                                                           │
+│   Config: use_nlsq_informed_priors=True (default)                        │
+│           nlsq_prior_width_factor=2.0 (default)                          │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Prior Tempering (Scott et al. 2016)**
+
+Without tempering, K shards each apply the full prior, producing combined posterior = prior^K x likelihood.
+With tempering, each shard uses prior^(1/K), producing the correct combined posterior = prior x likelihood.
+For Normal(mu, sigma): prior^(1/K) ~ Normal(mu, sigma*sqrt(K)), i.e., widen std by sqrt(num_shards).
+
+Enabled by default via `prior_tempering=True`.
+
+### February 2026: Adaptive Sampling & SamplingPlan (v2.22.2)
+
+Small datasets receive fewer warmup/samples to reduce NUTS overhead:
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ SamplingPlan (sampler.py, v2.22.2)                                       │
+│                                                                           │
+│   SamplingPlan.from_config(config, shard_size, n_params):                │
+│     • Scales warmup/samples based on shard_size                          │
+│     • Enforces min_warmup (100) and min_samples (200)                    │
+│     • Records was_adapted flag                                           │
+│                                                                           │
+│   IMPORTANT: Use SamplingPlan instead of config.num_warmup directly      │
+│   in sampling hot paths. config.num_warmup/num_samples are pre-          │
+│   adaptation defaults for logging and timeout estimation only.            │
+│                                                                           │
+│   Shard Size │ Warmup │ Samples │ Reduction                              │
+│   ───────────┼────────┼─────────┼──────────                              │
+│   50 pts     │ 140    │ 350     │ 75%                                    │
+│   5K pts     │ 250    │ 750     │ 50%                                    │
+│   50K+ pts   │ 500    │ 1,500   │ None                                   │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+### February 2026: JAX Profiling Support (v2.22.2)
+
+py-spy only profiles Python code; XLA runs native code invisible to it. Enable JAX
+profiling for XLA-level insights:
+
+```yaml
+optimization:
+  cmc:
+    per_shard_mcmc:
+      enable_jax_profiling: true
+      jax_profile_dir: ./profiles/jax
+```
+
+View with TensorBoard: `tensorboard --logdir=./profiles/jax`
+
+### February 2026: Constant-Averaged Mode & NLSQ Parity (v2.22.2)
+
+When both CMC and NLSQ use "auto" mode and NLSQ warm-start is present,
+`get_effective_per_angle_mode()` automatically upgrades to "constant_averaged".
+This fixes scaling values and reduces the parameter count, preventing
+contrast/offset sampling from absorbing physical parameter signal.
