@@ -437,7 +437,9 @@ def generate_and_plot_fitted_simulations(
         c2_result = np.array(c2_phi[0])
         c2_fitted_list.append(c2_result)
 
-        logger.debug(f"  C₂ range: [{float(np.nanmin(c2_result)):.4f}, {float(np.nanmax(c2_result)):.4f}]")
+        logger.debug(
+            f"  C₂ range: [{float(np.nanmin(c2_result)):.4f}, {float(np.nanmax(c2_result)):.4f}]"
+        )
 
     c2_fitted = np.array(c2_fitted_list)
 
@@ -483,8 +485,8 @@ def generate_and_plot_fitted_simulations(
 
     # Get time extent for plotting
     if t1 is not None and t2 is not None:
-        t1_min, t1_max = float(np.min(t1)), float(np.max(t1))
-        t2_min, t2_max = float(np.min(t2)), float(np.max(t2))
+        t1_min, t1_max = float(np.nanmin(t1)), float(np.nanmax(t1))
+        t2_min, t2_max = float(np.nanmin(t2)), float(np.nanmax(t2))
         # imshow uses .T so after transpose: x=t1, y=t2
         extent = [t1_min, t1_max, t2_min, t2_max]
         xlabel = "t₁ (s)"
@@ -626,11 +628,6 @@ def generate_nlsq_plots(
     c2_fit_display = c2_solver_scaled if use_solver_surface else c2_theoretical_scaled
     residuals_display = c2_exp - c2_fit_display
 
-    color_mode = color_scale_cfg.get("mode", "legacy")
-    _pin_legacy_range = color_scale_cfg.get(  # noqa: F841
-        "pin_legacy_range",
-        color_mode != "adaptive",
-    )
     percentile_min = color_scale_cfg.get("percentile_min", 1.0)
     percentile_max = color_scale_cfg.get("percentile_max", 99.0)
 

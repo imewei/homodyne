@@ -114,7 +114,7 @@ def plot_trace_plots(
     - Poor mixing: trace shows trends or gets stuck
     """
     # Extract samples
-    if result.samples_params is None:
+    if not hasattr(result, "samples_params") or result.samples_params is None:
         logger.warning("No parameter samples available for trace plots")
         fig = _create_empty_figure("No samples available")
         if not show:
@@ -129,9 +129,9 @@ def plot_trace_plots(
 
     # Generate parameter names if not provided
     if param_names is None:
-        if result.analysis_mode == "static":
+        if getattr(result, "analysis_mode", None) == "static":
             param_names = ["D0", "alpha", "D_offset"]
-        elif result.analysis_mode == "laminar_flow":
+        elif getattr(result, "analysis_mode", None) == "laminar_flow":
             param_names = [
                 "D0",
                 "alpha",
@@ -1007,9 +1007,7 @@ def plot_cmc_summary_dashboard(
             threshold = 2.0
 
             _kl_max = (
-                float(np.nanmax(kl_matrix))
-                if np.any(np.isfinite(kl_matrix))
-                else 0.0
+                float(np.nanmax(kl_matrix)) if np.any(np.isfinite(kl_matrix)) else 0.0
             )
             im = ax_kl.imshow(
                 kl_matrix,
@@ -1107,9 +1105,7 @@ def plot_cmc_summary_dashboard(
                 positions = np.arange(num_params)
                 import matplotlib as _mpl
 
-                _mpl_ver = tuple(
-                    int(x) for x in _mpl.__version__.split(".")[:2]
-                )
+                _mpl_ver = tuple(int(x) for x in _mpl.__version__.split(".")[:2])
                 _bp_kwargs: dict = {
                     "positions": positions,
                     "patch_artist": True,
@@ -1206,7 +1202,9 @@ def plot_cmc_summary_dashboard(
             )
 
     # Panel 4: Posterior histograms (bottom row)
-    _n_hist_params_total = len(result.mean_params) if result.mean_params is not None else 0
+    _n_hist_params_total = (
+        len(result.mean_params) if result.mean_params is not None else 0
+    )
     num_hist_params = min(2, _n_hist_params_total)
     for i in range(num_hist_params):
         ax_hist = fig.add_subplot(gs[2, i])

@@ -725,7 +725,7 @@ class TestNLSQErrorRecovery:
     """Test error handling and recovery scenarios."""
 
     def test_save_nlsq_results_with_missing_metadata(self):
-        """Test that fallback defaults work when metadata is missing."""
+        """Test that JSON files are saved even when dt is missing (no theoretical fits)."""
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir)
 
@@ -748,21 +748,18 @@ class TestNLSQErrorRecovery:
             config.config = config_dict
             config.get_config.return_value = config_dict
 
-            # Call save_nlsq_results - should use fallback defaults
+            # Call save_nlsq_results - should gracefully skip NPZ/plots when dt missing
             save_nlsq_results(result, data, config, output_dir)
 
-            # Verify files were still created
+            # Verify JSON files were still created
             nlsq_dir = output_dir / "nlsq"
             assert nlsq_dir.exists()
             assert (nlsq_dir / "parameters.json").exists()
-            assert (nlsq_dir / "fitted_data.npz").exists()
             assert (nlsq_dir / "analysis_results_nlsq.json").exists()
             assert (nlsq_dir / "convergence_metrics.json").exists()
 
-            # Verify fallback values were used in metadata
-            # L should default to 2000000.0 Å
-            npz_data = np.load(nlsq_dir / "fitted_data.npz")
-            assert npz_data["q"] is not None  # q comes from data, should be present
+            # NPZ requires theoretical fits which need dt - should be skipped
+            assert not (nlsq_dir / "fitted_data.npz").exists()
 
     def test_save_nlsq_results_plotting_failure_recovery(self):
         """Test that data files are saved even when plotting fails."""
