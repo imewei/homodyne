@@ -263,7 +263,7 @@ class PBSBackend(CMCBackend):
             "model_kwargs": serializable_kwargs,
         }
 
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(combined, f, indent=2)
 
     def _save_shard(self, shard: PreparedData, path: Path) -> None:
@@ -324,7 +324,7 @@ class PBSBackend(CMCBackend):
 
         # Write job script
         script_file = output_dir / f"job_{shard_id}.pbs"
-        with open(script_file, "w") as f:
+        with open(script_file, "w", encoding="utf-8") as f:
             f.write(job_script)
 
         # Submit job

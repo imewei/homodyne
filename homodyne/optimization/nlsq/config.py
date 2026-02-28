@@ -704,7 +704,7 @@ class NLSQConfig:
         if not path.exists():
             raise FileNotFoundError(f"Configuration file not found: {yaml_path}")
 
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             full_config = yaml.safe_load(f)
 
         if full_config is None:
