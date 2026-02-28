@@ -1184,7 +1184,7 @@ class ConfigManager:
         if normalized_mode != original_mode:
             self.config["analysis_mode"] = normalized_mode
             logger.debug(
-                f"Normalized analysis_mode: '{original_mode}' → '{normalized_mode}'"
+                f"Normalized analysis_mode: '{original_mode}' -> '{normalized_mode}'"
             )
 
     def _validate_config_version(self) -> None:
@@ -1263,7 +1263,7 @@ class ConfigManager:
             logger.info(
                 f"Normalized legacy config format:\n"
                 f"   {folder} + {filename}\n"
-                f"   → file_path: {file_path}",
+                f"   -> file_path: {file_path}",
             )
 
         # Handle phi angles similarly

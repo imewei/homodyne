@@ -406,7 +406,7 @@ class TheoryEngine:
         # Note: 1 Å = 1e-10 m, so 1e5 Å = 10 μm, 1e8 Å = 10 mm.
         if not (1e5 <= L <= 1e8):
             logger.warning(
-                f"L = {L:.1f} Å outside typical range [1e5, 1e8] Å (10 μm to 10 mm) - check experimental setup",
+                f"L = {L:.1f} AA outside typical range [1e5, 1e8] AA (10 um to 10 mm) - check experimental setup",
             )
 
     def _validate_scaling_parameters(self, contrast: float, offset: float) -> None:
