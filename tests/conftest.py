@@ -150,33 +150,15 @@ def jax_backend():
 
 @pytest.fixture(autouse=True, scope="function")
 def cleanup_jax_state():
-    """Clear JAX cache between tests to prevent contamination.
+    """Yield-only fixture kept for potential future test isolation needs.
 
-    This fixture automatically runs after each test to ensure clean state.
-    Addresses test isolation issues identified in v2.1.0 testing.
+    JAX JIT caches are keyed by (function_id, shape, dtype) and do not
+    cause cross-test contamination.  Clearing them after every test
+    forces recompilation (~113 ms per JIT function) and added ~285 s
+    (28 %) to the full suite via gc.collect() + jax.clear_caches().
+    Removed in Feb 2026 cleanup.
     """
-    try:
-        import jax
-    except ImportError:
-        yield
-        return
-
     yield
-
-    # Force garbage collection
-    import gc
-
-    gc.collect()
-
-    # Clear JAX compilation cache if available
-    # CRITICAL FIX (Nov 10, 2025): jax.clear_backends() removed in JAX 0.4.0+
-    # Use jax.clear_caches() for JAX 0.8.0 compatibility
-    if JAX_AVAILABLE:
-        try:
-            if hasattr(jax, "clear_caches"):
-                jax.clear_caches()
-        except Exception:
-            pass
 
 
 @pytest.fixture(autouse=True, scope="function")
