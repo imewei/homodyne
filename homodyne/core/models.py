@@ -367,9 +367,9 @@ class CombinedModel(
                 # (jax.vmap/jit creates BatchTracer objects that can't be formatted)
                 if logger.isEnabledFor(10):  # DEBUG level
                     try:
-                        # Only log if we can actually compute the values
-                        min_val = float(jnp.min(result))
-                        max_val = float(jnp.max(result))
+                        # Use nanmin/nanmax: g1 result may contain NaN from failed shards.
+                        min_val = float(jnp.nanmin(result))
+                        max_val = float(jnp.nanmax(result))
                         logger.debug(
                             f"CombinedModel.compute_g1: compute_g1_total completed, result.shape={result.shape}, min={min_val:.6e}, max={max_val:.6e}",
                         )

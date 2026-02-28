@@ -1026,7 +1026,7 @@ def validate_gradient_accuracy(
                 error = np.abs(numerical_grad - analytical_grad)
                 result["absolute_error"] = error
                 result["relative_error"] = error / (np.abs(analytical_grad) + EPS)
-                result["max_error"] = np.max(error)
+                result["max_error"] = np.nanmax(error)
                 result["accuracy_ok"] = np.all(error < tolerance)
 
             results[method] = result

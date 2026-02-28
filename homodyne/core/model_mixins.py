@@ -368,12 +368,12 @@ class BenchmarkingMixin:
                     "gradient_shape": gradient.shape,
                     "gradient_finite": bool(jnp.all(jnp.isfinite(gradient))),
                     "gradient_magnitude": float(jnp.linalg.norm(gradient)),
-                    "max_gradient_component": float(jnp.max(jnp.abs(gradient))),
+                    "max_gradient_component": float(jnp.nanmax(jnp.abs(gradient))),
                     "method_used": self.get_best_gradient_method(),
                 }
 
                 # Check for reasonable gradient magnitudes for XPCS physics
-                max_grad = float(jnp.max(jnp.abs(gradient)))
+                max_grad = float(jnp.nanmax(jnp.abs(gradient)))
                 if max_grad > 1e6:
                     validation_results["recommendations"].append(
                         "Gradient magnitudes are very large - check parameter scaling",
