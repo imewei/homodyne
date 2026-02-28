@@ -54,18 +54,18 @@ def save_nlsq_json_files(
 
     try:
         # Save parameters.json
-        with open(param_file, "w") as f:
+        with open(param_file, "w", encoding="utf-8") as f:
             json.dump(param_dict, f, indent=2, default=json_serializer)
         # T056: Log file path and write completion
         logger.debug(f"Saved parameters to {param_file}")
 
         # Save analysis_results_nlsq.json
-        with open(analysis_file, "w") as f:
+        with open(analysis_file, "w", encoding="utf-8") as f:
             json.dump(analysis_dict, f, indent=2, default=json_serializer)
         logger.debug(f"Saved analysis results to {analysis_file}")
 
         # Save convergence_metrics.json
-        with open(convergence_file, "w") as f:
+        with open(convergence_file, "w", encoding="utf-8") as f:
             json.dump(convergence_dict, f, indent=2, default=json_serializer)
         logger.debug(f"Saved convergence metrics to {convergence_file}")
 

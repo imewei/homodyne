@@ -116,7 +116,9 @@ def create_mcmc_parameters_dict(result: Any) -> dict:
     ):
         if isinstance(result.effective_sample_size, dict):
             ess_values = [
-                v for v in result.effective_sample_size.values() if v is not None
+                v
+                for v in result.effective_sample_size.values()
+                if v is not None and np.isfinite(v)
             ]
             if ess_values:
                 convergence_dict = param_dict["convergence"]
@@ -497,7 +499,7 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
         ess = np.asarray(result.ess)
         total_samples = result.n_samples * getattr(result, "n_chains", 1)
         if total_samples > 0:
-            ess_ratio = _json_safe(float(np.mean(ess) / total_samples))
+            ess_ratio = _json_safe(float(np.nanmean(ess) / total_samples))
             diagnostics_dict["posterior_checks"]["effective_sample_size_ratio"] = (
                 ess_ratio
             )
@@ -587,10 +589,10 @@ def create_mcmc_diagnostics_dict(result: Any) -> dict:
 
             if acceptance_rates:
                 shard_summary["acceptance_rate_stats"] = {
-                    "mean": _json_safe(float(np.mean(acceptance_rates))),
-                    "min": _json_safe(float(np.min(acceptance_rates))),
-                    "max": _json_safe(float(np.max(acceptance_rates))),
-                    "std": _json_safe(float(np.std(acceptance_rates))),
+                    "mean": _json_safe(float(np.nanmean(acceptance_rates))),
+                    "min": _json_safe(float(np.nanmin(acceptance_rates))),
+                    "max": _json_safe(float(np.nanmax(acceptance_rates))),
+                    "std": _json_safe(float(np.nanstd(acceptance_rates))),
                 }
 
             diagnostics_dict["cmc_specific"]["shard_summary"] = shard_summary
