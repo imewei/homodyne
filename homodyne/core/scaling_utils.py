@@ -314,8 +314,8 @@ def compute_averaged_scaling(
     offset_per_angle = np.array([estimates[f"offset_{i}"] for i in range(n_phi)])
 
     # Compute averaged values
-    contrast_avg = float(np.mean(contrast_per_angle))
-    offset_avg = float(np.mean(offset_per_angle))
+    contrast_avg = float(np.nanmean(contrast_per_angle))
+    offset_avg = float(np.nanmean(offset_per_angle))
 
     log.info(
         f"Computed averaged scaling for constant mode:\n"
