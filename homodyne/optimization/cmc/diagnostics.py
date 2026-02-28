@@ -19,7 +19,7 @@ except ImportError:
     az = None  # type: ignore[assignment]
 
 import numpy as np
-from sklearn.mixture import GaussianMixture  # type: ignore[import-untyped]
+from sklearn.mixture import GaussianMixture
 
 from homodyne.utils.logging import get_logger
 

@@ -58,11 +58,11 @@ Per-Angle Scaling Fix (v2.2):
 - Reference: ultra-think-20251106-012247
 
 Production Status:
-- ✅ Production-ready with comprehensive error recovery
-- ✅ Scientifically validated (100% test pass rate)
-- ✅ Parameter recovery accuracy: 2-14% on core parameters
-- ✅ Sub-linear performance scaling with dataset size
-- ✅ Per-angle scaling compatible with large datasets (v2.2+)
+- Production-ready with comprehensive error recovery
+- Scientifically validated (100% test pass rate)
+- Parameter recovery accuracy: 2-14% on core parameters
+- Sub-linear performance scaling with dataset size
+- Per-angle scaling compatible with large datasets (v2.2+)
 
 References:
 - NLSQ Package: https://github.com/imewei/NLSQ
@@ -2377,7 +2377,7 @@ class NLSQWrapper(NLSQAdapterBase):
                         "Using curve_fit_large with NLSQ automatic memory management"
                     )
 
-                    # ✅ CRITICAL FIX (Nov 14, 2025): Use parameter magnitude-based scaling
+                    # CRITICAL FIX (Nov 14, 2025): Use parameter magnitude-based scaling
                     # Same issue as curve_fit: x_scale from config may be scalar or "jac"
                     # which fails with 6+ orders of magnitude gradient disparity
                     if isinstance(x_scale_value, (int, float)):
@@ -2418,7 +2418,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     info["initial_cost"] = initial_cost
                 else:
                     # Use standard curve_fit for small datasets
-                    # ✅ CRITICAL FIX (Nov 14, 2025): Use parameter magnitude-based scaling
+                    # CRITICAL FIX (Nov 14, 2025): Use parameter magnitude-based scaling
                     # PROBLEM: x_scale="jac" fails when gradient magnitudes span 6+ orders
                     #   - D0 gradient: ~1e-4 (physics: D0*t^alpha with alpha<0 suppresses sensitivity)
                     #   - offset gradient: ~600 (direct additive term)

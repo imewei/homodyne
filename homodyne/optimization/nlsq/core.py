@@ -17,16 +17,16 @@ Key Features:
 - Dataset size-aware optimization strategies
 
 Performance (Validated T036-T041):
-- ✅ Parameter recovery accuracy: 2-14% on core parameters
-- ✅ Sub-linear time scaling: ~1.5s for 500-9,375 point datasets
-- ✅ Numerical stability: <4% deviation across initial conditions
-- ✅ Throughput: 317-5,977 points/second
-- ✅ 100% convergence rate across all validation tests
+- Parameter recovery accuracy: 2-14% on core parameters
+- Sub-linear time scaling: ~1.5s for 500-9,375 point datasets
+- Numerical stability: <4% deviation across initial conditions
+- Throughput: 317-5,977 points/second
+- 100% convergence rate across all validation tests
 
 Production Status:
-- ✅ Scientifically validated (7/7 tests passed)
-- ✅ Production-ready with error recovery
-- ✅ Approved for scientific research and deployment
+- Scientifically validated (7/7 tests passed)
+- Production-ready with error recovery
+- Approved for scientific research and deployment
 
 Migration from Optimistix:
 - Replaced Optimistix with NLSQ package (github.com/imewei/NLSQ)
@@ -437,7 +437,7 @@ def fit_nlsq_jax(
     x0 = _params_to_array(initial_params, analysis_mode)
 
     # Set up parameter bounds
-    # ✅ FIX: Use ParameterManager to load bounds from config (including custom user bounds)
+    # FIX: Use ParameterManager to load bounds from config (including custom user bounds)
     if HAS_PARAMETER_MANAGER:
         # Handle both ConfigManager objects and plain dicts
         if hasattr(config, "config"):
@@ -919,7 +919,7 @@ def _load_initial_params_from_config(
 
     # Add scaling parameters if missing
     # (config typically only includes physical parameters)
-    # ✅ FIX (Nov 14, 2025): Use physically reasonable defaults instead of data estimation
+    # FIX (Nov 14, 2025): Use physically reasonable defaults instead of data estimation
     # PROBLEM: Data estimation from diagonal-corrected g2 gives wrong values
     #   - Estimated: contrast~0.055, offset~1.003 (from percentile + max)
     #   - Actual fitted: contrast~0.26, offset~0.77 (from previous successful runs)

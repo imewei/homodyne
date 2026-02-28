@@ -191,7 +191,7 @@ class RecoveryStrategyApplicator:
         # Additive fallback for zero-valued params (multiplicative would leave them at zero)
         scale = np.where(np.abs(params) > 1e-30, np.abs(params), 1.0)
         perturbed = params + perturbation * scale
-        return perturbed
+        return np.asarray(perturbed)
 
     def should_retry(self, attempt: int) -> bool:
         """Check if another retry attempt should be made.
