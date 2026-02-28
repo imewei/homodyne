@@ -135,8 +135,8 @@ class PhiAngleFilter:
             # to max_angle. angle_filtering.py uses identical logic.
             if min_angle > max_angle:
                 logger.debug(
-                    f"Wrapped range [{min_angle}, {max_angle}] detected — "
-                    "applying split mask across ±180° boundary"
+                    f"Wrapped range [{min_angle}, {max_angle}] detected - "
+                    "applying split mask across +/-180 deg boundary"
                 )
                 range_mask = (phi_angles_array >= min_angle) | (
                     phi_angles_array <= max_angle
@@ -195,7 +195,7 @@ class PhiAngleFilter:
                 # splitting the mask: (angle >= min) | (angle <= max).
                 logger.debug(
                     f"Range {i}: min_angle ({min_angle}) > max_angle ({max_angle}) "
-                    "— wrapped range across +/-180 degree boundary",
+                    "- wrapped range across +/-180 degree boundary",
                 )
             if not (-360 <= min_angle <= 360 and -360 <= max_angle <= 360):
                 logger.error(

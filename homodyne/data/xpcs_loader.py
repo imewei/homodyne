@@ -903,7 +903,7 @@ class XPCSDataLoader:
 
             logger.debug(
                 f"Selected {len(q_matching_indices)} (q,phi) pairs with q-range: "
-                f"{dqlist[q_matching_indices].min():.6f} - {dqlist[q_matching_indices].max():.6f} Å⁻¹",
+                f"{dqlist[q_matching_indices].min():.6f} - {dqlist[q_matching_indices].max():.6f} AA^-1",
             )
 
             if quality_filtering_enabled:
@@ -1107,7 +1107,7 @@ class XPCSDataLoader:
                 n_discarded = abs(n_matrices - n_pairs)
                 logger.warning(
                     f"APS-U matrix/pair count mismatch: {n_matrices} matrices vs "
-                    f"{n_pairs} (q,phi) pairs — truncating to {min_count} entries, "
+                    f"{n_pairs} (q,phi) pairs - truncating to {min_count} entries, "
                     f"discarding {n_discarded} unmatched {'matrices' if n_matrices > n_pairs else '(q,phi) pairs'}. "
                     "Check HDF5 file integrity."
                 )
@@ -1128,7 +1128,7 @@ class XPCSDataLoader:
             selected_q = filtered_dqlist[selected_q_idx]
 
             logger.debug(
-                f"Selected optimal q-vector: {selected_q:.6f} Å⁻¹ (index {selected_q_idx})",
+                f"Selected optimal q-vector: {selected_q:.6f} AA^-1 (index {selected_q_idx})",
             )
 
             # Find all (q,phi) pairs matching the selected q-vector
@@ -1539,7 +1539,7 @@ class XPCSDataLoader:
         deviation = abs(selected_q - config_q)
 
         logger.info(
-            f"Selected closest q-vector: {selected_q:.6f} Å⁻¹ (target: {config_q:.6f} Å⁻¹, index: {closest_idx}, deviation: {deviation:.6f} Å⁻¹)",
+            f"Selected closest q-vector: {selected_q:.6f} AA^-1 (target: {config_q:.6f} AA^-1, index: {closest_idx}, deviation: {deviation:.6f} AA^-1)",
         )
 
         return closest_idx
@@ -1582,7 +1582,7 @@ class XPCSDataLoader:
                 f"Applied frame slicing: [{start_frame}:{end_frame}] -> shape {c2_exp.shape}",
             )
             logger.debug(
-                f"Frame reduction: {max_frames}×{max_frames} -> {sliced_frames}×{sliced_frames}",
+                f"Frame reduction: {max_frames}x{max_frames} -> {sliced_frames}x{sliced_frames}",
             )
         else:
             c2_exp = c2_matrices
@@ -1688,7 +1688,7 @@ class XPCSDataLoader:
         # Check if configuration q-vectors match (within floating point precision)
         if abs(current_config_q - cached_config_q) > 1e-8:
             logger.warning(
-                f"Cache q-vector mismatch: current={current_config_q:.6f}, cached={cached_config_q:.6f} Å⁻¹",
+                f"Cache q-vector mismatch: current={current_config_q:.6f}, cached={cached_config_q:.6f} AA^-1",
             )
 
         # Check if cache uses selective q-caching (v2.0 feature)
@@ -1701,7 +1701,7 @@ class XPCSDataLoader:
             actual_q = cache_metadata.get("actual_wavevector_q", cached_config_q)
             q_variance = cache_metadata.get("q_variance", 0.0)
             logger.debug(
-                f"Validated selective cache: q={actual_q:.6f} ± {q_variance:.6f} Å⁻¹",
+                f"Validated selective cache: q={actual_q:.6f} +/- {q_variance:.6f} AA^-1",
             )
 
     def _generate_cache_path(self) -> Path:

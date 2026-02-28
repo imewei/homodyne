@@ -254,9 +254,9 @@ def apply_angle_filtering_for_optimization(
     angles_too_large = phi_angles[np.abs(phi_angles) > 360]
     if len(angles_too_large) > 0:
         logger.warning(
-            f"Found {len(angles_too_large)} angle(s) with |φ| > 360°: {angles_too_large}. "
+            f"Found {len(angles_too_large)} angle(s) with |phi| > 360 deg: {angles_too_large}. "
             f"This may indicate data loading issues, unit confusion (radians vs degrees), "
-            f"or instrument malfunction. Angles will be normalized to [-180°, 180°] range.",
+            f"or instrument malfunction. Angles will be normalized to [-180 deg, 180 deg] range.",
         )
 
     # Normalize phi angles to [-180°, 180°] range (flow direction at 0°)
@@ -309,7 +309,7 @@ def apply_angle_filtering_for_optimization(
             },
         )
         logger.debug(
-            f"Normalized range [{min_angle}°, {max_angle}°] -> [{normalized_min}°, {normalized_max}°]"
+            f"Normalized range [{min_angle} deg, {max_angle} deg] -> [{normalized_min} deg, {normalized_max} deg]"
         )
 
     # Apply filtering with normalized angles and ranges

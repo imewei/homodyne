@@ -804,10 +804,10 @@ class TestAngleValidation:
         # Assert - Warning logged
         log_messages = [rec.message for rec in caplog.records]
         warning_found = any(
-            "|φ| > 360°" in msg and "400" in msg and "500" in msg
+            ("|phi| > 360" in msg or "|φ| > 360" in msg) and "400" in msg and "500" in msg
             for msg in log_messages
         )
-        assert warning_found, "Should log warning for angles > 360°"
+        assert warning_found, "Should log warning for angles > 360 deg"
 
         # Assert - Angles are normalized correctly
         assert 40.0 in filtered_data["phi_angles_list"]  # 400° → 40°
@@ -830,10 +830,10 @@ class TestAngleValidation:
         # Assert - Warning logged
         log_messages = [rec.message for rec in caplog.records]
         warning_found = any(
-            "|φ| > 360°" in msg and "-400" in msg and "-500" in msg
+            ("|phi| > 360" in msg or "|φ| > 360" in msg) and "-400" in msg and "-500" in msg
             for msg in log_messages
         )
-        assert warning_found, "Should log warning for angles < -360°"
+        assert warning_found, "Should log warning for angles < -360 deg"
 
         # Assert - Angles are normalized correctly
         assert -40.0 in filtered_data["phi_angles_list"]  # -400° → -40°
