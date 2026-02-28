@@ -320,9 +320,9 @@ def compute_averaged_scaling(
     log.info(
         f"Computed averaged scaling for constant mode:\n"
         f"  contrast_avg: {contrast_avg:.4f} (per-angle range: "
-        f"[{contrast_per_angle.min():.4f}, {contrast_per_angle.max():.4f}])\n"
+        f"[{float(np.nanmin(contrast_per_angle)):.4f}, {float(np.nanmax(contrast_per_angle)):.4f}])\n"
         f"  offset_avg: {offset_avg:.4f} (per-angle range: "
-        f"[{offset_per_angle.min():.4f}, {offset_per_angle.max():.4f}])"
+        f"[{float(np.nanmin(offset_per_angle)):.4f}, {float(np.nanmax(offset_per_angle)):.4f}])"
     )
 
     return contrast_avg, offset_avg, contrast_per_angle, offset_per_angle

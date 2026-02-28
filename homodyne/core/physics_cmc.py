@@ -765,7 +765,7 @@ def compute_g1_total(
         time_grid_np = np.asarray(time_grid)
         params_np = np.asarray(params)
 
-        logger.warning(
+        logger.debug(
             f"[CMC DEBUG] compute_g1_total called:\n"
             f"  q={q:.6g}, L={L:.6g}, dt={dt_value:.6g}\n"
             f"  wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6g}\n"
@@ -790,11 +790,6 @@ def compute_g1_total(
 
     # Log warning if phi appears to have duplicates (only when size is suspicious)
     # This is a soft check - we can't call np.unique() here without breaking JIT
-    if hasattr(phi, "shape") and len(phi.shape) == 1:
-        # If phi has many elements, it might contain duplicates
-        # But we can't check without calling unique(), so just trust the caller
-        pass
-
     result: jnp.ndarray = _compute_g1_total_elementwise(
         params,
         t1,

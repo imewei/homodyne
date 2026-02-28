@@ -164,8 +164,8 @@ class PhysicsFactors:
         )
 
         logger.debug(f"Created PhysicsFactors: q={q:.6e}, L={L:.6e}, dt={dt_value:.6e}")
-        logger.debug(f"  q²dt/2 = {wavevector_q_squared_half_dt:.6e}")
-        logger.debug(f"  qLdt/2π = {sinc_prefactor:.6e}")
+        logger.debug(f"  q^2*dt/2 = {wavevector_q_squared_half_dt:.6e}")
+        logger.debug(f"  q*L*dt/(2*pi) = {sinc_prefactor:.6e}")
 
         return instance
 
@@ -205,19 +205,19 @@ class PhysicsFactors:
         # Check reasonable ranges (warn but don't fail)
         if self.wavevector_q < 1e-4 or self.wavevector_q > 1.0:
             logger.warning(
-                f"wavevector_q = {self.wavevector_q:.6e} Å⁻¹ is outside typical "
-                f"XPCS range [10⁻⁴, 1] Å⁻¹",
+                f"wavevector_q = {self.wavevector_q:.6e} A^-1 is outside typical "
+                f"XPCS range [1e-4, 1] A^-1",
             )
 
         if self.stator_rotor_gap < 1e5 or self.stator_rotor_gap > 1e8:
             logger.warning(
-                f"stator_rotor_gap = {self.stator_rotor_gap:.6e} Å is outside typical "
-                f"range [10⁵, 10⁸] Å (10 μm - 10 mm)",
+                f"stator_rotor_gap = {self.stator_rotor_gap:.6e} A is outside typical "
+                f"range [1e5, 1e8] A (10 um - 10 mm)",
             )
 
         if self.dt < 1e-6 or self.dt > 1e3:
             logger.warning(
-                f"dt = {self.dt:.6e} s is outside typical XPCS range [10⁻⁶, 10³] s",
+                f"dt = {self.dt:.6e} s is outside typical XPCS range [1e-6, 1e3] s",
             )
 
         # Check derived factors
@@ -289,8 +289,8 @@ class PhysicsFactors:
     def __str__(self) -> str:
         """Human-readable string representation."""
         return (
-            f"PhysicsFactors(q={self.wavevector_q:.6e} Å⁻¹, "
-            f"L={self.stator_rotor_gap:.6e} Å, "
+            f"PhysicsFactors(q={self.wavevector_q:.6e} A^-1, "
+            f"L={self.stator_rotor_gap:.6e} A, "
             f"dt={self.dt:.6e} s)"
         )
 

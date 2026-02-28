@@ -85,7 +85,6 @@ except ImportError:
 
 
 from collections import OrderedDict
-from collections.abc import Callable
 from functools import partial, wraps
 from typing import Any, cast
 

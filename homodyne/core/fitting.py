@@ -14,7 +14,7 @@ Key Features:
 - Unified parameter space with specified bounds and priors
 - Dataset size-aware optimization (<1M, 1-10M, >20M points)
 - Mode-aware parameter management (3 vs 7 parameters)
-- CPU-primary, GPU-optional architecture
+- CPU-only architecture
 """
 
 from __future__ import annotations
@@ -340,7 +340,7 @@ if JAX_AVAILABLE:
         """JAX-accelerated batch least squares solver.
 
         Optimized least squares implementation with JAX acceleration
-        with JAX acceleration for GPU/CPU optimization.
+        for CPU-accelerated least squares fitting.
 
         Solves: min ||A*x - b||^2 where A = [theory, ones] for each angle.
         Model: c2_fitted = c2_theory * contrast + offset

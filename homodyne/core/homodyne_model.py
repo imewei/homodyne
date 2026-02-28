@@ -235,7 +235,7 @@ class HomodyneModel:
         logger.debug(
             f"Computed C2 for {len(phi_angles)} angles, "
             f"shape: {result.shape}, "
-            f"range: [{float(result.min()):.4f}, {float(result.max()):.4f}]",
+            f"range: [{float(np.nanmin(result)):.4f}, {float(np.nanmax(result)):.4f}]",
         )
 
         return np.array(result)

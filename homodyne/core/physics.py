@@ -334,7 +334,7 @@ def clip_parameters(
         clipped[i] = np.clip(param, min_val, max_val)
 
         if abs(clipped[i] - param) > 1e-10:
-            logger.debug(f"Clipped parameter {i}: {param} → {clipped[i]}")
+            logger.debug(f"Clipped parameter {i}: {param} -> {clipped[i]}")
 
     return clipped
 
@@ -403,17 +403,17 @@ def validate_experimental_setup(
     # Check q-range
     if not (PhysicsConstants.Q_MIN_TYPICAL <= q <= PhysicsConstants.Q_MAX_TYPICAL):
         logger.warning(
-            f"q-value {q:.2e} Å⁻¹ outside typical range "
+            f"q-value {q:.2e} A^-1 outside typical range "
             f"[{PhysicsConstants.Q_MIN_TYPICAL:.2e}, {PhysicsConstants.Q_MAX_TYPICAL:.2e}]",
         )
         return False
 
     # Check detector distance (L is in Angstroms)
-    # Typical range: 100,000 Å (10 μm) to 100,000,000 Å (10 mm)
-    # Note: 1 Å = 1e-10 m, so 1e5 Å = 10 μm, 1e8 Å = 10 mm.
+    # Typical range: 100,000 A (10 um) to 100,000,000 A (10 mm)
+    # Note: 1 A = 1e-10 m, so 1e5 A = 10 um, 1e8 A = 10 mm.
     if not (1e5 <= L <= 1e8):
         logger.warning(
-            f"Sample-detector distance {L:.1f} Å outside reasonable range [1e5, 1e8] Å (10 μm to 10 mm)",
+            f"Sample-detector distance {L:.1f} A outside reasonable range [1e5, 1e8] A (10 um to 10 mm)",
         )
         return False
 
@@ -421,7 +421,7 @@ def validate_experimental_setup(
     if wavelength is not None:
         if not (0.1 <= wavelength <= 10.0):
             logger.warning(
-                f"X-ray wavelength {wavelength:.2f} Å outside reasonable range [0.1, 10.0]",
+                f"X-ray wavelength {wavelength:.2f} A outside reasonable range [0.1, 10.0]",
             )
             return False
 
