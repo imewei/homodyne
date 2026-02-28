@@ -819,8 +819,12 @@ class AdvancedDatasetOptimizer:
 
         try:
             # Schedule cache warming for next likely operations
-            dataset_size = config["dataset_info"].size
-            method = config["performance_metrics"]["method"].lower()
+            dataset_info = config.get("dataset_info")
+            if dataset_info is None:
+                return
+            dataset_size = dataset_info.size
+            performance_metrics = config.get("performance_metrics", {})
+            method = performance_metrics.get("method", "").lower()
 
             # Predict next operation based on common patterns
             if method == "nlsq" and dataset_size > 1000000:
@@ -865,7 +869,7 @@ class AdvancedDatasetOptimizer:
             recent_optimizations = list(self._optimization_history)[-20:]  # Last 20
 
             stats["recent_performance"] = {
-                "avg_optimization_time_ms": np.mean(
+                "avg_optimization_time_ms": np.nanmean(
                     [h["optimization_time"] * 1000 for h in recent_optimizations],
                 ),
                 "success_rate": sum(h["success"] for h in recent_optimizations)
@@ -874,7 +878,7 @@ class AdvancedDatasetOptimizer:
                 "dataset_sizes_range": {
                     "min": min(h["dataset_size"] for h in recent_optimizations),
                     "max": max(h["dataset_size"] for h in recent_optimizations),
-                    "avg": np.mean([h["dataset_size"] for h in recent_optimizations]),
+                    "avg": np.nanmean([h["dataset_size"] for h in recent_optimizations]),
                 },
             }
 

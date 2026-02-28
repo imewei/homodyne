@@ -265,8 +265,8 @@ class XPCSDataFilter:
                 "q_min": q_min,
                 "q_max": q_max,
                 "selected_count": int(selected_count),
-                "data_q_min": float(np.min(dqlist)),
-                "data_q_max": float(np.max(dqlist)),
+                "data_q_min": float(np.nanmin(dqlist)),
+                "data_q_max": float(np.nanmax(dqlist)),
                 "selection_fraction": float(selected_count / len(dqlist)),
             }
         else:
@@ -325,8 +325,8 @@ class XPCSDataFilter:
                 "phi_min": phi_min,
                 "phi_max": phi_max,
                 "selected_count": int(selected_count),
-                "data_phi_min": float(np.min(dphilist)),
-                "data_phi_max": float(np.max(dphilist)),
+                "data_phi_min": float(np.nanmin(dphilist)),
+                "data_phi_max": float(np.nanmax(dphilist)),
                 "selection_fraction": float(selected_count / len(dphilist)),
             }
         else:
@@ -379,10 +379,10 @@ class XPCSDataFilter:
         selected_count = np.sum(mask)
         if quality_scores:
             score_stats = {
-                "mean": float(np.mean(quality_scores)),
-                "std": float(np.std(quality_scores)),
-                "min": float(np.min(quality_scores)),
-                "max": float(np.max(quality_scores)),
+                "mean": float(np.nanmean(quality_scores)),
+                "std": float(np.nanstd(quality_scores)),
+                "min": float(np.nanmin(quality_scores)),
+                "max": float(np.nanmax(quality_scores)),
             }
         else:
             score_stats = {"mean": 0.0, "std": 0.0, "min": 0.0, "max": 0.0}

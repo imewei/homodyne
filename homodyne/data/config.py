@@ -681,14 +681,14 @@ def save_yaml_config(config: dict[str, Any], output_path: str | Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        with open(output_path, "w") as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             yaml_module.dump(
                 config, f, default_flow_style=False, indent=2, sort_keys=False
             )
 
         logger.info(f"Saved YAML configuration to: {output_path}")
 
-    except Exception as e:
+    except (OSError, ValueError) as e:
         raise XPCSConfigurationError(
             f"Failed to save YAML configuration to {output_path}: {e}",
         ) from e

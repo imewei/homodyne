@@ -1851,7 +1851,7 @@ class XPCSDataLoader:
 
         # Check for reasonable correlation values (should be around 1.0 at t=0)
         diagonal_values = np.array([c2_exp[i].diagonal() for i in range(len(c2_exp))])
-        mean_diagonal = np.mean(diagonal_values[:, 0])  # t=0 correlation
+        mean_diagonal = np.nanmean(diagonal_values[:, 0])  # t=0 correlation
         if not (0.5 < mean_diagonal < 2.0):
             logger.warning(
                 f"Unusual t=0 correlation value: {mean_diagonal:.3f} (expected ~1.0)",

@@ -220,10 +220,10 @@ class PhiAngleFilter:
         stats = {
             "total_angles": len(phi_angles_array),
             "angle_range": {
-                "min": float(np.min(phi_angles_array)),
-                "max": float(np.max(phi_angles_array)),
-                "mean": float(np.mean(phi_angles_array)),
-                "std": float(np.std(phi_angles_array)),
+                "min": float(np.nanmin(phi_angles_array)) if phi_angles_array.size > 0 else float("nan"),
+                "max": float(np.nanmax(phi_angles_array)) if phi_angles_array.size > 0 else float("nan"),
+                "mean": float(np.nanmean(phi_angles_array)) if phi_angles_array.size > 0 else float("nan"),
+                "std": float(np.nanstd(phi_angles_array)) if phi_angles_array.size > 0 else float("nan"),
             },
             "target_ranges": self.target_ranges,
             "angles_per_range": [],

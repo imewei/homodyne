@@ -781,8 +781,8 @@ class DataQualityController:
                 symmetry_scores = []
                 for matrix in matrices:
                     if matrix.ndim == 2 and matrix.shape[0] == matrix.shape[1]:
-                        symmetry_error = np.mean(np.abs(matrix - matrix.T))
-                        max_val = np.max(np.abs(matrix))
+                        symmetry_error = np.nanmean(np.abs(matrix - matrix.T))
+                        max_val = np.nanmax(np.abs(matrix))
                         if max_val > 0:
                             symmetry_score = max(
                                 0,
@@ -912,7 +912,7 @@ class DataQualityController:
 
             # Check for unrealistic value ranges
             if arr.size > 0:
-                min_val, max_val = np.min(arr), np.max(arr)
+                min_val, max_val = np.nanmin(arr), np.nanmax(arr)
                 if min_val < -10 or max_val > 100:  # Unrealistic correlation values
                     return False
 

@@ -742,8 +742,8 @@ class PreprocessingPipeline:
             # Z-score normalization
             for i in range(len(c2_exp)):
                 c2_matrix = c2_exp[i]
-                mean_val = np.mean(c2_matrix)
-                std_val = np.std(c2_matrix)
+                mean_val = np.nanmean(c2_matrix)
+                std_val = np.nanstd(c2_matrix)
                 # Use epsilon guard instead of exact float equality: std_val near
                 # zero (subnormal) would pass != 0 but cause overflow on division.
                 if abs(std_val) > np.finfo(np.float64).eps:
@@ -757,8 +757,8 @@ class PreprocessingPipeline:
             # Min-max scaling [0, 1]
             for i in range(len(c2_exp)):
                 c2_matrix = c2_exp[i]
-                min_val = np.min(c2_matrix)
-                max_val = np.max(c2_matrix)
+                min_val = np.nanmin(c2_matrix)
+                max_val = np.nanmax(c2_matrix)
                 if max_val - min_val > np.finfo(float).eps * max(abs(max_val), 1.0):
                     normalized_data["c2_exp"][i] = (c2_matrix - min_val) / (
                         max_val - min_val
@@ -773,9 +773,9 @@ class PreprocessingPipeline:
             percentile_range = config.get("percentile_range", [25, 75])
             for i in range(len(c2_exp)):
                 c2_matrix = c2_exp[i]
-                q25, q75 = np.percentile(c2_matrix, percentile_range)
+                q25, q75 = np.nanpercentile(c2_matrix, percentile_range)
                 if q75 - q25 > np.finfo(float).eps * max(abs(q75), 1.0):
-                    median_val = np.median(c2_matrix)
+                    median_val = np.nanmedian(c2_matrix)
                     normalized_data["c2_exp"][i] = (c2_matrix - median_val) / (
                         q75 - q25
                     )
@@ -790,8 +790,8 @@ class PreprocessingPipeline:
             for i in range(len(c2_exp)):
                 c2_matrix = c2_exp[i]
 
-                # Normalize by maximum value but ensure t=0 correlation ≥ 1
-                max_val = np.max(c2_matrix)
+                # Normalize by maximum value but ensure t=0 correlation >= 1
+                max_val = np.nanmax(c2_matrix)
                 if max_val > 0:
                     normalized_matrix = c2_matrix / max_val
 
