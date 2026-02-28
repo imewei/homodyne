@@ -496,8 +496,8 @@ class HomodyneModel:
             f"  analysis_mode='{self.analysis_mode}',\n"
             f"  dt={self.dt} s,\n"
             f"  time_points={len(self.time_array)},\n"
-            f"  q={self.wavevector_q} Å⁻¹,\n"
-            f"  L={self.stator_rotor_gap} Å\n"
+            f"  q={self.wavevector_q} AA^-1,\n"
+            f"  L={self.stator_rotor_gap} AA\n"
             f")"
         )
 

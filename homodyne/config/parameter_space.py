@@ -888,7 +888,7 @@ class ParameterSpace:
             lines.append(
                 f"    {param_name:20s}: "
                 f"[{min_val:10.3e}, {max_val:10.3e}] "
-                f"{prior.dist_type}(μ={prior.mu:.3e}, σ={prior.sigma:.3e}) "
+                f"{prior.dist_type}(mu={prior.mu:.3e}, sigma={prior.sigma:.3e}) "
                 f"{unit}"
             )
 
