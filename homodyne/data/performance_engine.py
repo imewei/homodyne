@@ -665,23 +665,33 @@ class MultiLevelCache:
             item: Item to cache
             priority: Priority level (1=highest, 10=lowest)
         """
+        # Determine promotion decisions while holding the lock
         with self._lock:
             current_time = time.time()
 
             # Always try to put in memory cache first
             self._put_memory(key, item, current_time, priority)
 
-            # For high-priority items or frequently accessed items, also cache to SSD
-            if (
+            # Decide SSD/HDD promotion without performing disk I/O
+            should_cache_ssd = (
                 priority <= 3 or self._get_access_frequency(key) > 0.1
-            ):  # >0.1 accesses per minute
-                self._put_ssd(key, item)
-
-            # For very high priority or very frequently accessed items, cache to HDD
-            if (
+            )  # >0.1 accesses per minute
+            should_cache_hdd = (
                 priority <= 2 or self._get_access_frequency(key) > 1.0
-            ):  # >1 access per minute
+            )  # >1 access per minute
+
+        # Perform disk writes outside the lock
+        if should_cache_ssd:
+            try:
+                self._put_ssd(key, item)
+            except OSError as e:
+                logger.warning(f"Failed to cache to SSD {key}: {e}")
+
+        if should_cache_hdd:
+            try:
                 self._put_hdd(key, item)
+            except OSError as e:
+                logger.warning(f"Failed to cache to HDD {key}: {e}")
 
     def _put_memory(
         self,
@@ -853,13 +863,14 @@ class MultiLevelCache:
             return
 
         # Use LRU with access frequency weighting
-        least_valuable_key = None
-        least_value_score = float("inf")
+        # Higher value_score = less recent + less frequent = should be evicted
+        best_eviction_key = None
+        highest_eviction_score = float("-inf")
 
         current_time = time.time()
 
         for key in list(self._memory_cache.keys()):
-            # Calculate value score (lower is less valuable)
+            # Calculate value score (higher = less valuable = better eviction candidate)
             recency_score = current_time - self._access_times.get(
                 key,
                 0,
@@ -869,16 +880,16 @@ class MultiLevelCache:
             )  # Higher = less frequent
             value_score = recency_score * frequency_score
 
-            if value_score < least_value_score:
-                least_value_score = value_score
-                least_valuable_key = key
+            if value_score > highest_eviction_score:
+                highest_eviction_score = value_score
+                best_eviction_key = key
 
-        if least_valuable_key:
-            evicted_item = self._memory_cache.pop(least_valuable_key)
+        if best_eviction_key:
+            evicted_item = self._memory_cache.pop(best_eviction_key)
             evicted_size = self._estimate_size_mb(evicted_item)
             self._memory_usage_mb -= evicted_size
             logger.debug(
-                f"Evicted from memory: {least_valuable_key} ({evicted_size:.1f}MB)",
+                f"Evicted from memory: {best_eviction_key} ({evicted_size:.1f}MB)",
             )
 
     def _evict_from_ssd(self) -> None:
@@ -929,19 +940,25 @@ class MultiLevelCache:
                     "items": memory_items,
                     "usage_mb": self._memory_usage_mb,
                     "limit_mb": self.memory_cache_mb,
-                    "utilization": self._memory_usage_mb / self.memory_cache_mb,
+                    "utilization": self._memory_usage_mb / self.memory_cache_mb
+                    if self.memory_cache_mb > 0
+                    else 0.0,
                 },
                 "ssd_cache": {
                     "items": ssd_items,
                     "usage_mb": self._ssd_usage_mb,
                     "limit_mb": self.ssd_cache_mb,
-                    "utilization": self._ssd_usage_mb / self.ssd_cache_mb,
+                    "utilization": self._ssd_usage_mb / self.ssd_cache_mb
+                    if self.ssd_cache_mb > 0
+                    else 0.0,
                 },
                 "hdd_cache": {
                     "items": hdd_items,
                     "usage_mb": self._hdd_usage_mb,
                     "limit_mb": self.hdd_cache_mb,
-                    "utilization": self._hdd_usage_mb / self.hdd_cache_mb,
+                    "utilization": self._hdd_usage_mb / self.hdd_cache_mb
+                    if self.hdd_cache_mb > 0
+                    else 0.0,
                 },
                 "total_items": memory_items + ssd_items + hdd_items,
             }
@@ -1086,14 +1103,15 @@ class PerformanceEngine:
         # Cache metrics
         cache_stats = self.cache.get_cache_stats()
         if cache_stats["memory_cache"]["items"] > 0:
-            total_requests = sum(self.cache._access_counts.values())
-            cache_hits = len(
-                [
-                    k
-                    for k in self.cache._memory_cache.keys()
-                    if k in self.cache._access_counts
-                ],
-            )
+            with self.cache._lock:
+                total_requests = sum(self.cache._access_counts.values())
+                cache_hits = len(
+                    [
+                        k
+                        for k in self.cache._memory_cache.keys()
+                        if k in self.cache._access_counts
+                    ],
+                )
             cache_hit_rate = cache_hits / max(total_requests, 1)
             self.metrics.update(cache_hit_rate=cache_hit_rate)
 

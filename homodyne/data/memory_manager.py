@@ -487,6 +487,10 @@ class AdvancedMemoryManager:
         self._last_gc_time = 0.0
         self._gc_threshold_multiplier = 2.0  # Reduce GC frequency under pressure
 
+        # GC rate limiting (owned by this class, not by pressure_monitor)
+        self._consecutive_zero_gc: int = 0
+        self._last_gc_freed: int = 0
+
         # Virtual memory support
         self._virtual_memory_enabled = self.memory_config.get("virtual_memory", True)
         default_vm_path = str(
@@ -715,7 +719,9 @@ class AdvancedMemoryManager:
             mm = mmap.mmap(fh.fileno(), 0)
 
             # Create numpy array from memory map
-            buffer = np.ndarray(shape=(total_bytes // np.dtype(dtype).itemsize,), dtype=dtype, buffer=mm)
+            buffer = np.ndarray(
+                shape=(total_bytes // np.dtype(dtype).itemsize,), dtype=dtype, buffer=mm
+            )
 
             # Store references to keep mmap and file handle alive
             buffer._homodyne_mmap = mm  # type: ignore[attr-defined]
@@ -745,7 +751,7 @@ class AdvancedMemoryManager:
         if self._gc_optimization_enabled:
             # Skip GC if we've had 3+ consecutive zero-result collections
             # This indicates memory is in use by JAX/NumPy, not collectable
-            if self.pressure_monitor._consecutive_zero_gc >= 3:
+            if self._consecutive_zero_gc >= 3:
                 logger.debug(
                     "Skipping GC - previous calls freed 0 objects "
                     "(memory likely in JAX/NumPy arrays)"
@@ -756,10 +762,10 @@ class AdvancedMemoryManager:
 
                 # Track consecutive zero-result collections
                 if collected == 0:
-                    self.pressure_monitor._consecutive_zero_gc += 1
+                    self._consecutive_zero_gc += 1
                 else:
-                    self.pressure_monitor._consecutive_zero_gc = 0
-                self.pressure_monitor._last_gc_freed = collected
+                    self._consecutive_zero_gc = 0
+                self._last_gc_freed = collected
 
         # Clean up old pools
         self._cleanup_old_pools()

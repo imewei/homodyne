@@ -450,7 +450,17 @@ class AnalysisSummaryLogger:
         try:
             from homodyne.io.json_utils import json_safe as _json_safe
         except ImportError:
-            _json_safe = lambda x: x  # noqa: E731 — fallback if io not available
+
+            def _json_safe(value: Any) -> Any:
+                """Minimal fallback when io module unavailable."""
+                if isinstance(value, float):
+                    import math
+
+                    if math.isnan(value):
+                        return None
+                    if math.isinf(value):
+                        return str(value)
+                return value
 
         return {
             "run_id": self.run_id,

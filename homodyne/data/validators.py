@@ -109,6 +109,7 @@ def validate_numeric_range(
     *,
     require_positive: bool = False,
     value_bounds: tuple[float, float] | None = None,
+    allow_wrapped: bool = False,
 ) -> list[str]:
     """Validate a min/max range dictionary.
 
@@ -117,6 +118,7 @@ def validate_numeric_range(
         field_name: Name of the field for error messages
         require_positive: Whether values must be positive
         value_bounds: Optional (min, max) bounds for allowed values
+        allow_wrapped: Whether to allow min >= max (for wrapped ranges like phi)
 
     Returns:
         List of error messages (empty if valid)
@@ -135,7 +137,12 @@ def validate_numeric_range(
         if max_val is not None and max_val <= 0:
             errors.append(f"{field_name}.max ({max_val}) must be positive")
 
-    if min_val is not None and max_val is not None and min_val >= max_val:
+    if (
+        min_val is not None
+        and max_val is not None
+        and min_val >= max_val
+        and not allow_wrapped
+    ):
         errors.append(
             f"{field_name}.min ({min_val}) must be less than {field_name}.max ({max_val})"
         )

@@ -120,7 +120,7 @@ def detect_cpu_info() -> dict[str, Any]:
         elif info["supports_avx"]:
             optimization_flags.append("avx2")
 
-    except Exception as e:
+    except (OSError, UnicodeDecodeError, ValueError) as e:
         logger.warning(f"Could not detect full CPU information: {e}")
 
     return info

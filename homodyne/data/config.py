@@ -390,6 +390,7 @@ def _validate_parameter_values(config: dict[str, Any]) -> list[str]:
                     data_filtering.get("phi_range"),
                     "phi_range",
                     value_bounds=(-360, 360),
+                    allow_wrapped=True,
                 )
             )
             errors.extend(

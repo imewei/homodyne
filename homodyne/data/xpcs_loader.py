@@ -1647,11 +1647,15 @@ class XPCSDataLoader:
             "q_variance": q_variance,
             "q_count": len(q_values),
             "start_frame": self.analyzer_config.get("start_frame", 1),
-            "end_frame": self.analyzer_config.get(
-                "end_frame",
-                cache_data["c2_exp"].shape[-1]
-                + self.analyzer_config.get("start_frame", 1)
-                - 1,
+            # Normalize end_frame=-1 sentinel to actual last frame
+            "end_frame": (
+                self.analyzer_config.get("end_frame")
+                if self.analyzer_config.get("end_frame", -1) != -1
+                else (
+                    cache_data["c2_exp"].shape[-1]
+                    + self.analyzer_config.get("start_frame", 1)
+                    - 1
+                )
             ),
             "phi_count": len(cache_data["phi_angles_list"]),
             "cache_version": "2.0",

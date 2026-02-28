@@ -567,10 +567,14 @@ def _compute_data_statistics(data: dict[str, Any], report: DataQualityReport) ->
                     # np.nan != np.nan is True → cache miss on every call).
                     "sum": float(np.nansum(arr)) if arr.size > 0 else 0.0,
                     "first": (
-                        float(arr.flat[0]) if arr.size > 0 and np.isfinite(arr.flat[0]) else 0.0
+                        float(arr.flat[0])
+                        if arr.size > 0 and np.isfinite(arr.flat[0])
+                        else 0.0
                     ),
                     "last": (
-                        float(arr.flat[-1]) if arr.size > 0 and np.isfinite(arr.flat[-1]) else 0.0
+                        float(arr.flat[-1])
+                        if arr.size > 0 and np.isfinite(arr.flat[-1])
+                        else 0.0
                     ),
                 }
 
@@ -631,6 +635,7 @@ class IncrementalValidationCache:
     validation_level: str
     report: DataQualityReport
     timestamp: float
+    # Reserved for future incremental validation -- not currently used
     component_hashes: dict[str, str] = field(default_factory=dict)
 
     def is_valid_for_data(
@@ -1012,8 +1017,8 @@ def _cache_validation_result(
     _validation_cache[cache_key] = cache_entry
 
     # Limit cache size
-    if len(_validation_cache) > 50:
-        # Remove oldest entries
+    if len(_validation_cache) > 100:
+        # Remove oldest entries by timestamp
         oldest_keys = sorted(
             _validation_cache.keys(),
             key=lambda k: _validation_cache[k].timestamp,

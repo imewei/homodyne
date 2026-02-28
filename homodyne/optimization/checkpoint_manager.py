@@ -287,6 +287,13 @@ class CheckpointManager:
                 version = f.attrs.get("version", "unknown")
                 timestamp = f.attrs.get("timestamp", 0.0)
 
+                # Version compatibility check
+                if version != __version__:
+                    logger.warning(
+                        f"Checkpoint version {version} != current {__version__}. "
+                        "Optimizer state may be incompatible."
+                    )
+
                 # Validate checksum
                 computed_checksum = self._compute_checksum(optimizer_bytes)
                 if computed_checksum != stored_checksum:
