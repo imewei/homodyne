@@ -78,7 +78,7 @@ class ParameterSpace:
     """
 
     # Scaling parameters (always present)
-    # ✅ FIXED (Nov 11, 2025): Updated bounds to match homodyne physics g₂ = 1 + β×g₁²
+    # FIXED (Nov 11, 2025): Updated bounds to match homodyne physics g₂ = 1 + β×g₁²
     # - contrast (β): Physical range [0, 1] where 0=no signal, 1=perfect contrast
     # - offset: Deviation from baseline=1.0, range [0.5, 1.5] allows ±50% variation
     contrast_bounds: tuple[float, float] = (0.0, 1.0)  # Physical contrast range
@@ -97,7 +97,7 @@ class ParameterSpace:
 
     # Physical parameter bounds (mode-dependent) - STANDARDIZED VALUES
     D0_bounds: tuple[float, float] = (1.0, 1000000.0)
-    alpha_bounds: tuple[float, float] = (-2.0, 2.0)  # ✅ FIXED: Was (-10, 10)
+    alpha_bounds: tuple[float, float] = (-2.0, 2.0)  # FIXED: Was (-10, 10)
     # Extreme values like alpha=-4.96 cause numerical underflow: exp(-q²*D₀*t^α*dt/2) → 0
     D_offset_bounds: tuple[float, float] = (
         -100000.0,
@@ -106,7 +106,7 @@ class ParameterSpace:
 
     # Laminar flow parameters (only for laminar_flow mode) - STANDARDIZED VALUES
     gamma_dot_t0_bounds: tuple[float, float] = (1e-5, 1.0)
-    beta_bounds: tuple[float, float] = (-2.0, 2.0)  # ✅ FIXED: Was (-10, 10)
+    beta_bounds: tuple[float, float] = (-2.0, 2.0)  # FIXED: Was (-10, 10)
     gamma_dot_t_offset_bounds: tuple[float, float] = (
         -1.0,
         1.0,

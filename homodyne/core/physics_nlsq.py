@@ -98,7 +98,7 @@ def _compute_g1_diffusion_meshgrid(
         # Handle 1D and other cases
         time_array = jnp.atleast_1d(t1)
 
-    # ✅ CRITICAL FIX (Nov 11, 2025): time_array is ALREADY physical time in seconds
+    # CRITICAL FIX (Nov 11, 2025): time_array is ALREADY physical time in seconds
     # Data loader converts: time_1d = np.linspace(0, dt*(end-start), size)
     # Result: time_array = [0.0, 0.1, 0.2, ...] seconds (NOT frame indices!)
     # DO NOT multiply by dt - that would cause 10× time scale error!
@@ -191,7 +191,7 @@ def _compute_g1_shear_meshgrid(
         # Handle 1D and other cases
         time_array = jnp.atleast_1d(t1)
 
-    # ✅ CRITICAL FIX (Nov 11, 2025): time_array is ALREADY physical time in seconds
+    # CRITICAL FIX (Nov 11, 2025): time_array is ALREADY physical time in seconds
     # Data loader converts: time_1d = np.linspace(0, dt*(end-start), size)
     # Result: time_array = [0.0, 0.1, 0.2, ...] seconds (NOT frame indices!)
     # DO NOT multiply by dt - that would cause 10× time scale error!

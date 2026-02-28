@@ -635,7 +635,7 @@ def compute_g1_diffusion(
     # Build/infer time grid (prefer provided grid to avoid JIT shape issues)
     if time_grid is None:
         # Infer maximum time and construct grid from dt
-        max_time = float(np.max(np.concatenate([np.asarray(t1), np.asarray(t2)])))
+        max_time = float(np.nanmax(np.concatenate([np.asarray(t1), np.asarray(t2)])))
         n_time = int(round(max_time / dt_value)) + 1
         time_grid = jnp.linspace(0.0, dt_value * (n_time - 1), n_time)
     else:
@@ -740,7 +740,7 @@ def compute_g1_total(
     if time_grid is None:
         # Infer maximum time and construct grid from dt_value
         dt_safe = float(dt_value)
-        max_time = float(np.max(np.concatenate([np.asarray(t1), np.asarray(t2)])))
+        max_time = float(np.nanmax(np.concatenate([np.asarray(t1), np.asarray(t2)])))
         n_time = int(round(max_time / dt_safe)) + 1
         time_grid = jnp.linspace(0.0, dt_safe * (n_time - 1), n_time)
         if _debug:
@@ -771,9 +771,9 @@ def compute_g1_total(
             f"  wavevector_q_squared_half_dt={wavevector_q_squared_half_dt:.6g}\n"
             f"  sinc_prefactor={sinc_prefactor:.6g}\n"
             f"  params={params_np}\n"
-            f"  t1: shape={t1_np.shape}, range=[{t1_np.min():.4g}, {t1_np.max():.4g}]\n"
-            f"  t2: shape={t2_np.shape}, range=[{t2_np.min():.4g}, {t2_np.max():.4g}]\n"
-            f"  time_grid: shape={time_grid_np.shape}, range=[{time_grid_np.min():.4g}, {time_grid_np.max():.4g}]\n"
+            f"  t1: shape={t1_np.shape}, range=[{np.nanmin(t1_np):.4g}, {np.nanmax(t1_np):.4g}]\n"
+            f"  t2: shape={t2_np.shape}, range=[{np.nanmin(t2_np):.4g}, {np.nanmax(t2_np):.4g}]\n"
+            f"  time_grid: shape={time_grid_np.shape}, range=[{np.nanmin(time_grid_np):.4g}, {np.nanmax(time_grid_np):.4g}]\n"
             f"  phi: {np.asarray(phi)}"
         )
 
@@ -782,7 +782,7 @@ def compute_g1_total(
     # This is especially critical for MCMC backends where NumPyro JIT-traces this function
     #
     # OLD CODE (REMOVED):
-    # phi_unique = jnp.unique(jnp.atleast_1d(phi))  # ❌ Causes JAX concretization error in MCMC
+    # phi_unique = jnp.unique(jnp.atleast_1d(phi))  # REMOVED: Causes JAX concretization error in MCMC
     #
     # NEW CODE:
     # Assume phi is already unique (caller's responsibility to pre-compute)
