@@ -298,7 +298,7 @@ def interactive_builder() -> dict[str, Any]:
             allow_absolute=True,
         )
     except (PathValidationError, ValueError) as e:
-        print(f"Error: Invalid output path — {e}", file=sys.stderr)
+        print(f"Error: Invalid output path - {e}", file=sys.stderr)
         return {}
     if validated_path is None:
         print("Error: Invalid output path", file=sys.stderr)

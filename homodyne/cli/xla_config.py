@@ -49,15 +49,15 @@ def set_mode(mode: str) -> bool:
 
     # Show what this means
     if mode == "cmc":
-        print("  → 4 CPU devices for parallel CMC chains")
+        print("  -> 4 CPU devices for parallel CMC chains")
     elif mode == "cmc-hpc":
-        print("  → 8 CPU devices for HPC clusters (36+ cores)")
+        print("  -> 8 CPU devices for HPC clusters (36+ cores)")
     elif mode == "nlsq":
-        print("  → 1 CPU device (NLSQ doesn't need parallelism)")
+        print("  -> 1 CPU device (NLSQ doesn't need parallelism)")
     elif mode == "auto":
         devices = detect_optimal_devices()
         cores = os.cpu_count() or 4
-        print(f"  → Auto-detect: {devices} devices (detected {cores} CPU cores)")
+        print(f"  -> Auto-detect: {devices} devices (detected {cores} CPU cores)")
 
     # Check if activation scripts exist before suggesting them
     venv = os.environ.get("VIRTUAL_ENV")

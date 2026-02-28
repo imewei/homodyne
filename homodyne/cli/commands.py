@@ -872,7 +872,10 @@ def _apply_angle_filtering_for_optimization(
     original_phi_angles = np.asarray(phi_angles).copy()
     phi_angles_normalized = normalize_angle_to_symmetric_range(np.asarray(phi_angles))
     phi_angles = np.asarray(phi_angles_normalized)
-    logger.info("Normalized phi angles to [-180°, 180°] range (flow direction at 0°)")
+    logger.info(
+        "Normalized phi angles to [-180, 180] deg range"
+        " (flow direction at 0 deg)"
+    )
     logger.debug(f"Original angles: {original_phi_angles}")
     logger.debug(f"Normalized angles: {phi_angles}")
 
@@ -2055,7 +2058,7 @@ def _extract_nlsq_metadata(config: Any, data: dict[str, Any]) -> dict[str, Any]:
 
         if "stator_rotor_gap" in geometry:
             metadata["L"] = float(geometry["stator_rotor_gap"])
-            logger.debug(f"Using stator_rotor_gap L = {metadata['L']:.1f} Å")
+            logger.debug(f"Using stator_rotor_gap L = {metadata['L']:.1f} A")
         else:
             exp_config = config_dict.get("experimental_data", {})
             exp_geometry = exp_config.get("geometry", {})
@@ -2066,16 +2069,16 @@ def _extract_nlsq_metadata(config: Any, data: dict[str, Any]) -> dict[str, Any]:
             elif "sample_detector_distance" in exp_config:
                 metadata["L"] = float(exp_config["sample_detector_distance"])
                 logger.debug(
-                    f"Using sample_detector_distance L = {metadata['L']:.1f} Å",
+                    f"Using sample_detector_distance L = {metadata['L']:.1f} A",
                 )
             else:
-                metadata["L"] = 2000000.0  # Default: 200 µm
+                metadata["L"] = 2000000.0  # Default: 200 um
                 logger.warning(
-                    f"No L parameter found, using default L = {metadata['L']:.1f} Å",
+                    f"No L parameter found, using default L = {metadata['L']:.1f} A",
                 )
     except (AttributeError, TypeError, ValueError) as e:
         metadata["L"] = 2000000.0
-        logger.warning(f"Error reading L: {e}, using default L = 2000000.0 Å")
+        logger.warning(f"Error reading L: {e}, using default L = 2000000.0 A")
 
     # dt (time step) extraction (optional)
     try:
@@ -2101,7 +2104,7 @@ def _extract_nlsq_metadata(config: Any, data: dict[str, Any]) -> dict[str, Any]:
         q_list = np.asarray(data["wavevector_q_list"])
         if q_list.size > 0:
             metadata["q"] = float(q_list[0])
-            logger.debug(f"Using q = {metadata['q']:.6f} Å⁻¹")
+            logger.debug(f"Using q = {metadata['q']:.6f} A^-1")
         else:
             metadata["q"] = None
             logger.warning("Empty wavevector_q_list")
