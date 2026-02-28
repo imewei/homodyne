@@ -217,7 +217,7 @@ class SingleStartResult:
     final_params: NDArray[np.float64]
     chi_squared: float
     reduced_chi_squared: float = float("inf")
-    success: bool = True
+    success: bool = False
     status: int = 0
     message: str = ""
     n_iterations: int = 0

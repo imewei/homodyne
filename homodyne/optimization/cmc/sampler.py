@@ -985,7 +985,7 @@ def run_nuts_sampling(
     if "accept_prob" in extra_fields:
         accept_prob_arr = np.asarray(extra_fields["accept_prob"])
         if accept_prob_arr.size:
-            accept_prob = float(np.mean(accept_prob_arr))
+            accept_prob = float(np.nanmean(accept_prob_arr))
 
     # Adaptation diagnostics (step size, mass matrix)
     step_size = 0.0
@@ -994,9 +994,9 @@ def run_nuts_sampling(
     adapt_states = _extract_adapt_states(last_state)
     step_sizes = _extract_step_sizes(adapt_states)
     if step_sizes:
-        step_size = float(np.median(step_sizes))
-        step_size_min = float(np.min(step_sizes))
-        step_size_max = float(np.max(step_sizes))
+        step_size = float(np.nanmedian(step_sizes))
+        step_size_min = float(np.nanmin(step_sizes))
+        step_size_max = float(np.nanmax(step_sizes))
     else:
         step_size_min = None
         step_size_max = None
@@ -1024,12 +1024,12 @@ def run_nuts_sampling(
     if step_sizes:
         run_logger.info(
             "Adapted step_size stats: "
-            f"min={float(np.min(step_sizes)):.3g}, "
-            f"median={float(np.median(step_sizes)):.3g}, "
-            f"max={float(np.max(step_sizes)):.3g}"
+            f"min={float(np.nanmin(step_sizes)):.3g}, "
+            f"median={float(np.nanmedian(step_sizes)):.3g}, "
+            f"max={float(np.nanmax(step_sizes)):.3g}"
         )
     elif step_size > 0:
-        run_logger.info(f"Adapted step_size≈{step_size:.3g} (from extra_fields)")
+        run_logger.info(f"Adapted step_size~={step_size:.3g} (from extra_fields)")
     if inv_mass_summary is not None:
         run_logger.info(f"Adapted inverse_mass_matrix: {inv_mass_summary}")
 
@@ -1037,11 +1037,11 @@ def run_nuts_sampling(
     if accept_prob_arr is not None and accept_prob_arr.size:
         run_logger.info(
             "accept_prob stats: "
-            f"mean={float(np.mean(accept_prob_arr)):.3g}, "
-            f"min={float(np.min(accept_prob_arr)):.3g}, "
-            f"median={float(np.median(accept_prob_arr)):.3g}, "
-            f"max={float(np.max(accept_prob_arr)):.3g}, "
-            f"frac<1e-12={float(np.mean(accept_prob_arr < 1e-12)):.1%}, "
+            f"mean={float(np.nanmean(accept_prob_arr)):.3g}, "
+            f"min={float(np.nanmin(accept_prob_arr)):.3g}, "
+            f"median={float(np.nanmedian(accept_prob_arr)):.3g}, "
+            f"max={float(np.nanmax(accept_prob_arr)):.3g}, "
+            f"frac<1e-12={float(np.nanmean(accept_prob_arr < 1e-12)):.1%}, "
             f"shape={accept_prob_arr.shape}"
         )
 
@@ -1051,9 +1051,9 @@ def run_nuts_sampling(
                 a = np.asarray(accept_prob_arr[i]).reshape(-1)
                 if a.size:
                     run_logger.info(
-                        f"accept_prob chain[{i}] mean={float(np.mean(a)):.3g} "
-                        f"min={float(np.min(a)):.3g} median={float(np.median(a)):.3g} "
-                        f"max={float(np.max(a)):.3g}"
+                        f"accept_prob chain[{i}] mean={float(np.nanmean(a)):.3g} "
+                        f"min={float(np.nanmin(a)):.3g} median={float(np.nanmedian(a)):.3g} "
+                        f"max={float(np.nanmax(a)):.3g}"
                     )
 
     if "diverging" in extra_fields:

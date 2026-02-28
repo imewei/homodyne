@@ -254,8 +254,8 @@ class CMCResult:
         for i, name in enumerate(param_names):
             if name in mcmc_samples.samples:
                 samples_flat = mcmc_samples.samples[name].flatten()
-                parameters[i] = np.mean(samples_flat)
-                uncertainties[i] = np.std(samples_flat)
+                parameters[i] = np.nanmean(samples_flat)
+                uncertainties[i] = np.nanstd(samples_flat)
 
                 # CRITICAL FIX (Dec 2025): Exclude _z (z-space) parameters from legacy stats
                 # The scaled model samples contrast_0_z ~ N(0,1) and registers contrast_0 as
@@ -288,19 +288,27 @@ class CMCResult:
             # Not enough samples for covariance - return zeros
             covariance = np.zeros((all_samples.shape[1], all_samples.shape[1]))
         else:
-            # Q4: Subsample to at most 10K rows before computing covariance.
-            # np.cov is O(N*P^2); for N=600K, P=9 this takes ~1 s and uses ~170 MB.
-            # 10K rows give a statistically equivalent 9x9 result in ~50 ms.
-            _max_cov_samples = 10_000
-            if all_samples.shape[0] > _max_cov_samples:
-                # Fixed seed for reproducible covariance subsampling.
-                rng = np.random.default_rng(seed=0)
-                idx = rng.choice(
-                    all_samples.shape[0], size=_max_cov_samples, replace=False
-                )
-                covariance = np.cov(all_samples[idx], rowvar=False)
+            # Filter rows with any NaN before computing covariance.
+            # NaN samples arise from failed shards or NUTS divergences that
+            # produce non-finite values; np.cov propagates them to the full matrix.
+            finite_mask = np.all(np.isfinite(all_samples), axis=1)
+            all_samples_finite = all_samples[finite_mask]
+            if all_samples_finite.shape[0] < 2:
+                covariance = np.zeros((all_samples.shape[1], all_samples.shape[1]))
             else:
-                covariance = np.cov(all_samples, rowvar=False)
+                # Q4: Subsample to at most 10K rows before computing covariance.
+                # np.cov is O(N*P^2); for N=600K, P=9 this takes ~1 s and uses ~170 MB.
+                # 10K rows give a statistically equivalent 9x9 result in ~50 ms.
+                _max_cov_samples = 10_000
+                if all_samples_finite.shape[0] > _max_cov_samples:
+                    # Fixed seed for reproducible covariance subsampling.
+                    rng = np.random.default_rng(seed=0)
+                    idx = rng.choice(
+                        all_samples_finite.shape[0], size=_max_cov_samples, replace=False
+                    )
+                    covariance = np.cov(all_samples_finite[idx], rowvar=False)
+                else:
+                    covariance = np.cov(all_samples_finite, rowvar=False)
 
         # Create ArviZ InferenceData
         inference_data = create_inference_data(mcmc_samples)
@@ -309,11 +317,11 @@ class CMCResult:
         std_params_stats = ParameterStats(physical_param_names, std_params_physical)
 
         if contrast_values:
-            mean_params_stats["contrast"] = float(np.mean(contrast_values))
-            std_params_stats["contrast"] = float(np.mean(contrast_stds))
+            mean_params_stats["contrast"] = float(np.nanmean(contrast_values))
+            std_params_stats["contrast"] = float(np.nanmean(contrast_stds))
         if offset_values:
-            mean_params_stats["offset"] = float(np.mean(offset_values))
-            std_params_stats["offset"] = float(np.mean(offset_stds))
+            mean_params_stats["offset"] = float(np.nanmean(offset_values))
+            std_params_stats["offset"] = float(np.nanmean(offset_stds))
 
         return cls(
             parameters=parameters,
@@ -361,11 +369,11 @@ class CMCResult:
             samples_flat = self.samples[name].flatten()
 
             stats[name] = {
-                "mean": float(np.mean(samples_flat)),
-                "std": float(np.std(samples_flat)),
-                "median": float(np.median(samples_flat)),
-                "hdi_5%": float(np.percentile(samples_flat, 5)),
-                "hdi_95%": float(np.percentile(samples_flat, 95)),
+                "mean": float(np.nanmean(samples_flat)),
+                "std": float(np.nanstd(samples_flat)),
+                "median": float(np.nanmedian(samples_flat)),
+                "hdi_5%": float(np.nanpercentile(samples_flat, 5)),
+                "hdi_95%": float(np.nanpercentile(samples_flat, 95)),
                 "r_hat": self.r_hat.get(name, np.nan),
                 "ess_bulk": self.ess_bulk.get(name, np.nan),
                 "ess_tail": self.ess_tail.get(name, np.nan),
