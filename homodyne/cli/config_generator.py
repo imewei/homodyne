@@ -20,7 +20,7 @@ from typing import Any
 import yaml
 
 try:
-    from ruamel.yaml import YAML  # type: ignore[import-not-found]
+    from ruamel.yaml import YAML
 
     HAS_RUAMEL = True
 except ImportError:
@@ -291,7 +291,7 @@ def interactive_builder() -> dict[str, Any]:
 
     # Validate output path before creating directories to prevent path traversal.
     try:
-        output_path = validate_save_path(
+        validated_path = validate_save_path(
             output_path,
             allowed_extensions=(".yaml", ".yml"),
             require_parent_exists=False,
@@ -300,6 +300,10 @@ def interactive_builder() -> dict[str, Any]:
     except (PathValidationError, ValueError) as e:
         print(f"Error: Invalid output path — {e}", file=sys.stderr)
         return {}
+    if validated_path is None:
+        print("Error: Invalid output path", file=sys.stderr)
+        return {}
+    output_path = validated_path
 
     # Save configuration with comment preservation
     output_path.parent.mkdir(parents=True, exist_ok=True)
