@@ -469,8 +469,7 @@ def log_analysis_summary(
     logger.info(f"  Shards: {shards_succeeded}/{n_shards} ({success_rate:.0%} success)")
     logger.info(f"  Runtime: {execution_time:.1f}s ({execution_time / 60:.1f} min)")
     logger.info(
-        f"  R-hat (max): {max_rhat:.4f} "
-        f"{'[OK]' if max_rhat <= 1.05 else '[FAIL]'}"
+        f"  R-hat (max): {max_rhat:.4f} {'[OK]' if max_rhat <= 1.05 else '[FAIL]'}"
     )
     logger.info(
         f"  ESS (min): {min_ess:.0f} "

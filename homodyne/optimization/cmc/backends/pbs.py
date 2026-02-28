@@ -451,7 +451,6 @@ class PBSBackend(CMCBackend):
                 + (" ..." if len(missing) > 5 else "")
             )
         for path in result_files:
-
             data = np.load(path, allow_pickle=False)
 
             # Reconstruct samples dict from prefixed arrays
@@ -479,8 +478,16 @@ class PBSBackend(CMCBackend):
 
             # Derive actual chain/sample counts from array shape (not serialized metadata)
             first_param = next(iter(samples_dict.values()), None)
-            actual_n_chains = first_param.shape[0] if first_param is not None else int(data["n_chains"])
-            actual_n_samples = first_param.shape[1] if first_param is not None and first_param.ndim >= 2 else int(data["n_samples"])
+            actual_n_chains = (
+                first_param.shape[0]
+                if first_param is not None
+                else int(data["n_chains"])
+            )
+            actual_n_samples = (
+                first_param.shape[1]
+                if first_param is not None and first_param.ndim >= 2
+                else int(data["n_samples"])
+            )
 
             samples = MCMCSamples(
                 samples=samples_dict,

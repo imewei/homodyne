@@ -508,9 +508,7 @@ class StratifiedResidualFunctionJIT:
                     f"  Expected {n_expected} angles, got {len(chunk_angles)}"
                 )
 
-        self.logger.info(
-            "Chunk structure validation passed: all chunks angle-complete"
-        )
+        self.logger.info("Chunk structure validation passed: all chunks angle-complete")
         return True
 
     def get_diagnostics(self) -> dict:

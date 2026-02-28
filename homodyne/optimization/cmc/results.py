@@ -304,7 +304,9 @@ class CMCResult:
                     # Fixed seed for reproducible covariance subsampling.
                     rng = np.random.default_rng(seed=0)
                     idx = rng.choice(
-                        all_samples_finite.shape[0], size=_max_cov_samples, replace=False
+                        all_samples_finite.shape[0],
+                        size=_max_cov_samples,
+                        replace=False,
                     )
                     covariance = np.cov(all_samples_finite[idx], rowvar=False)
                 else:

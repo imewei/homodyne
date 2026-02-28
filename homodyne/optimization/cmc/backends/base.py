@@ -246,9 +246,7 @@ def combine_shard_samples(
         for name in param_names:
             stats = shard_stats[name]
             if not stats:
-                logger.warning(
-                    f"Hierarchical CMC: all shards excluded for '{name}'"
-                )
+                logger.warning(f"Hierarchical CMC: all shards excluded for '{name}'")
                 combined_samples_dict[name] = rng.normal(
                     loc=0.0, scale=1.0, size=(n_chains, n_samples)
                 )
@@ -298,7 +296,7 @@ def combine_shard_samples(
 
         # Combine extra fields from the first chunk for metadata
         combined_extra: dict = {}
-        first_chunk = shard_samples[:min(chunk_size, len(shard_samples))]
+        first_chunk = shard_samples[: min(chunk_size, len(shard_samples))]
         for key in first_chunk[0].extra_fields.keys():
             all_extra = [
                 s.extra_fields.get(key) for s in first_chunk if key in s.extra_fields
@@ -755,8 +753,12 @@ def combine_shard_samples_bimodal(
                 median_var = float(np.median(shard_variances))
                 degenerate_threshold = 1e-6 * median_var if median_var > 0 else 1e-30
                 valid_mask = [v >= degenerate_threshold for v in shard_variances]
-                shard_means = [m for m, ok in zip(shard_means, valid_mask, strict=True) if ok]
-                shard_variances = [v for v, ok in zip(shard_variances, valid_mask, strict=True) if ok]
+                shard_means = [
+                    m for m, ok in zip(shard_means, valid_mask, strict=True) if ok
+                ]
+                shard_variances = [
+                    v for v, ok in zip(shard_variances, valid_mask, strict=True) if ok
+                ]
 
             if len(shard_means) < 3:
                 # Too few shards: use simple mean

@@ -793,7 +793,9 @@ def validate_init_values_order(
             )
 
         # Same length: find first positional mismatch
-        for i, (actual, expected) in enumerate(zip(actual_names, expected_names, strict=False)):
+        for i, (actual, expected) in enumerate(
+            zip(actual_names, expected_names, strict=False)
+        ):
             if actual != expected:
                 raise ValueError(
                     f"Parameter order mismatch at position {i}!\n"
@@ -981,7 +983,9 @@ def extract_nlsq_values_for_cmc(
         n_static_scaling = n_params - 3
         n_laminar_scaling = n_params - 7
         is_likely_static_individual = (
-            n_static_scaling >= 4 and n_static_scaling % 2 == 0 and n_laminar_scaling < 2
+            n_static_scaling >= 4
+            and n_static_scaling % 2 == 0
+            and n_laminar_scaling < 2
         )
         # Use laminar flow ONLY if scaling count is small (2-3 angles max without ambiguity)
         # For n_params >= 9, check the analysis_mode hint from model_kwargs if available
