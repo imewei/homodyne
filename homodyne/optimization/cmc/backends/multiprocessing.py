@@ -1734,16 +1734,16 @@ class MultiprocessingBackend(CMCBackend):
             for param in key_params:
                 if param in successful_samples[0].samples:
                     means = [
-                        float(np.mean(s.samples[param])) for s in successful_samples
+                        float(np.nanmean(s.samples[param])) for s in successful_samples
                     ]
                     run_logger.info(
-                        f"  {param}: shard_means=[{np.min(means):.4g}, {np.max(means):.4g}], "
-                        f"range={np.max(means) - np.min(means):.4g}, "
-                        f"mean_of_means={np.mean(means):.4g}, "
-                        f"std_of_means={np.std(means):.4g}"
+                        f"  {param}: shard_means=[{np.nanmin(means):.4g}, {np.nanmax(means):.4g}], "
+                        f"range={np.nanmax(means) - np.nanmin(means):.4g}, "
+                        f"mean_of_means={np.nanmean(means):.4g}, "
+                        f"std_of_means={np.nanstd(means):.4g}"
                     )
                     # Check for high heterogeneity (bounds-aware CV)
-                    mean_val = abs(np.mean(means))
+                    mean_val = abs(np.nanmean(means))
                     if parameter_space is not None:
                         try:
                             lo, hi = parameter_space.get_bounds(param)
@@ -1772,7 +1772,7 @@ class MultiprocessingBackend(CMCBackend):
                             scale = max(mean_val, 1e-10)
                     else:
                         scale = max(mean_val, 1e-10)
-                    cv = np.std(means) / scale
+                    cv = np.nanstd(means) / scale
                     if not np.isfinite(cv):
                         # NaN/Inf CV means shard posteriors contain non-finite values
                         high_cv_params.append((param, float("inf")))
@@ -1842,9 +1842,9 @@ class MultiprocessingBackend(CMCBackend):
             for param in key_params:
                 if param in successful_samples[0].samples:
                     means = [
-                        float(np.mean(s.samples[param])) for s in successful_samples
+                        float(np.nanmean(s.samples[param])) for s in successful_samples
                     ]
-                    consensus_means[param] = float(np.mean(means))
+                    consensus_means[param] = float(np.nanmean(means))
 
             bimodal_summary = summarize_cross_shard_bimodality(
                 bimodal_detections,

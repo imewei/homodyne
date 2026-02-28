@@ -2238,16 +2238,16 @@ def _prepare_parameter_data(
             f"Physical params array (indices {2 * n_angles}-{len(result.parameters) - 1}): {physical_params[:7]}"
         )
 
-        # Use mean contrast/offset for JSON (representative value)
-        contrast_mean = float(np.mean(contrast_per_angle))
-        offset_mean = float(np.mean(offset_per_angle))
+        # Use mean contrast/offset for JSON (representative value; NaN-safe for failed angles)
+        contrast_mean = float(np.nanmean(contrast_per_angle))
+        offset_mean = float(np.nanmean(offset_per_angle))
 
         # Compute uncertainties for contrast/offset (RMS of per-angle uncertainties)
         if result.uncertainties is not None:
             contrast_unc_per_angle = result.uncertainties[:n_angles]
             offset_unc_per_angle = result.uncertainties[n_angles : 2 * n_angles]
-            contrast_unc = float(np.sqrt(np.mean(contrast_unc_per_angle**2)))
-            offset_unc = float(np.sqrt(np.mean(offset_unc_per_angle**2)))
+            contrast_unc = float(np.sqrt(np.nanmean(contrast_unc_per_angle**2)))
+            offset_unc = float(np.sqrt(np.nanmean(offset_unc_per_angle**2)))
         else:
             contrast_unc = None
             offset_unc = None

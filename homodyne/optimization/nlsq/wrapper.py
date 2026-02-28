@@ -4727,10 +4727,10 @@ class NLSQWrapper(NLSQAdapterBase):
                 effective_per_angle_scaling = False
                 logger.info(
                     f"Fixed per-angle scaling will be used:\n"
-                    f"  Contrast: mean={np.mean(fixed_contrast):.4f}, "
-                    f"range=[{np.min(fixed_contrast):.4f}, {np.max(fixed_contrast):.4f}]\n"
-                    f"  Offset: mean={np.mean(fixed_offset):.4f}, "
-                    f"range=[{np.min(fixed_offset):.4f}, {np.max(fixed_offset):.4f}]"
+                    f"  Contrast: mean={np.nanmean(fixed_contrast):.4f}, "
+                    f"range=[{np.nanmin(fixed_contrast):.4f}, {np.nanmax(fixed_contrast):.4f}]\n"
+                    f"  Offset: mean={np.nanmean(fixed_offset):.4f}, "
+                    f"range=[{np.nanmin(fixed_offset):.4f}, {np.nanmax(fixed_offset):.4f}]"
                 )
             else:
                 logger.warning(
@@ -4772,8 +4772,8 @@ class NLSQWrapper(NLSQAdapterBase):
             fixed_scaling = ad_controller.get_fixed_per_angle_scaling()
             if fixed_scaling is not None:
                 contrast_per_angle, offset_per_angle = fixed_scaling
-                avg_contrast = float(np.mean(contrast_per_angle))
-                avg_offset = float(np.mean(offset_per_angle))
+                avg_contrast = float(np.nanmean(contrast_per_angle))
+                avg_offset = float(np.nanmean(offset_per_angle))
 
                 # Build 9-param initial_params: [contrast_avg, offset_avg, physical(7)]
                 physical_params_init = initial_params[2 * n_phi :]
@@ -4807,20 +4807,20 @@ class NLSQWrapper(NLSQAdapterBase):
                 logger.info(
                     f"Averaged scaling will be OPTIMIZED (not fixed):\n"
                     f"  Initial contrast: {avg_contrast:.4f} "
-                    f"(from per-angle range [{np.min(contrast_per_angle):.4f}, "
-                    f"{np.max(contrast_per_angle):.4f}])\n"
+                    f"(from per-angle range [{np.nanmin(contrast_per_angle):.4f}, "
+                    f"{np.nanmax(contrast_per_angle):.4f}])\n"
                     f"  Initial offset: {avg_offset:.4f} "
-                    f"(from per-angle range [{np.min(offset_per_angle):.4f}, "
-                    f"{np.max(offset_per_angle):.4f}])"
+                    f"(from per-angle range [{np.nanmin(offset_per_angle):.4f}, "
+                    f"{np.nanmax(offset_per_angle):.4f}])"
                 )
             else:
                 logger.warning(
                     "Failed to compute per-angle scaling estimates, "
                     "falling back to mean of initial per-angle values"
                 )
-                # Fallback: average the initial per-angle values
-                avg_contrast = float(np.mean(initial_params[:n_phi]))
-                avg_offset = float(np.mean(initial_params[n_phi : 2 * n_phi]))
+                # Fallback: average the initial per-angle values (NaN-safe)
+                avg_contrast = float(np.nanmean(initial_params[:n_phi]))
+                avg_offset = float(np.nanmean(initial_params[n_phi : 2 * n_phi]))
                 physical_params_init = initial_params[2 * n_phi :]
                 initial_params = np.concatenate(
                     [[avg_contrast, avg_offset], physical_params_init]
@@ -5188,8 +5188,8 @@ class NLSQWrapper(NLSQAdapterBase):
                     logger.info(
                         f"Expanding parameters from fixed_constant mode:\n"
                         f"  Physical params: {len(popt)}\n"
-                        f"  Fixed contrast: mean={np.mean(fixed_contrast):.4f}\n"
-                        f"  Fixed offset: mean={np.mean(fixed_offset):.4f}\n"
+                        f"  Fixed contrast: mean={np.nanmean(fixed_contrast):.4f}\n"
+                        f"  Fixed offset: mean={np.nanmean(fixed_offset):.4f}\n"
                         f"  Expanded: {2 * n_phi + n_physical}"
                     )
 
@@ -5217,10 +5217,10 @@ class NLSQWrapper(NLSQAdapterBase):
                     anti_degeneracy_info["original_n_params"] = n_physical
                     anti_degeneracy_info["expanded_n_params"] = len(popt)
                     anti_degeneracy_info["fixed_contrast_mean"] = float(
-                        np.mean(fixed_contrast)
+                        np.nanmean(fixed_contrast)
                     )
                     anti_degeneracy_info["fixed_offset_mean"] = float(
-                        np.mean(fixed_offset)
+                        np.nanmean(fixed_offset)
                     )
                 else:
                     logger.warning(
