@@ -181,7 +181,7 @@ def detect_hardware() -> HardwareConfig:
         nodefile = os.environ.get("PBS_NODEFILE")
         if nodefile and os.path.exists(nodefile):
             try:
-                with open(nodefile) as f:
+                with open(nodefile, encoding="utf-8") as f:
                     # Strip whitespace and skip blank lines before deduplication;
                     # PBS nodefiles often contain a trailing newline or blank lines.
                     num_nodes = len(

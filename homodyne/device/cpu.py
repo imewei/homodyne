@@ -67,7 +67,7 @@ def detect_cpu_info() -> dict[str, Any]:
     try:
         # Try to get CPU brand information
         if platform.system() == "Linux":
-            with open("/proc/cpuinfo") as f:
+            with open("/proc/cpuinfo", encoding="utf-8") as f:
                 cpuinfo = f.read()
                 for line in cpuinfo.split("\n"):
                     if "model name" in line and info["cpu_brand"] == "Unknown":
