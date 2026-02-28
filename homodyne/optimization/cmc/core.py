@@ -434,10 +434,10 @@ def _log_runtime_comparison(
 
     # Provide suggestions if significantly off
     if accuracy > 200:
-        logger.info("  → Consider reducing num_samples or num_chains for faster runs")
+        logger.info("  -> Consider reducing num_samples or num_chains for faster runs")
     elif accuracy < 30:
         logger.info(
-            "  → Actual runtime much faster than expected - estimate may be conservative"
+            "  -> Actual runtime much faster than expected - estimate may be conservative"
         )
 
 
@@ -1166,7 +1166,7 @@ def _fit_mcmc_jax_impl(
     t1_np = np.asarray(prepared.t1)
     t2_np = np.asarray(prepared.t2)
     t_min = 0.0  # Always start from t=0 for consistent integration
-    t_max = float(max(t1_np.max(), t2_np.max()))
+    t_max = float(max(float(np.nanmax(t1_np)), float(np.nanmax(t2_np))))
     n_time_points = int(round(t_max / dt_used)) + 1
     # Guard against OOM: cap time grid at 100K points. For typical XPCS
     # experiments (dt~0.1s, t_max~100s) this gives ~1001 points.
@@ -1208,9 +1208,11 @@ def _fit_mcmc_jax_impl(
         f"[CMC] time_grid constructed with dt={dt_used:.6g}s: "
         f"n_points={n_time_points}, range=[{t_min:.6g}, {t_max:.6g}]"
     )
+    t1_lo, t1_hi = float(np.nanmin(t1_np)), float(np.nanmax(t1_np))
+    t2_lo, t2_hi = float(np.nanmin(t2_np)), float(np.nanmax(t2_np))
     run_logger.info(
-        f"[CMC] Data time ranges: t1=[{t1_np.min():.6g}, {t1_np.max():.6g}], "
-        f"t2=[{t2_np.min():.6g}, {t2_np.max():.6g}]"
+        f"[CMC] Data time ranges: t1=[{t1_lo:.6g}, {t1_hi:.6g}], "
+        f"t2=[{t2_lo:.6g}, {t2_hi:.6g}]"
     )
 
     # Verify grid spacing matches config dt

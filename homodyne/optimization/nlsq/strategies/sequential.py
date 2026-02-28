@@ -646,7 +646,7 @@ def optimize_single_angle(
         }
 
     except (ValueError, RuntimeError, OSError) as e:
-        logger.error(f"Optimization failed for angle {subset.phi_angle:.2f}°: {e}")
+        logger.error(f"Optimization failed for angle {subset.phi_angle:.2f} deg: {e}")
         return {
             "parameters": initial_params,
             "covariance": np.eye(len(initial_params)),

@@ -319,7 +319,7 @@ def diagnose_gradient_imbalance(
         ...     analysis_mode="laminar_flow"
         ... )
         >>> if diag["imbalance_detected"]:
-        ...     print(f"Gradient imbalance detected: max ratio = {diag['max_ratio']:.0f}×")
+        ...     print(f"Gradient imbalance detected: max ratio = {diag['max_ratio']:.0f}x")
         ...     print("Recommendations:")
         ...     print(diag["recommendations"]["summary"])
     """
@@ -414,7 +414,7 @@ def print_gradient_report(
     logger.info("\n" + "-" * 80)
     if diag["imbalance_detected"]:
         logger.warning("GRADIENT IMBALANCE DETECTED")
-        logger.warning(f"Maximum ratio: {diag['max_ratio']:.0f}×")
+        logger.warning(f"Maximum ratio: {diag['max_ratio']:.0f}x")
         logger.info("\nThis can cause:")
         logger.info("  - Premature convergence")
         logger.info("  - Missing fine-scale features (oscillations)")

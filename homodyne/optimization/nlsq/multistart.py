@@ -1133,8 +1133,8 @@ def run_multistart_nlsq(
     logger.info("=" * 60)
     logger.info("MULTI-START OPTIMIZATION COMPLETE")
     logger.info("=" * 60)
-    logger.info(f"Best result: χ²={best.chi_squared:.6e} (start {best.start_idx})")
-    logger.info(f"Best reduced χ²: {best.reduced_chi_squared:.6f}")
+    logger.info(f"Best result: chi2={best.chi_squared:.6e} (start {best.start_idx})")
+    logger.info(f"Best reduced chi2: {best.reduced_chi_squared:.6f}")
     logger.info(f"Unique basins found: {n_unique_basins}")
     if degeneracy_detected:
         logger.warning(

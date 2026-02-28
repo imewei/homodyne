@@ -607,8 +607,8 @@ def _log_optimization_results(
     logger.info(f"Status: {'SUCCESS' if result.success else 'FAILED'}")
     logger.info(f"Iterations: {result.iterations}")
     logger.info(f"Execution time: {result.execution_time:.3f}s")
-    logger.info(f"χ² = {result.chi_squared:.6e}")
-    logger.info(f"Reduced χ² = {result.reduced_chi_squared:.6f}")
+    logger.info(f"chi2 = {result.chi_squared:.6e}")
+    logger.info(f"Reduced chi2 = {result.reduced_chi_squared:.6f}")
 
     if hasattr(result, "parameters") and result.parameters is not None:
         physical_param_names = _get_physical_param_names(analysis_mode)
@@ -641,7 +641,7 @@ def _log_optimization_results(
                     if unc_array is not None and idx < len(unc_array)
                     else 0.0
                 )
-                logger.info(f"    {name}: {param_val:.6g} ± {unc_val:.6g}")
+                logger.info(f"    {name}: {param_val:.6g} +/- {unc_val:.6g}")
 
             contrast_vals = result.parameters[:n_angles]
             offset_vals = result.parameters[n_angles : 2 * n_angles]
@@ -662,7 +662,7 @@ def _log_optimization_results(
                     and i < len(result.uncertainties)
                     else 0.0
                 )
-                logger.info(f"  {param_names[i]}: {param_val:.6g} ± {unc_val:.6g}")
+                logger.info(f"  {param_names[i]}: {param_val:.6g} +/- {unc_val:.6g}")
 
     logger.info("=" * 60)
 
@@ -1451,7 +1451,7 @@ def fit_nlsq_multistart(
     >>> config = ConfigManager("config.yaml")
     >>> # Ensure multi_start.enable: true in config
     >>> result = fit_nlsq_multistart(data, config)
-    >>> print(f"Best chi²: {result.best.chi_squared:.4g}")
+    >>> print(f"Best chi2: {result.best.chi_squared:.4g}")
     >>> print(f"Strategy used: {result.strategy_used}")
     >>> if result.degeneracy_detected:
     ...     print(f"Warning: {result.n_unique_basins} distinct basins found")
@@ -1622,7 +1622,7 @@ def fit_nlsq_cmaes(
     >>> config = ConfigManager("config.yaml")
     >>> # Ensure cmaes.enable: true in config
     >>> result = fit_nlsq_cmaes(data, config)
-    >>> print(f"Chi²: {result.chi_squared:.4e}")
+    >>> print(f"Chi2: {result.chi_squared:.4e}")
     >>> print(f"Method: {result.device_info['method']}")
     """
     import time
@@ -2290,8 +2290,8 @@ def fit_nlsq_cmaes(
         logger.info(f"Status: {'SUCCESS' if result.success else 'FAILED'}")
         logger.info(f"Generations: {result.iterations}")
         logger.info(f"Execution time: {execution_time:.3f}s")
-        logger.info(f"χ² = {result.chi_squared:.6e}")
-        logger.info(f"Reduced χ² = {result.reduced_chi_squared:.6f}")
+        logger.info(f"chi2 = {result.chi_squared:.6e}")
+        logger.info(f"Reduced chi2 = {result.reduced_chi_squared:.6f}")
         logger.info(f"L-M refined: {cmaes_result.nlsq_refined}")
         if use_constant_mode:
             logger.info(

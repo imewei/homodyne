@@ -792,6 +792,6 @@ def compute_fitted_c2(
         sample_contrasts_mapped * np.array(batched_g1_at_phi) ** 2
         + sample_offsets_mapped
     )  # (n_posterior_samples, n_points)
-    c2_fitted_std = np.std(c2_samples_arr, axis=0)
+    c2_fitted_std = np.nanstd(c2_samples_arr, axis=0)
 
     return c2_fitted, c2_fitted_std

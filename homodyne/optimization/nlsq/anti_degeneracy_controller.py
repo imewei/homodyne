@@ -315,7 +315,7 @@ class AntiDegeneracyController:
                     f"  Reason: n_phi ({self.n_phi}) >= "
                     f"constant_scaling_threshold ({config.constant_scaling_threshold})"
                 )
-                logger.info("  Behavior: Quantile estimates → AVERAGED → OPTIMIZED")
+                logger.info("  Behavior: Quantile estimates -> AVERAGED -> OPTIMIZED")
                 logger.info("  Parameters: 7 physical + 2 averaged scaling = 9 total")
                 logger.info("=" * 60)
             else:

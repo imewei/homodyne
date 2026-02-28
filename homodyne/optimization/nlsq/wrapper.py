@@ -2483,7 +2483,7 @@ class NLSQWrapper(NLSQAdapterBase):
                         f"  Params changed: {not np.allclose(popt, current_params, rtol=1e-10)}"
                     )
                     logger.info(f"  pcov shape: {pcov.shape}")
-                    logger.info(f"  pcov diagonal (uncertainties²): {np.diag(pcov)}")
+                    logger.info(f"  pcov diagonal (uncertainties^2): {np.diag(pcov)}")
                     logger.info(f"  pcov condition number: {np.linalg.cond(pcov):.2e}")
 
                     # Check for zero/near-zero uncertainties
@@ -3747,7 +3747,7 @@ class NLSQWrapper(NLSQAdapterBase):
             f"  Angles optimized: {sequential_result.n_angles_optimized}/{sequential_result.n_angles_optimized + sequential_result.n_angles_failed}"
         )
         logger.info(f"  Combined cost: {sequential_result.total_cost:.4f}")
-        logger.info(f"  Reduced χ²: {reduced_chi_squared:.4f}")
+        logger.info(f"  Reduced chi2: {reduced_chi_squared:.4f}")
         logger.info(f"  Execution time: {execution_time:.2f}s")
         logger.info(f"  Weighting: {weighting}")
         logger.info("=" * 80)
@@ -6162,7 +6162,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     f"  Reason: n_phi ({n_phi}) >= "
                     f"constant_scaling_threshold ({constant_scaling_threshold})"
                 )
-                logger.info("  Behavior: Quantile estimates → AVERAGED → OPTIMIZED")
+                logger.info("  Behavior: Quantile estimates -> AVERAGED -> OPTIMIZED")
                 logger.info(
                     "  Parameters: 7 physical + 2 averaged (contrast, offset) = 9 total"
                 )
@@ -6286,7 +6286,7 @@ class NLSQWrapper(NLSQAdapterBase):
             )
             logger.info(f"  Mode: {per_angle_mode_actual}")
             logger.info(f"  n_phi: {n_phi}")
-            logger.info("  Method: Quantile estimates → averaged → OPTIMIZED")
+            logger.info("  Method: Quantile estimates -> averaged -> OPTIMIZED")
             logger.info("  Initial values: averaged from per-angle quantile estimates")
             logger.info(
                 f"  Parameter reduction: {2 * n_phi} -> 2 (averaged contrast + offset)"
@@ -6660,7 +6660,7 @@ class NLSQWrapper(NLSQAdapterBase):
             logger.info(f"  n_phi: {n_phi}")
             logger.info(f"  min_weight: {sw_config.min_weight:.2f}")
             logger.info(f"  alpha: {sw_config.alpha:.1f}")
-            logger.info(f"  initial_phi0: {initial_phi0:.1f}°")
+            logger.info(f"  initial_phi0: {initial_phi0:.1f} deg")
             logger.info("=" * 60)
 
         # Store anti-degeneracy components for diagnostics
