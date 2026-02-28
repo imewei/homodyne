@@ -124,7 +124,7 @@ def _plot_3d_experimental_data(
     """Plot 3D experimental data (n_phi, n_t1, n_t2)."""
     n_angles = c2_exp.shape[0]
 
-    logger.info(f"Generating individual C₂ heatmaps for {n_angles} phi angles...")
+    logger.info(f"Generating individual C2 heatmaps for {n_angles} phi angles...")
 
     for angle_idx in range(n_angles):
         phi_deg = (
@@ -176,7 +176,7 @@ def _plot_3d_experimental_data(
 
         logger.debug(f"  Saved: {filename}")
 
-    logger.info(f"Generated {n_angles} individual C₂ heatmaps")
+    logger.info(f"Generated {n_angles} individual C2 heatmaps")
 
     # Plot diagonal (t1=t2) for all phi angles
     fig, ax = plt.subplots(figsize=(10, 6))

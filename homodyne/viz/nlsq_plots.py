@@ -164,15 +164,15 @@ def plot_simulated_data(
     L_microns = L_angstroms / 10000.0
 
     logger.info(
-        f"Generating theoretical C₂ with q={q:.6f} Å⁻¹, L={L_microns:.1f} μm ({L_angstroms:.0f} Å)",
+        f"Generating theoretical C2 with q={q:.6f} A^-1, L={L_microns:.1f} um ({L_angstroms:.0f} A)",
     )
 
-    # Generate simulated C₂ for each phi angle
+    # Generate simulated C2 for each phi angle
     c2_simulated_list = []
 
     for _i, phi_val in enumerate(phi):
         phi_array = jnp.array([phi_val])
-        logger.debug(f"Computing C₂ for φ={phi_val}° (phi_array={phi_array})")
+        logger.debug(f"Computing C2 for phi={phi_val} deg (phi_array={phi_array})")
 
         c2_phi = model.compute_g2(
             params,
@@ -188,13 +188,13 @@ def plot_simulated_data(
 
         c2_result = np.array(c2_phi[0])
         logger.debug(
-            f"  C₂ shape: {c2_result.shape}, range: [{float(np.nanmin(c2_result)):.4f}, {float(np.nanmax(c2_result)):.4f}]",
+            f"  C2 shape: {c2_result.shape}, range: [{float(np.nanmin(c2_result)):.4f}, {float(np.nanmax(c2_result)):.4f}]",
         )
         c2_simulated_list.append(c2_result)
 
     c2_simulated = np.array(c2_simulated_list)
 
-    logger.info(f"Generated simulated C₂ with shape: {c2_simulated.shape}")
+    logger.info(f"Generated simulated C2 with shape: {c2_simulated.shape}")
 
     # Compute global color scale
     c2_min = float(np.nanmin(c2_simulated))
@@ -205,14 +205,14 @@ def plot_simulated_data(
     vmax = min(1.6, c2_max)
 
     logger.debug(
-        f"Simulated C2 range [{c2_min:.4f}, {c2_max:.4f}] → "
+        f"Simulated C2 range [{c2_min:.4f}, {c2_max:.4f}] -> "
         f"color scale [{vmin:.4f}, {vmax:.4f}] (clamped to [1.0, 1.6])"
     )
 
-    # Save individual C₂ heatmap for EACH phi angle
+    # Save individual C2 heatmap for EACH phi angle
     n_phi = len(phi)
     logger.info(
-        f"Generating individual simulated C₂ heatmaps for {n_phi} phi angles..."
+        f"Generating individual simulated C2 heatmaps for {n_phi} phi angles..."
     )
 
     for idx in range(n_phi):
@@ -275,7 +275,7 @@ def plot_simulated_data(
 
         logger.debug(f"  Saved: {filename}")
 
-    logger.info(f"Generated {n_phi} individual simulated C₂ heatmaps")
+    logger.info(f"Generated {n_phi} individual simulated C2 heatmaps")
 
     # Plot diagonal (t1=t2) for all phi angles
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -332,7 +332,7 @@ def generate_and_plot_fitted_simulations(
     from homodyne.config.manager import ConfigManager
     from homodyne.core.models import CombinedModel
 
-    logger.info("Generating fitted C₂ simulations...")
+    logger.info("Generating fitted C2 simulations...")
 
     # Apply phi filtering to data (if enabled in config)
     if angle_filter_func is not None:
@@ -412,7 +412,7 @@ def generate_and_plot_fitted_simulations(
     q = scattering_config.get("wavevector_q", 0.0054)
     L_angstroms = geometry_config.get("stator_rotor_gap", 2000000)
 
-    logger.debug(f"Physics: q={q:.6f} Å⁻¹, L={L_angstroms:.0f} Å, dt={dt}")
+    logger.debug(f"Physics: q={q:.6f} A^-1, L={L_angstroms:.0f} A, dt={dt}")
 
     # Generate fitted C2 for each phi angle
     c2_fitted_list = []
@@ -420,7 +420,7 @@ def generate_and_plot_fitted_simulations(
     for _i, phi_deg in enumerate(phi_angles_list):
         phi_array = jnp.array([phi_deg])
 
-        logger.debug(f"Generating fitted C₂ for φ={phi_deg:.1f}°")
+        logger.debug(f"Generating fitted C2 for phi={phi_deg:.1f} deg")
 
         c2_phi = model.compute_g2(
             params,
@@ -438,12 +438,12 @@ def generate_and_plot_fitted_simulations(
         c2_fitted_list.append(c2_result)
 
         logger.debug(
-            f"  C₂ range: [{float(np.nanmin(c2_result)):.4f}, {float(np.nanmax(c2_result)):.4f}]"
+            f"  C2 range: [{float(np.nanmin(c2_result)):.4f}, {float(np.nanmax(c2_result)):.4f}]"
         )
 
     c2_fitted = np.array(c2_fitted_list)
 
-    logger.info(f"Generated fitted C₂ with shape: {c2_fitted.shape}")
+    logger.info(f"Generated fitted C2 with shape: {c2_fitted.shape}")
 
     # Save fitted C2 data as NPZ
     npz_file = simulated_data_dir / "c2_fitted_data.npz"
@@ -457,7 +457,7 @@ def generate_and_plot_fitted_simulations(
         contrast=contrast,
         offset=offset,
     )
-    logger.info(f"Saved fitted C₂ data: {npz_file}")
+    logger.info(f"Saved fitted C2 data: {npz_file}")
 
     # Save configuration for fitted simulation
     config_file = simulated_data_dir / "simulation_config_fitted.json"
@@ -480,7 +480,7 @@ def generate_and_plot_fitted_simulations(
 
     # Generate individual plots for each phi angle
     logger.info(
-        f"Generating individual fitted C₂ plots for {len(phi_angles_list)} angles...",
+        f"Generating individual fitted C2 plots for {len(phi_angles_list)} angles...",
     )
 
     # Get time extent for plotting
@@ -551,7 +551,7 @@ def generate_and_plot_fitted_simulations(
 
         logger.debug(f"  Saved: {filename}")
 
-    logger.info(f"Generated {len(phi_angles_list)} individual fitted C₂ plots")
+    logger.info(f"Generated {len(phi_angles_list)} individual fitted C2 plots")
     logger.info(f"Fitted simulation data saved to: {simulated_data_dir}")
 
 
@@ -620,7 +620,7 @@ def generate_nlsq_plots(
 
         logger.debug(
             f"Plot config: preview_mode={preview_mode}, "
-            f"canvas={width}×{height}, parallel={parallel}",
+            f"canvas={width}x{height}, parallel={parallel}",
         )
 
     # Determine which fit surface to display
