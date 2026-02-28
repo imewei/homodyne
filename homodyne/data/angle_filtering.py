@@ -85,9 +85,9 @@ def angle_in_range(angle: float, min_angle: float, max_angle: float) -> bool:
 
     Example: User specifies range [170°, 190°]
     - After normalization: [170°, -170°] (min > max, wrapped)
-    - Angle 175° matches: 175° ≥ 170° ✓
-    - Angle -175° matches: -175° ≤ -170° ✓
-    - Angle 0° does not match: 0° < 170° and 0° > -170° ✗
+    - Angle 175 matches: 175 >= 170 (yes)
+    - Angle -175 matches: -175 <= -170 (yes)
+    - Angle 0 does not match: 0 < 170 and 0 > -170 (no)
 
     Parameters
     ----------
