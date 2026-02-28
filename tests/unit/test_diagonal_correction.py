@@ -823,24 +823,22 @@ class TestDiagonalCorrectionPerformance:
     """Performance benchmarks"""
 
     def test_jit_compilation_overhead(self, simple_matrix):
-        """Measure JIT compilation vs execution time"""
+        """JIT-compiled function should execute fast after warm-up."""
         import time
 
         from homodyne.core.diagonal_correction import _diagonal_correction_jax_core
 
-        # First call - includes compilation (internal function is pre-JIT'd)
-        start = time.time()
+        # Warm-up call (may or may not trigger compilation depending on cache)
         _ = _diagonal_correction_jax_core(simple_matrix)
-        compile_time = time.time() - start
 
-        # Subsequent calls - cached
+        # Measure cached execution
         start = time.time()
         for _ in range(100):
             _ = _diagonal_correction_jax_core(simple_matrix)
         exec_time = (time.time() - start) / 100
 
-        # Compilation should be much slower than execution
-        assert compile_time > exec_time * 10
+        # Cached JIT execution should be fast (< 10ms per call)
+        assert exec_time < 0.01, f"JIT execution too slow: {exec_time:.4f}s per call"
 
 
 # ============================================================================
