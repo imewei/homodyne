@@ -38,9 +38,12 @@ def set_mode(mode: str) -> bool:
         return False
 
     try:
-        CONFIG_FILE.write_text(mode + "\n")
+        CONFIG_FILE.write_text(mode + "\n", encoding="utf-8")
     except OSError as e:
-        print(f"Error: Cannot write XLA mode config to {CONFIG_FILE}: {e}", file=sys.stderr)
+        print(
+            f"Error: Cannot write XLA mode config to {CONFIG_FILE}: {e}",
+            file=sys.stderr,
+        )
         return False
     print(f"OK: XLA mode set to: {mode}")
 
@@ -84,7 +87,7 @@ def show_config():
     # Read current mode
     if CONFIG_FILE.exists():
         try:
-            mode = CONFIG_FILE.read_text().strip()
+            mode = CONFIG_FILE.read_text(encoding="utf-8").strip()
         except OSError:
             mode = "cmc (default, config unreadable)"
     else:

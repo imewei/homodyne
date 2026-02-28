@@ -1231,8 +1231,7 @@ def load_nlsq_result_from_file(nlsq_result_path: Path) -> dict[str, Any] | None:
         _rchi2 = result["reduced_chi_squared"]
         _rchi2_str = f"{_rchi2:.2f}" if _rchi2 is not None else "N/A"
         logger.info(
-            f"  Convergence: {result['convergence_status']}, "
-            f"reduced χ² = {_rchi2_str}"
+            f"  Convergence: {result['convergence_status']}, reduced χ² = {_rchi2_str}"
         )
 
         # Log physical parameters for diagnostics
@@ -1515,7 +1514,7 @@ def _run_optimization(
             _n_phi = pooled["n_phi"]  # noqa: F841
             _n_t = pooled["n_t"]  # noqa: F841
 
-            # ✅ v2.1.0 BREAKING CHANGE: Removed automatic NLSQ/SVI initialization
+            # [OK] v2.1.0 BREAKING CHANGE: Removed automatic NLSQ/SVI initialization
             # Manual workflow required: Run NLSQ separately, copy results to YAML, then run MCMC
             # Load initial values from config YAML (initial_parameters.values section)
             initial_values = (
@@ -1583,10 +1582,10 @@ def _run_optimization(
                 ),
                 method=method,  # Pass "mcmc" for CMC-only path
                 cmc_config=cmc_config,  # Pass CMC configuration
-                initial_values=initial_values,  # ✅ FIXED: Load from config initial_parameters.values
-                parameter_space=parameter_space,  # ✅ Pass config-aware ParameterSpace
+                initial_values=initial_values,  # [OK] FIXED: Load from config initial_parameters.values
+                parameter_space=parameter_space,  # [OK] Pass config-aware ParameterSpace
                 dt=config_config.get("analyzer_parameters", {}).get("dt"),
-                nlsq_result=nlsq_result,  # ✅ Pass NLSQ warm-start result (Jan 2026)
+                nlsq_result=nlsq_result,  # [OK] Pass NLSQ warm-start result (Jan 2026)
                 **mcmc_runtime_kwargs,
             )
 
@@ -2039,16 +2038,26 @@ def _extract_nlsq_metadata(config: Any, data: dict[str, Any]) -> dict[str, Any]:
     """
     metadata: dict[str, Any] = {}
 
+    # Normalize config access: support dict, ConfigManager, or object with .config
+    if isinstance(config, dict):
+        config_dict = config
+    elif hasattr(config, "config") and isinstance(config.config, dict):
+        config_dict = config.config
+    elif hasattr(config, "get_config"):
+        config_dict = config.get_config()
+    else:
+        config_dict = getattr(config, "config", {})
+
     # L (characteristic length) extraction with fallback hierarchy
     try:
-        analyzer_params = config.config.get("analyzer_parameters", {})
+        analyzer_params = config_dict.get("analyzer_parameters", {})
         geometry = analyzer_params.get("geometry", {})
 
         if "stator_rotor_gap" in geometry:
             metadata["L"] = float(geometry["stator_rotor_gap"])
             logger.debug(f"Using stator_rotor_gap L = {metadata['L']:.1f} Å")
         else:
-            exp_config = config.config.get("experimental_data", {})
+            exp_config = config_dict.get("experimental_data", {})
             exp_geometry = exp_config.get("geometry", {})
 
             if "stator_rotor_gap" in exp_geometry:
@@ -2070,11 +2079,11 @@ def _extract_nlsq_metadata(config: Any, data: dict[str, Any]) -> dict[str, Any]:
 
     # dt (time step) extraction (optional)
     try:
-        analyzer_params = config.config.get("analyzer_parameters", {})
+        analyzer_params = config_dict.get("analyzer_parameters", {})
         dt_value = analyzer_params.get("dt")
 
         if dt_value is None:
-            exp_config = config.config.get("experimental_data", {})
+            exp_config = config_dict.get("experimental_data", {})
             dt_value = exp_config.get("dt")
 
         if dt_value is not None:
@@ -2179,7 +2188,9 @@ def _prepare_parameter_data(
             logger.warning(
                 "Cannot cleanly infer n_angles: parameter count %d - n_physical %d = %d (odd). "
                 "Falling back to n_angles=1.",
-                len(result.parameters), n_physical, remainder,
+                len(result.parameters),
+                n_physical,
+                remainder,
             )
         inferred = remainder // 2 if remainder % 2 == 0 and remainder else 1
         n_angles = max(1, inferred)
@@ -2442,22 +2453,30 @@ def save_nlsq_results(
 
     # Step 3: Compute theoretical fits with per-angle scaling
     logger.info("Computing theoretical fits with per-angle scaling")
-    fits_dict = compute_theoretical_fits(
-        result,
-        filtered_data,
-        metadata,
-        analysis_mode=analysis_mode,  # Pass analysis_mode to fix parameter count detection
-        include_solver_surface=True,
-    )
-    scalar_expanded = fits_dict.pop("scalar_per_angle_expansion", False)
-    if scalar_expanded:
-        logger.warning(
-            "Recorded scalar_per_angle_expansion=true in diagnostics (scalar contrast/offset replicated per angle)."
+    try:
+        fits_dict = compute_theoretical_fits(
+            result,
+            filtered_data,
+            metadata,
+            analysis_mode=analysis_mode,  # Pass analysis_mode to fix parameter count detection
+            include_solver_surface=True,
         )
-        if getattr(result, "nlsq_diagnostics", None) is None:
-            result.nlsq_diagnostics = {"scalar_per_angle_expansion": True}
-        elif isinstance(result.nlsq_diagnostics, dict):
-            result.nlsq_diagnostics["scalar_per_angle_expansion"] = True
+    except ValueError as exc:
+        logger.warning(
+            f"Could not compute theoretical fits (skipping NPZ and plots): {exc}"
+        )
+        fits_dict = None
+
+    if fits_dict is not None:
+        scalar_expanded = fits_dict.pop("scalar_per_angle_expansion", False)
+        if scalar_expanded:
+            logger.warning(
+                "Recorded scalar_per_angle_expansion=true in diagnostics (scalar contrast/offset replicated per angle)."
+            )
+            if getattr(result, "nlsq_diagnostics", None) is None:
+                result.nlsq_diagnostics = {"scalar_per_angle_expansion": True}
+            elif isinstance(result.nlsq_diagnostics, dict):
+                result.nlsq_diagnostics["scalar_per_angle_expansion"] = True
 
     # Step 4: Prepare analysis results dictionary
     phi_angles = np.asarray(filtered_data["phi_angles_list"])
@@ -2570,6 +2589,29 @@ def save_nlsq_results(
         nlsq_dir,
     )
 
+    # Step 8b: Persist diagnostics payload if available
+    diagnostics_payload = getattr(result, "nlsq_diagnostics", None)
+    if diagnostics_payload:
+        diagnostics_file = nlsq_dir / "diagnostics.json"
+        try:
+            with open(diagnostics_file, "w") as f:
+                json.dump(_json_safe(diagnostics_payload), f, indent=2)
+            logger.info(f"Saved diagnostics to {diagnostics_file}")
+        except (TypeError, OSError) as exc:
+            logger.warning(
+                "Failed to save diagnostics.json (%s). Payload keys: %s",
+                exc,
+                list(diagnostics_payload.keys()),
+            )
+
+    if fits_dict is None:
+        logger.info(f"OK: NLSQ results saved successfully to {nlsq_dir}")
+        logger.info(
+            "  - 3 JSON files (parameters, analysis results, convergence metrics)"
+        )
+        logger.info("  - NPZ and plots skipped (theoretical fits unavailable)")
+        return
+
     # Step 7: Compute normalized residuals
     # For now, assume uniform uncertainty of 5% (would need sigma from data for real normalization)
     # Use safe division to avoid divide-by-zero warnings where c2_exp == 0
@@ -2615,21 +2657,6 @@ def save_nlsq_results(
     logger.info(f"OK: NLSQ results saved successfully to {nlsq_dir}")
     logger.info("  - 3 JSON files (parameters, analysis results, convergence metrics)")
     logger.info("  - 1 NPZ file (10 arrays: experimental + theoretical + residuals)")
-
-    # Step 8b: Persist diagnostics payload if available
-    diagnostics_payload = getattr(result, "nlsq_diagnostics", None)
-    if diagnostics_payload:
-        diagnostics_file = nlsq_dir / "diagnostics.json"
-        try:
-            with open(diagnostics_file, "w") as f:
-                json.dump(_json_safe(diagnostics_payload), f, indent=2)
-            logger.info(f"Saved diagnostics to {diagnostics_file}")
-        except TypeError as exc:
-            logger.warning(
-                "Failed to save diagnostics.json (%s). Payload keys: %s",
-                exc,
-                list(diagnostics_payload.keys()),
-            )
 
     # Step 9: Generate plots with graceful degradation
     try:
@@ -2779,9 +2806,7 @@ def save_mcmc_results(
                 offset_samples = result.samples_offset
                 if offset_samples.ndim == 1:
                     offset_samples = offset_samples[:, np.newaxis]
-                samples_list.insert(
-                    1 if contrast_inserted else 0, offset_samples
-                )
+                samples_list.insert(1 if contrast_inserted else 0, offset_samples)
 
             # Concatenate all samples
             save_dict["samples"] = np.concatenate(samples_list, axis=1)
@@ -2833,7 +2858,11 @@ def save_mcmc_results(
         if save_dict:  # Only save if we have data
             np.savez_compressed(str(samples_file), **save_dict)
             # T058b: Log file size after write completion
-            samples_size_mb = samples_file.stat().st_size / (1024 * 1024)
+            try:
+                samples_size_mb = samples_file.stat().st_size / (1024 * 1024)
+            except OSError:
+                samples_size_mb = 0
+                logger.debug("Could not stat samples file")
             logger.debug(
                 f"Saved posterior samples to {samples_file} ({samples_size_mb:.2f} MB)"
             )
@@ -2875,7 +2904,9 @@ def save_mcmc_results(
                 # Use _json_serializer (not default=str) so NaN/Inf values in
                 # per-shard diagnostics are written as null/"Infinity" rather
                 # than the string "nan"/"inf".
-                json.dump(result.per_shard_diagnostics, f, indent=2, default=_json_serializer)
+                json.dump(
+                    result.per_shard_diagnostics, f, indent=2, default=_json_serializer
+                )
             logger.debug(f"Saved per-shard diagnostics to {shard_diag_file}")
         except Exception as e:
             logger.warning(f"Failed to save shard_diagnostics.json: {e}")
@@ -2929,7 +2960,11 @@ def save_mcmc_results(
             t2=t2,
             q=np.array([q_val]),
         )
-        fitted_size_mb = npz_file.stat().st_size / (1024 * 1024)
+        try:
+            fitted_size_mb = npz_file.stat().st_size / (1024 * 1024)
+        except OSError:
+            fitted_size_mb = 0
+            logger.debug("Could not stat fitted data file")
         logger.info(f"Saved fitted_data.npz ({fitted_size_mb:.2f} MB)")
 
         # Generate plots using NLSQ plotting function
@@ -2952,8 +2987,14 @@ def save_mcmc_results(
     # T057: Calculate and log total file sizes
     json_files = list(method_dir.glob("*.json"))
     npz_files = list(method_dir.glob("*.npz"))
-    total_json_kb = sum(f.stat().st_size for f in json_files) / 1024
-    total_npz_mb = sum(f.stat().st_size for f in npz_files) / (1024 * 1024)
+    try:
+        total_json_kb = sum(f.stat().st_size for f in json_files) / 1024
+    except OSError:
+        total_json_kb = 0
+    try:
+        total_npz_mb = sum(f.stat().st_size for f in npz_files) / (1024 * 1024)
+    except OSError:
+        total_npz_mb = 0
 
     logger.info(f"OK: {method_name.upper()} results saved successfully to {method_dir}")
     if (
@@ -3303,7 +3344,7 @@ def _compute_theoretical_c2_from_mcmc(
             "  - Verify initial_parameters.values in config are reasonable"
         )
 
-    return {  # type: ignore[return-value]
+    return {
         "c2_theoretical_scaled": c2_theoretical_scaled,
         "c2_theoretical_raw": np.array(c2_raw_list),
         "per_angle_scaling": np.array(scaling_list),
