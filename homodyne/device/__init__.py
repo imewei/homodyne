@@ -1,5 +1,5 @@
-"""Device Optimization Module for Homodyne.3
-============================================
+"""Device Optimization Module for Homodyne
+==========================================
 
 HPC CPU device optimization with intelligent configuration.
 Provides CPU-only device detection, configuration, and optimization
@@ -140,7 +140,7 @@ def _configure_cpu_optimal(
 
             logger.info("[OK] Basic CPU configuration completed")
 
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, ImportError) as e:
         logger.error(f"CPU configuration failed: {e}")
         config_result.update(
             {
@@ -202,7 +202,7 @@ def get_device_status() -> dict[str, Any]:
                 "Standard CPU configuration - adequate performance expected",
             )
 
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, ImportError) as e:
         logger.error(f"Device status check failed: {e}")
         status["error"] = str(e)
 
@@ -247,7 +247,7 @@ def benchmark_device_performance(
                 "Install psutil for detailed CPU benchmarking",
             )
 
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, ImportError) as e:
         logger.error(f"Device benchmarking failed: {e}")
         benchmark_results["error"] = str(e)
 
@@ -269,6 +269,7 @@ _all_exports = [
 if HAS_CPU_MODULE:
     _all_exports.extend(
         [
+            "benchmark_cpu_performance",
             "configure_cpu_hpc",
             "detect_cpu_info",
             "get_optimal_batch_size",

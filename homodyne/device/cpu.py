@@ -354,7 +354,7 @@ def _configure_jax_cpu(
 
         logger.info("JAX CPU configuration completed successfully")
 
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, AttributeError) as e:
         logger.warning(f"JAX CPU configuration failed: {e}")
         jax_config["error"] = str(e)
 
