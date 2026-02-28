@@ -863,9 +863,9 @@ def _apply_angle_filtering_for_optimization(
     angles_too_large = phi_angles[np.abs(phi_angles) > 360]
     if len(angles_too_large) > 0:
         logger.warning(
-            f"Found {len(angles_too_large)} angle(s) with |φ| > 360°: {angles_too_large}. "
+            f"Found {len(angles_too_large)} angle(s) with |phi| > 360 deg: {angles_too_large}. "
             f"This may indicate data loading issues, unit confusion (radians vs degrees), "
-            f"or instrument malfunction. Angles will be normalized to [-180°, 180°] range.",
+            f"or instrument malfunction. Angles will be normalized to [-180 deg, 180 deg] range.",
         )
 
     # Normalize phi angles to [-180°, 180°] range (flow direction at 0°)
@@ -921,8 +921,8 @@ def _apply_angle_filtering_for_optimization(
             },
         )
         logger.debug(
-            f"Normalized range [{min_angle:.1f}°, {max_angle:.1f}°] → "
-            f"[{normalized_min:.1f}°, {normalized_max:.1f}°]",
+            f"Normalized range [{min_angle:.1f} deg, {max_angle:.1f} deg] -> "
+            f"[{normalized_min:.1f} deg, {normalized_max:.1f} deg]",
         )
     target_ranges = normalized_ranges
 
@@ -1101,7 +1101,7 @@ def _pool_mcmc_data(filtered_data: dict[str, Any]) -> dict[str, Any]:
     if t1_arr.ndim == 1 and t2_arr.ndim == 1:
         t1_2d, t2_2d = np.meshgrid(t1_arr, t2_arr, indexing="ij")
         logger.debug(
-            f"Created 2D meshgrids from 1D arrays: t1={t1_arr.shape} → {t1_2d.shape}"
+            f"Created 2D meshgrids from 1D arrays: t1={t1_arr.shape} -> {t1_2d.shape}"
         )
     elif t1_arr.ndim == 2 and t2_arr.ndim == 2:
         t1_2d = t1_arr
@@ -1135,7 +1135,7 @@ def _pool_mcmc_data(filtered_data: dict[str, Any]) -> dict[str, Any]:
             )
 
     logger.debug(
-        f"Pooled MCMC data: {n_phi} angles × {n_t}×{n_t} = {n_total:,} data points"
+        f"Pooled MCMC data: {n_phi} angles x {n_t}x{n_t} = {n_total:,} data points"
     )
 
     return {
@@ -1234,7 +1234,7 @@ def load_nlsq_result_from_file(nlsq_result_path: Path) -> dict[str, Any] | None:
         _rchi2 = result["reduced_chi_squared"]
         _rchi2_str = f"{_rchi2:.2f}" if _rchi2 is not None else "N/A"
         logger.info(
-            f"  Convergence: {result['convergence_status']}, reduced χ² = {_rchi2_str}"
+            f"  Convergence: {result['convergence_status']}, reduced chi2 = {_rchi2_str}"
         )
 
         # Log physical parameters for diagnostics
@@ -1308,13 +1308,13 @@ def _validate_warmstart_quality(nlsq_result: Any, source: str) -> bool:
     if reduced_chi2 > _CMC_WARMSTART_CHI2_THRESHOLD:
         logger.warning(
             f"NLSQ warm-start ({source}) has poor fit quality "
-            f"(reduced χ² = {reduced_chi2:.2f} > threshold {_CMC_WARMSTART_CHI2_THRESHOLD}). "
+            f"(reduced chi2 = {reduced_chi2:.2f} > threshold {_CMC_WARMSTART_CHI2_THRESHOLD}). "
             "Falling back to config initial values."
         )
         return False
 
     logger.info(
-        f"NLSQ warm-start ({source}) accepted (reduced χ² = {reduced_chi2:.2f}). "
+        f"NLSQ warm-start ({source}) accepted (reduced chi2 = {reduced_chi2:.2f}). "
         "Using NLSQ estimates as CMC initial values."
     )
     return True
@@ -3270,13 +3270,13 @@ def _compute_theoretical_c2_from_mcmc(
                 # Log warning if lstsq produces unphysical values (indicates model mismatch)
                 if contrast_raw > 1.0:
                     logger.warning(
-                        f"Angle {i} (φ={phi:.2f}°): lstsq contrast={contrast_raw:.4f} > 1.0 "
+                        f"Angle {i} (phi={phi:.2f} deg): lstsq contrast={contrast_raw:.4f} > 1.0 "
                         "(unphysical). This indicates the physics model underestimates "
                         "the C2 variation. Clipping to 1.0."
                     )
                 elif contrast_raw <= 0:
                     logger.warning(
-                        f"Angle {i} (φ={phi:.2f}°): lstsq contrast={contrast_raw:.4f} <= 0 "
+                        f"Angle {i} (phi={phi:.2f} deg): lstsq contrast={contrast_raw:.4f} <= 0 "
                         "(unphysical). Clipping to 0.01."
                     )
 
@@ -3290,7 +3290,7 @@ def _compute_theoretical_c2_from_mcmc(
 
                 if i == 0:  # Log first angle details
                     logger.debug(
-                        f"  Angle {i} (φ={phi:.2f}°): fitted contrast={contrast_i:.4f}, "
+                        f"  Angle {i} (phi={phi:.2f} deg): fitted contrast={contrast_i:.4f}, "
                         f"offset={offset_i:.4f}"
                     )
             except Exception as e:
@@ -3336,7 +3336,7 @@ def _compute_theoretical_c2_from_mcmc(
     if c2_range < 0.01:
         logger.warning(
             f"Theoretical C2 has very low variation ({c2_range:.6f} < 0.01). "
-            f"The model prediction is nearly constant (c2 ≈ {c2_min:.4f}). "
+            f"The model prediction is nearly constant (c2 ~ {c2_min:.4f}). "
             "This indicates:\n"
             "  1. Poor MCMC convergence to local minimum\n"
             "  2. Inappropriate initial parameter values\n"

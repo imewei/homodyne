@@ -115,7 +115,7 @@ if [[ -z "$_HOMODYNE_ZSH_COMPLETION_LOADED" ]]; then
     }
 fi"""
 
-    completion_file.write_text(completion_content)
+    completion_file.write_text(completion_content, encoding="utf-8")
     return completion_file
 
 
@@ -138,7 +138,7 @@ def copy_full_completion_script(venv_path: Path) -> Path | None:
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         dest = dest_dir / "completion.sh"
-        dest.write_text(src.read_text())
+        dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
         dest.chmod(0o644)
         return dest
 
@@ -264,7 +264,7 @@ if not set -q _HOMODYNE_FISH_COMPLETION_LOADED
     complete -c homodyne-cleanup -s f -l force -d 'Skip confirmation'
 end
 """
-        fish_file.write_text(fish_content)
+        fish_file.write_text(fish_content, encoding="utf-8")
         fish_file.chmod(0o644)
         return fish_file
 
@@ -388,13 +388,13 @@ def create_xla_activation_scripts(venv_path: Path) -> list[Path]:
 
         # Copy bash/zsh activation script
         xla_bash_dest = activation_dir / "xla_config.bash"
-        xla_bash_dest.write_text(xla_bash_src.read_text())
+        xla_bash_dest.write_text(xla_bash_src.read_text(encoding="utf-8"), encoding="utf-8")
         xla_bash_dest.chmod(0o644)
         created_scripts.append(xla_bash_dest)
 
         # Copy fish activation script
         xla_fish_dest = activation_dir / "xla_config.fish"
-        xla_fish_dest.write_text(xla_fish_src.read_text())
+        xla_fish_dest.write_text(xla_fish_src.read_text(encoding="utf-8"), encoding="utf-8")
         xla_fish_dest.chmod(0o644)
         created_scripts.append(xla_fish_dest)
 
@@ -595,7 +595,7 @@ if [[ -f "{venv_path}/etc/homodyne/activation/xla_config.bash" ]]; then
     source "{venv_path}/etc/homodyne/activation/xla_config.bash"
 fi
 """
-            completion_script.write_text(completion_content)
+            completion_script.write_text(completion_content, encoding="utf-8")
             completion_script.chmod(0o755)
 
             logger.info("Shell completion installed (conda/mamba)")
@@ -700,7 +700,7 @@ from homodyne.runtime.utils.system_validator import main
 if __name__ == "__main__":
     main()
 """
-        validator_cmd.write_text(validator_content)
+        validator_cmd.write_text(validator_content, encoding="utf-8")
         validator_cmd.chmod(0o755)
 
         # Note: Full completion.sh is now always copied by install_shell_completion().

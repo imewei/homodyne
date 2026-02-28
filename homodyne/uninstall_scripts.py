@@ -178,14 +178,14 @@ def cleanup_activate_script_hooks() -> list[tuple[str, str]]:
             continue
 
         try:
-            original = script_path.read_text()
+            original = script_path.read_text(encoding="utf-8")
             modified = _remove_homodyne_blocks(original, end_marker)
 
             if modified != original:
                 # Create .bak backup before modifying
                 backup_path = script_path.with_suffix(script_path.suffix + ".bak")
-                backup_path.write_text(original)
-                script_path.write_text(modified)
+                backup_path.write_text(original, encoding="utf-8")
+                script_path.write_text(modified, encoding="utf-8")
                 cleaned.append(("Activate hook", script_name))
 
         except OSError as e:
