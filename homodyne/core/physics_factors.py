@@ -215,9 +215,9 @@ class PhysicsFactors:
                 f"range [10⁵, 10⁸] Å (10 μm - 10 mm)",
             )
 
-        if self.dt < 1e-3 or self.dt > 1e3:
+        if self.dt < 1e-6 or self.dt > 1e3:
             logger.warning(
-                f"dt = {self.dt:.6e} s is outside typical XPCS range [10⁻³, 10³] s",
+                f"dt = {self.dt:.6e} s is outside typical XPCS range [10⁻⁶, 10³] s",
             )
 
         # Check derived factors

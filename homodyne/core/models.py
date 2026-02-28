@@ -41,6 +41,7 @@ Experimental parameters:
 """
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 import numpy as np
 
@@ -361,7 +362,7 @@ class CombinedModel(
                     dt,
                 )
             try:
-                result = compute_g1_total(params, t1, t2, phi, q, L, dt)  # type: ignore[arg-type]
+                result = compute_g1_total(params, t1, t2, phi, q, L, dt)
                 # Note: Skip debug logging of result values when traced by JAX
                 # (jax.vmap/jit creates BatchTracer objects that can't be formatted)
                 if logger.isEnabledFor(10):  # DEBUG level
@@ -433,8 +434,14 @@ class CombinedModel(
         if not hasattr(self, "_cached_g1_vmap"):
 
             def _compute_g1_single(
-                params_inner, t1_val, t2_val, phi_val, q_inner, L_inner, dt_inner
-            ):
+                params_inner: Any,
+                t1_val: Any,
+                t2_val: Any,
+                phi_val: Any,
+                q_inner: Any,
+                L_inner: Any,
+                dt_inner: Any,
+            ) -> Any:
                 g1 = self.compute_g1(
                     params_inner,
                     jnp.array([t1_val]),

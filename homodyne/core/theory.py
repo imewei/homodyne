@@ -15,6 +15,7 @@ The theory engine handles:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -31,7 +32,7 @@ try:
     from homodyne.core.physics_utils import safe_len
 except ImportError:
     jax_available = False
-    safe_len = len
+    safe_len: Callable[..., int] = len  # type: ignore[no-redef]
     logger = get_logger(__name__)
     logger.error("Could not import JAX backend - theory computations disabled")
 
@@ -414,8 +415,11 @@ class TheoryEngine:
         if jax_available:
             import jax.core as jax_core
 
-            if isinstance(contrast, jax_core.Tracer) or isinstance(offset, jax_core.Tracer):
-                return
+            if isinstance(contrast, jax_core.Tracer) or isinstance(  # type: ignore[unreachable]
+                offset,  # type: ignore[unreachable]
+                jax_core.Tracer,
+            ):
+                return  # type: ignore[unreachable]
 
         if contrast <= 0:
             raise ValueError(f"Contrast must be positive, got {contrast}")
@@ -435,8 +439,8 @@ class TheoryEngine:
         if jax_available:
             import jax.core as jax_core
 
-            if isinstance(data, jax_core.Tracer):
-                return
+            if isinstance(data, jax_core.Tracer):  # type: ignore[unreachable]
+                return  # type: ignore[unreachable]
 
         # Shape consistency
         phi_array = np.atleast_1d(phi)
@@ -460,7 +464,7 @@ class TheoryEngine:
 
     def get_model_info(self) -> dict[str, Any]:
         """Get comprehensive model and engine information."""
-        info = self.model.get_model_info()  # type: ignore[misc]
+        info = self.model.get_model_info()
         info.update(
             {
                 "theory_engine_version": "2.0",

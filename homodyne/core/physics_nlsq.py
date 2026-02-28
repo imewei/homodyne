@@ -168,12 +168,8 @@ def _compute_g1_shear_meshgrid(
         # Return ones for all phi angles and time combinations (g1_shear = 1)
         phi_array = jnp.atleast_1d(phi)
         n_phi = phi_array.shape[0]
-        if t1.ndim == 2:
-            n_times = t1.shape[0]
-            return jnp.ones((n_phi, n_times, n_times))
-        else:
-            n_times = t1.shape[0]
-            return jnp.ones((n_phi, n_times, n_times))
+        n_times = t1.shape[0]
+        return jnp.ones((n_phi, n_times, n_times))
 
     gamma_dot_0, beta, gamma_dot_offset, phi0 = (
         params[3],

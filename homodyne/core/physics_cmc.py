@@ -103,7 +103,7 @@ def precompute_shard_grid(
     time_grid: jnp.ndarray,
     t1: jnp.ndarray,
     t2: jnp.ndarray,
-    dt: float,
+    dt: float | None,
 ) -> ShardGrid:
     """Pre-compute shard-constant quantities for the CMC physics hot path.
 
@@ -222,7 +222,6 @@ def _compute_g1_shear_from_idx(
     time_safe: jnp.ndarray,
     phi_unique: jnp.ndarray,
     sinc_prefactor: jnp.ndarray,
-    dt_safe: float,
 ) -> jnp.ndarray:
     """Shear g1 using pre-computed indices and time_safe.
 
@@ -241,9 +240,6 @@ def _compute_g1_shear_from_idx(
         Unique scattering angles (degrees). Must be pre-deduplicated by caller.
     sinc_prefactor : scalar
         Pre-computed factor 0.5/π * q * L * dt.
-    dt_safe : float
-        Time step used for the gamma_dot_0=0 singularity guard
-        (``jnp.maximum(dt, 1e-5)`` in CMC shear).
 
     Returns
     -------
@@ -296,7 +292,6 @@ def _compute_g1_total_with_precomputed(
     idx2: jnp.ndarray,
     wavevector_q_squared_half_dt: jnp.ndarray,
     sinc_prefactor: jnp.ndarray,
-    dt_safe: float,
 ) -> jnp.ndarray:
     """Total g1 using pre-computed shard-constant quantities.
 
@@ -317,7 +312,6 @@ def _compute_g1_total_with_precomputed(
     idx1, idx2 : (N,)  — pre-computed, shard-constant
     wavevector_q_squared_half_dt : scalar
     sinc_prefactor : scalar
-    dt_safe : float
 
     Returns
     -------
@@ -330,7 +324,7 @@ def _compute_g1_total_with_precomputed(
 
     # Shear: shape (P, N)
     g1_shear = _compute_g1_shear_from_idx(
-        params, idx1, idx2, time_safe, phi_unique, sinc_prefactor, dt_safe
+        params, idx1, idx2, time_safe, phi_unique, sinc_prefactor
     )
 
     # Broadcast and multiply: (P, N)
@@ -341,7 +335,7 @@ def _compute_g1_total_with_precomputed(
     # g1_shear (sinc²) is exactly zero at Phi=n*pi; without this floor, d(g2)/dparams=0
     # at those points, stalling NUTS leapfrog.
     epsilon = 1e-10
-    return jnp.where(g1_total > epsilon, g1_total, epsilon)
+    return jnp.where(g1_total > epsilon, g1_total, epsilon)  # type: ignore[no-any-return]
 
 
 # =============================================================================
@@ -586,7 +580,6 @@ def compute_g1_total_with_precomputed(
         shard_grid.idx2,
         wavevector_q_squared_half_dt,
         sinc_prefactor,
-        shard_grid.dt_safe,
     )
     return result
 
@@ -664,7 +657,7 @@ def compute_g1_total(
     phi: jnp.ndarray,
     q: float,
     L: float,
-    dt: float,
+    dt: float | None,
     time_grid: jnp.ndarray | None = None,
     _debug: bool = False,
 ) -> jnp.ndarray:

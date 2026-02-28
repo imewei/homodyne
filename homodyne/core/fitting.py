@@ -209,7 +209,14 @@ class ParameterSpace:
             "phi_0": self.phi0_bounds,
             "phi0": self.phi0_bounds,
         }
-        return bound_map.get(param_name, (0.0, 1.0))  # Safe fallback
+        default = (0.0, 1.0)
+        bounds = bound_map.get(param_name)
+        if bounds is None:
+            logger.warning(
+                f"Unknown parameter '{param_name}': using default bounds {default}"
+            )
+            return default
+        return bounds
 
     def get_param_priors(self, analysis_mode: str) -> list[tuple[float, float]]:
         """Get parameter priors based on analysis mode."""
@@ -370,7 +377,7 @@ if JAX_AVAILABLE:
 
         # Fallback for singular cases
         contrast = jnp.where(valid_det, contrast, 1.0)
-        offset = jnp.where(valid_det, offset, 0.0)
+        offset = jnp.where(valid_det, offset, 1.0)
 
         # Ensure contrast is positive (physical constraint).
         # P1: Use jnp.where for gradient safety (jnp.maximum zeros gradient below floor).
@@ -411,7 +418,7 @@ else:
                 contrast_batch[i] = max(contrast_batch[i], 1e-6)  # Ensure positive
             else:
                 contrast_batch[i] = 1.0
-                offset_batch[i] = 0.0
+                offset_batch[i] = 1.0
 
         return contrast_batch, offset_batch
 
@@ -773,7 +780,7 @@ if JAX_AVAILABLE:
             jnp.array(0.0, dtype=jnp.float64),  # sum_theory
             jnp.array(0.0, dtype=jnp.float64),  # sum_exp
             jnp.array(0.0, dtype=jnp.float64),  # sum_theory_exp
-            jnp.array(0, dtype=jnp.int32),       # n_data (already fixed in R6)
+            jnp.array(0, dtype=jnp.int32),  # n_data (already fixed in R6)
         )
 
         # Process all chunks
@@ -786,7 +793,7 @@ if JAX_AVAILABLE:
                 n_data_final,
             ),
             _,
-        ) = jax.lax.scan(process_chunk, carry_init, (theory_chunks, exp_chunks))
+        ) = jax.lax.scan(process_chunk, carry_init, (theory_chunks, exp_chunks))  # type: ignore[arg-type]
 
         # Solve 2x2 system (maintaining existing logic)
         det = sum_theory_sq_final * n_data_final - sum_theory_final * sum_theory_final
@@ -806,7 +813,7 @@ if JAX_AVAILABLE:
 
         # Apply constraints
         contrast = jnp.where(valid_det, contrast, 1.0)
-        offset = jnp.where(valid_det, offset, 0.0)
+        offset = jnp.where(valid_det, offset, 1.0)
         # P1: Use jnp.where for gradient safety (jnp.maximum zeros gradient below floor).
         contrast = jnp.where(contrast > 1e-6, contrast, 1e-6)
 
@@ -856,7 +863,7 @@ else:
             contrast = max(contrast, 1e-6)
         else:
             contrast = 1.0
-            offset = 0.0
+            offset = 1.0
 
         return np.array(contrast), np.array(offset)
 

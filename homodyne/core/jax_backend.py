@@ -772,6 +772,7 @@ def _compute_g1_total_core(
     # CRITICAL FIX (Nov 2025): Handle element-wise vs matrix mode
     # Element-wise mode: both g1_diff and g1_shear are 1D (shape (n,))
     # Matrix mode: g1_diff is 2D (n_times, n_times), g1_shear is 3D (n_phi, n_times, n_times)
+    # Note: element-wise branch only valid for single-angle (P=1). Multi-angle CMC uses physics_cmc.py.
     is_elementwise = g1_diff.ndim == 1 and g1_shear.ndim == 1
 
     if is_elementwise:
