@@ -930,10 +930,12 @@ class MultiLevelCache:
 
     def get_cache_stats(self) -> dict[str, Any]:
         """Get comprehensive cache statistics."""
+        # Perform disk I/O outside the lock to avoid blocking other threads.
+        # glob() can be slow (network filesystems, large directories).
+        ssd_items = len(list(self._ssd_cache_path.glob("*.zstd")))
+        hdd_items = len(list(self._hdd_cache_path.glob("*.zstd")))
         with self._lock:
             memory_items = len(self._memory_cache)
-            ssd_items = len(list(self._ssd_cache_path.glob("*.zstd")))
-            hdd_items = len(list(self._hdd_cache_path.glob("*.zstd")))
 
             return {
                 "memory_cache": {

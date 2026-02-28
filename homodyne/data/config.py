@@ -188,7 +188,7 @@ def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
         raise XPCSConfigurationError(f"Configuration file not found: {config_path}")
 
     try:
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config_data = yaml_module.safe_load(f)
 
         if config_data is None:
@@ -228,7 +228,7 @@ def load_json_config(config_path: str | Path) -> dict[str, Any]:
         raise XPCSConfigurationError(f"Configuration file not found: {config_path}")
 
     try:
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config_data = json.load(f)
 
         logger.debug(f"Loaded JSON configuration from: {config_path}")

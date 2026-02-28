@@ -238,14 +238,14 @@ def load_xpcs_config(config_path: str | Path) -> dict[str, Any]:
                 )
 
             # Native YAML loading
-            with open(config_path) as f:
+            with open(config_path, encoding="utf-8") as f:
                 config: dict[str, Any] = yaml.safe_load(f)
             logger.info(f"Loaded YAML configuration: {config_path}")
             return config
 
         elif config_path.suffix.lower() == ".json":
             # JSON loading with structure conversion
-            with open(config_path) as f:
+            with open(config_path, encoding="utf-8") as f:
                 json_config: dict[str, Any] = json.load(f)
 
             logger.info(f"Loaded JSON configuration (converted to YAML): {config_path}")
@@ -1638,8 +1638,9 @@ class XPCSDataLoader:
 
         # Calculate actual q-vector stats from cached data
         q_values = cache_data["wavevector_q_list"]
-        actual_q = float(np.mean(q_values)) if len(q_values) > 0 else config_q
-        q_variance = float(np.std(q_values)) if len(q_values) > 1 else 0.0
+        # Use nan-safe variants: q_values from HDF5 may contain NaN for bad pixels.
+        actual_q = float(np.nanmean(q_values)) if len(q_values) > 0 else config_q
+        q_variance = float(np.nanstd(q_values)) if len(q_values) > 1 else 0.0
 
         cache_metadata = {
             "config_wavevector_q": float(config_q),
@@ -1870,7 +1871,7 @@ class XPCSDataLoader:
                     decay_rates.append(decay_rate)
 
             if decay_rates:
-                mean_decay = np.mean(decay_rates)
+                mean_decay = np.nanmean(decay_rates)
                 logger.info(
                     f"Mean correlation decay over 10 time steps: {mean_decay:.3f}",
                 )

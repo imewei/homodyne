@@ -356,9 +356,10 @@ def _validate_physics_parameters(
     try:
         q_values = np.asarray(data.get("wavevector_q_list", []))
 
-        # Validate q-range against physics constants
+        # Validate q-range against physics constants.
+        # Use nanmin/nanmax: q_values from HDF5 may contain NaN for bad pixels.
         if len(q_values) > 0:
-            q_min, q_max = np.min(q_values), np.max(q_values)
+            q_min, q_max = np.nanmin(q_values), np.nanmax(q_values)
 
             if q_min < PhysicsConstants.Q_MIN_TYPICAL:
                 report.add_issue(
@@ -414,13 +415,16 @@ def _validate_physics_parameters(
                     )
 
         if len(q_values) > 0:
+            # Reuse q_min/q_max already computed above (avoids redundant nanmin/nanmax).
+            _q_min = float(q_min)
+            _q_max = float(q_max)
             report.physics_checks = {
                 "q_range_valid": PhysicsConstants.Q_MIN_TYPICAL
-                <= float(np.min(q_values))
-                <= float(np.max(q_values))
+                <= _q_min
+                <= _q_max
                 <= PhysicsConstants.Q_MAX_TYPICAL,
-                "q_min": float(np.min(q_values)),
-                "q_max": float(np.max(q_values)),
+                "q_min": _q_min,
+                "q_max": _q_max,
             }
         else:
             report.physics_checks = {

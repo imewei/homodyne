@@ -444,15 +444,16 @@ class XPCSDataFilter:
 
             diagonal_quality = 1.0 if 0.5 <= t0_correlation <= 2.0 else 0.5
 
-            # Check matrix symmetry
+            # Check matrix symmetry.
+            # Use nanmean: up to 10% non-finite values pass the finite_fraction guard.
             if matrix.shape[0] == matrix.shape[1]:
-                symmetry_error = np.mean(np.abs(matrix - matrix.T))
+                symmetry_error = np.nanmean(np.abs(matrix - matrix.T))
                 symmetry_quality = max(0.0, 1.0 - symmetry_error * 100)
             else:
                 symmetry_quality = 0.5
 
             # Check for reasonable value ranges
-            matrix_mean = np.mean(matrix)
+            matrix_mean = np.nanmean(matrix)
             range_quality = 1.0 if 0.1 <= matrix_mean <= 5.0 else 0.5
 
             # Combine quality metrics

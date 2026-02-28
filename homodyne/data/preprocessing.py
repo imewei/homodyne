@@ -1037,7 +1037,7 @@ class PreprocessingPipeline:
         filepath = Path(filepath)
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(filepath, "w") as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             json.dump(provenance.to_dict(), f, indent=2)
 
         logger.info(f"Preprocessing provenance saved to: {filepath}")
@@ -1051,7 +1051,7 @@ class PreprocessingPipeline:
         Returns:
             PreprocessingProvenance object
         """
-        with open(filepath) as f:
+        with open(filepath, encoding="utf-8") as f:
             data = json.load(f)
 
         # Reconstruct provenance object

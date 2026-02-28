@@ -1446,7 +1446,7 @@ class DataQualityController:
         if output_path and self.quality_config.export_detailed_reports:
             try:
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                with open(output_path, "w") as f:
+                with open(output_path, "w", encoding="utf-8") as f:
                     json.dump(report, f, indent=2, default=str)
                 logger.info(f"Quality report saved to: {output_path}")
             except Exception as e:
