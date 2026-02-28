@@ -66,7 +66,12 @@ class TestNlsqPlotsContrastWarning:
 
         from homodyne.viz.nlsq_plots import plot_simulated_data
 
-        config = {"analysis_mode": "static", "parameters": {}}
+        # Use small end_frame to avoid creating huge meshgrid (default 8000x8000).
+        config = {
+            "analysis_mode": "static",
+            "parameters": {},
+            "analyzer_parameters": {"end_frame": 10, "start_frame": 1, "dt": 0.1},
+        }
         with caplog.at_level(logging.WARNING, logger="homodyne.viz.nlsq_plots"):
             try:
                 plot_simulated_data(
