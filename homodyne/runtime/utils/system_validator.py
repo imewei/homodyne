@@ -1437,7 +1437,7 @@ Examples:
                 for warning in result.warnings:
                     print(f"[WARN] {warning}")
             if result.remediation:
-                print("\n🔧 Remediation:")
+                print("\n[FIX] Remediation:")
                 for fix in result.remediation:
                     print(f"   {fix}")
 

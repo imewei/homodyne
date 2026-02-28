@@ -309,7 +309,7 @@ def cleanup_old_system_files() -> list[tuple[str, str]]:
 def interactive_cleanup() -> list[tuple[str, str]]:
     """Interactive cleanup allowing user to choose what to remove."""
     try:
-        print("\n🧹 Homodyne Interactive Cleanup")
+        print("\nHomodyne Interactive Cleanup")
         print("Choose what to remove:")
         print()
 
@@ -395,11 +395,11 @@ def cleanup_all_files() -> bool:
     system = platform.system()
     is_venv = is_virtual_environment()
 
-    print("═" * 70)
-    print("🧹 Homodyne Cleanup - Shell Completion System")
-    print("═" * 70)
+    print("=" * 70)
+    print("Homodyne Cleanup - Shell Completion System")
+    print("=" * 70)
     print(f"Platform: {system}")
-    print(f"📦 Environment: {'Virtual Environment' if is_venv else 'System Python'}")
+    print(f"[ENV] Environment: {'Virtual Environment' if is_venv else 'System Python'}")
 
     if not is_venv:
         print("\n[WARN] Not running in a virtual environment")
@@ -446,7 +446,7 @@ def cleanup_all_files() -> bool:
         if all_removed:
             print(f"   [OK] Successfully removed {len(all_removed)} items:")
             for file_type, name in all_removed:
-                print(f"      • {file_type}: {name}")
+                print(f"      - {file_type}: {name}")
             print("   Restart shell or reactivate environment to complete cleanup")
         else:
             print("   No homodyne files found to remove")
@@ -464,11 +464,11 @@ def show_dry_run() -> bool:
     system = platform.system()
     is_venv = is_virtual_environment()
 
-    print("═" * 70)
-    print("🧹 Homodyne Cleanup - DRY RUN")
-    print("═" * 70)
+    print("=" * 70)
+    print("Homodyne Cleanup - DRY RUN")
+    print("=" * 70)
     print(f"Platform: {system}")
-    print(f"📦 Environment: {'Virtual Environment' if is_venv else 'System Python'}")
+    print(f"[ENV] Environment: {'Virtual Environment' if is_venv else 'System Python'}")
 
     if not is_venv:
         print("\n[WARN] Not running in a virtual environment")
@@ -576,9 +576,9 @@ def show_dry_run() -> bool:
 
     print("\nDry Run Results:")
     if files_to_remove:
-        print(f"   📋 Would remove {len(files_to_remove)} items:")
+        print(f"   [LIST] Would remove {len(files_to_remove)} items:")
         for file_type, name in files_to_remove:
-            print(f"      • {file_type}: {name}")
+            print(f"      - {file_type}: {name}")
         print("   Would clean up empty directories")
         print("\n[TIP] To actually remove these files, run without --dry-run")
     else:
@@ -596,9 +596,9 @@ def main() -> int:
         if args.dry_run:
             success = show_dry_run()
         elif args.interactive:
-            print("═" * 70)
-            print("🧹 Homodyne Interactive Cleanup")
-            print("═" * 70)
+            print("=" * 70)
+            print("Homodyne Interactive Cleanup")
+            print("=" * 70)
 
             if not is_virtual_environment():
                 print("\n[WARN] Not in a virtual environment - nothing to clean")
@@ -610,7 +610,7 @@ def main() -> int:
             if removed_files:
                 print(f"   [OK] Removed {len(removed_files)} items:")
                 for file_type, name in removed_files:
-                    print(f"      • {file_type}: {name}")
+                    print(f"      - {file_type}: {name}")
             else:
                 print("   No files were removed")
 
@@ -622,15 +622,15 @@ def main() -> int:
                     "\n[WARN] This will remove all homodyne shell completion and setup files:",
                 )
                 print(
-                    "   • Shell completion scripts and aliases (hm, hconfig, hm-nlsq, etc.)",
+                    "   - Shell completion scripts and aliases (hm, hconfig, hm-nlsq, etc.)",
                 )
-                print("   • Activation scripts (homodyne-activate)")
-                print("   • GPU acceleration setup files")
-                print("   • Advanced features CLI commands")
-                print("   • All conda activation hooks")
-                print("   • XLA configuration (~/.homodyne_xla_mode)")
+                print("   - Activation scripts (homodyne-activate)")
+                print("   - GPU acceleration setup files")
+                print("   - Advanced features CLI commands")
+                print("   - All conda activation hooks")
+                print("   - XLA configuration (~/.homodyne_xla_mode)")
                 print(
-                    "   • XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)"
+                    "   - XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)"
                 )
                 print("\n[TIP] To restore these files later, run:")
                 print("   homodyne-post-install --interactive")
@@ -638,46 +638,46 @@ def main() -> int:
 
                 try:
                     confirm = (
-                        input("🤔 Are you sure you want to proceed? [y/N]: ")
+                        input("Are you sure you want to proceed? [y/N]: ")
                         .strip()
                         .lower()
                     )
                     if not confirm.startswith("y"):
-                        print("🚫 Cleanup cancelled by user")
+                        print("[SKIP] Cleanup cancelled by user")
                         return 0
                 except (KeyboardInterrupt, EOFError):
-                    print("\n🚫 Cleanup cancelled by user")
+                    print("\n[SKIP] Cleanup cancelled by user")
                     return 0
 
             success = cleanup_all_files()
 
-        print("\n" + "═" * 70)
+        print("\n" + "=" * 70)
         if success:
             print("[OK] Homodyne cleanup completed!")
             if not args.interactive:
                 print("\n[TIP] What was cleaned:")
-                print("   ├─ Shell completion scripts (bash/zsh/fish)")
-                print("   ├─ Activation scripts (homodyne-activate)")
-                print("   ├─ GPU acceleration setup (JAX with CUDA)")
-                print("   ├─ Conda activation hooks")
-                print("   ├─ XLA configuration (~/.homodyne_xla_mode)")
+                print("   |- Shell completion scripts (bash/zsh/fish)")
+                print("   |- Activation scripts (homodyne-activate)")
+                print("   |- GPU acceleration setup (JAX with CUDA)")
+                print("   |- Conda activation hooks")
+                print("   |- XLA configuration (~/.homodyne_xla_mode)")
                 print(
-                    "   ├─ XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)"
+                    "   |- XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)"
                 )
-                print("   └─ Legacy system files")
+                print("   `- Legacy system files")
             print("\nNext steps:")
-            print("   • Restart your shell session")
-            print("   • Or reactivate your virtual environment")
-            print("   • Run 'pip uninstall homodyne' to complete removal")
-            print("\n🔧 To restore shell completion and setup files:")
+            print("   - Restart your shell session")
+            print("   - Or reactivate your virtual environment")
+            print("   - Run 'pip uninstall homodyne' to complete removal")
+            print("\n[FIX] To restore shell completion and setup files:")
             print("   homodyne-post-install --interactive")
         else:
             print("[WARN] Cleanup had some issues")
             print("\n[TIP] Troubleshooting:")
-            print("   • Make sure you're in a virtual environment")
-            print("   • Try: homodyne-cleanup --interactive")
-            print("   • Check file permissions if needed")
-        print("═" * 70)
+            print("   - Make sure you're in a virtual environment")
+            print("   - Try: homodyne-cleanup --interactive")
+            print("   - Check file permissions if needed")
+        print("=" * 70)
 
         return 0 if success else 1
 
@@ -710,13 +710,13 @@ IMPORTANT: To restore files after cleanup, run:
   homodyne-post-install --interactive
 
 Files removed:
-  • Shell completion scripts (bash/zsh/fish)
-  • Activation scripts (homodyne-activate)
-  • GPU acceleration setup (JAX with CUDA)
-  • Conda activation hooks
-  • XLA configuration (~/.homodyne_xla_mode)
-  • XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)
-  • Legacy system files
+  - Shell completion scripts (bash/zsh/fish)
+  - Activation scripts (homodyne-activate)
+  - GPU acceleration setup (JAX with CUDA)
+  - Conda activation hooks
+  - XLA configuration (~/.homodyne_xla_mode)
+  - XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)
+  - Legacy system files
 
 Supports: conda, mamba, uv, venv, virtualenv
         """,

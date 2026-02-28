@@ -295,7 +295,7 @@ def integrate_with_venv_activate(venv_path: Path) -> list[Path]:
     bash_activate = bin_dir / "activate"
     if bash_activate.exists():
         try:
-            content = bash_activate.read_text()
+            content = bash_activate.read_text(encoding="utf-8")
 
             # Check if already integrated
             if "homodyne-completion" not in content:
@@ -309,7 +309,7 @@ elif [[ -f "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh" ]]; then
     source "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh"
 fi
 """
-                with bash_activate.open("a") as f:
+                with bash_activate.open("a", encoding="utf-8") as f:
                     f.write(completion_code)
 
                 modified_scripts.append(bash_activate)
@@ -324,7 +324,7 @@ fi
     fish_activate = bin_dir / "activate.fish"
     if fish_activate.exists():
         try:
-            content = fish_activate.read_text()
+            content = fish_activate.read_text(encoding="utf-8")
 
             # Check if already integrated
             if "homodyne-completion" not in content:
@@ -335,7 +335,7 @@ if test -f "$VIRTUAL_ENV/etc/homodyne/shell/completion.fish"
     source "$VIRTUAL_ENV/etc/homodyne/shell/completion.fish"
 end
 """
-                with fish_activate.open("a") as f:
+                with fish_activate.open("a", encoding="utf-8") as f:
                     f.write(completion_code)
 
                 modified_scripts.append(fish_activate)
@@ -429,7 +429,7 @@ def integrate_xla_with_venv_activate(venv_path: Path) -> list[Path]:
     bash_activate = bin_dir / "activate"
     if bash_activate.exists():
         try:
-            content = bash_activate.read_text()
+            content = bash_activate.read_text(encoding="utf-8")
 
             # Check if already integrated
             if "homodyne XLA configuration" not in content:
@@ -440,7 +440,7 @@ if [[ -f "$VIRTUAL_ENV/etc/homodyne/activation/xla_config.bash" ]]; then
     source "$VIRTUAL_ENV/etc/homodyne/activation/xla_config.bash"
 fi
 """
-                with bash_activate.open("a") as f:
+                with bash_activate.open("a", encoding="utf-8") as f:
                     f.write(xla_code)
 
                 modified_scripts.append(bash_activate)
@@ -457,7 +457,7 @@ fi
     fish_activate = bin_dir / "activate.fish"
     if fish_activate.exists():
         try:
-            content = fish_activate.read_text()
+            content = fish_activate.read_text(encoding="utf-8")
 
             # Check if already integrated
             if "homodyne XLA configuration" not in content:
@@ -468,7 +468,7 @@ if test -f "$VIRTUAL_ENV/etc/homodyne/activation/xla_config.fish"
     source "$VIRTUAL_ENV/etc/homodyne/activation/xla_config.fish"
 end
 """
-                with fish_activate.open("a") as f:
+                with fish_activate.open("a", encoding="utf-8") as f:
                     f.write(xla_code)
 
                 modified_scripts.append(fish_activate)
