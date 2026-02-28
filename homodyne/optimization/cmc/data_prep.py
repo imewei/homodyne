@@ -212,11 +212,11 @@ def compute_data_statistics(data: np.ndarray) -> dict[str, float]:
         Statistics including min, max, mean, std, median.
     """
     return {
-        "min": float(np.min(data)),
-        "max": float(np.max(data)),
-        "mean": float(np.mean(data)),
-        "std": float(np.std(data)),
-        "median": float(np.median(data)),
+        "min": float(np.nanmin(data)),
+        "max": float(np.nanmax(data)),
+        "mean": float(np.nanmean(data)),
+        "std": float(np.nanstd(data)),
+        "median": float(np.nanmedian(data)),
     }
 
 
@@ -276,7 +276,11 @@ def prepare_mcmc_data(
         # Epsilon = 1 ppm of the smallest time step (or 1e-12 fallback).
         _t_unique = np.unique(np.concatenate([t1, t2]))
         _diffs = np.diff(_t_unique)
-        _dt_min = float(_diffs[_diffs > 0].min()) if _diffs.size > 0 and np.any(_diffs > 0) else 1.0
+        _dt_min = (
+            float(_diffs[_diffs > 0].min())
+            if _diffs.size > 0 and np.any(_diffs > 0)
+            else 1.0
+        )
         _diag_eps = max(_dt_min * 1e-6, 1e-12)
         non_diagonal_mask = np.abs(t1 - t2) > _diag_eps
         data = data[non_diagonal_mask]

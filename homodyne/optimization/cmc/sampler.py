@@ -736,7 +736,7 @@ def run_nuts_sampling(
             z_space_init["log_D_ref"] = float(np.log(D_ref_init))
             denom = D_ref_init + D_offset_init
             z_space_init["D_offset_frac"] = (
-                float(D_offset_init / denom) if denom > 0 else 0.05
+                float(np.clip(D_offset_init / denom, 0.0, 0.5)) if denom > 0 else 0.05
             )
 
         if (
@@ -766,7 +766,10 @@ def run_nuts_sampling(
     # match), falling back to init_to_median and discarding the NLSQ warm-start.
     # For these modes, use the original-space full_init directly.
     nlsq_prior_config = model_kwargs.get("nlsq_prior_config")
-    if nlsq_prior_config is not None and per_angle_mode in ("auto", "constant_averaged"):
+    if nlsq_prior_config is not None and per_angle_mode in (
+        "auto",
+        "constant_averaged",
+    ):
         # Original-space initialization for NLSQ-informed models
         init_strategy = create_init_strategy(full_init, param_names_with_sigma)
     else:
@@ -1172,7 +1175,11 @@ def run_nuts_sampling(
     # Create MCMCSamples object
     # Derive actual chain count from first sample array (not from config)
     first_param_samples = next(iter(samples_np.values()), None)
-    actual_n_chains = first_param_samples.shape[0] if first_param_samples is not None else config.num_chains
+    actual_n_chains = (
+        first_param_samples.shape[0]
+        if first_param_samples is not None
+        else config.num_chains
+    )
     mcmc_samples = MCMCSamples(
         samples=samples_np,
         param_names=[k for k in samples_np.keys() if k != "obs"],
@@ -1312,9 +1319,7 @@ def run_nuts_with_retry(
             )
             last_error = e
 
-    run_logger.error(
-        f"MCMC sampling failed after {max_retries} attempts: {last_error}"
-    )
+    run_logger.error(f"MCMC sampling failed after {max_retries} attempts: {last_error}")
     # All retries failed
     raise RuntimeError(
         f"MCMC sampling failed after {max_retries} attempts: {last_error}"

@@ -263,7 +263,7 @@ class HierarchicalOptimizer:
     ) -> Callable[[np.ndarray], float]:
         """Create physical loss function with pre-allocated buffer (FR-002).
 
-        Uses in-place updates to avoid np.concatenate allocations on every call.
+        Uses a local buffer copy to avoid interference between closures.
 
         Parameters
         ----------
@@ -277,13 +277,13 @@ class HierarchicalOptimizer:
         callable
             Physical-only loss function.
         """
-        # Copy frozen values into buffer once
-        self._full_params_buffer[self.per_angle_indices] = frozen_per_angle
+        # Local copy to avoid shared-buffer interference between closures
+        buffer = self._full_params_buffer.copy()
+        buffer[self.per_angle_indices] = frozen_per_angle
 
         def physical_loss(physical_params: np.ndarray) -> float:
-            # In-place update of physical params (avoids np.concatenate)
-            self._full_params_buffer[self.physical_indices] = physical_params
-            return loss_fn(self._full_params_buffer)
+            buffer[self.physical_indices] = physical_params
+            return loss_fn(buffer)
 
         return physical_loss
 
@@ -294,7 +294,7 @@ class HierarchicalOptimizer:
     ) -> Callable[[np.ndarray], np.ndarray]:
         """Create physical gradient function with pre-allocated buffer (FR-002).
 
-        Uses in-place updates to avoid np.concatenate allocations on every call.
+        Uses a local buffer copy to avoid interference between closures.
 
         Parameters
         ----------
@@ -308,13 +308,13 @@ class HierarchicalOptimizer:
         callable
             Physical-only gradient function.
         """
-        # Copy frozen values into buffer once
-        self._full_params_buffer[self.per_angle_indices] = frozen_per_angle
+        # Local copy to avoid shared-buffer interference between closures
+        buffer = self._full_params_buffer.copy()
+        buffer[self.per_angle_indices] = frozen_per_angle
 
         def physical_grad(physical_params: np.ndarray) -> np.ndarray:
-            # In-place update of physical params (avoids np.concatenate)
-            self._full_params_buffer[self.physical_indices] = physical_params
-            full_grad = grad_fn(self._full_params_buffer)
+            buffer[self.physical_indices] = physical_params
+            full_grad = grad_fn(buffer)
             return full_grad[self.physical_indices]
 
         return physical_grad
@@ -326,7 +326,7 @@ class HierarchicalOptimizer:
     ) -> Callable[[np.ndarray], float]:
         """Create per-angle loss function with pre-allocated buffer (FR-002).
 
-        Uses in-place updates to avoid np.concatenate allocations on every call.
+        Uses a local buffer copy to avoid interference between closures.
 
         Parameters
         ----------
@@ -340,13 +340,13 @@ class HierarchicalOptimizer:
         callable
             Per-angle-only loss function.
         """
-        # Copy frozen values into buffer once
-        self._full_params_buffer[self.physical_indices] = frozen_physical
+        # Local copy to avoid shared-buffer interference between closures
+        buffer = self._full_params_buffer.copy()
+        buffer[self.physical_indices] = frozen_physical
 
         def per_angle_loss(per_angle_params: np.ndarray) -> float:
-            # In-place update of per-angle params (avoids np.concatenate)
-            self._full_params_buffer[self.per_angle_indices] = per_angle_params
-            return loss_fn(self._full_params_buffer)
+            buffer[self.per_angle_indices] = per_angle_params
+            return loss_fn(buffer)
 
         return per_angle_loss
 
@@ -357,7 +357,7 @@ class HierarchicalOptimizer:
     ) -> Callable[[np.ndarray], np.ndarray]:
         """Create per-angle gradient function with pre-allocated buffer (FR-002).
 
-        Uses in-place updates to avoid np.concatenate allocations on every call.
+        Uses a local buffer copy to avoid interference between closures.
 
         Parameters
         ----------
@@ -371,13 +371,13 @@ class HierarchicalOptimizer:
         callable
             Per-angle-only gradient function.
         """
-        # Copy frozen values into buffer once
-        self._full_params_buffer[self.physical_indices] = frozen_physical
+        # Local copy to avoid shared-buffer interference between closures
+        buffer = self._full_params_buffer.copy()
+        buffer[self.physical_indices] = frozen_physical
 
         def per_angle_grad(per_angle_params: np.ndarray) -> np.ndarray:
-            # In-place update of per-angle params (avoids np.concatenate)
-            self._full_params_buffer[self.per_angle_indices] = per_angle_params
-            full_grad = grad_fn(self._full_params_buffer)
+            buffer[self.per_angle_indices] = per_angle_params
+            full_grad = grad_fn(buffer)
             return full_grad[self.per_angle_indices]
 
         return per_angle_grad
@@ -518,7 +518,7 @@ class HierarchicalOptimizer:
         return HierarchicalResult(
             x=current_params,
             fun=final_loss,
-            success=converged or (final_loss < initial_loss),
+            success=converged,
             n_outer_iterations=len(history),
             history=history,
             total_time=total_time,

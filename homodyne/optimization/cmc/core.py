@@ -748,6 +748,18 @@ def _fit_mcmc_jax_impl(
             [scaling_estimates[f"offset_{i}"] for i in range(prepared.n_phi)]
         )
 
+        # NaN guard: reject corrupted per-angle scaling estimates
+        if np.any(np.isnan(contrast_per_angle)):
+            raise ValueError(
+                "NaN detected in per-angle contrast estimates. "
+                "Check data quality for angles with insufficient points."
+            )
+        if np.any(np.isnan(offset_per_angle)):
+            raise ValueError(
+                "NaN detected in per-angle offset estimates. "
+                "Check data quality for angles with insufficient points."
+            )
+
         fixed_contrast = jnp.array(contrast_per_angle)
         fixed_offset = jnp.array(offset_per_angle)
 
@@ -755,20 +767,20 @@ def _fit_mcmc_jax_impl(
             # CONSTANT_AVERAGED mode: Model will internally average these
             run_logger.info(
                 f"CONSTANT_AVERAGED mode: Using FIXED AVERAGED scaling (NLSQ parity):\n"
-                f"  contrast: per-angle range=[{contrast_per_angle.min():.4f}, {contrast_per_angle.max():.4f}], "
-                f"avg={contrast_per_angle.mean():.4f} (will be used)\n"
-                f"  offset: per-angle range=[{offset_per_angle.min():.4f}, {offset_per_angle.max():.4f}], "
-                f"avg={offset_per_angle.mean():.4f} (will be used)\n"
+                f"  contrast: per-angle range=[{np.nanmin(contrast_per_angle):.4f}, {np.nanmax(contrast_per_angle):.4f}], "
+                f"avg={np.nanmean(contrast_per_angle):.4f} (will be used)\n"
+                f"  offset: per-angle range=[{np.nanmin(offset_per_angle):.4f}, {np.nanmax(offset_per_angle):.4f}], "
+                f"avg={np.nanmean(offset_per_angle):.4f} (will be used)\n"
                 f"  Parameters: {n_physical} physical + 1 sigma = {n_physical + 1} total (scaling fixed, averaged)"
             )
         else:
             # CONSTANT mode: Different value per angle
             run_logger.info(
                 f"CONSTANT mode: Using FIXED per-angle scaling (NOT sampled):\n"
-                f"  contrast: mean={contrast_per_angle.mean():.4f}, "
-                f"range=[{contrast_per_angle.min():.4f}, {contrast_per_angle.max():.4f}]\n"
-                f"  offset: mean={offset_per_angle.mean():.4f}, "
-                f"range=[{offset_per_angle.min():.4f}, {offset_per_angle.max():.4f}]\n"
+                f"  contrast: mean={np.nanmean(contrast_per_angle):.4f}, "
+                f"range=[{np.nanmin(contrast_per_angle):.4f}, {np.nanmax(contrast_per_angle):.4f}]\n"
+                f"  offset: mean={np.nanmean(offset_per_angle):.4f}, "
+                f"range=[{np.nanmin(offset_per_angle):.4f}, {np.nanmax(offset_per_angle):.4f}]\n"
                 f"  Parameters: {n_physical} physical + 1 sigma = {n_physical + 1} total (scaling fixed)"
             )
     elif effective_per_angle_mode == "auto":

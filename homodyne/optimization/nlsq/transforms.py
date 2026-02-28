@@ -259,7 +259,7 @@ def apply_forward_shear_transforms_to_vector(
             state["beta_center_idx"] = idx
 
     if state["gamma_log_idx"] is None and state["beta_center_idx"] is None:
-        return params, {}
+        return np.asarray(params, dtype=float).copy(), {}
 
     return vector, state
 

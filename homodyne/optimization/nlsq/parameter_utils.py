@@ -472,17 +472,21 @@ def compute_quantile_per_angle_scaling(
         delta_t_angle = delta_t[mask]
 
         # Find lag thresholds for this angle
-        lag_threshold_high = np.percentile(delta_t_angle, lag_floor_quantile * 100)
-        lag_threshold_low = np.percentile(delta_t_angle, lag_ceiling_quantile * 100)
+        lag_threshold_high = np.nanpercentile(delta_t_angle, lag_floor_quantile * 100)
+        lag_threshold_low = np.nanpercentile(delta_t_angle, lag_ceiling_quantile * 100)
 
         # OFFSET estimation: From large-lag region where g1² ≈ 0
         large_lag_mask = delta_t_angle >= lag_threshold_high
         if np.sum(large_lag_mask) >= 10:
             c2_floor_region = c2_angle[large_lag_mask]
-            offset_est = np.percentile(c2_floor_region, value_quantile_low * 100)
+            offset_est = np.nanpercentile(c2_floor_region, value_quantile_low * 100)
+            if not np.isfinite(offset_est):
+                offset_est = offset_mid
         else:
             # Fallback: use overall low quantile
-            offset_est = np.percentile(c2_angle, value_quantile_low * 100)
+            offset_est = np.nanpercentile(c2_angle, value_quantile_low * 100)
+            if not np.isfinite(offset_est):
+                offset_est = offset_mid
 
         # Clip offset to bounds
         offset_est = float(np.clip(offset_est, offset_bounds[0], offset_bounds[1]))
@@ -491,10 +495,14 @@ def compute_quantile_per_angle_scaling(
         small_lag_mask = delta_t_angle <= lag_threshold_low
         if np.sum(small_lag_mask) >= 10:
             c2_ceiling_region = c2_angle[small_lag_mask]
-            c2_ceiling = np.percentile(c2_ceiling_region, value_quantile_high * 100)
+            c2_ceiling = np.nanpercentile(c2_ceiling_region, value_quantile_high * 100)
+            if not np.isfinite(c2_ceiling):
+                c2_ceiling = contrast_mid + offset_mid
         else:
             # Fallback: use overall high quantile
-            c2_ceiling = np.percentile(c2_angle, value_quantile_high * 100)
+            c2_ceiling = np.nanpercentile(c2_angle, value_quantile_high * 100)
+            if not np.isfinite(c2_ceiling):
+                c2_ceiling = contrast_mid + offset_mid
 
         # contrast ≈ c2_ceiling - offset
         contrast_est = c2_ceiling - offset_est

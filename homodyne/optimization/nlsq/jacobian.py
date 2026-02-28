@@ -180,6 +180,7 @@ def estimate_gradient_noise(
     params: np.ndarray,
     n_samples: int = 5,
     perturbation: float = 1e-6,
+    seed: int = 42,
 ) -> float | None:
     """Estimate gradient noise from multiple Jacobian computations.
 
@@ -207,15 +208,13 @@ def estimate_gradient_noise(
     try:
         params_base = np.asarray(params, dtype=float)
         jacobians = []
-        rng = np.random.default_rng(seed=42)
+        rng = np.random.default_rng(seed=seed)
 
         # Define residual_vector once outside the loop (branch condition is loop-invariant)
         if hasattr(residual_fn, "jax_residual"):
 
             def residual_vector(p):
-                return jnp.asarray(
-                    residual_fn.jax_residual(jnp.asarray(p))
-                ).reshape(-1)
+                return jnp.asarray(residual_fn.jax_residual(jnp.asarray(p))).reshape(-1)
 
         else:
 
@@ -225,7 +224,9 @@ def estimate_gradient_noise(
         for _ in range(n_samples):
             # Add small perturbation
             noise = (
-                rng.standard_normal(len(params_base)) * perturbation * np.abs(params_base)
+                rng.standard_normal(len(params_base))
+                * perturbation
+                * np.abs(params_base)
             )
             params_perturbed = params_base + noise
 

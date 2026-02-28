@@ -270,7 +270,7 @@ class LargeDatasetExecutor(OptimizationExecutor):
                     pcov = result.pcov
                 info = {"nfev": getattr(result, "nfev", 0)}
 
-            info["success"] = info.get("success", True)
+            info.setdefault("success", True)
             info["strategy"] = "large"
 
             return ExecutionResult(
@@ -278,7 +278,9 @@ class LargeDatasetExecutor(OptimizationExecutor):
                 pcov=np.asarray(pcov),
                 info=info,
                 recovery_actions=[],
-                convergence_status="converged" if info.get("success", True) else "partial",
+                convergence_status="converged"
+                if info.get("success", True)
+                else "partial",
             )
 
         except (ValueError, RuntimeError, TypeError, OSError, MemoryError) as e:

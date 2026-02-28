@@ -20,6 +20,7 @@ except ImportError:
 
 import numpy as np
 
+from homodyne.optimization.cmc.diagnostics import DEFAULT_MIN_ESS
 from homodyne.optimization.cmc.sampler import MCMCSamples, SamplingStats
 from homodyne.utils.logging import get_logger
 
@@ -134,7 +135,9 @@ class CMCResult:
     n_samples: int = 2000
     n_warmup: int = 500
     analysis_mode: str = "static"
-    per_angle_mode: str = "auto"  # Per-angle scaling mode (auto/constant/constant_averaged/individual)
+    per_angle_mode: str = (
+        "auto"  # Per-angle scaling mode (auto/constant/constant_averaged/individual)
+    )
     num_shards: int = 1  # Number of shards combined (for correct divergence rate)
 
     # Compatibility fields
@@ -274,9 +277,13 @@ class CMCResult:
         # P2-R6-03: Guard against param_names entries absent from samples
         # (e.g. deterministic sites not returned by get_samples, failed shards).
         present_names = [n for n in param_names if n in mcmc_samples.samples]
-        all_samples = np.column_stack(
-            [mcmc_samples.samples[name].flatten() for name in present_names]
-        ) if present_names else np.zeros((0, 0))
+        all_samples = (
+            np.column_stack(
+                [mcmc_samples.samples[name].flatten() for name in present_names]
+            )
+            if present_names
+            else np.zeros((0, 0))
+        )
         if all_samples.shape[0] < 2:
             # Not enough samples for covariance - return zeros
             covariance = np.zeros((all_samples.shape[1], all_samples.shape[1]))
@@ -441,8 +448,9 @@ class CMCResult:
             # only warn if the mode actually expects sampled contrast/offset.
             # analysis_mode vocabulary is "static"/"laminar_flow" (not "constant"),
             # so check per_angle_mode (which tracks the scaling strategy) instead.
-            if self.analysis_mode not in ("constant", "constant_averaged") and \
-               getattr(self, 'per_angle_mode', None) not in ("constant", "constant_averaged"):
+            if self.analysis_mode not in ("constant", "constant_averaged") and getattr(
+                self, "per_angle_mode", None
+            ) not in ("constant", "constant_averaged"):
                 warnings.append(
                     "No contrast/offset sites found in posterior samples. "
                     "Expected 'contrast'/'offset' (auto mode) or 'contrast_0'/'offset_0' "
@@ -457,8 +465,8 @@ class CMCResult:
 
         if max_r_hat > 1.1:
             warnings.append(f"High R-hat detected: {max_r_hat:.3f} > 1.1")
-        if min_ess < 100:
-            warnings.append(f"Low ESS detected: {min_ess:.0f} < 100")
+        if min_ess < DEFAULT_MIN_ESS:
+            warnings.append(f"Low ESS detected: {min_ess:.0f} < {DEFAULT_MIN_ESS}")
 
         # Check for divergences
         if self.divergences > 0:
@@ -739,9 +747,7 @@ def compute_fitted_c2(
             [
                 np.full(
                     n_phi,
-                    result.samples["offset"][
-                        chain_indices[i], within_chain_indices[i]
-                    ],
+                    result.samples["offset"][chain_indices[i], within_chain_indices[i]],
                 )
                 for i in range(n_posterior_samples)
             ]

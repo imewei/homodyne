@@ -692,7 +692,7 @@ def _run_shard_worker(
             model_kwargs["shard_grid"] = precompute_shard_grid(
                 _time_grid, _t1, _t2, _dt
             )
-    except Exception as _exc:
+    except (ImportError, ValueError, RuntimeError) as _exc:
         # Non-fatal: fall back to legacy compute_g1_total path in model.py
         worker_logger.warning(
             f"precompute_shard_grid failed (using legacy path): "

@@ -407,6 +407,7 @@ def create_shear_weighting(
     phi_angles: np.ndarray,
     n_physical: int,
     config: Mapping | None = None,
+    physical_param_names: list[str] | None = None,
 ) -> ShearSensitivityWeighting | None:
     """Factory function to create shear weighting if enabled.
 
@@ -435,7 +436,14 @@ def create_shear_weighting(
 
     # phi0 is typically the last of the 7 physical parameters in laminar_flow
     # Physical params: [D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
-    phi0_index = 6  # 0-indexed position of phi0 in physical params
+    if physical_param_names is not None and "phi0" not in physical_param_names:
+        logger.debug("phi0 not in physical params -- shear weighting disabled")
+        return None
+    phi0_index = (
+        physical_param_names.index("phi0")
+        if physical_param_names is not None and "phi0" in physical_param_names
+        else 6
+    )
 
     return ShearSensitivityWeighting(
         phi_angles=phi_angles,

@@ -136,7 +136,12 @@ class AdaptiveRegularizer:
     ... )
     """
 
-    def __init__(self, config: AdaptiveRegularizationConfig, n_phi: int):
+    def __init__(
+        self,
+        config: AdaptiveRegularizationConfig,
+        n_phi: int,
+        n_params: int | None = None,
+    ):
         """Initialize adaptive regularizer.
 
         Parameters
@@ -145,16 +150,30 @@ class AdaptiveRegularizer:
             Regularization configuration.
         n_phi : int
             Number of unique phi angles.
+        n_params : int, optional
+            Actual parameter vector length. When provided and less than
+            2 * n_phi + n_physical, auto_averaged mode is assumed
+            (2 scaling params instead of 2 * n_phi).
         """
         self.config = config
         self.n_phi = n_phi
 
         # Auto-compute group indices if not provided
         if config.group_indices is None:
-            self.group_indices = [
-                (0, n_phi),  # contrast group
-                (n_phi, 2 * n_phi),  # offset group
-            ]
+            # For auto_averaged mode, the parameter vector has only 2 scaling
+            # params (1 contrast_avg + 1 offset_avg) instead of 2*n_phi.
+            # Detect this by checking if n_params < 2*n_phi.
+            if n_params is not None and n_params < 2 * n_phi:
+                # auto_averaged: indices [0,1) for contrast_avg, [1,2) for offset_avg
+                self.group_indices = [
+                    (0, 1),  # contrast_avg group
+                    (1, 2),  # offset_avg group
+                ]
+            else:
+                self.group_indices = [
+                    (0, n_phi),  # contrast group
+                    (n_phi, 2 * n_phi),  # offset group
+                ]
         else:
             self.group_indices = list(config.group_indices)
 

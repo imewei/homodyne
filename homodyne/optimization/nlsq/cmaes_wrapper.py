@@ -989,7 +989,9 @@ class CMAESWrapper:
 
                 # Calculate improvement percentage
                 if cmaes_chi_squared > 0.0:
-                    improvement = (cmaes_chi_squared - best_chi_squared) / cmaes_chi_squared
+                    improvement = (
+                        cmaes_chi_squared - best_chi_squared
+                    ) / cmaes_chi_squared
                 else:
                     improvement = 0.0
                 diagnostics["chi_squared_improvement"] = improvement
@@ -1038,11 +1040,14 @@ class CMAESWrapper:
             f"chi²={best_chi_squared:.4e}, total_time={total_time:.1f}s"
         )
 
+        converged_reasons = {"tol_fun", "tol_x", "tol_fun_hist", "ftarget"}
+        success = convergence_reason in converged_reasons or nlsq_refined
+
         return CMAESResult(
             parameters=best_params,
             covariance=best_covariance,
             chi_squared=best_chi_squared,
-            success=True,
+            success=success,
             diagnostics=diagnostics,
             method_used="cmaes",
             nlsq_refined=nlsq_refined,

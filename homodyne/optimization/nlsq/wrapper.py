@@ -2240,7 +2240,9 @@ class NLSQWrapper(NLSQAdapterBase):
             if final_jtj is not None:
                 n_diag_data = len(final_residuals)
                 n_diag_params = len(popt)
-                s2_diag = float(np.sum(final_residuals**2)) / max(n_diag_data - n_diag_params, 1)
+                s2_diag = float(np.sum(final_residuals**2)) / max(
+                    n_diag_data - n_diag_params, 1
+                )
                 pcov = s2_diag * np.linalg.pinv(final_jtj, rcond=1e-10)
                 diagnostics_payload["jtj_condition"] = (
                     float(np.linalg.cond(final_jtj)) if final_jtj.size > 0 else None
@@ -2346,7 +2348,9 @@ class NLSQWrapper(NLSQAdapterBase):
 
         # Compute initial cost for optimization success tracking
         # Handle both calling conventions: f(xdata, *params) and f(params)
-        if hasattr(residual_fn, 'n_total_points') or isinstance(residual_fn, FunctionEvaluationCounter):
+        if hasattr(residual_fn, "n_total_points") or isinstance(
+            residual_fn, FunctionEvaluationCounter
+        ):
             initial_residuals = residual_fn(initial_params)
         else:
             initial_residuals = residual_fn(xdata, *initial_params)
@@ -2696,7 +2700,9 @@ class NLSQWrapper(NLSQAdapterBase):
             # Recovery strategy: perturb parameters or relax tolerance
             if attempt == 0:
                 # First retry: perturb parameters by 10%
-                perturbation = np.random.default_rng(seed=42).standard_normal(params.shape) * 0.1
+                perturbation = (
+                    np.random.default_rng(seed=42).standard_normal(params.shape) * 0.1
+                )
                 new_params = params * (1.0 + perturbation)
 
                 # Clip to bounds if they exist
@@ -2709,7 +2715,9 @@ class NLSQWrapper(NLSQAdapterBase):
                 }
             else:
                 # Second retry: larger perturbation (20%)
-                perturbation = np.random.default_rng(seed=123).standard_normal(params.shape) * 0.2
+                perturbation = (
+                    np.random.default_rng(seed=123).standard_normal(params.shape) * 0.2
+                )
                 new_params = params * (1.0 + perturbation)
 
                 if bounds is not None:
@@ -5060,10 +5068,23 @@ class NLSQWrapper(NLSQAdapterBase):
         n_data = len(final_residuals)
         n_params = len(popt)
 
+        # Effective parameter count for DOF in s² computation.
+        # In auto_averaged mode, the compressed vector has 2 + n_physical params,
+        # but the model uses 2*n_phi + n_physical effective DOF (each angle has
+        # its own contrast/offset, constrained to equal the averaged value).
+        if (
+            ad_controller is not None
+            and ad_controller.is_enabled
+            and ad_controller.use_averaged_scaling
+        ):
+            n_params_effective = 2 * n_phi + n_physical
+        else:
+            n_params_effective = n_params
+
         # Use actual data point count, not padded length from StratifiedResidualFunction
         n_data_real = (
             residual_fn.n_total_points
-            if hasattr(residual_fn, 'n_total_points')
+            if hasattr(residual_fn, "n_total_points")
             else n_data
         )
 
@@ -5078,22 +5099,33 @@ class NLSQWrapper(NLSQAdapterBase):
             logger.info("Computing covariance matrix from Jacobian...")
 
             # Noise variance estimate (reduced chi-squared)
-            s2 = final_cost / max(n_data_real - n_params, 1)
+            s2 = final_cost / max(n_data_real - n_params_effective, 1)
 
-            # Use JAX to compute Jacobian at final parameters
-            jac_fn = jax.jacfwd(residual_fn)
-            J = jac_fn(popt)
-            J = np.asarray(J)
+            # Jacobian space consistency check
+            if hasattr(residual_fn, "n_params") and residual_fn.n_params != len(popt):
+                logger.warning(
+                    f"Parameter space mismatch: residual_fn expects {residual_fn.n_params} "
+                    f"params but popt has {len(popt)}. Skipping Jacobian-based covariance."
+                )
+                pcov = np.eye(len(popt)) * s2
+            else:
+                # Use JAX to compute Jacobian at final parameters
+                jac_fn = jax.jacfwd(residual_fn)
+                J = jac_fn(popt)
+                J = np.asarray(J)
 
-            try:
-                JTJ = J.T @ J
-                pcov = np.linalg.inv(JTJ) * s2
-            except np.linalg.LinAlgError:
-                logger.warning("Singular Jacobian, using pseudo-inverse for covariance")
-                pcov = np.linalg.pinv(JTJ) * s2
+                try:
+                    JTJ = J.T @ J
+                    pcov = np.linalg.inv(JTJ) * s2
+                except np.linalg.LinAlgError:
+                    logger.warning(
+                        "Singular Jacobian, using pseudo-inverse for covariance"
+                    )
+                    pcov = np.linalg.pinv(JTJ) * s2
 
             logger.info(
-                f"Covariance scaling: s²={s2:.6e} (n_data={n_data_real}, n_params={n_params})"
+                f"Covariance scaling: s²={s2:.6e} (n_data={n_data_real}, "
+                f"n_params_effective={n_params_effective})"
             )
 
         # Extract convergence information
@@ -5452,7 +5484,7 @@ class NLSQWrapper(NLSQAdapterBase):
             t1_arr = np.asarray(d.t1)
             t2_arr = np.asarray(d.t2)
             g2_arr = np.asarray(d.g2)
-            sigma_arr = getattr(d, 'sigma', None)
+            sigma_arr = getattr(d, "sigma", None)
 
             # Extract 1D from meshgrids if needed (borrowed from _prepare_data)
             if t1_arr.ndim == 2 and t1_arr.size > 0:
@@ -5473,7 +5505,13 @@ class NLSQWrapper(NLSQAdapterBase):
 
             # These flattens create copies usually, but for 25M points (200MB) it's acceptable ONCE
             # The OOM comes from creating SECOND and THIRD copies during stratification.
-            return phi_grid.ravel(), t1_grid.ravel(), t2_grid.ravel(), g2_arr.ravel(), sigma_flat
+            return (
+                phi_grid.ravel(),
+                t1_grid.ravel(),
+                t2_grid.ravel(),
+                g2_arr.ravel(),
+                sigma_flat,
+            )
 
         phi_flat, t1_flat, t2_flat, g2_flat, sigma_flat = _get_flat_arrays(data)
 
@@ -5532,6 +5570,15 @@ class NLSQWrapper(NLSQAdapterBase):
         n_phi = len(phi_unique)
         n_t1 = len(t1_unique_global)
         n_t2 = len(t2_unique_global)
+        n_physical = len(physical_param_names)
+
+        # Effective parameter count for DOF in s² computation.
+        # In auto_averaged mode, n_params = 2 + n_physical (compressed), but the
+        # model effectively uses 2*n_phi + n_physical DOF.
+        if per_angle_scaling and n_params < 2 * n_phi + n_physical:
+            n_params_effective = 2 * n_phi + n_physical
+        else:
+            n_params_effective = n_params
 
         logger.info(
             f"Full Physics Setup: n_phi={n_phi}, n_t1={n_t1}, n_t2={n_t2}, "
@@ -5624,7 +5671,9 @@ class NLSQWrapper(NLSQAdapterBase):
                 t2_indices = jnp.searchsorted(t2_unique_global, t2_c)
 
                 # Compute flat indices (C-order: phi varies slowest)
-                flat_indices = phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices
+                flat_indices = (
+                    phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices
+                )
 
                 # Extract theory values for this chunk
                 g2_theory_chunk = g2_theory_flat[flat_indices]
@@ -5868,13 +5917,15 @@ class NLSQWrapper(NLSQAdapterBase):
                             f"Out-of-Core converged: xtol={rel_change:.2e}<{xtol:.0e}, "
                             f"ftol={cost_change:.2e}<{ftol:.0e}"
                         )
-                        # pcov = s² * (J^T J)^{-1}  where s² = RSS / (n - p)
-                        # Consistent with the stratified LS path (line ~5086).
-                        s2 = float(chi2_new) / max(count - n_params, 1)
+                        # pcov = s² * (J^T J)^{-1}  where s² = RSS / (n - p_effective)
+                        # Uses n_params_effective for correct DOF in auto_averaged mode.
+                        s2 = float(chi2_new) / max(count - n_params_effective, 1)
                         try:
                             pcov = s2 * np.linalg.inv(np.array(total_JtJ))
                         except np.linalg.LinAlgError:
-                            logger.warning("Singular J^T J in OOC — using pseudo-inverse for covariance")
+                            logger.warning(
+                                "Singular J^T J in OOC — using pseudo-inverse for covariance"
+                            )
                             pcov = s2 * np.linalg.pinv(np.array(total_JtJ))
                         return (
                             np.array(params_curr),
@@ -5906,13 +5957,15 @@ class NLSQWrapper(NLSQAdapterBase):
             "convergence_status": "converged" if converged else "max_iter",
             "message": "Out-of-Core accumulation completed",
         }
-        # pcov = s² * (J^T J)^{-1}  where s² = RSS / (n - p)
-        # Consistent with the stratified LS path (line ~5086).
-        s2 = float(total_chi2) / max(count - n_params, 1)
+        # pcov = s² * (J^T J)^{-1}  where s² = RSS / (n - p_effective)
+        # Uses n_params_effective for correct DOF in auto_averaged mode.
+        s2 = float(total_chi2) / max(count - n_params_effective, 1)
         try:
             pcov = s2 * np.linalg.inv(np.array(total_JtJ))
         except np.linalg.LinAlgError:
-            logger.warning("Singular J^T J in OOC — using pseudo-inverse for covariance")
+            logger.warning(
+                "Singular J^T J in OOC — using pseudo-inverse for covariance"
+            )
             pcov = s2 * np.linalg.pinv(np.array(total_JtJ))
         return np.array(params_curr), pcov, info
 
@@ -8022,7 +8075,11 @@ class NLSQWrapper(NLSQAdapterBase):
             total_bytes = detect_total_system_memory()
             if total_bytes is not None:
                 total_gb = total_bytes / (1024**3)
-                return (False, 0.0, f"psutil not available; system has {total_gb:.1f} GB")
+                return (
+                    False,
+                    0.0,
+                    f"psutil not available; system has {total_gb:.1f} GB",
+                )
             return (False, 0.0, "psutil not available; system memory unknown")
 
         # Compute adaptive threshold if not explicitly provided

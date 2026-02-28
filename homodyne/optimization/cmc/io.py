@@ -74,12 +74,17 @@ def save_samples_npz(
     )
 
     # Count per-angle parameters to get n_phi.
+    # n_phi here counts sampled contrast sites (1 for auto, n for individual), not physical angles
     # Individual mode: "contrast_0", "contrast_1", ... → n_phi = count of indexed sites.
     # Auto mode: "contrast" (single unindexed site) → n_phi = 1 (at least one angle).
     # Constant/constant_averaged mode: no sampled contrast sites → n_phi = 0.
-    _contrast_indexed = sum(1 for name in result.param_names if name.startswith("contrast_"))
+    _contrast_indexed = sum(
+        1 for name in result.param_names if name.startswith("contrast_")
+    )
     _has_contrast_auto = "contrast" in result.param_names
-    n_phi = _contrast_indexed if _contrast_indexed > 0 else (1 if _has_contrast_auto else 0)
+    n_phi = (
+        _contrast_indexed if _contrast_indexed > 0 else (1 if _has_contrast_auto else 0)
+    )
 
     # Save to compressed npz (P2-R5-01: same fix as nlsq_writers.py P2-17)
     # Float64 posterior samples compress ~5-10x via zlib deflate.

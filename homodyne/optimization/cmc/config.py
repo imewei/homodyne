@@ -163,7 +163,7 @@ class CMCConfig:
 
     # Validation thresholds
     max_r_hat: float = 1.1
-    min_ess: float = 100.0
+    min_ess: float = 400.0
     max_divergence_rate: float = 0.10  # Filter shards with >10% divergence rate
 
     # Combination
@@ -347,7 +347,9 @@ class CMCConfig:
             jax_profile_dir=per_shard.get("jax_profile_dir", "./profiles/jax"),
             # Validation
             max_r_hat=validation.get("max_per_shard_rhat", 1.1),
-            min_ess=validation.get("min_per_shard_ess", 100.0),
+            min_ess=validation.get(
+                "min_ess", validation.get("min_per_shard_ess", 400.0)
+            ),
             max_divergence_rate=validation.get("max_divergence_rate", 0.10),
             # Combination
             combination_method=combination.get("method", "robust_consensus_mc"),

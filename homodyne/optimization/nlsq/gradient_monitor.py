@@ -420,7 +420,7 @@ class GradientCollapseMonitor:
         reset_params = params.copy()
 
         # Assuming per-angle layout: [contrast_0..n_phi, offset_0..n_phi, physical...]
-        if len(self.per_angle_indices) >= 2 * n_phi:
+        if len(self.per_angle_indices) >= 2:
             # Reset contrast to mean
             contrast_indices = self.per_angle_indices[:n_phi]
             contrast_mean = np.mean(params[contrast_indices])

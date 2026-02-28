@@ -77,7 +77,7 @@ class PjitBackend(CMCBackend):
             # Check that JAX is properly configured
             _ = jax.devices()
             return True
-        except Exception:
+        except (RuntimeError, OSError):
             return False
 
     def run(

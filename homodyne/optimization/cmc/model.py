@@ -541,6 +541,11 @@ def xpcs_model_averaged(
     # 1. Sample SINGLE averaged contrast and offset (SAMPLED, not fixed)
     # =========================================================================
     # Use contrast_0 and offset_0 scaling as representative for the averaged values
+    if "contrast_0" not in scalings:
+        raise ValueError(
+            f"scalings dict missing 'contrast_0' key. "
+            f"Available keys: {list(scalings.keys())}. n_phi may be 0."
+        )
     contrast = sample_scaled_parameter(
         "contrast", scalings["contrast_0"], prior_scale=prior_scale
     )
@@ -1030,9 +1035,7 @@ def xpcs_model_reparameterized(
             log_gamma_ref_scale_tempered = min(log_gamma_ref_scale * prior_scale, 10.0)
             log_gamma_ref = numpyro.sample(
                 "log_gamma_ref",
-                dist.Normal(
-                    loc=log_gamma_ref_loc, scale=log_gamma_ref_scale_tempered
-                ),
+                dist.Normal(loc=log_gamma_ref_loc, scale=log_gamma_ref_scale_tempered),
             )
             # Recover gamma_dot_t0 = exp(log_gamma_ref) * t_ref^(-beta)
             gamma_dot_t0 = numpyro.deterministic(
