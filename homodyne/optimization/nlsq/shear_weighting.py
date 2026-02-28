@@ -229,7 +229,7 @@ class ShearSensitivityWeighting:
             logger.info(
                 f"ShearSensitivityWeighting initialized: "
                 f"n_phi={self.n_phi}, min_weight={self.config.min_weight:.2f}, "
-                f"alpha={self.config.alpha:.1f}, initial_phi0={self._phi0_current:.1f}°"
+                f"alpha={self.config.alpha:.1f}, initial_phi0={self._phi0_current:.1f} deg"
             )
 
     def _compute_weights(self, phi0: float) -> np.ndarray:
@@ -291,7 +291,7 @@ class ShearSensitivityWeighting:
 
             logger.debug(
                 f"ShearSensitivityWeighting updated: "
-                f"phi0={new_phi0:.2f}°, weights range=[{self._weights.min():.3f}, "
+                f"phi0={new_phi0:.2f} deg, weights range=[{self._weights.min():.3f}, "
                 f"{self._weights.max():.3f}]"
             )
 

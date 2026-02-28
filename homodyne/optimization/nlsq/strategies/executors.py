@@ -262,7 +262,7 @@ class LargeDatasetExecutor(OptimizationExecutor):
                     # code that inverts pcov or extracts uncertainties via sqrt(diag)
                     # will produce zeros (no information) rather than NaN/Inf.
                     _module_logger.warning(
-                        "OptimizeResult has no pcov attribute — using identity matrix "
+                        "OptimizeResult has no pcov attribute - using identity matrix "
                         "as covariance placeholder. Uncertainties will be unreliable."
                     )
                     pcov = np.eye(len(popt))
@@ -374,7 +374,7 @@ class StreamingExecutor(OptimizationExecutor):
                 # Identity matrix is safer than zeros: sqrt(diag) yields ones
                 # (max uncertainty) rather than zeros (falsely indicating certainty).
                 _module_logger.warning(
-                    "Streaming optimizer result has no 'pcov' key — using identity "
+                    "Streaming optimizer result has no 'pcov' key - using identity "
                     "matrix as covariance placeholder. Uncertainties will be unreliable."
                 )
                 pcov = np.eye(len(popt))

@@ -431,7 +431,7 @@ def _combine_shard_chunk(
             if not shard_means:
                 raise ValueError(
                     f"All shards excluded for parameter '{name}' due to non-finite samples. "
-                    "Cannot combine posteriors — check NUTS divergence diagnostics."
+                    "Cannot combine posteriors - check NUTS divergence diagnostics."
                 )
 
             means_arr = np.array(shard_means)
@@ -543,7 +543,7 @@ def _combine_shard_chunk(
             if not shard_means:
                 raise ValueError(
                     f"All shards excluded for parameter '{name}' due to non-finite samples. "
-                    "Cannot combine posteriors — check NUTS divergence diagnostics."
+                    "Cannot combine posteriors - check NUTS divergence diagnostics."
                 )
 
             # Detect degenerate shards: near-zero variance indicates a chain

@@ -756,7 +756,7 @@ def _run_shard_worker(
         )
         worker_logger.info(
             f"Shard {shard_idx} completed in {duration:.2f}s: "
-            f"{samples.n_samples} samples/chain × {samples.n_chains} chains{divergence_str}"
+            f"{samples.n_samples} samples/chain x {samples.n_chains} chains{divergence_str}"
         )
         if stats.num_divergent > 0:
             worker_logger.warning(
@@ -1017,7 +1017,7 @@ class MultiprocessingBackend(CMCBackend):
         if threads_per_worker < max(1, total_threads // max(1, actual_workers)):
             run_logger.info(
                 f"Capping threads to avoid oversubscription: logical={total_threads}, "
-                f"workers={actual_workers} → {threads_per_worker} threads/worker"
+                f"workers={actual_workers} -> {threads_per_worker} threads/worker"
             )
 
         run_logger.info(
@@ -1727,7 +1727,7 @@ class MultiprocessingBackend(CMCBackend):
             )
             if parameter_space is None:
                 run_logger.warning(
-                    "parameter_space is None — bounds-aware CV disabled; "
+                    "parameter_space is None - bounds-aware CV disabled; "
                     "heterogeneity detection may produce false positives for near-zero parameters"
                 )
 

@@ -13,7 +13,7 @@ Key Features:
 - Intelligent error recovery with 3-attempt retry strategy (T022-T024)
 - Compatible with existing ParameterSpace and FitResult classes
 - HPC-optimized for 36/128-core CPU nodes
-- GPU acceleration when available
+- CPU-only (no GPU support since v2.3.0)
 - Dataset size-aware optimization strategies
 
 Performance (Validated T036-T041):
@@ -646,8 +646,8 @@ def _log_optimization_results(
             contrast_vals = result.parameters[:n_angles]
             offset_vals = result.parameters[n_angles : 2 * n_angles]
             logger.info(
-                f"  Mean scaling: contrast={np.mean(contrast_vals):.4f}, "
-                f"offset={np.mean(offset_vals):.4f}"
+                f"  Mean scaling: contrast={np.nanmean(contrast_vals):.4f}, "
+                f"offset={np.nanmean(offset_vals):.4f}"
             )
         else:
             param_names = _get_param_names(analysis_mode)
@@ -725,7 +725,7 @@ def _normalize_data_to_object(data: Any, config: Any, logger: Any) -> Any:
             if t1.ndim == 2:
                 data_obj.t1 = t1[:, 0]
                 logger.debug(
-                    f"Extracted 1D t1 vector from 2D meshgrid: {t1.shape} → {data_obj.t1.shape}",
+                    f"Extracted 1D t1 vector from 2D meshgrid: {t1.shape} -> {data_obj.t1.shape}",
                 )
             elif t1.ndim != 1:
                 raise ValueError(f"t1 must be 1D or 2D array, got shape {t1.shape}")
@@ -735,7 +735,7 @@ def _normalize_data_to_object(data: Any, config: Any, logger: Any) -> Any:
             if t2.ndim == 2:
                 data_obj.t2 = t2[0, :]
                 logger.debug(
-                    f"Extracted 1D t2 vector from 2D meshgrid: {t2.shape} → {data_obj.t2.shape}",
+                    f"Extracted 1D t2 vector from 2D meshgrid: {t2.shape} -> {data_obj.t2.shape}",
                 )
             elif t2.ndim != 1:
                 raise ValueError(f"t2 must be 1D or 2D array, got shape {t2.shape}")
@@ -749,7 +749,7 @@ def _normalize_data_to_object(data: Any, config: Any, logger: Any) -> Any:
                 if "stator_rotor_gap" in geometry:
                     data_obj.L = float(geometry["stator_rotor_gap"])  # type: ignore[attr-defined]
                     logger.debug(
-                        f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.analyzer_parameters.geometry)",  # type: ignore[attr-defined]
+                        f"Using stator_rotor_gap L = {data_obj.L:.1f} AA (from config.analyzer_parameters.geometry)",  # type: ignore[attr-defined]
                     )
                 else:
                     exp_config = config.config.get("experimental_data", {})  # type: ignore[union-attr]
@@ -758,22 +758,22 @@ def _normalize_data_to_object(data: Any, config: Any, logger: Any) -> Any:
                     if "stator_rotor_gap" in exp_geometry:
                         data_obj.L = float(exp_geometry["stator_rotor_gap"])  # type: ignore[attr-defined]
                         logger.debug(
-                            f"Using stator_rotor_gap L = {data_obj.L:.1f} Å (from config.experimental_data.geometry)",  # type: ignore[attr-defined]
+                            f"Using stator_rotor_gap L = {data_obj.L:.1f} AA (from config.experimental_data.geometry)",  # type: ignore[attr-defined]
                         )
                     elif "sample_detector_distance" in exp_config:
                         data_obj.L = float(exp_config["sample_detector_distance"])  # type: ignore[attr-defined]
                         logger.debug(
-                            f"Using sample_detector_distance L = {data_obj.L:.1f} Å (from config.experimental_data)",  # type: ignore[attr-defined]
+                            f"Using sample_detector_distance L = {data_obj.L:.1f} AA (from config.experimental_data)",  # type: ignore[attr-defined]
                         )
                     else:
                         data_obj.L = 2000000.0  # type: ignore[attr-defined]
                         logger.warning(
-                            f"No L parameter found in config, using default L = {data_obj.L:.1f} Å (200 µm, typical rheology-XPCS gap)",  # type: ignore[attr-defined]
+                            f"No L parameter found in config, using default L = {data_obj.L:.1f} AA (200 um, typical rheology-XPCS gap)",  # type: ignore[attr-defined]
                         )
             except (AttributeError, TypeError, ValueError) as e:
                 data_obj.L = 2000000.0  # type: ignore[attr-defined]
                 logger.warning(
-                    f"Error reading L from config: {e}, using default L = {data_obj.L:.1f} Å (200 µm)",  # type: ignore[attr-defined]
+                    f"Error reading L from config: {e}, using default L = {data_obj.L:.1f} AA (200 um)",  # type: ignore[attr-defined]
                 )
 
         # Get time step dt from config if available
@@ -1025,11 +1025,11 @@ def _estimate_contrast_offset_from_data(
     g2_array = np.asarray(g2)
 
     # Estimate offset from baseline (5th percentile to avoid outliers)
-    offset_est = float(np.percentile(g2_array, 5))
+    offset_est = float(np.nanpercentile(g2_array, 5))
 
     # Estimate contrast from amplitude (max - baseline)
-    # For c₂ = offset + contrast × [c₁]², max occurs at c₁²=1
-    max_g2 = float(np.max(g2_array))
+    # For c2 = offset + contrast * [c1]^2, max occurs at c1^2=1
+    max_g2 = float(np.nanmax(g2_array))
     contrast_est = max_g2 - offset_est
 
     # Sanity checks
@@ -1043,7 +1043,7 @@ def _estimate_contrast_offset_from_data(
     logger.info(
         f"Estimated scaling parameters from data: "
         f"contrast={contrast_est:.4f}, offset={offset_est:.4f} "
-        f"(g2 range: [{np.min(g2_array):.4f}, {np.max(g2_array):.4f}])"
+        f"(g2 range: [{np.nanmin(g2_array):.4f}, {np.nanmax(g2_array):.4f}])"
     )
 
     return contrast_est, offset_est
@@ -1568,7 +1568,7 @@ def fit_nlsq_multistart(
 
     logger.info(
         f"Multi-start complete: strategy={result.strategy_used}, "
-        f"best χ²={result.best.chi_squared:.4g}, "
+        f"best chi2={result.best.chi_squared:.4g}, "
         f"basins={result.n_unique_basins}"
     )
 
@@ -1933,10 +1933,10 @@ def fit_nlsq_cmaes(
 
             logger.info(
                 f"Per-angle scaling computed:\n"
-                f"  Contrast: mean={np.mean(fixed_contrast_per_angle):.4f}, "
-                f"range=[{np.min(fixed_contrast_per_angle):.4f}, {np.max(fixed_contrast_per_angle):.4f}]\n"
-                f"  Offset: mean={np.mean(fixed_offset_per_angle):.4f}, "
-                f"range=[{np.min(fixed_offset_per_angle):.4f}, {np.max(fixed_offset_per_angle):.4f}]"
+                f"  Contrast: mean={np.nanmean(fixed_contrast_per_angle):.4f}, "
+                f"range=[{np.nanmin(fixed_contrast_per_angle):.4f}, {np.nanmax(fixed_contrast_per_angle):.4f}]\n"
+                f"  Offset: mean={np.nanmean(fixed_offset_per_angle):.4f}, "
+                f"range=[{np.nanmin(fixed_offset_per_angle):.4f}, {np.nanmax(fixed_offset_per_angle):.4f}]"
             )
 
             if use_fixed_scaling:
@@ -1974,8 +1974,8 @@ def fit_nlsq_cmaes(
 
             else:
                 # AUTO AVERAGED MODE: Average to 2 values, optimize 9 params
-                avg_contrast = float(np.mean(fixed_contrast_per_angle))
-                avg_offset = float(np.mean(fixed_offset_per_angle))
+                avg_contrast = float(np.nanmean(fixed_contrast_per_angle))
+                avg_offset = float(np.nanmean(fixed_offset_per_angle))
 
                 logger.info(
                     f"Auto averaged mode: scaling averaged to contrast={avg_contrast:.4f}, offset={avg_offset:.4f}"

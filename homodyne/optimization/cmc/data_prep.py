@@ -403,13 +403,13 @@ def shard_data_stratified(
                     n_points + max_shards_per_angle - 1
                 ) // max_shards_per_angle
                 logger.debug(
-                    f"Angle {angle_idx} (phi={angle_phi_value:.4f}): {n_points:,} points → "
+                    f"Angle {angle_idx} (phi={angle_phi_value:.4f}): {n_points:,} points -> "
                     f"{max_shards_per_angle} shards (~{effective_max_points:,} points each, "
                     f"increased from {max_points_per_shard:,} to fit all data)"
                 )
             else:
                 logger.debug(
-                    f"Angle {angle_idx} (phi={angle_phi_value:.4f}): {n_points:,} points → "
+                    f"Angle {angle_idx} (phi={angle_phi_value:.4f}): {n_points:,} points -> "
                     f"{n_angle_shards} shards (~{max_points_per_shard:,} points each)"
                 )
         else:
@@ -539,7 +539,7 @@ def shard_data_random(
     if num_shards > max_shards:
         effective_points_per_shard = (prepared.n_total + max_shards - 1) // max_shards
         logger.info(
-            f"Random sharding: {prepared.n_total:,} points → {max_shards} shards "
+            f"Random sharding: {prepared.n_total:,} points -> {max_shards} shards "
             f"(~{effective_points_per_shard:,} points each"
             f"{f', increased from {max_points_per_shard:,}' if max_points_per_shard is not None else ''}"
             f" to fit all data)"
@@ -548,7 +548,7 @@ def shard_data_random(
     else:
         points_per_shard = prepared.n_total // num_shards
         logger.info(
-            f"Random sharding: {prepared.n_total:,} points → {num_shards} shards "
+            f"Random sharding: {prepared.n_total:,} points -> {num_shards} shards "
             f"(~{points_per_shard:,} points each)"
         )
 
@@ -787,7 +787,7 @@ def shard_data_angle_balanced(
         total_shard_points = sum(s.n_total for s in shards)
 
         logger.info(
-            f"Angle-balanced sharding: {prepared.n_total:,} points → {len(shards)} shards "
+            f"Angle-balanced sharding: {prepared.n_total:,} points -> {len(shards)} shards "
             f"(~{total_shard_points // len(shards):,} points each)"
         )
         logger.info(

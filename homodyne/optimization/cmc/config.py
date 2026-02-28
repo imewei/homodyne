@@ -668,7 +668,7 @@ class CMCConfig:
         if param_factor > 1.0:
             logger.debug(
                 f"Param-aware shard sizing: {n_params} params detected. "
-                f"Adjusted max_points_per_shard: {base_max:,} → {adjusted_max:,} "
+                f"Adjusted max_points_per_shard: {base_max:,} -> {adjusted_max:,} "
                 f"(factor={param_factor:.2f})"
             )
 
@@ -729,7 +729,7 @@ class CMCConfig:
         # Log if different from defaults
         if final_warmup != self.num_warmup or final_samples != self.num_samples:
             logger.debug(
-                f"Adaptive sampling: {shard_size:,} points, {n_params} params → "
+                f"Adaptive sampling: {shard_size:,} points, {n_params} params -> "
                 f"warmup={final_warmup} (was {self.num_warmup}), "
                 f"samples={final_samples} (was {self.num_samples})"
             )

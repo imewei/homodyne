@@ -462,7 +462,7 @@ def compute_quantile_per_angle_scaling(
 
         if n_points < 100:
             logger.debug(
-                f"Angle {i} (phi={phi:.1f}°): insufficient data ({n_points} points), "
+                f"Angle {i} (phi={phi:.1f} deg): insufficient data ({n_points} points), "
                 f"using midpoint defaults"
             )
             continue
@@ -516,7 +516,7 @@ def compute_quantile_per_angle_scaling(
         offset_per_angle[i] = offset_est
 
         logger.debug(
-            f"Angle {i} (phi={phi:.1f}°): quantile estimation "
+            f"Angle {i} (phi={phi:.1f} deg): quantile estimation "
             f"contrast={contrast_est:.4f}, offset={offset_est:.4f} "
             f"from {n_points:,} points"
         )

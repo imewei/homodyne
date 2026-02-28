@@ -128,7 +128,7 @@ def _resolve_max_points_per_shard(
         if analysis_mode == "laminar_flow" and user_specified < MIN_SHARD_SIZE_LAMINAR:
             logger.warning(
                 f"Enforcing minimum shard size for laminar_flow: "
-                f"{user_specified:,} → {MIN_SHARD_SIZE_LAMINAR:,} points "
+                f"{user_specified:,} -> {MIN_SHARD_SIZE_LAMINAR:,} points "
                 "(to prevent data-starved shards)"
             )
             return MIN_SHARD_SIZE_LAMINAR
@@ -203,8 +203,8 @@ def _resolve_max_points_per_shard(
     # Log angle-aware scaling if factor < 1.0
     if angle_factor < 1.0:
         logger.info(
-            f"Angle-aware shard sizing: n_phi={n_phi} → factor={angle_factor:.1f}, "
-            f"base={base:,} → scaled={scaled_base:,} (min={MIN_SHARD_SIZE_LAMINAR if analysis_mode == 'laminar_flow' else MIN_SHARD_SIZE_STATIC:,})"
+            f"Angle-aware shard sizing: n_phi={n_phi} -> factor={angle_factor:.1f}, "
+            f"base={base:,} -> scaled={scaled_base:,} (min={MIN_SHARD_SIZE_LAMINAR if analysis_mode == 'laminar_flow' else MIN_SHARD_SIZE_STATIC:,})"
         )
 
     # Apply iteration-aware scaling (Feb 2026):
@@ -223,7 +223,7 @@ def _resolve_max_points_per_shard(
         if scaled_base != pre_iter:
             logger.info(
                 f"Iteration-aware shard sizing: ratio={clamped_ratio:.2f} "
-                f"(default/actual iterations), shard_size {pre_iter:,} → {scaled_base:,}"
+                f"(default/actual iterations), shard_size {pre_iter:,} -> {scaled_base:,}"
             )
 
     # Cap shard count to prevent memory exhaustion during combination
@@ -701,7 +701,7 @@ def _fit_mcmc_jax_impl(
         use_reparameterization=use_reparam,
     )
     run_logger.info(
-        f"CMC per-angle mode: {config.per_angle_mode} → {effective_per_angle_mode} "
+        f"CMC per-angle mode: {config.per_angle_mode} -> {effective_per_angle_mode} "
         f"(n_phi={prepared.n_phi}, threshold={config.constant_scaling_threshold})"
     )
 
@@ -883,7 +883,7 @@ def _fit_mcmc_jax_impl(
         # Log NLSQ uncertainties if available (useful for posterior comparison)
         if nlsq_uncertainties:
             unc_str = ", ".join(
-                f"{p}±{nlsq_uncertainties[p]:.4g}"
+                f"{p}+/-{nlsq_uncertainties[p]:.4g}"
                 for p in nlsq_used[:5]
                 if p in nlsq_uncertainties
             )
@@ -1333,12 +1333,12 @@ def _fit_mcmc_jax_impl(
         run_logger.debug(
             f"[CMC DEBUG] D(t) at sample times with initial params:\n"
             f"  D0={D0_init:.4g}, alpha={alpha_init:.4g}, D_offset={D_offset_init:.4g}\n"
-            f"  t=[0, 1, 10, 50] → D={D_samples}"
+            f"  t=[0, 1, 10, 50] -> D={D_samples}"
         )
         # Compute expected prefactor
         wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_used
         run_logger.debug(
-            f"[CMC DEBUG] Physics prefactor: 0.5*q²*dt = 0.5*{q}²*{dt_used} = {wavevector_q_squared_half_dt:.6g}"
+            f"[CMC DEBUG] Physics prefactor: 0.5*q^2*dt = 0.5*{q}^2*{dt_used} = {wavevector_q_squared_half_dt:.6g}"
         )
 
     # =========================================================================

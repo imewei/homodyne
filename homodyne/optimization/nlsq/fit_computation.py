@@ -333,7 +333,7 @@ def extract_parameters_from_result(
     else:
         raise ValueError(
             f"Parameter count mismatch! Expected {expected_per_angle} "
-            f"(2×{n_angles} scaling + {n_physical} physical), got {n_params}. "
+            f"(2x{n_angles} scaling + {n_physical} physical), got {n_params}. "
             f"Per-angle scaling is REQUIRED in v2.4.0+"
         )
 
@@ -405,8 +405,8 @@ def compute_theoretical_fits(
     )
     logger.debug(
         f"Extracted fitted parameters - "
-        f"contrasts: mean={np.mean(fitted_contrasts):.4f}, "
-        f"offsets: mean={np.mean(fitted_offsets):.4f}"
+        f"contrasts: mean={np.nanmean(fitted_contrasts):.4f}, "
+        f"offsets: mean={np.nanmean(fitted_offsets):.4f}"
     )
 
     # Extract metadata
@@ -429,7 +429,7 @@ def compute_theoretical_fits(
         raise ValueError("q (wavevector) is required but was not found")
 
     logger.info(
-        f"Computing theoretical fits for {len(phi_angles)} angles using L={L:.1f} Å, q={q:.6f} Å⁻¹"
+        f"Computing theoretical fits for {len(phi_angles)} angles using L={L:.1f} AA, q={q:.6f} AA^-1"
     )
 
     # Performance Optimization (Spec 006 - FR-007, FR-008):
@@ -498,8 +498,8 @@ def compute_theoretical_fits(
 
     # Log statistics
     logger.debug(
-        f"Batch lstsq - contrasts: mean={np.mean(contrasts_lstsq):.4f}, "
-        f"offsets: mean={np.mean(offsets_lstsq):.4f}"
+        f"Batch lstsq - contrasts: mean={np.nanmean(contrasts_lstsq):.4f}, "
+        f"offsets: mean={np.nanmean(offsets_lstsq):.4f}"
     )
     logger.info(
         "Note: lstsq contrast/offset values may differ from NLSQ-optimized values. "

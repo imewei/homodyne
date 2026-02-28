@@ -516,7 +516,7 @@ class OptimizationResult:
     def message(self) -> str:
         """Return descriptive message about optimization outcome."""
         if self.convergence_status == "converged":
-            return f"Optimization converged successfully. χ²={self.chi_squared:.6f}"
+            return f"Optimization converged successfully. chi2={self.chi_squared:.6f}"
         elif self.convergence_status == "max_iter":
             return "Optimization stopped: maximum iterations reached"
         else:
@@ -1167,7 +1167,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     # auto_averaged: 2 averaged scaling params replace 2*n_angles
                     effective_n_params = n_physical + 2
                     logger.info(
-                        f"Anti-Degeneracy pre-check: auto → auto_averaged "
+                        f"Anti-Degeneracy pre-check: auto -> auto_averaged "
                         f"(n_phi={n_angles_check} >= threshold={ad_threshold}). "
                         f"Effective params: {effective_n_params} "
                         f"(expanded: {actual_n_params})"
@@ -1196,7 +1196,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     logger.warning(
                         f"Out-of-core triggered with {actual_n_params} expanded params, "
                         f"but anti-degeneracy would reduce to {effective_n_params}. "
-                        f"This should not happen — the pre-check should have used "
+                        f"This should not happen - the pre-check should have used "
                         f"effective params for memory estimation. Check routing logic."
                     )
                 logger.info("=" * 80)
@@ -1423,8 +1423,8 @@ class NLSQWrapper(NLSQAdapterBase):
                         logger.info("=" * 80)
                         logger.info("HYBRID STREAMING OPTIMIZATION COMPLETE")
                         logger.info(
-                            f"Final χ²: {result.chi_squared:.4e}, "
-                            f"Reduced χ²: {result.reduced_chi_squared:.4f}"
+                            f"Final chi2: {result.chi_squared:.4e}, "
+                            f"Reduced chi2: {result.reduced_chi_squared:.4f}"
                         )
                         logger.info("=" * 80)
 
@@ -1510,7 +1510,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 logger.info("=" * 80)
                 logger.info("STRATIFIED LEAST-SQUARES COMPLETE")
                 logger.info(
-                    f"Final χ²: {result.chi_squared:.4e}, Reduced χ²: {result.reduced_chi_squared:.4f}"
+                    f"Final chi2: {result.chi_squared:.4e}, Reduced chi2: {result.reduced_chi_squared:.4f}"
                 )
                 logger.info("=" * 80)
 
@@ -1679,7 +1679,7 @@ class NLSQWrapper(NLSQAdapterBase):
             logger.info(
                 f"Expanded parameters for per-angle scaling:\n"
                 f"  {n_phi} phi angles detected\n"
-                f"  Parameters: compact {2 + len(physical_params)} → per-angle {len(validated_params)}\n"
+                f"  Parameters: compact {2 + len(physical_params)} -> per-angle {len(validated_params)}\n"
                 f"  Structure: [{n_phi} contrasts, {n_phi} offsets, {len(physical_params)} physical]"
             )
 
@@ -1711,7 +1711,7 @@ class NLSQWrapper(NLSQAdapterBase):
 
                 logger.info(
                     f"Expanded bounds for per-angle scaling:\n"
-                    f"  Bounds: compact {2 + len(physical_lower)} → per-angle {len(expanded_lower)}"
+                    f"  Bounds: compact {2 + len(physical_lower)} -> per-angle {len(expanded_lower)}"
                 )
 
         n_angles_for_map = n_phi_unique if per_angle_scaling else 1
@@ -2234,7 +2234,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 ]
                 if clips:
                     logger.warning(
-                        "Diagnostics: parameters at bounds → %s",
+                        "Diagnostics: parameters at bounds -> %s",
                         ", ".join(clips),
                     )
             if final_jtj is not None:
@@ -2274,7 +2274,7 @@ class NLSQWrapper(NLSQAdapterBase):
         logger.info(
             f"{status_indicator}: {status_msg} in {execution_time:.2f}s\n"
             f"  Function evaluations: {function_evals}\n"
-            f"  Cost: {initial_cost:.4e} → {final_cost:.4e} ({cost_reduction * 100:+.1f}%)\n"
+            f"  Cost: {initial_cost:.4e} -> {final_cost:.4e} ({cost_reduction * 100:+.1f}%)\n"
             f"  Iterations reported: {reported_iterations} (NLSQ may report 0)"
         )
         if recovery_actions:
@@ -4924,7 +4924,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 )
                 logger.error("=" * 80)
                 raise ValueError(
-                    f"Gradient sanity check FAILED: gradient ≈ {gradient_estimate:.2e} "
+                    f"Gradient sanity check FAILED: gradient ~{gradient_estimate:.2e} "
                     f"(expected > 1e-10). Optimization cannot proceed with zero gradients."
                 )
 
@@ -5124,7 +5124,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     pcov = np.linalg.pinv(JTJ) * s2
 
             logger.info(
-                f"Covariance scaling: s²={s2:.6e} (n_data={n_data_real}, "
+                f"Covariance scaling: s^2={s2:.6e} (n_data={n_data_real}, "
                 f"n_params_effective={n_params_effective})"
             )
 
@@ -5363,7 +5363,7 @@ class NLSQWrapper(NLSQAdapterBase):
                         "The model has effectively collapsed to static_isotropic mode."
                     )
                     logger.warning(
-                        "RECOMMENDED: Use phi_filtering for angles near 0° and 90°"
+                        "RECOMMENDED: Use phi_filtering for angles near 0 and 90 deg"
                     )
                     logger.warning("=" * 80)
                     info["shear_collapse_warning"] = {
@@ -5924,7 +5924,7 @@ class NLSQWrapper(NLSQAdapterBase):
                             pcov = s2 * np.linalg.inv(np.array(total_JtJ))
                         except np.linalg.LinAlgError:
                             logger.warning(
-                                "Singular J^T J in OOC — using pseudo-inverse for covariance"
+                                "Singular J^T J in OOC - using pseudo-inverse for covariance"
                             )
                             pcov = s2 * np.linalg.pinv(np.array(total_JtJ))
                         return (
@@ -5964,7 +5964,7 @@ class NLSQWrapper(NLSQAdapterBase):
             pcov = s2 * np.linalg.inv(np.array(total_JtJ))
         except np.linalg.LinAlgError:
             logger.warning(
-                "Singular J^T J in OOC — using pseudo-inverse for covariance"
+                "Singular J^T J in OOC - using pseudo-inverse for covariance"
             )
             pcov = s2 * np.linalg.pinv(np.array(total_JtJ))
         return np.array(params_curr), pcov, info
@@ -6187,11 +6187,11 @@ class NLSQWrapper(NLSQAdapterBase):
             per_angle_mode_actual = "fixed_constant"
             logger.info("=" * 60)
             logger.info(
-                "ANTI-DEGENERACY DEFENSE: Explicit 'constant' mode → fixed_constant"
+                "ANTI-DEGENERACY DEFENSE: Explicit 'constant' mode -> fixed_constant"
             )
             logger.info(f"  n_phi: {n_phi}")
             logger.info(
-                "  Behavior: Quantile estimates → per-angle values FIXED (NOT optimized)"
+                "  Behavior: Quantile estimates -> per-angle values FIXED (NOT optimized)"
             )
             logger.info("  Parameters: 7 physical only (scaling FIXED from quantiles)")
             logger.info("=" * 60)
@@ -7430,7 +7430,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 try:
                     pcov_hier = 2.0 * s2_hier * np.linalg.inv(H)
                     logger.info(
-                        f"Hierarchical covariance from Hessian: s²={s2_hier:.6e} "
+                        f"Hierarchical covariance from Hessian: s^2={s2_hier:.6e} "
                         f"(n_data={n_hier_data}, n_params={n_hier_params})"
                     )
                 except np.linalg.LinAlgError:
@@ -7838,13 +7838,13 @@ class NLSQWrapper(NLSQAdapterBase):
                 logger.warning("")
                 logger.warning("RECOMMENDED ACTIONS:")
                 logger.warning(
-                    "  - Enable phi_filtering to use only angles near 0° and 90° for laminar flow"
+                    "  - Enable phi_filtering to use only angles near 0 and 90 deg for laminar flow"
                 )
                 logger.warning(
                     "  - Use multi-start optimization to explore multiple parameter basins"
                 )
                 logger.warning(
-                    "  - Check if gamma_dot_t0 ≈ 0 means shear contribution is missing"
+                    "  - Check if gamma_dot_t0 ~ 0 means shear contribution is missing"
                 )
                 logger.warning("=" * 80)
 

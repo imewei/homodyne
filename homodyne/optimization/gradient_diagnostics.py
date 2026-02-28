@@ -270,18 +270,18 @@ def compute_optimal_x_scale(
         ratio = grad_norm / baseline_grad
         if ratio > 10:
             logger.info(
-                f"Parameter {name:18s}: gradient {ratio:>8.0f}× baseline "
-                f"→ x_scale={clipped_scale:.2e}"
+                f"Parameter {name:18s}: gradient {ratio:>8.0f}x baseline "
+                f"-> x_scale={clipped_scale:.2e}"
             )
         elif ratio < 0.1:
             logger.info(
-                f"Parameter {name:18s}: gradient {ratio:>8.2f}× baseline "
-                f"→ x_scale={clipped_scale:.2e}"
+                f"Parameter {name:18s}: gradient {ratio:>8.2f}x baseline "
+                f"-> x_scale={clipped_scale:.2e}"
             )
         else:
             logger.debug(
-                f"Parameter {name:18s}: gradient {ratio:>8.2f}× baseline "
-                f"→ x_scale={clipped_scale:.2e}"
+                f"Parameter {name:18s}: gradient {ratio:>8.2f}x baseline "
+                f"-> x_scale={clipped_scale:.2e}"
             )
 
     return x_scale_map
@@ -342,7 +342,7 @@ def diagnose_gradient_imbalance(
 
         recommendations["x_scale_map"] = x_scale_map
         summary = (
-            f"Gradient imbalance detected: {max_ratio:.0f}× ratio\n"
+            f"Gradient imbalance detected: {max_ratio:.0f}x ratio\n"
             f"Apply parameter-specific scaling by adding to config:\n"
             f"optimization:\n"
             f"  nlsq:\n"
@@ -355,7 +355,7 @@ def diagnose_gradient_imbalance(
         recommendations["action"] = "apply_x_scale_map"
     else:
         recommendations["summary"] = (
-            f"No significant gradient imbalance detected ({max_ratio:.1f}× ratio)"
+            f"No significant gradient imbalance detected ({max_ratio:.1f}x ratio)"
         )
         recommendations["action"] = "no_action_needed"
 

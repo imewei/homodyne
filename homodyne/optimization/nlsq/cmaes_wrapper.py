@@ -633,7 +633,7 @@ class CMAESWrapper:
             chi_squared = float(np.sum(residuals**2))
 
             logger.info(
-                f"[CMA-ES] Refinement completed: chi²={chi_squared:.4e}, "
+                f"[CMA-ES] Refinement completed: chi2={chi_squared:.4e}, "
                 f"time={phase.duration:.1f}s"
             )
 
@@ -953,7 +953,7 @@ class CMAESWrapper:
         )
 
         logger.info(
-            f"[CMA-ES] Global search completed: chi²={cmaes_chi_squared:.4e}, "
+            f"[CMA-ES] Global search completed: chi2={cmaes_chi_squared:.4e}, "
             f"generations={generations}, restarts={restarts}"
         )
         logger.info(
@@ -1001,8 +1001,8 @@ class CMAESWrapper:
                     diagnostics["refinement_time_s"] = refinement_result["duration_s"]
 
                 logger.info(
-                    f"[CMA-ES] Refinement improved chi²: "
-                    f"{cmaes_chi_squared:.4e} → {best_chi_squared:.4e} "
+                    f"[CMA-ES] Refinement improved chi2: "
+                    f"{cmaes_chi_squared:.4e} -> {best_chi_squared:.4e} "
                     f"({improvement:.2%} improvement)"
                 )
             else:
@@ -1037,7 +1037,7 @@ class CMAESWrapper:
         refined_str = " (refined)" if nlsq_refined else ""
         logger.info(
             f"[CMA-ES] Optimization completed{refined_str}: "
-            f"chi²={best_chi_squared:.4e}, total_time={total_time:.1f}s"
+            f"chi2={best_chi_squared:.4e}, total_time={total_time:.1f}s"
         )
 
         converged_reasons = {"tol_fun", "tol_x", "tol_fun_hist", "ftarget"}

@@ -1138,7 +1138,7 @@ def run_multistart_nlsq(
     logger.info(f"Unique basins found: {n_unique_basins}")
     if degeneracy_detected:
         logger.warning(
-            f"DEGENERACY DETECTED: {n_unique_basins} distinct minima with similar χ²"
+            f"DEGENERACY DETECTED: {n_unique_basins} distinct minima with similar chi2"
         )
     logger.info(f"Total wall time: {total_time:.1f}s")
     logger.info("=" * 60)
@@ -1369,7 +1369,7 @@ def _run_parallel_with_progress(
                         wall_time=result.wall_time,
                     )
                     logger.debug(
-                        f"Worker {idx} completed: χ²={result.chi_squared:.4e}, "
+                        f"Worker {idx} completed: chi2={result.chi_squared:.4e}, "
                         f"time={result.wall_time:.1f}s ({completed_count}/{total_count})"
                     )
                 except TimeoutError:

@@ -338,11 +338,11 @@ class AntiDegeneracyController:
             self.per_angle_mode_actual = "fixed_constant"
             logger.info("=" * 60)
             logger.info(
-                "ANTI-DEGENERACY: Using explicit 'constant' mode → fixed_constant"
+                "ANTI-DEGENERACY: Using explicit 'constant' mode -> fixed_constant"
             )
             logger.info(f"  n_phi: {self.n_phi}")
             logger.info(
-                "  Behavior: Quantile estimates → per-angle values FIXED (NOT optimized)"
+                "  Behavior: Quantile estimates -> per-angle values FIXED (NOT optimized)"
             )
             logger.info("  Parameters: 7 physical only (scaling FIXED from quantiles)")
             logger.info("=" * 60)
@@ -748,10 +748,10 @@ class AntiDegeneracyController:
             )
             assert self._fixed_offset_per_angle is not None, "Fixed offset must be set"
             diag["fixed_per_angle_scaling"] = {
-                "contrast_mean": float(np.mean(self._fixed_contrast_per_angle)),
-                "contrast_std": float(np.std(self._fixed_contrast_per_angle)),
-                "offset_mean": float(np.mean(self._fixed_offset_per_angle)),
-                "offset_std": float(np.std(self._fixed_offset_per_angle)),
+                "contrast_mean": float(np.nanmean(self._fixed_contrast_per_angle)),
+                "contrast_std": float(np.nanstd(self._fixed_contrast_per_angle)),
+                "offset_mean": float(np.nanmean(self._fixed_offset_per_angle)),
+                "offset_std": float(np.nanstd(self._fixed_offset_per_angle)),
             }
 
         # Add mapper diagnostics
@@ -869,10 +869,10 @@ class AntiDegeneracyController:
         logger.info(
             f"Fixed per-angle scaling stored:\n"
             f"  n_phi: {self.n_phi}\n"
-            f"  Contrast: mean={np.mean(contrast_per_angle):.4f}, "
-            f"std={np.std(contrast_per_angle):.4f}\n"
-            f"  Offset: mean={np.mean(offset_per_angle):.4f}, "
-            f"std={np.std(offset_per_angle):.4f}"
+            f"  Contrast: mean={np.nanmean(contrast_per_angle):.4f}, "
+            f"std={np.nanstd(contrast_per_angle):.4f}\n"
+            f"  Offset: mean={np.nanmean(offset_per_angle):.4f}, "
+            f"std={np.nanstd(offset_per_angle):.4f}"
         )
 
     def get_fixed_per_angle_scaling(self) -> tuple[np.ndarray, np.ndarray] | None:

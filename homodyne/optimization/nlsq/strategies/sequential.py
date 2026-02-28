@@ -456,7 +456,7 @@ def split_data_by_angle(
 
         if n_points < min_points_per_angle:
             raise ValueError(
-                f"Angle {angle:.2f}° has only {n_points} points, "
+                f"Angle {angle:.2f} deg has only {n_points} points, "
                 f"minimum required: {min_points_per_angle}"
             )
 
@@ -473,7 +473,7 @@ def split_data_by_angle(
 
         subsets.append(subset)
         logger.debug(
-            f"  Angle {angle:6.2f}°: {n_points:,} points "
+            f"  Angle {angle:6.2f} deg: {n_points:,} points "
             f"({n_points / len(phi_np) * 100:.1f}% of total)"
         )
 
@@ -520,7 +520,7 @@ def optimize_single_angle(
     Uses NLSQ LeastSquares for JAX-accelerated optimization.
     """
     logger.debug(
-        f"Optimizing angle {subset.phi_angle:.2f}° ({subset.n_points:,} points)"
+        f"Optimizing angle {subset.phi_angle:.2f} deg ({subset.n_points:,} points)"
     )
 
     try:
@@ -557,7 +557,7 @@ def optimize_single_angle(
             )
 
         logger.debug(
-            "Angle %.2f° dtype check: init=%s%s lower=%s%s upper=%s%s",
+            "Angle %.2f deg dtype check: init=%s%s lower=%s%s upper=%s%s",
             subset.phi_angle,
             initial_params.dtype,
             initial_params.shape,
@@ -613,7 +613,7 @@ def optimize_single_angle(
                     try:
                         cov = np.linalg.pinv(jac.T @ jac) * s2
                         logger.warning(
-                            "Singular J^T J — used pinv fallback for covariance"
+                            "Singular J^T J - used pinv fallback for covariance"
                         )
                     except np.linalg.LinAlgError:
                         cov = np.eye(len(initial_params))
@@ -622,7 +622,7 @@ def optimize_single_angle(
         except (np.linalg.LinAlgError, ValueError):
             # Fallback to identity if singular
             logger.warning(
-                f"Could not compute covariance for angle {subset.phi_angle:.2f}°"
+                f"Could not compute covariance for angle {subset.phi_angle:.2f} deg"
             )
             cov = np.eye(len(initial_params))
 
@@ -968,7 +968,7 @@ def optimize_per_angle_sequential(
 
         status = "OK" if result["success"] else "FAIL"
         logger.info(
-            f"  {status} Angle {result['phi_angle']:6.2f}°: "
+            f"  {status} Angle {result['phi_angle']:6.2f} deg: "
             f"cost={result['cost']:.4f}, "
             f"iterations={result['n_iterations']}"
         )

@@ -181,7 +181,7 @@ class AdaptiveRegularizer:
         if config.auto_tune_lambda and config.target_cv > 0:
             self.lambda_value = config.target_contribution / (config.target_cv**2)
             logger.debug(
-                f"Auto-tuned λ = {self.lambda_value:.2f} "
+                f"Auto-tuned lambda = {self.lambda_value:.2f} "
                 f"(target_cv={config.target_cv}, "
                 f"contribution={config.target_contribution})"
             )

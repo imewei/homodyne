@@ -260,8 +260,8 @@ def _compute_mcmc_safe_d0(
             new_d_offset = max(new_d_offset, -1e6)  # Allow negative but bound
 
             logger_inst.warning(
-                f"MCMC-SAFE ADJUSTMENT: Initial D0={d0:.4g} causes g1≈{g1_estimate:.2e} (vanishing gradients). "
-                f"Scaling D0 to {new_d0:.4g} (×{scale_factor:.4f}) for MCMC exploration stability. "
+                f"MCMC-SAFE ADJUSTMENT: Initial D0={d0:.4g} causes g1~{g1_estimate:.2e} (vanishing gradients). "
+                f"Scaling D0 to {new_d0:.4g} (x{scale_factor:.4f}) for MCMC exploration stability. "
                 f"The sampler can still converge to optimal values if supported by likelihood."
             )
 
@@ -315,7 +315,7 @@ def _summarize_inverse_mass_matrix(inv_mass: Any) -> str:
             dmin = float(np.min(diag))
             dmax = float(np.max(diag))
             cond = float(dmax / dmin) if dmin > 0 else float("inf")
-            return f"diag(dim={arr.size}) min={dmin:.3g} max={dmax:.3g} cond≈{cond:.3g}"
+            return f"diag(dim={arr.size}) min={dmin:.3g} max={dmax:.3g} cond~{cond:.3g}"
 
         if arr.ndim == 2 and arr.shape[0] == arr.shape[1]:
             diag = np.diag(arr)
