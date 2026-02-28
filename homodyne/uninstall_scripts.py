@@ -407,7 +407,7 @@ def cleanup_all_files() -> bool:
         print("   System installations don't create extra files")
         return False
 
-    print(f"\n🔍 Scanning for homodyne files in: {sys.prefix}")
+    print(f"\n[SCAN] Scanning for homodyne files in: {sys.prefix}")
 
     try:
         # Clean up all types of files
@@ -476,7 +476,7 @@ def show_dry_run() -> bool:
         print("   System installations don't create extra files")
         return False
 
-    print(f"\n🔍 Would scan for homodyne files in: {sys.prefix}")
+    print(f"\n[SCAN] Would scan for homodyne files in: {sys.prefix}")
 
     # Simulate finding files without removing them
     venv_path = Path(sys.prefix)
@@ -580,7 +580,7 @@ def show_dry_run() -> bool:
         for file_type, name in files_to_remove:
             print(f"      • {file_type}: {name}")
         print("   Would clean up empty directories")
-        print("\n💡 To actually remove these files, run without --dry-run")
+        print("\n[TIP] To actually remove these files, run without --dry-run")
     else:
         print("   No homodyne files found to remove")
         print("   Environment is already clean")
@@ -632,7 +632,7 @@ def main() -> int:
                 print(
                     "   • XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)"
                 )
-                print("\n💡 To restore these files later, run:")
+                print("\n[TIP] To restore these files later, run:")
                 print("   homodyne-post-install --interactive")
                 print()
 
@@ -655,7 +655,7 @@ def main() -> int:
         if success:
             print("[OK] Homodyne cleanup completed!")
             if not args.interactive:
-                print("\n💡 What was cleaned:")
+                print("\n[TIP] What was cleaned:")
                 print("   ├─ Shell completion scripts (bash/zsh/fish)")
                 print("   ├─ Activation scripts (homodyne-activate)")
                 print("   ├─ GPU acceleration setup (JAX with CUDA)")
@@ -673,7 +673,7 @@ def main() -> int:
             print("   homodyne-post-install --interactive")
         else:
             print("[WARN] Cleanup had some issues")
-            print("\n💡 Troubleshooting:")
+            print("\n[TIP] Troubleshooting:")
             print("   • Make sure you're in a virtual environment")
             print("   • Try: homodyne-cleanup --interactive")
             print("   • Check file permissions if needed")
@@ -686,7 +686,7 @@ def main() -> int:
         return 1
     except Exception as e:
         print(f"\n[FAIL] Unexpected error during cleanup: {e}")
-        print("💡 Please report this issue if it persists")
+        print("[TIP] Please report this issue if it persists")
         return 1
 
 
