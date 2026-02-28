@@ -197,7 +197,7 @@ def generate_config(
     shutil.copy2(template_path, output_path)
 
     # Load config for return value (without modifying file)
-    with open(template_path) as f:
+    with open(template_path, encoding="utf-8") as f:
         config: dict[str, Any] = yaml.safe_load(f)
 
     print(f"OK: Generated {mode} configuration: {output_path}")
@@ -282,7 +282,7 @@ def interactive_builder() -> dict[str, Any]:
             print("Configuration not saved.")
             # Still load and return config for reference
             template_path = get_template_path(mode)
-            with open(template_path) as f:
+            with open(template_path, encoding="utf-8") as f:
                 result: dict[str, Any] = yaml.safe_load(f)
                 return result
 
@@ -317,7 +317,7 @@ def interactive_builder() -> dict[str, Any]:
             yaml_handler.preserve_quotes = True
             yaml_handler.width = 4096  # Prevent line wrapping
 
-            with open(template_path) as f:
+            with open(template_path, encoding="utf-8") as f:
                 config = yaml_handler.load(f)
 
             # Customize configuration
@@ -329,15 +329,15 @@ def interactive_builder() -> dict[str, Any]:
             config["output"]["sample_name"] = sample_name
             config["output"]["experiment_id"] = experiment_id
 
-            with open(output_path, "w") as f:
+            with open(output_path, "w", encoding="utf-8") as f:
                 yaml_handler.dump(config, f)
 
             # Load for return value with proper type
-            with open(output_path) as f:
+            with open(output_path, encoding="utf-8") as f:
                 result_config = yaml.safe_load(f)
         else:
             # Fallback: use text replacement to preserve comments
-            with open(template_path) as f:
+            with open(template_path, encoding="utf-8") as f:
                 content = f.read()
 
             # Replace key values using simple text substitution
@@ -363,11 +363,11 @@ def interactive_builder() -> dict[str, Any]:
                     f'directory: "{safe_output_dir}"\n  sample_name: "{safe_sample_name}"\n  experiment_id: "{safe_experiment_id}"',
                 )
 
-            with open(output_path, "w") as f:
+            with open(output_path, "w", encoding="utf-8") as f:
                 f.write(content)
 
             # Load config for return value
-            with open(template_path) as f:
+            with open(template_path, encoding="utf-8") as f:
                 result_config = yaml.safe_load(f)
     except OSError as e:
         print(f"Error: Cannot write configuration to {output_path}: {e}", file=sys.stderr)

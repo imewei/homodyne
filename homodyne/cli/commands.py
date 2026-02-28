@@ -1193,7 +1193,7 @@ def load_nlsq_result_from_file(nlsq_result_path: Path) -> dict[str, Any] | None:
     try:
         import json
 
-        with open(params_file) as f:
+        with open(params_file, encoding="utf-8") as f:
             data = json.load(f)
 
         # Extract parameter values and uncertainties from the nested structure
@@ -1689,7 +1689,7 @@ def _generate_cmc_diagnostic_plots(
             }
 
             diag_file = diag_dir / "cmc_diagnostics.json"
-            with open(diag_file, "w") as f:
+            with open(diag_file, "w", encoding="utf-8") as f:
                 # Use _json_serializer (not default=str) so NaN/Inf values in
                 # KL matrices and per-shard diagnostics are sanitized to null/"Infinity"
                 # rather than written as the string "nan"/"inf".
@@ -1794,13 +1794,13 @@ def _save_results(
 
     try:
         if args.output_format == "yaml":
-            with open(output_file, "w") as f:
+            with open(output_file, "w", encoding="utf-8") as f:
                 # Apply json_safe before yaml.dump so NaN/Inf floats (e.g.,
                 # chi_squared) are converted to None/"Infinity" rather than
                 # PyYAML's .nan/.inf tokens, which surprise downstream consumers.
                 yaml.dump(_json_safe(results_summary), f, default_flow_style=False)
         elif args.output_format == "json":
-            with open(output_file, "w") as f:
+            with open(output_file, "w", encoding="utf-8") as f:
                 json.dump(results_summary, f, indent=2, default=_json_serializer)
         elif args.output_format == "npz":
             # Save numpy arrays
@@ -2594,7 +2594,7 @@ def save_nlsq_results(
     if diagnostics_payload:
         diagnostics_file = nlsq_dir / "diagnostics.json"
         try:
-            with open(diagnostics_file, "w") as f:
+            with open(diagnostics_file, "w", encoding="utf-8") as f:
                 json.dump(_json_safe(diagnostics_payload), f, indent=2)
             logger.info(f"Saved diagnostics to {diagnostics_file}")
         except (TypeError, OSError) as exc:
@@ -2773,7 +2773,7 @@ def save_mcmc_results(
     try:
         param_dict = _create_mcmc_parameters_dict(result)
         param_file = method_dir / "parameters.json"
-        with open(param_file, "w") as f:
+        with open(param_file, "w", encoding="utf-8") as f:
             json.dump(param_dict, f, indent=2, default=_json_serializer)
         logger.debug(f"Saved parameters to {param_file}")
     except Exception as e:
@@ -2874,7 +2874,7 @@ def save_mcmc_results(
     try:
         analysis_dict = _create_mcmc_analysis_dict(result, data, method_name)
         analysis_file = method_dir / f"analysis_results_{method_name}.json"
-        with open(analysis_file, "w") as f:
+        with open(analysis_file, "w", encoding="utf-8") as f:
             json.dump(analysis_dict, f, indent=2, default=_json_serializer)
         logger.debug(f"Saved analysis results to {analysis_file}")
     except Exception as e:
@@ -2885,7 +2885,7 @@ def save_mcmc_results(
     try:
         diagnostics_dict = _create_mcmc_diagnostics_dict(result)
         diagnostics_file = method_dir / "diagnostics.json"
-        with open(diagnostics_file, "w") as f:
+        with open(diagnostics_file, "w", encoding="utf-8") as f:
             json.dump(diagnostics_dict, f, indent=2, default=_json_serializer)
         logger.debug(f"Saved diagnostics to {diagnostics_file}")
     except Exception as e:
@@ -2900,7 +2900,7 @@ def save_mcmc_results(
     ):
         try:
             shard_diag_file = method_dir / "shard_diagnostics.json"
-            with open(shard_diag_file, "w") as f:
+            with open(shard_diag_file, "w", encoding="utf-8") as f:
                 # Use _json_serializer (not default=str) so NaN/Inf values in
                 # per-shard diagnostics are written as null/"Infinity" rather
                 # than the string "nan"/"inf".
