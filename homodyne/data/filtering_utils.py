@@ -390,7 +390,9 @@ class XPCSDataFilter:
             "threshold": quality_threshold,
             "selected_count": int(selected_count),
             "quality_scores": score_stats,
-            "selection_fraction": float(selected_count / len(correlation_matrices)) if len(correlation_matrices) > 0 else 0.0,
+            "selection_fraction": float(selected_count / len(correlation_matrices))
+            if len(correlation_matrices) > 0
+            else 0.0,
         }
 
         logger.debug(

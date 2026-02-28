@@ -299,7 +299,8 @@ class DatasetOptimizer:
                 os.environ[key.upper()] = value
                 logger.debug(
                     "Set JAX env var %s=%s (may be ignored if JAX already imported)",
-                    key.upper(), value,
+                    key.upper(),
+                    value,
                 )
 
         optimization_config = {
@@ -356,7 +357,8 @@ class DatasetOptimizer:
                 os.environ[key.upper()] = value
                 logger.debug(
                     "Set JAX env var %s=%s (may be ignored if JAX already imported)",
-                    key.upper(), value,
+                    key.upper(),
+                    value,
                 )
 
         optimization_config = {
@@ -878,7 +880,9 @@ class AdvancedDatasetOptimizer:
                 "dataset_sizes_range": {
                     "min": min(h["dataset_size"] for h in recent_optimizations),
                     "max": max(h["dataset_size"] for h in recent_optimizations),
-                    "avg": np.nanmean([h["dataset_size"] for h in recent_optimizations]),
+                    "avg": np.nanmean(
+                        [h["dataset_size"] for h in recent_optimizations]
+                    ),
                 },
             }
 

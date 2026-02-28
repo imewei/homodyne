@@ -551,7 +551,11 @@ class PreprocessingPipeline:
 
         # Use unified module if available
         if HAS_DIAGONAL_CORRECTION and apply_diagonal_correction is not None:
-            extra_kwargs = {k: v for k, v in config.items() if k not in ("method", "enabled", "backend")}
+            extra_kwargs = {
+                k: v
+                for k, v in config.items()
+                if k not in ("method", "enabled", "backend")
+            }
             for i in range(len(c2_exp)):
                 corrected_data["c2_exp"][i] = apply_diagonal_correction(
                     c2_exp[i],
@@ -721,7 +725,11 @@ class PreprocessingPipeline:
         # Deep-copy non-ndarray values (lists, dicts, etc.) so that downstream
         # mutations of e.g. "filters_applied" lists do not corrupt the original dict.
         normalized_data = {
-            k: (np.array(v, copy=True) if isinstance(v, np.ndarray) else copy.deepcopy(v))
+            k: (
+                np.array(v, copy=True)
+                if isinstance(v, np.ndarray)
+                else copy.deepcopy(v)
+            )
             for k, v in data.items()
         }
 
