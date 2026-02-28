@@ -186,7 +186,8 @@ def calculate_shear_rate(
     # array length. For n==1, index 0 is used twice → inferred dt=0, but the
     # jnp.where guard below keeps it safe with a 1e-8 floor.
     dt = jnp.where(
-        jnp.abs(time_array[jnp.minimum(1, time_array.shape[0] - 1)] - time_array[0]) > 1e-8,
+        jnp.abs(time_array[jnp.minimum(1, time_array.shape[0] - 1)] - time_array[0])
+        > 1e-8,
         jnp.abs(time_array[jnp.minimum(1, time_array.shape[0] - 1)] - time_array[0]),
         1e-8,
     )
@@ -231,7 +232,9 @@ def calculate_shear_rate_cmc(
     # CRITICAL FIX: Ensure dt > 0 to prevent 0^(negative beta) = infinity
     # CMC element-wise data can have consecutive zeros: t[0]=0, t[1]=0 → dt=0
     # This causes NaN when beta < 0 in gamma_t = gamma_dot_0 * (time_safe**beta)
-    dt_raw = jnp.abs(time_array[jnp.minimum(1, time_array.shape[0] - 1)] - time_array[0])
+    dt_raw = jnp.abs(
+        time_array[jnp.minimum(1, time_array.shape[0] - 1)] - time_array[0]
+    )
     dt = jnp.where(dt_raw > 1e-8, dt_raw, 1e-8)
 
     # Replace near-zero values with dt/2 floor, matching calculate_diffusion_coefficient.

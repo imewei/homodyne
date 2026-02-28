@@ -195,7 +195,13 @@ def _complex_step_derivative(
         try:
             f_complex = func(x_complex)
             gradient[i] = np.imag(f_complex) / h[i]
-        except (ValueError, ArithmeticError, FloatingPointError, OverflowError, TypeError) as e:
+        except (
+            ValueError,
+            ArithmeticError,
+            FloatingPointError,
+            OverflowError,
+            TypeError,
+        ) as e:
             # Fallback to central differences if complex evaluation fails
             logger.warning(f"Complex-step failed for parameter {i}: {e}")
             gradient[i] = _central_difference_single(func, x.real, i, h[i])
@@ -446,7 +452,13 @@ def _adaptive_gradient(
             step_sizes = h_optimal
             total_function_calls += n_params
             method_used = DifferentiationMethod.COMPLEX_STEP
-        except (ValueError, ArithmeticError, FloatingPointError, OverflowError, TypeError) as e:
+        except (
+            ValueError,
+            ArithmeticError,
+            FloatingPointError,
+            OverflowError,
+            TypeError,
+        ) as e:
             warnings_list.append(f"Complex-step differentiation failed: {e}")
             complex_step_success = False
     else:
@@ -477,7 +489,12 @@ def _adaptive_gradient(
                     2 * config.richardson_terms,
                     None,
                 )
-            except (ValueError, ArithmeticError, FloatingPointError, OverflowError) as e:
+            except (
+                ValueError,
+                ArithmeticError,
+                FloatingPointError,
+                OverflowError,
+            ) as e:
                 deriv = _central_difference_single(func, x, i, h_optimal[i])
                 warning = f"Richardson extrapolation failed for param {i}: {e}"
                 return i, deriv, 0.0, h_optimal[i], 2, warning
@@ -622,7 +639,13 @@ def _process_parameter_chunk(
 
             method_used = DifferentiationMethod.COMPLEX_STEP
 
-        except (ValueError, ArithmeticError, FloatingPointError, OverflowError, TypeError) as e:
+        except (
+            ValueError,
+            ArithmeticError,
+            FloatingPointError,
+            OverflowError,
+            TypeError,
+        ) as e:
             chunk_warnings.append(f"Complex-step failed for chunk: {e}")
             # Fallback to Richardson extrapolation
             method_used = DifferentiationMethod.RICHARDSON
@@ -639,7 +662,12 @@ def _process_parameter_chunk(
                     chunk_gradient[i] = deriv
                     chunk_error_estimates[i] = error_est
                     chunk_function_calls += 2 * config.richardson_terms
-                except (ValueError, ArithmeticError, FloatingPointError, OverflowError) as e2:
+                except (
+                    ValueError,
+                    ArithmeticError,
+                    FloatingPointError,
+                    OverflowError,
+                ) as e2:
                     chunk_warnings.append(
                         f"Richardson failed for param {param_idx}: {e2}",
                     )
@@ -666,7 +694,12 @@ def _process_parameter_chunk(
                 chunk_gradient[i] = deriv
                 chunk_error_estimates[i] = error_est
                 chunk_function_calls += 2 * config.richardson_terms
-            except (ValueError, ArithmeticError, FloatingPointError, OverflowError) as e:
+            except (
+                ValueError,
+                ArithmeticError,
+                FloatingPointError,
+                OverflowError,
+            ) as e:
                 chunk_warnings.append(f"Richardson failed for param {param_idx}: {e}")
                 chunk_gradient[i] = _central_difference_single(
                     func,
@@ -1031,7 +1064,13 @@ def validate_gradient_accuracy(
 
             results[method] = result
 
-        except (ValueError, ArithmeticError, FloatingPointError, OverflowError, TypeError) as e:
+        except (
+            ValueError,
+            ArithmeticError,
+            FloatingPointError,
+            OverflowError,
+            TypeError,
+        ) as e:
             results[method] = {"success": False, "error": str(e), "method": method}
 
     return results

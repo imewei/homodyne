@@ -396,7 +396,13 @@ class BenchmarkingMixin:
                     "Install JAX or scipy for gradient-based optimization",
                 )
 
-        except (TypeError, ValueError, RuntimeError, ArithmeticError, AttributeError) as e:
+        except (
+            TypeError,
+            ValueError,
+            RuntimeError,
+            ArithmeticError,
+            AttributeError,
+        ) as e:
             validation_results["accuracy_assessment"] = {
                 "gradient_computed": False,
                 "error": str(e),
