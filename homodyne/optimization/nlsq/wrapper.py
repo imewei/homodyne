@@ -6335,21 +6335,21 @@ class NLSQWrapper(NLSQAdapterBase):
                             "Fixed per-angle scaling computed (FIXED, not optimized):"
                         )
                         logger.info(
-                            f"  Contrast: mean={np.mean(fixed_contrast_per_angle):.4f}, "
-                            f"range=[{np.min(fixed_contrast_per_angle):.4f}, "
-                            f"{np.max(fixed_contrast_per_angle):.4f}]"
+                            f"  Contrast: mean={np.nanmean(fixed_contrast_per_angle):.4f}, "
+                            f"range=[{np.nanmin(fixed_contrast_per_angle):.4f}, "
+                            f"{np.nanmax(fixed_contrast_per_angle):.4f}]"
                         )
                         logger.info(
-                            f"  Offset: mean={np.mean(fixed_offset_per_angle):.4f}, "
-                            f"range=[{np.min(fixed_offset_per_angle):.4f}, "
-                            f"{np.max(fixed_offset_per_angle):.4f}]"
+                            f"  Offset: mean={np.nanmean(fixed_offset_per_angle):.4f}, "
+                            f"range=[{np.nanmin(fixed_offset_per_angle):.4f}, "
+                            f"{np.nanmax(fixed_offset_per_angle):.4f}]"
                         )
                     elif per_angle_mode_actual == "auto_averaged":
                         # auto_averaged: AVERAGE per-angle values → use as INITIAL for optimization
                         averaged_contrast_init = float(
-                            np.mean(fixed_contrast_per_angle)
+                            np.nanmean(fixed_contrast_per_angle)
                         )
-                        averaged_offset_init = float(np.mean(fixed_offset_per_angle))
+                        averaged_offset_init = float(np.nanmean(fixed_offset_per_angle))
 
                         logger.info(
                             "Averaged scaling computed (initial values for optimization):"
@@ -7094,8 +7094,8 @@ class NLSQWrapper(NLSQAdapterBase):
                     "  Using quantile-based averaged initial values (OPTIMIZED)"
                 )
             else:
-                contrast_mean = np.mean(contrast_per_angle)
-                offset_mean = np.mean(offset_per_angle)
+                contrast_mean = np.nanmean(contrast_per_angle)
+                offset_mean = np.nanmean(offset_per_angle)
                 logger.info(
                     "  Using parameter-based averaged initial values (OPTIMIZED)"
                 )
@@ -7597,12 +7597,12 @@ class NLSQWrapper(NLSQAdapterBase):
             logger.info(f"  Physical params: {len(physical_params_opt)}")
             logger.info(f"  Fixed per-angle scaling restored: {len(popt)} total params")
             logger.info(
-                f"  Contrast (fixed): mean={np.mean(contrast_per_angle_opt):.4f}, "
-                f"range=[{np.min(contrast_per_angle_opt):.4f}, {np.max(contrast_per_angle_opt):.4f}]"
+                f"  Contrast (fixed): mean={np.nanmean(contrast_per_angle_opt):.4f}, "
+                f"range=[{np.nanmin(contrast_per_angle_opt):.4f}, {np.nanmax(contrast_per_angle_opt):.4f}]"
             )
             logger.info(
-                f"  Offset (fixed): mean={np.mean(offset_per_angle_opt):.4f}, "
-                f"range=[{np.min(offset_per_angle_opt):.4f}, {np.max(offset_per_angle_opt):.4f}]"
+                f"  Offset (fixed): mean={np.nanmean(offset_per_angle_opt):.4f}, "
+                f"range=[{np.nanmin(offset_per_angle_opt):.4f}, {np.nanmax(offset_per_angle_opt):.4f}]"
             )
 
             # Transform covariance from physical-only space to full space
@@ -7888,15 +7888,15 @@ class NLSQWrapper(NLSQAdapterBase):
             info["anti_degeneracy"]["fixed_scaling"] = {
                 "param_reduction": f"{2 * n_phi} -> 0 (physical only)",
                 "method": "quantile_estimation",
-                "contrast_mean": float(np.mean(fixed_contrast_per_angle)),
+                "contrast_mean": float(np.nanmean(fixed_contrast_per_angle)),
                 "contrast_range": [
-                    float(np.min(fixed_contrast_per_angle)),
-                    float(np.max(fixed_contrast_per_angle)),
+                    float(np.nanmin(fixed_contrast_per_angle)),
+                    float(np.nanmax(fixed_contrast_per_angle)),
                 ],
-                "offset_mean": float(np.mean(fixed_offset_per_angle)),
+                "offset_mean": float(np.nanmean(fixed_offset_per_angle)),
                 "offset_range": [
-                    float(np.min(fixed_offset_per_angle)),
-                    float(np.max(fixed_offset_per_angle)),
+                    float(np.nanmin(fixed_offset_per_angle)),
+                    float(np.nanmax(fixed_offset_per_angle)),
                 ],
             }
         elif use_averaged_scaling:
