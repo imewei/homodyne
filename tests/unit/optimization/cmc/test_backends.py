@@ -902,3 +902,42 @@ class TestDynamicXLADeviceCount:
                 os.environ["HOMODYNE_CMC_NUM_CHAINS"] = saved
             else:
                 os.environ.pop("HOMODYNE_CMC_NUM_CHAINS", None)
+
+
+# =============================================================================
+# Tests for WorkerPool Integration
+# =============================================================================
+
+
+class TestWorkerPoolIntegration:
+    """Test WorkerPool integration with multiprocessing backend."""
+
+    def test_pool_fallback_few_shards(self):
+        """Verify fallback to per-shard spawn for < 3 shards."""
+        from homodyne.optimization.cmc.backends.worker_pool import should_use_pool
+
+        assert not should_use_pool(n_shards=1, n_workers=4)
+        assert not should_use_pool(n_shards=2, n_workers=4)
+
+    def test_pool_activated_many_shards(self):
+        """Verify pool is used for >= 3 shards."""
+        from homodyne.optimization.cmc.backends.worker_pool import should_use_pool
+
+        assert should_use_pool(n_shards=3, n_workers=2)
+        assert should_use_pool(n_shards=50, n_workers=8)
+
+    def test_pool_boundary_at_three(self):
+        """Verify exact boundary condition at n_shards=3."""
+        from homodyne.optimization.cmc.backends.worker_pool import should_use_pool
+
+        assert not should_use_pool(n_shards=2, n_workers=1)
+        assert should_use_pool(n_shards=3, n_workers=1)
+
+    def test_pool_single_worker(self):
+        """Verify pool decision with single worker."""
+        from homodyne.optimization.cmc.backends.worker_pool import should_use_pool
+
+        # Even with 1 worker, pool is used if >= 3 shards
+        # (avoids respawn overhead)
+        assert should_use_pool(n_shards=3, n_workers=1)
+        assert not should_use_pool(n_shards=2, n_workers=1)

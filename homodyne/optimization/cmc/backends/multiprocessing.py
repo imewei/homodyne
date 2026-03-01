@@ -1193,6 +1193,26 @@ class MultiprocessingBackend(CMCBackend):
                     f"noise range [{min(noises):.4g}, {max(noises):.4g}], "
                     f"dispatching highest-cost first"
                 )
+            # Determine dispatch strategy: persistent pool vs per-shard spawn
+            from homodyne.optimization.cmc.backends.worker_pool import (
+                should_use_pool,
+            )
+
+            use_pool = should_use_pool(
+                n_shards=n_shards, n_workers=actual_workers
+            )
+            if use_pool:
+                run_logger.info(
+                    f"Worker pool eligible ({n_shards} shards >= 3): "
+                    f"pool dispatch available for {actual_workers} workers "
+                    f"(Phase 1: using per-shard spawn, pool dispatch in Phase 2)"
+                )
+            else:
+                run_logger.debug(
+                    f"Per-shard spawn: {n_shards} shards < 3, "
+                    f"pool not beneficial"
+                )
+
             # M1-parent: Free per-shard numpy arrays now that they have been
             # copied into shared memory (via create_shared_shard_arrays above).
             del shard_data_list
