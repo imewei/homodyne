@@ -600,7 +600,8 @@ def _combine_shard_chunk(
         combined_samples = {}
         for name in param_names:
             all_shard_samples = [s.samples[name] for s in shard_samples]
-            combined_samples[name] = np.mean(all_shard_samples, axis=0)
+            # NaN-safe: NUTS can produce NaN samples from divergent transitions
+            combined_samples[name] = np.nanmean(all_shard_samples, axis=0)
 
     else:  # weighted_gaussian (legacy default)
         warnings.warn(
@@ -614,7 +615,8 @@ def _combine_shard_chunk(
         combined_samples = {}
         for name in param_names:
             all_shard_samples = [s.samples[name] for s in shard_samples]
-            variances = [np.var(s) for s in all_shard_samples]
+            # NaN-safe: NUTS can produce NaN samples from divergent transitions
+            variances = [float(np.nanvar(s)) for s in all_shard_samples]
             precisions = [1.0 / max(v, 1e-10) for v in variances]
             total_precision = sum(precisions)
             weights = [p / total_precision for p in precisions]
@@ -746,8 +748,28 @@ def combine_shard_samples_bimodal(
                 else:
                     # Unimodal shard or non-modal param: use full posterior
                     samples = shard_samples[shard_idx].samples[name].flatten()
-                    shard_means.append(float(np.mean(samples)))
-                    shard_variances.append(float(np.var(samples, ddof=1)))
+                    # NaN-safe: NUTS can produce NaN samples from divergent transitions
+                    if not np.all(np.isfinite(samples)):
+                        n_bad = int(np.sum(~np.isfinite(samples)))
+                        logger.warning(
+                            f"Bimodal CMC: shard {shard_idx} has "
+                            f"{n_bad}/{len(samples)} non-finite samples "
+                            f"for '{name}'; using finite subset"
+                        )
+                        finite_samples = samples[np.isfinite(samples)]
+                        if finite_samples.size == 0:
+                            continue
+                        shard_means.append(float(np.mean(finite_samples)))
+                        shard_variances.append(
+                            float(
+                                np.var(finite_samples, ddof=1)
+                                if finite_samples.size > 1
+                                else 0.0
+                            )
+                        )
+                    else:
+                        shard_means.append(float(np.mean(samples)))
+                        shard_variances.append(float(np.var(samples, ddof=1)))
 
             # Exclude degenerate shards (near-zero variance) before consensus
             if len(shard_variances) >= 3:
