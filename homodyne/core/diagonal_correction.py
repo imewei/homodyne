@@ -436,20 +436,27 @@ def _statistical_correction_numpy(
         if neighbors:
             neighbors_arr = np.array(neighbors)
 
-            # Apply statistical estimator
+            # Apply statistical estimator (NaN-safe: neighbors come from raw HDF5 data)
             if estimator == "median":
-                c2_corrected[i, i] = np.median(neighbors_arr)
+                c2_corrected[i, i] = np.nanmedian(neighbors_arr)
             elif estimator == "mean":
-                c2_corrected[i, i] = np.mean(neighbors_arr)
+                c2_corrected[i, i] = np.nanmean(neighbors_arr)
             elif estimator == "trimmed_mean":
                 if HAS_SCIPY:
-                    c2_corrected[i, i] = stats.trim_mean(neighbors_arr, trim_fraction)
+                    # Remove NaN before trimmed mean — scipy trim_mean propagates NaN
+                    finite_neighbors = neighbors_arr[np.isfinite(neighbors_arr)]
+                    if finite_neighbors.size > 0:
+                        c2_corrected[i, i] = stats.trim_mean(
+                            finite_neighbors, trim_fraction
+                        )
+                    else:
+                        c2_corrected[i, i] = np.nan
                 else:
                     # Fallback to median if scipy not available
-                    c2_corrected[i, i] = np.median(neighbors_arr)
+                    c2_corrected[i, i] = np.nanmedian(neighbors_arr)
             else:  # Defensive fallback for unknown estimator
                 logger.warning(f"Unknown estimator '{estimator}', using median")  # type: ignore[unreachable]
-                c2_corrected[i, i] = np.median(neighbors_arr)
+                c2_corrected[i, i] = np.nanmedian(neighbors_arr)
 
     return c2_corrected
 
@@ -473,13 +480,13 @@ def _interpolation_correction_numpy(
             y_points = [c2_mat[i - 1, i], c2_mat[i + 1, i]]
 
             if interp_method == "linear":
-                c2_corrected[i, i] = np.mean(y_points)
+                c2_corrected[i, i] = np.nanmean(y_points)
             elif interp_method == "cubic":
                 raise NotImplementedError(
                     "Cubic diagonal correction is not yet implemented. Use method='linear'."
                 )
             else:
-                c2_corrected[i, i] = np.mean(y_points)
+                c2_corrected[i, i] = np.nanmean(y_points)
         elif i == 0:
             # Edge case: use next off-diagonal value
             c2_corrected[i, i] = c2_mat[0, 1]
