@@ -653,23 +653,29 @@ class PreprocessingPipeline:
                 else:
                     neighbors_arr = neighbors  # type: ignore[assignment]
 
-                # Apply statistical estimator
+                # Apply statistical estimator (NaN-safe: off-diagonal c2 values
+                # can be NaN for failed measurement points)
                 if estimator == "median":
-                    c2_corrected[i, i] = np.median(neighbors_arr)
+                    c2_corrected[i, i] = np.nanmedian(neighbors_arr)
                 elif estimator == "mean":
-                    c2_corrected[i, i] = np.mean(neighbors_arr)
+                    c2_corrected[i, i] = np.nanmean(neighbors_arr)
                 elif estimator == "trimmed_mean":
                     trim_fraction = config.get("trim_fraction", 0.2)
                     if HAS_SCIPY:
-                        c2_corrected[i, i] = stats.trim_mean(
-                            neighbors_arr, trim_fraction
-                        )
+                        # Filter NaN before trim_mean (scipy has no NaN-safe variant)
+                        finite_neighbors = neighbors_arr[np.isfinite(neighbors_arr)]
+                        if finite_neighbors.size > 0:
+                            c2_corrected[i, i] = stats.trim_mean(
+                                finite_neighbors, trim_fraction
+                            )
+                        else:
+                            c2_corrected[i, i] = np.nan
                     else:
                         # Fallback to median
-                        c2_corrected[i, i] = np.median(neighbors_arr)
+                        c2_corrected[i, i] = np.nanmedian(neighbors_arr)
                 else:
                     logger.warning(f"Unknown estimator: {estimator}, using median")
-                    c2_corrected[i, i] = np.median(neighbors_arr)
+                    c2_corrected[i, i] = np.nanmedian(neighbors_arr)
 
         return c2_corrected
 
@@ -695,12 +701,12 @@ class PreprocessingPipeline:
                 # Use neighboring off-diagonal values for interpolation
                 y_points = [c2_mat[i - 1, i], c2_mat[i + 1, i]]
 
-                # Simple linear interpolation
+                # Simple linear interpolation (NaN-safe: neighbors may be NaN)
                 if method == "linear":
-                    c2_corrected[i, i] = np.mean(y_points)
+                    c2_corrected[i, i] = np.nanmean(y_points)
                 elif method == "cubic" and len(y_points) >= 2:
                     # For cubic, need more points - fall back to linear
-                    c2_corrected[i, i] = np.mean(y_points)
+                    c2_corrected[i, i] = np.nanmean(y_points)
             elif i == 0:
                 # Use next off-diagonal value
                 c2_corrected[i, i] = c2_mat[0, 1]
