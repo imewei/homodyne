@@ -964,9 +964,44 @@ class NLSQWrapper(NLSQAdapterBase):
 
             execution_time = time.time() - start_time
             uncertainties = _safe_uncertainties_from_pcov(pcov, len(popt))
-            reduced_chi2 = info.get("chi_squared", 0.0) / max(
-                1, n_est_points - len(popt)
+            # Effective DOF for reduced chi-squared: in auto_averaged mode the
+            # optimizer works on a compressed param vector but the true model
+            # DOF is 2*n_phi + n_physical (one contrast+offset per angle).
+            _ooc_init_n_params_effective: int | None = None
+            if per_angle_scaling and config is not None and hasattr(config, "config"):
+                _ooc_init_ad = (
+                    config.config.get("optimization", {})
+                    .get("nlsq", {})
+                    .get("anti_degeneracy", {})
+                )
+                _ooc_init_mode = _ooc_init_ad.get("per_angle_mode", "auto")
+                _ooc_init_thresh = _ooc_init_ad.get("constant_scaling_threshold", 3)
+                _ooc_init_n_phi = len(popt) - len(physical_param_names)
+                if _ooc_init_n_phi > 0:
+                    _ooc_init_n_phi = _ooc_init_n_phi // 2
+                _ooc_init_n_physical = len(physical_param_names)
+                if _ooc_init_mode == "auto" and _ooc_init_n_phi >= _ooc_init_thresh:
+                    _ooc_init_n_params_effective = (
+                        2 * _ooc_init_n_phi + _ooc_init_n_physical
+                    )
+                elif _ooc_init_mode == "constant":
+                    _ooc_init_n_params_effective = _ooc_init_n_physical
+            _ooc_init_dof = (
+                _ooc_init_n_params_effective
+                if _ooc_init_n_params_effective is not None
+                else len(popt)
             )
+            reduced_chi2 = info.get("chi_squared", 0.0) / max(
+                1, n_est_points - _ooc_init_dof
+            )
+            # Derive quality_flag from reduced chi-squared (same thresholds
+            # as _create_fit_result) instead of hardcoding "good".
+            if reduced_chi2 < 1.5:
+                _ooc_init_quality = "good"
+            elif reduced_chi2 < 3.0:
+                _ooc_init_quality = "marginal"
+            else:
+                _ooc_init_quality = "poor"
 
             return OptimizationResult(
                 parameters=popt,
@@ -984,7 +1019,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     "decision": strategy_decision.reason,
                 },
                 recovery_actions=["out_of_core_delegation"],
-                quality_flag="good",
+                quality_flag=_ooc_init_quality,
             )
 
         # STANDARD strategy falls through to existing optimization path
@@ -1240,9 +1275,42 @@ class NLSQWrapper(NLSQAdapterBase):
 
                 execution_time = time.time() - start_time
                 uncertainties = _safe_uncertainties_from_pcov(pcov, len(popt))
-                reduced_chi2 = info.get("chi_squared", 0.0) / max(
-                    1, n_total_points - len(popt)
+                # Effective DOF for reduced chi-squared: in auto_averaged mode the
+                # optimizer works on a compressed param vector but the true model
+                # DOF is 2*n_phi + n_physical (one contrast+offset per angle).
+                _ooc_n_params_effective: int | None = None
+                if (
+                    per_angle_scaling
+                    and config is not None
+                    and hasattr(config, "config")
+                ):
+                    _ooc_ad = (
+                        config.config.get("optimization", {})
+                        .get("nlsq", {})
+                        .get("anti_degeneracy", {})
+                    )
+                    _ooc_mode = _ooc_ad.get("per_angle_mode", "auto")
+                    _ooc_thresh = _ooc_ad.get("constant_scaling_threshold", 3)
+                    if _ooc_mode == "auto" and n_angles_check >= _ooc_thresh:
+                        _ooc_n_params_effective = 2 * n_angles_check + n_physical
+                    elif _ooc_mode == "constant":
+                        _ooc_n_params_effective = n_physical
+                _ooc_dof = (
+                    _ooc_n_params_effective
+                    if _ooc_n_params_effective is not None
+                    else len(popt)
                 )
+                reduced_chi2 = info.get("chi_squared", 0.0) / max(
+                    1, n_total_points - _ooc_dof
+                )
+                # Derive quality_flag from reduced chi-squared (same thresholds
+                # as _create_fit_result) instead of hardcoding "good".
+                if reduced_chi2 < 1.5:
+                    _ooc_recheck_quality = "good"
+                elif reduced_chi2 < 3.0:
+                    _ooc_recheck_quality = "marginal"
+                else:
+                    _ooc_recheck_quality = "poor"
 
                 return OptimizationResult(
                     parameters=popt,
@@ -1260,7 +1328,7 @@ class NLSQWrapper(NLSQAdapterBase):
                         "decision": strategy_recheck.reason,
                     },
                     recovery_actions=["out_of_core_recheck_delegation"],
-                    quality_flag="good",
+                    quality_flag=_ooc_recheck_quality,
                 )
 
             # Route to HYBRID_STREAMING if index array exceeds threshold (extreme scale)
@@ -1401,6 +1469,22 @@ class NLSQWrapper(NLSQAdapterBase):
                         # Get execution time
                         execution_time = time.time() - start_time
 
+                        # Compute effective DOF for reduced_chi_squared.
+                        # In auto_averaged mode, popt has compressed length (e.g. 9),
+                        # but the true model DOF is 2*n_phi + n_physical (e.g. 53).
+                        _hs_n_params_effective: int | None = None
+                        if per_angle_scaling and anti_degeneracy_config:
+                            _hs_ad_mode = anti_degeneracy_config.get(
+                                "per_angle_mode", "auto"
+                            )
+                            _hs_thresh = anti_degeneracy_config.get(
+                                "constant_scaling_threshold", 3
+                            )
+                            if _hs_ad_mode == "auto" and n_angles_check >= _hs_thresh:
+                                _hs_n_params_effective = 2 * n_angles_check + n_physical
+                            elif _hs_ad_mode == "constant":
+                                _hs_n_params_effective = n_physical
+
                         # Create result
                         result = self._create_fit_result(
                             popt=popt,
@@ -1418,6 +1502,7 @@ class NLSQWrapper(NLSQAdapterBase):
                             ),
                             stratification_diagnostics=stratification_diagnostics,
                             diagnostics_payload=None,
+                            n_params_effective=_hs_n_params_effective,
                         )
 
                         logger.info("=" * 80)
@@ -1490,6 +1575,20 @@ class NLSQWrapper(NLSQAdapterBase):
                 # Get execution time
                 execution_time = time.time() - start_time
 
+                # Compute effective DOF for reduced_chi_squared.
+                # In auto_averaged mode, popt has compressed length (e.g. 9),
+                # but the true model DOF is 2*n_phi + n_physical (e.g. 53).
+                _sls_n_params_effective: int | None = None
+                if per_angle_scaling and anti_degeneracy_config:
+                    _sls_ad_mode = anti_degeneracy_config.get("per_angle_mode", "auto")
+                    _sls_thresh = anti_degeneracy_config.get(
+                        "constant_scaling_threshold", 3
+                    )
+                    if _sls_ad_mode == "auto" and n_angles_check >= _sls_thresh:
+                        _sls_n_params_effective = 2 * n_angles_check + n_physical
+                    elif _sls_ad_mode == "constant":
+                        _sls_n_params_effective = n_physical
+
                 # Create result
                 result = self._create_fit_result(
                     popt=popt,
@@ -1505,6 +1604,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     streaming_diagnostics=None,
                     stratification_diagnostics=stratification_diagnostics,
                     diagnostics_payload=None,
+                    n_params_effective=_sls_n_params_effective,
                 )
 
                 logger.info("=" * 80)
@@ -1892,6 +1992,26 @@ class NLSQWrapper(NLSQAdapterBase):
             )
         )
 
+        # Compute effective DOF for the diagnostics covariance scaling (s²).
+        # In auto_averaged mode the optimizer works on a compressed 9-param vector
+        # (contrast_avg, offset_avg, physical×7), but the physics model consumes
+        # 2*n_phi + n_physical effective degrees of freedom (one contrast+offset per
+        # angle, constrained to an averaged value).  Using the compressed count (9)
+        # would underestimate s² and produce artificially tight diagnostic pcov.
+        n_physical = len(physical_param_names)
+        n_dof_effective: int | None = None
+        if per_angle_scaling and config is not None and hasattr(config, "config"):
+            _nlsq_cfg = config.config.get("optimization", {}).get("nlsq", {})
+            _ad_cfg = _nlsq_cfg.get("anti_degeneracy", {})
+            _ad_mode = _ad_cfg.get("per_angle_mode", "auto")
+            _ad_threshold = _ad_cfg.get("constant_scaling_threshold", 3)
+            if _ad_mode == "auto" and n_phi_unique >= _ad_threshold:
+                # auto_averaged: expanded DOF = 2*n_phi + n_physical (e.g. 53)
+                n_dof_effective = 2 * n_phi_unique + n_physical
+            elif _ad_mode == "constant":
+                # constant: only physical params are optimised; scaling is fixed
+                n_dof_effective = n_physical
+
         return self._post_process_results(
             popt=popt,
             pcov=pcov,
@@ -1916,6 +2036,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 "param_labels": param_labels,
             },
             logger=logger,
+            n_dof_effective=n_dof_effective,
         )
 
     def _execute_optimization_with_fallback(
@@ -2125,6 +2246,7 @@ class NLSQWrapper(NLSQAdapterBase):
         stratification_diagnostics: Any,
         diagnostics_state: dict[str, Any],
         logger: logging.Logger | logging.LoggerAdapter[logging.Logger],
+        n_dof_effective: int | None = None,
     ) -> OptimizationResult:
         """Post-process optimization outputs into final result.
 
@@ -2239,7 +2361,14 @@ class NLSQWrapper(NLSQAdapterBase):
                     )
             if final_jtj is not None:
                 n_diag_data = len(final_residuals)
-                n_diag_params = len(popt)
+                # Use n_dof_effective when provided (e.g. auto_averaged mode where
+                # the compressed optimizer vector has fewer entries than the true
+                # model DOF: 2*n_phi + n_physical >> len(popt)).  Falling back to
+                # len(popt) would underestimate s² and produce artificially tight
+                # diagnostic covariances.
+                n_diag_params = (
+                    n_dof_effective if n_dof_effective is not None else len(popt)
+                )
                 s2_diag = float(np.sum(final_residuals**2)) / max(
                     n_diag_data - n_diag_params, 1
                 )
@@ -2300,6 +2429,7 @@ class NLSQWrapper(NLSQAdapterBase):
             streaming_diagnostics=streaming_diagnostics,
             stratification_diagnostics=stratification_diagnostics,
             diagnostics_payload=diagnostics_payload if diagnostics_enabled else None,
+            n_params_effective=n_dof_effective,
         )
 
         logger.info(
@@ -8133,6 +8263,7 @@ class NLSQWrapper(NLSQAdapterBase):
         streaming_diagnostics: dict[str, Any] | None = None,
         stratification_diagnostics: StratificationDiagnostics | None = None,
         diagnostics_payload: dict[str, Any] | None = None,
+        n_params_effective: int | None = None,
     ) -> OptimizationResult:
         """Convert NLSQ output to OptimizationResult.
 
@@ -8162,8 +8293,13 @@ class NLSQWrapper(NLSQAdapterBase):
         # Compute chi-squared
         chi_squared = float(np.sum(residuals**2))
 
-        # Compute reduced chi-squared
-        n_params = len(popt)
+        # Compute reduced chi-squared.
+        # Use n_params_effective when provided — in auto_averaged mode the compressed
+        # optimizer vector (e.g. 9 params) has fewer entries than the true model DOF
+        # (e.g. 2*n_phi + n_physical = 53). Using len(popt) would underestimate the
+        # true DOF, producing an artificially low reduced chi-squared and a falsely
+        # optimistic quality_flag ("good" when the fit is "marginal" or "poor").
+        n_params = n_params_effective if n_params_effective is not None else len(popt)
         degrees_of_freedom = n_data - n_params
         reduced_chi_squared = (
             chi_squared / degrees_of_freedom if degrees_of_freedom > 0 else np.inf
