@@ -9,6 +9,153 @@ ______________________________________________________________________
 
 ## [Unreleased]
 
+### Reliability Hardening, Code Quality Sweep, and Tooling Modernization
+
+Comprehensive reliability sweep (QA round 11, 6 sub-rounds) addressing NaN-unsafe NumPy
+operations, missing file encoding declarations, Unicode/emoji in runtime strings, and
+dead test infrastructure. Plus full codebase reformatting to 88-char line limit and
+tooling configuration updates for mypy and pre-commit.
+
+90 files changed across 39 commits; 2718 tests pass.
+
+#### Fixed
+
+**NaN-safe NumPy operations (~50 sites):**
+
+- **fix(core)**: Replace `np.mean`/`np.min`/`np.max`/`np.std` with NaN-safe variants
+  (`nanmean`, `nanmin`, `nanmax`, `nanstd`) across all data arrays that can contain NaN:
+  gradient diagnostics, model result summaries, per-angle contrast/offset averaging
+  (`physics_cmc.py`, `fitting.py`, `jax_backend.py`)
+
+- **fix(data)**: NaN-safe aggregations in data loading, validation, cache stats, and
+  filtering utilities — prevents crashes on partially-valid HDF5 datasets
+  (`xpcs_loader.py`, `validation.py`, `filtering_utils.py`, `performance_engine.py`)
+
+- **fix(optimization)**: NaN-safe parameter statistics in NLSQ quantile estimation and
+  MCMC posterior summaries — prevents NaN propagation through `np.percentile` and
+  `np.mean` on arrays with non-finite values (`parameter_utils.py`, `results.py`,
+  `diagnostics.py`, `sampler.py`)
+
+- **fix(io)**: NaN-safe MCMC stats in result writers — guards `int(NaN)` crashes and
+  filters non-finite R-hat/ESS values in JSON/NPZ export (`mcmc_writers.py`,
+  `nlsq_writers.py`)
+
+- **fix(viz)**: NaN-safe `np.min`/`np.max`/`np.percentile` in all plotting backends —
+  prevents matplotlib crashes on datasets with NaN values (`nlsq_plots.py`,
+  `mcmc_plots.py`, `experimental_plots.py`, `datashader_backend.py`, `diagnostics.py`)
+
+**Explicit file encoding (~20 sites):**
+
+- **fix(cli)**: Add `encoding="utf-8"` to all text-mode `open()` calls in CLI commands,
+  config generator, and XLA config (`commands.py`, `config_generator.py`,
+  `xla_config.py`)
+
+- **fix(data)**: Add `encoding="utf-8"` to config file reads and cache operations
+  (`config.py`, `performance_engine.py`)
+
+- **fix(device)**: Add `encoding="utf-8"` to nodefile and `/proc/cpuinfo` reads
+  (`cpu.py`)
+
+- **fix(optimization)**: Add `encoding="utf-8"` to CMC config and PBS script I/O
+  (`config.py`, `pbs.py`)
+
+- **fix(io)**: Add `encoding="utf-8"` to JSON/NPZ result writers (`mcmc_writers.py`,
+  `nlsq_writers.py`)
+
+- **fix(viz)**: Add `encoding="utf-8"` to matplotlib config file write
+  (`diagnostics.py`)
+
+- **fix(runtime)**: Add `encoding="utf-8"` to post-install and uninstall script I/O
+  (`post_install.py`, `uninstall_scripts.py`)
+
+**Unicode/emoji to ASCII in runtime strings (~40 sites):**
+
+- **fix(core)**: Replace Unicode checkmarks, arrows, and symbols with ASCII equivalents
+  in `__repr__`, `__str__`, and log messages — prevents encoding errors on non-UTF-8
+  terminals (`theory.py`, `physics.py`, `config/manager.py`)
+
+- **fix(data)**: Unicode to ASCII in angle filtering, phi range logging, and data loader
+  status messages (`filtering_utils.py`, `xpcs_loader.py`, `preprocessing.py`)
+
+- **fix(optimization)**: Comprehensive Unicode to ASCII sweep across all NLSQ and CMC
+  log messages, progress indicators, and convergence reports (`wrapper.py`,
+  `sequential.py`, `progress.py`, `results.py`, `multiprocessing.py`)
+
+- **fix(cli)**: Unicode to ASCII in CLI output, user prompts, and command summaries
+  (`commands.py`, `config_generator.py`)
+
+- **fix(runtime)**: Replace emoji with ASCII markers in installer output
+  (`post_install.py`, `uninstall_scripts.py`, `system_validator.py`)
+
+- **fix(viz)**: Unicode to ASCII in log messages; keep Unicode in matplotlib plot labels
+  where rendering requires it (`nlsq_plots.py`, `mcmc_plots.py`,
+  `experimental_plots.py`)
+
+**Narrow exception handlers (~5 sites):**
+
+- **fix(core)**: Narrow `except Exception` to specific types (`ValueError`, `TypeError`,
+  `RuntimeError`) at function boundaries (`jax_backend.py`)
+
+- **fix(device)**: Narrow broad exception handlers in CPU detection (`cpu.py`)
+
+- **fix(data)**: Remove GPU/TPU references from CPU-only package (`xpcs_loader.py`,
+  `performance_engine.py`)
+
+**Pessimistic success defaults:**
+
+- **fix(optimization)**: Default MCMC shard success to `False` (was `True`) — prevents
+  failed shards from being silently included in posterior combination (`results.py`)
+
+**Mypy and type checking:**
+
+- **fix(cli)**: Resolve mypy errors in `config_generator.py` — `ruamel.yaml` import
+  handling
+
+- **fix(optimization)**: Resolve mypy errors in optimization modules — Unicode removal
+  from docstrings/comments that confused type inference
+
+- **chore(tooling)**: Add `ruamel.*` and `sklearn.*` to mypy `ignore_missing_imports`
+  override list (`pyproject.toml`)
+
+#### Changed
+
+**Test infrastructure cleanup:**
+
+- **perf(tests)**: Remove unnecessary JAX cache clearing from conftest — eliminates
+  redundant `jax.clear_caches()` calls that added ~28% overhead to test suite
+  (`conftest.py`)
+
+- **fix(tests)**: Reduce memory in `test_plots` contrast warning test — prevents OOM on
+  CI runners (`viz/test_plots.py`)
+
+- **fix(tests)**: Stabilize flaky JIT compilation overhead test — increase tolerance for
+  timing-sensitive assertion (`test_nlsq_core.py`)
+
+- **chore(tests)**: Remove unused fixtures (`large_xpcs_data`, `test_parameters`), dead
+  test files (`test_chunking.py`, `test_numerical_validator_fixtures_demo.py`), and
+  stale conftest code (`conftest.py`)
+
+**Code formatting:**
+
+- **style**: Reformat entire codebase to 88-character line limit via `ruff format` —
+  core, data, optimization (NLSQ + CMC), CLI, I/O, runtime, viz, docs, and tests (26
+  files reformatted)
+
+- **style**: Fix end-of-file newlines in 4 Jupyter notebooks and `conftest.py`
+
+**Documentation:**
+
+- **docs(architecture)**: Add comprehensive architecture documentation — system
+  overview, physical model, NLSQ fitting, CMC fitting, and data handler architecture
+  (`docs/architecture/`)
+
+- **fix(docs)**: Fix RST docstring indentation in `combine_shard_samples` that caused
+  Sphinx build warnings (`backends/base.py`)
+
+- **chore(tooling)**: Exclude `homodyne-architecture-overview.md` from mdformat
+  pre-commit hook — file triggers a known mdformat roundtrip bug
+  (`.pre-commit-config.yaml`)
+
 ______________________________________________________________________
 
 ## [2.22.2] - 2026-02-24

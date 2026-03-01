@@ -165,8 +165,9 @@ def combine_shard_samples(
     synthetically drawn intermediate samples (P1-R6-01).
 
     Memory scaling:
-    - Each shard result: ~100KB (13 params × 4 chains × 1500 samples × 8 bytes)
-    - Hierarchical (chunk=500): processes max(chunk_size) shards at once (~50MB)
+
+    - Each shard result: ~100KB (13 params x 4 chains x 1500 samples x 8 bytes)
+    - Hierarchical (chunk=500): processes max(chunk_size) shards at once (~50MB),
       then releases them. Moment accumulation uses O(n_params) space.
 
     Parameters
