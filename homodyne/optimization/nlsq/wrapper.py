@@ -5460,8 +5460,9 @@ class NLSQWrapper(NLSQAdapterBase):
             identical to stratified least-squares. Anti-Degeneracy Defense System
             support is planned for a future release.
         """
+        import os
         import time
-        import jax
+
         import jax.numpy as jnp
 
         _start_time = time.perf_counter()  # noqa: F841
@@ -5614,17 +5615,16 @@ class NLSQWrapper(NLSQAdapterBase):
         )
 
         def evaluate_total_chi2(params_eval):
-            total_c2 = 0.0
-
-            # Fast Mode: Subsample chunks
-            # Use fixed stride of 10 (10% sample)
             stride = 10 if fast_chi2_mode else 1
-            _scale_factor = float(stride)  # noqa: F841
 
-            # Create subsampled iterator
-            # StratifiedIndexIterator is iterable but not slicable usually?
-            # We iterate manually to be safe
+            # Use parallel pool for chi2 evaluation when available
+            if ooc_pool is not None:
+                return ooc_pool.compute_chi2(
+                    np.asarray(params_eval), stride=stride
+                )
 
+            # Sequential fallback
+            total_c2 = 0.0
             eval_count = 0
             for i, ind_c in enumerate(iterator):
                 if i % stride != 0:
@@ -5641,8 +5641,6 @@ class NLSQWrapper(NLSQAdapterBase):
                 total_c2 += c2_chunk
                 eval_count += 1
 
-            # Correction if eval_count doesn't match stride exactly due to remainder
-            # Or simpler: total_c2 * (total_chunks / eval_count)
             total_chunks = len(iterator)
             if eval_count > 0:
                 scale = total_chunks / eval_count
@@ -5739,199 +5737,202 @@ class NLSQWrapper(NLSQAdapterBase):
                     ooc_shared = None
                 ooc_pool = None
 
-        for i in range(max_iter):
-            _iter_start = time.perf_counter()  # noqa: F841
+        # Track early convergence result for return after cleanup
+        _early_result: tuple[np.ndarray, np.ndarray, dict] | None = None
 
-            if ooc_pool is not None:
-                # Parallel compute: dispatch all chunks to pool
-                chunk_results = ooc_pool.compute_accumulators(
-                    np.asarray(params_curr)
-                )
-                count = sum(
-                    end - start
-                    for start, end in chunk_boundaries  # noqa: F821
-                )
-            else:
-                # Sequential compute: iterate chunks locally
-                chunk_results_local: list[
-                    tuple[np.ndarray, np.ndarray, float]
-                ] = []
-                count = 0
-                for indices_chunk in iterator:
-                    phi_c = phi_flat[indices_chunk]
-                    t1_c = t1_flat[indices_chunk]
-                    t2_c = t2_flat[indices_chunk]
-                    g2_c = g2_flat[indices_chunk]
-                    sigma_c = (
-                        sigma_flat[indices_chunk]
-                        if sigma_flat is not None
-                        else 1.0
+        try:
+            for i in range(max_iter):
+                _iter_start = time.perf_counter()  # noqa: F841
+
+                if ooc_pool is not None:
+                    # Parallel compute: dispatch all chunks to pool
+                    chunk_results = ooc_pool.compute_accumulators(
+                        np.asarray(params_curr)
                     )
-                    JtJ, Jtr, chi2 = compute_chunk_accumulators(
-                        params_curr, phi_c, t1_c, t2_c, g2_c, sigma_c
+                    count = sum(
+                        end - start
+                        for start, end in chunk_boundaries  # noqa: F821
                     )
-                    chunk_results_local.append(
-                        (np.asarray(JtJ), np.asarray(Jtr), float(chi2))
-                    )
-                    count += len(indices_chunk)
-                chunk_results = chunk_results_local
-
-            # Reduce chunk results (parallel reduction when beneficial)
-            n_chunks = len(chunk_results)
-            if n_chunks == 0:
-                total_JtJ = jnp.zeros((n_params, n_params))
-                total_Jtr = jnp.zeros(n_params)
-                total_chi2 = 0.0
-            elif should_use_parallel_accumulation(n_chunks):
-                if i == 0:
-                    logger.info(
-                        "Parallel chunk reduction: %d chunks",
-                        n_chunks,
-                    )
-                total_JtJ_np, total_Jtr_np, total_chi2, _ = (
-                    accumulate_chunks_parallel(
-                        chunk_results,
-                        n_workers=max(1, min(4, n_chunks // 4)),
-                    )
-                )
-                total_JtJ = jnp.asarray(total_JtJ_np)
-                total_Jtr = jnp.asarray(total_Jtr_np)
-            else:
-                if i == 0:
-                    logger.debug(
-                        "Sequential chunk reduction: %d chunks",
-                        n_chunks,
-                    )
-                total_JtJ_np, total_Jtr_np, total_chi2, _ = (
-                    accumulate_chunks_sequential(chunk_results)
-                )
-                total_JtJ = jnp.asarray(total_JtJ_np)
-                total_Jtr = jnp.asarray(total_Jtr_np)
-
-            # Robust Levenberg-Marquardt Step Loop
-            step_accepted = False
-
-            # Check for invalid Jacobian/Residuals
-            if jnp.any(jnp.isnan(total_Jtr)) or jnp.any(jnp.isinf(total_JtJ)):
-                logger.warning("Gradient/Hessian contains NaNs/Infs. Checking params.")
-                # If we are here, current params are bad? Or gradients near boundary are bad.
-                # If params valid but grad inf: likely at boundary singularity (tau=0).
-                if i == 0:
-                    raise RuntimeError("Initial parameters produced invalid gradients.")
-                # We should have rejected the previous step!
-                # But we are here.
-                break
-
-            diag_idx = jnp.diag_indices_from(total_JtJ)
-
-            for _lm_iter in range(10):  # Max dampings per iter
-                solver_matrix = total_JtJ.at[diag_idx].add(
-                    lm_lambda * jnp.diag(total_JtJ)
-                )
-
-                try:
-                    # use lstsq for robustness against singular matrices
-                    step, _, _, _ = jnp.linalg.lstsq(
-                        solver_matrix, -total_Jtr, rcond=1e-5
-                    )
-                except (ValueError, RuntimeError, FloatingPointError):
-                    step = jnp.nan  # Signal fail
-
-                # Check step validity
-                if jnp.any(jnp.isnan(step)):
-                    logger.warning(
-                        f"Bad step (NaN). Increasing damping ({lm_lambda:.1e} -> {lm_lambda * 10:.1e})"
-                    )
-                    lm_lambda *= 10
-                    continue
-
-                # Proposed parameters
-                params_new = params_curr + step
-                # Clip
-                if bounds is not None:
-                    lower, upper = bounds
-                    params_new = jnp.clip(
-                        params_new, jnp.asarray(lower), jnp.asarray(upper)
-                    )
-
-                # Evaluate New Cost
-                # This is expensive but necessary
-                try:
-                    chi2_new = evaluate_total_chi2(params_new)
-                except (ValueError, RuntimeError, FloatingPointError) as e:
-                    logger.warning(f"Eval failed: {e}")
-                    chi2_new = jnp.inf
-
-                # Acceptance check
-                if chi2_new < total_chi2:
-                    # Accept
-                    ratio = (total_chi2 - chi2_new) / total_chi2
-                    logger.info(
-                        f"Iter {i + 1}: chi2={float(chi2_new):.4e} (dec {ratio:.1%}), "
-                        f"lambda={lm_lambda:.1e}"
-                    )
-                    params_curr = params_new
-                    lm_lambda *= 0.1  # Decrease damping (trust more)
-                    if lm_lambda < 1e-7:
-                        lm_lambda = 1e-7
-                    step_accepted = True
-
-                    # Multi-criteria convergence (v2.22.0)
-                    # 1. Per-component relative parameter change (scale-invariant)
-                    param_scale = jnp.maximum(jnp.abs(params_curr), 1e-10)
-                    rel_change = float(jnp.max(jnp.abs(step) / param_scale))
-                    # 2. Relative cost function change
-                    cost_change = float(ratio)
-
-                    logger.debug(
-                        f"  Convergence: xtol={rel_change:.2e} "
-                        f"(thresh={xtol:.0e}), "
-                        f"ftol={cost_change:.2e} "
-                        f"(thresh={ftol:.0e})"
-                    )
-
-                    if rel_change < xtol and cost_change < ftol:
-                        logger.info(
-                            f"Out-of-Core converged: xtol={rel_change:.2e}<{xtol:.0e}, "
-                            f"ftol={cost_change:.2e}<{ftol:.0e}"
-                        )
-                        # pcov = s² * (J^T J)^{-1}  where s² = RSS / (n - p_effective)
-                        # Uses n_params_effective for correct DOF in auto_averaged mode.
-                        s2 = float(chi2_new) / max(count - n_params_effective, 1)
-                        try:
-                            pcov = s2 * np.linalg.inv(np.array(total_JtJ))
-                        except np.linalg.LinAlgError:
-                            logger.warning(
-                                "Singular J^T J in OOC - using pseudo-inverse for covariance"
-                            )
-                            pcov = s2 * np.linalg.pinv(np.array(total_JtJ))
-                        return (
-                            np.array(params_curr),
-                            pcov,
-                            {
-                                "chi_squared": float(chi2_new),
-                                "iterations": i + 1,
-                                "convergence_status": "converged",
-                                "message": "Out-of-Core converged (xtol+ftol)",
-                            },
-                        )
-                    break  # Break inner LM loop, proceed to next accumulation
                 else:
-                    # Reject
-                    logger.debug(
-                        f"Reject step (chi2 {float(chi2_new):.4e} >= {float(total_chi2):.4e}). Damping up."
+                    # Sequential compute: iterate chunks locally
+                    chunk_results_local: list[
+                        tuple[np.ndarray, np.ndarray, float]
+                    ] = []
+                    count = 0
+                    for indices_chunk in iterator:
+                        phi_c = phi_flat[indices_chunk]
+                        t1_c = t1_flat[indices_chunk]
+                        t2_c = t2_flat[indices_chunk]
+                        g2_c = g2_flat[indices_chunk]
+                        sigma_c = (
+                            sigma_flat[indices_chunk]
+                            if sigma_flat is not None
+                            else 1.0
+                        )
+                        JtJ, Jtr, chi2 = compute_chunk_accumulators(
+                            params_curr, phi_c, t1_c, t2_c, g2_c, sigma_c
+                        )
+                        chunk_results_local.append(
+                            (np.asarray(JtJ), np.asarray(Jtr), float(chi2))
+                        )
+                        count += len(indices_chunk)
+                    chunk_results = chunk_results_local
+
+                # Reduce chunk results (parallel reduction when beneficial)
+                n_chunks = len(chunk_results)
+                if n_chunks == 0:
+                    total_JtJ = jnp.zeros((n_params, n_params))
+                    total_Jtr = jnp.zeros(n_params)
+                    total_chi2 = 0.0
+                elif should_use_parallel_accumulation(n_chunks):
+                    if i == 0:
+                        logger.info(
+                            "Parallel chunk reduction: %d chunks",
+                            n_chunks,
+                        )
+                    total_JtJ_np, total_Jtr_np, total_chi2, _ = (
+                        accumulate_chunks_parallel(
+                            chunk_results,
+                            n_workers=max(1, min(4, n_chunks // 4)),
+                        )
                     )
-                    lm_lambda *= 10
+                    total_JtJ = jnp.asarray(total_JtJ_np)
+                    total_Jtr = jnp.asarray(total_Jtr_np)
+                else:
+                    if i == 0:
+                        logger.debug(
+                            "Sequential chunk reduction: %d chunks",
+                            n_chunks,
+                        )
+                    total_JtJ_np, total_Jtr_np, total_chi2, _ = (
+                        accumulate_chunks_sequential(chunk_results)
+                    )
+                    total_JtJ = jnp.asarray(total_JtJ_np)
+                    total_Jtr = jnp.asarray(total_Jtr_np)
 
-            if not step_accepted:
-                logger.warning("Could not find better step. Stopping.")
-                break
+                # Robust Levenberg-Marquardt Step Loop
+                step_accepted = False
 
-        # Clean up parallel compute pool and shared memory
-        if ooc_pool is not None:
-            ooc_pool.shutdown()
-        if ooc_shared is not None:
-            ooc_shared.cleanup()
+                # Check for invalid Jacobian/Residuals
+                if jnp.any(jnp.isnan(total_Jtr)) or jnp.any(jnp.isinf(total_JtJ)):
+                    logger.warning("Gradient/Hessian contains NaNs/Infs. Checking params.")
+                    if i == 0:
+                        raise RuntimeError("Initial parameters produced invalid gradients.")
+                    break
+
+                diag_idx = jnp.diag_indices_from(total_JtJ)
+
+                for _lm_iter in range(10):  # Max dampings per iter
+                    solver_matrix = total_JtJ.at[diag_idx].add(
+                        lm_lambda * jnp.diag(total_JtJ)
+                    )
+
+                    try:
+                        # use lstsq for robustness against singular matrices
+                        step, _, _, _ = jnp.linalg.lstsq(
+                            solver_matrix, -total_Jtr, rcond=1e-5
+                        )
+                    except (ValueError, RuntimeError, FloatingPointError):
+                        step = jnp.nan  # Signal fail
+
+                    # Check step validity
+                    if jnp.any(jnp.isnan(step)):
+                        logger.warning(
+                            f"Bad step (NaN). Increasing damping ({lm_lambda:.1e} -> {lm_lambda * 10:.1e})"
+                        )
+                        lm_lambda *= 10
+                        continue
+
+                    # Proposed parameters
+                    params_new = params_curr + step
+                    # Clip
+                    if bounds is not None:
+                        lower, upper = bounds
+                        params_new = jnp.clip(
+                            params_new, jnp.asarray(lower), jnp.asarray(upper)
+                        )
+
+                    # Evaluate New Cost
+                    try:
+                        chi2_new = evaluate_total_chi2(params_new)
+                    except (ValueError, RuntimeError, FloatingPointError) as e:
+                        logger.warning(f"Eval failed: {e}")
+                        chi2_new = jnp.inf
+
+                    # Acceptance check
+                    if chi2_new < total_chi2:
+                        # Accept
+                        ratio = (total_chi2 - chi2_new) / total_chi2
+                        logger.info(
+                            f"Iter {i + 1}: chi2={float(chi2_new):.4e} (dec {ratio:.1%}), "
+                            f"lambda={lm_lambda:.1e}"
+                        )
+                        params_curr = params_new
+                        lm_lambda *= 0.1  # Decrease damping (trust more)
+                        if lm_lambda < 1e-7:
+                            lm_lambda = 1e-7
+                        step_accepted = True
+
+                        # Multi-criteria convergence (v2.22.0)
+                        # 1. Per-component relative parameter change (scale-invariant)
+                        param_scale = jnp.maximum(jnp.abs(params_curr), 1e-10)
+                        rel_change = float(jnp.max(jnp.abs(step) / param_scale))
+                        # 2. Relative cost function change
+                        cost_change = float(ratio)
+
+                        logger.debug(
+                            f"  Convergence: xtol={rel_change:.2e} "
+                            f"(thresh={xtol:.0e}), "
+                            f"ftol={cost_change:.2e} "
+                            f"(thresh={ftol:.0e})"
+                        )
+
+                        if rel_change < xtol and cost_change < ftol:
+                            logger.info(
+                                f"Out-of-Core converged: xtol={rel_change:.2e}<{xtol:.0e}, "
+                                f"ftol={cost_change:.2e}<{ftol:.0e}"
+                            )
+                            s2 = float(chi2_new) / max(count - n_params_effective, 1)
+                            try:
+                                pcov = s2 * np.linalg.inv(np.array(total_JtJ))
+                            except np.linalg.LinAlgError:
+                                logger.warning(
+                                    "Singular J^T J in OOC - using pseudo-inverse for covariance"
+                                )
+                                pcov = s2 * np.linalg.pinv(np.array(total_JtJ))
+                            _early_result = (
+                                np.array(params_curr),
+                                pcov,
+                                {
+                                    "chi_squared": float(chi2_new),
+                                    "iterations": i + 1,
+                                    "convergence_status": "converged",
+                                    "message": "Out-of-Core converged (xtol+ftol)",
+                                },
+                            )
+                            break
+                        break  # Break inner LM loop, proceed to next accumulation
+                    else:
+                        # Reject
+                        logger.debug(
+                            f"Reject step (chi2 {float(chi2_new):.4e} >= {float(total_chi2):.4e}). Damping up."
+                        )
+                        lm_lambda *= 10
+
+                if _early_result is not None:
+                    break
+                if not step_accepted:
+                    logger.warning("Could not find better step. Stopping.")
+                    break
+        finally:
+            # Clean up parallel compute pool and shared memory
+            if ooc_pool is not None:
+                ooc_pool.shutdown()
+            if ooc_shared is not None:
+                ooc_shared.cleanup()
+
+        if _early_result is not None:
+            return _early_result
 
         # Determine final status (rel_change initialized to inf before loop)
         converged = rel_change < xtol and cost_change < ftol

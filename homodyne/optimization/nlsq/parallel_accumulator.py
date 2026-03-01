@@ -389,6 +389,15 @@ _w_compute_chi2: Callable | None = None
 _w_shm_handles: list[multiprocessing.shared_memory.SharedMemory] = []
 
 
+def _ooc_worker_cleanup() -> None:
+    """Close shared memory handles on worker exit."""
+    for shm in _w_shm_handles:
+        try:
+            shm.close()
+        except (OSError, ValueError):
+            pass
+
+
 def _ooc_worker_init(
     shm_refs: dict[str, dict[str, Any]],
     physics_config: dict[str, Any],
@@ -400,6 +409,8 @@ def _ooc_worker_init(
     Sets up JAX/OMP, attaches to shared memory (zero-copy views),
     and creates JIT kernels from physics constants.
     """
+    import atexit
+
     global _w_phi, _w_t1, _w_t2, _w_g2, _w_sigma  # noqa: PLW0603
     global _w_chunk_boundaries, _w_compute_accumulators  # noqa: PLW0603
     global _w_compute_chi2, _w_shm_handles  # noqa: PLW0603
@@ -436,6 +447,9 @@ def _ooc_worker_init(
         )
         _w_shm_handles.append(shm)
         arrays[name] = np.ndarray(ref["shape"], dtype=ref["dtype"], buffer=shm.buf)
+
+    # Register cleanup to close shared memory handles on worker exit
+    atexit.register(_ooc_worker_cleanup)
 
     _w_phi = arrays["phi"]
     _w_t1 = arrays["t1"]
@@ -499,6 +513,44 @@ def _ooc_compute_chunk(
         jnp.asarray(sigma_c) if isinstance(sigma_c, np.ndarray) else sigma_c,
     )
     return np.asarray(JtJ), np.asarray(Jtr), float(chi2)
+
+
+def _ooc_compute_chi2_chunk(
+    args: tuple[np.ndarray, int],
+) -> float:
+    """Compute chi2 for a single chunk using worker globals (no Jacobian).
+
+    Parameters
+    ----------
+    args : (params_np, chunk_id)
+        params_np: current parameter values as numpy array.
+        chunk_id: index into _w_chunk_boundaries.
+
+    Returns
+    -------
+    chi2 as float.
+    """
+    import jax.numpy as jnp
+
+    params_np, chunk_id = args
+    start, end = _w_chunk_boundaries[chunk_id]
+
+    phi_c = _w_phi[start:end]  # type: ignore[index]
+    t1_c = _w_t1[start:end]  # type: ignore[index]
+    t2_c = _w_t2[start:end]  # type: ignore[index]
+    g2_c = _w_g2[start:end]  # type: ignore[index]
+    sigma_c = _w_sigma[start:end] if _w_sigma is not None else 1.0  # type: ignore[index]
+
+    p = jnp.asarray(params_np)
+    chi2 = _w_compute_chi2(  # type: ignore[misc]
+        p,
+        jnp.asarray(phi_c),
+        jnp.asarray(t1_c),
+        jnp.asarray(t2_c),
+        jnp.asarray(g2_c),
+        jnp.asarray(sigma_c) if isinstance(sigma_c, np.ndarray) else sigma_c,
+    )
+    return float(chi2)
 
 
 class OOCSharedArrays:
@@ -649,6 +701,38 @@ class OOCComputePool:
         for future in as_completed(futures):
             results.append(future.result(timeout=300))
         return results
+
+    def compute_chi2(
+        self, params: np.ndarray, stride: int = 1
+    ) -> float:
+        """Dispatch chi2-only computation across workers (no Jacobian).
+
+        Parameters
+        ----------
+        params : np.ndarray
+            Current parameter values.
+        stride : int
+            Chunk stride for subsampling (1 = all chunks).
+
+        Returns
+        -------
+        Estimated total chi2 (scaled if stride > 1).
+        """
+        from concurrent.futures import as_completed
+
+        chunk_ids = list(range(0, self._n_chunks, stride))
+        futures = [
+            self._executor.submit(_ooc_compute_chi2_chunk, (params, cid))
+            for cid in chunk_ids
+        ]
+
+        total_chi2 = 0.0
+        for future in as_completed(futures):
+            total_chi2 += future.result(timeout=300)
+
+        if stride > 1 and len(chunk_ids) > 0:
+            total_chi2 *= self._n_chunks / len(chunk_ids)
+        return total_chi2
 
     def shutdown(self) -> None:
         """Shut down the pool. Idempotent."""
