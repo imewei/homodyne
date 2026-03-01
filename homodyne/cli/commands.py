@@ -1738,6 +1738,15 @@ def _save_results(
     import numpy as np
     import yaml
 
+    # Phase 1: Log async I/O availability for future integration
+    from homodyne.utils.async_io import AsyncWriter
+
+    logger.debug(
+        "%s available for background I/O "
+        "(Phase 1: synchronous writes, async dispatch in Phase 2)",
+        AsyncWriter.__name__,
+    )
+
     # Route to appropriate saving method based on optimization method
     if args.method == "nlsq":
         # Use comprehensive NLSQ saving (4 files: 3 JSON + 1 NPZ)
