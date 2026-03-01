@@ -5803,13 +5803,18 @@ class NLSQWrapper(NLSQAdapterBase):
         logger.info(f"Starting Out-of-Core Loop (Max iter: {max_iter})...")
         import time
 
+        # Lazy import for parallel chunk accumulation (Phase 1)
+        from homodyne.optimization.nlsq.parallel_accumulator import (
+            accumulate_chunks_parallel,
+            accumulate_chunks_sequential,
+            should_use_parallel_accumulation,
+        )
+
         for i in range(max_iter):
             _iter_start = time.perf_counter()  # noqa: F841
-            total_JtJ = jnp.zeros((n_params, n_params))
-            total_Jtr = jnp.zeros(n_params)
-            total_chi2 = 0.0
 
-            # Accumulate over chunks
+            # Pre-compute all chunk accumulators (JIT-cached, ~5-15ms each)
+            chunk_results: list[tuple[np.ndarray, np.ndarray, float]] = []
             count = 0
             for indices_chunk in iterator:
                 # Load chunk data using stratifying indices
@@ -5820,15 +5825,53 @@ class NLSQWrapper(NLSQAdapterBase):
                 g2_c = g2_flat[indices_chunk]
                 sigma_c = sigma_flat[indices_chunk] if sigma_flat is not None else 1.0
 
-                # Compute and Accumulate (using FULL homodyne physics v2.14.1+)
+                # Compute chunk accumulators (using FULL homodyne physics v2.14.1+)
                 JtJ, Jtr, chi2 = compute_chunk_accumulators(
                     params_curr, phi_c, t1_c, t2_c, g2_c, sigma_c
                 )
 
-                total_JtJ += JtJ
-                total_Jtr += Jtr
-                total_chi2 += chi2
+                # Convert JAX arrays to numpy for accumulator compatibility
+                chunk_results.append((
+                    np.asarray(JtJ),
+                    np.asarray(Jtr),
+                    float(chi2),
+                ))
                 count += len(indices_chunk)
+
+            # Reduce chunk results (parallel when beneficial)
+            n_chunks = len(chunk_results)
+            if n_chunks == 0:
+                total_JtJ = jnp.zeros((n_params, n_params))
+                total_Jtr = jnp.zeros(n_params)
+                total_chi2 = 0.0
+            elif should_use_parallel_accumulation(n_chunks):
+                if i == 0:
+                    logger.info(
+                        "Parallel chunk reduction: %d chunks "
+                        "across workers (Phase 1: reduction only, "
+                        "compute is sequential)",
+                        n_chunks,
+                    )
+                total_JtJ_np, total_Jtr_np, total_chi2, _ = (
+                    accumulate_chunks_parallel(
+                        chunk_results,
+                        n_workers=min(4, n_chunks // 4),
+                    )
+                )
+                total_JtJ = jnp.asarray(total_JtJ_np)
+                total_Jtr = jnp.asarray(total_Jtr_np)
+            else:
+                if i == 0:
+                    logger.debug(
+                        "Sequential chunk reduction: %d chunks "
+                        "(below parallel threshold)",
+                        n_chunks,
+                    )
+                total_JtJ_np, total_Jtr_np, total_chi2, _ = (
+                    accumulate_chunks_sequential(chunk_results)
+                )
+                total_JtJ = jnp.asarray(total_JtJ_np)
+                total_Jtr = jnp.asarray(total_Jtr_np)
 
             # Robust Levenberg-Marquardt Step Loop
             step_accepted = False
