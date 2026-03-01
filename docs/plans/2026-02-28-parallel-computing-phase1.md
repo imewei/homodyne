@@ -1,18 +1,24 @@
 # Parallel Computing Phase 1 Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this
+> plan task-by-task.
 
-**Goal:** Enable parallel execution by default across CMC chain sampling, CMC worker lifecycle, NLSQ streaming, and pipeline I/O — with automatic sequential fallback.
+**Goal:** Enable parallel execution by default across CMC chain sampling, CMC worker
+lifecycle, NLSQ streaming, and pipeline I/O — with automatic sequential fallback.
 
-**Architecture:** Four independent improvements that each default to ON and gracefully fall back to sequential. No new dependencies — stdlib multiprocessing, threading, and existing JAX primitives only.
+**Architecture:** Four independent improvements that each default to ON and gracefully
+fall back to sequential. No new dependencies — stdlib multiprocessing, threading, and
+existing JAX primitives only.
 
-**Tech Stack:** Python 3.12+ stdlib (multiprocessing, concurrent.futures, threading, shared_memory), JAX (vmap, jit), NumPyro (MCMC chain_method)
+**Tech Stack:** Python 3.12+ stdlib (multiprocessing, concurrent.futures, threading,
+shared_memory), JAX (vmap, jit), NumPyro (MCMC chain_method)
 
----
+______________________________________________________________________
 
 ### Task 1: CMC Chain Parallelism — Config
 
 **Files:**
+
 - Modify: `homodyne/optimization/cmc/config.py`
 - Test: `tests/unit/optimization/cmc/test_config.py`
 
@@ -60,7 +66,8 @@ def test_chain_method_to_dict(self):
 
 **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_config.py::TestCMCConfig::test_default_chain_method -v`
+Run:
+`uv run pytest tests/unit/optimization/cmc/test_config.py::TestCMCConfig::test_default_chain_method -v`
 Expected: FAIL — `AttributeError: 'CMCConfig' has no attribute 'chain_method'`
 
 **Step 3: Implement chain_method in CMCConfig**
@@ -68,12 +75,15 @@ Expected: FAIL — `AttributeError: 'CMCConfig' has no attribute 'chain_method'`
 In `homodyne/optimization/cmc/config.py`:
 
 a) Add field after `num_chains` (line 146):
+
 ```python
     num_chains: int = 4  # Increased from 2 for better R-hat convergence diagnostics
     chain_method: str = "parallel"  # "parallel" (default) or "sequential"
 ```
 
-b) Add docstring entry after the `num_chains` line in the class docstring (after line 68):
+b) Add docstring entry after the `num_chains` line in the class docstring (after line
+68):
+
 ```
     chain_method : str
         MCMC chain execution method. ``"parallel"`` (default) runs chains
@@ -84,12 +94,14 @@ b) Add docstring entry after the `num_chains` line in the class docstring (after
 ```
 
 c) Add to `from_dict` constructor call (after `num_chains` line 338):
+
 ```python
             num_chains=per_shard.get("num_chains", 4),
             chain_method=per_shard.get("chain_method", "parallel"),
 ```
 
 d) Add validation in `validate()` after the `num_chains` check (after line 479):
+
 ```python
         # Validate chain_method
         valid_chain_methods = ["parallel", "sequential"]
@@ -101,6 +113,7 @@ d) Add validation in `validate()` after the `num_chains` check (after line 479):
 ```
 
 e) Add to `to_dict` in the `per_shard_mcmc` section (after `num_chains` line 853):
+
 ```python
                 "num_chains": self.num_chains,
                 "chain_method": self.chain_method,
@@ -118,11 +131,12 @@ git add homodyne/optimization/cmc/config.py tests/unit/optimization/cmc/test_con
 git commit -m "feat(cmc): add chain_method config field (default: parallel)"
 ```
 
----
+______________________________________________________________________
 
 ### Task 2: CMC Chain Parallelism — Sampler Integration
 
 **Files:**
+
 - Modify: `homodyne/optimization/cmc/sampler.py`
 - Test: `tests/unit/optimization/cmc/test_sampler.py`
 
@@ -182,12 +196,14 @@ class TestChainMethodIntegration:
 
 **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_sampler.py::TestChainMethodIntegration -v`
+Run:
+`uv run pytest tests/unit/optimization/cmc/test_sampler.py::TestChainMethodIntegration -v`
 Expected: FAIL — MCMC not called with chain_method kwarg
 
 **Step 3: Implement chain_method in sampler**
 
-In `homodyne/optimization/cmc/sampler.py`, modify the MCMC creation block (~line 847-854):
+In `homodyne/optimization/cmc/sampler.py`, modify the MCMC creation block (~line
+847-854):
 
 ```python
     # Determine effective chain method with auto-fallback for small shards
@@ -212,13 +228,14 @@ In `homodyne/optimization/cmc/sampler.py`, modify the MCMC creation block (~line
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_sampler.py::TestChainMethodIntegration -v`
+Run:
+`uv run pytest tests/unit/optimization/cmc/test_sampler.py::TestChainMethodIntegration -v`
 Expected: PASS
 
 **Step 5: Run existing sampler tests for regression**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_sampler.py -v`
-Expected: All existing tests PASS
+Run: `uv run pytest tests/unit/optimization/cmc/test_sampler.py -v` Expected: All
+existing tests PASS
 
 **Step 6: Commit**
 
@@ -227,11 +244,12 @@ git add homodyne/optimization/cmc/sampler.py tests/unit/optimization/cmc/test_sa
 git commit -m "feat(cmc): pass chain_method to MCMC with auto-fallback for small shards"
 ```
 
----
+______________________________________________________________________
 
 ### Task 3: CMC Chain Parallelism — Dynamic XLA Device Count
 
 **Files:**
+
 - Modify: `homodyne/optimization/cmc/backends/multiprocessing.py`
 - Test: `tests/unit/optimization/cmc/test_backends.py`
 
@@ -270,14 +288,17 @@ class TestDynamicXLADeviceCount:
 
 **Step 2: Run test to verify baseline**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_backends.py::TestDynamicXLADeviceCount -v`
+Run:
+`uv run pytest tests/unit/optimization/cmc/test_backends.py::TestDynamicXLADeviceCount -v`
 Expected: PASS (logic tests, not worker execution)
 
 **Step 3: Modify multiprocessing.py worker setup**
 
-The module-level XLA setup (lines 542-549) currently hardcodes `device_count=4`. Change to read from env var set by parent:
+The module-level XLA setup (lines 542-549) currently hardcodes `device_count=4`. Change
+to read from env var set by parent:
 
 In the module-level worker init code:
+
 ```python
     _num_chains = int(os.environ.get("HOMODYNE_CMC_NUM_CHAINS", "4"))
     os.environ["XLA_FLAGS"] = (
@@ -287,6 +308,7 @@ In the module-level worker init code:
 ```
 
 In the parent dispatch code (where env vars are set before spawn):
+
 ```python
     os.environ["HOMODYNE_CMC_NUM_CHAINS"] = str(config.num_chains)
 ```
@@ -295,8 +317,7 @@ Add `"HOMODYNE_CMC_NUM_CHAINS"` to the `_saved_env` dict for cleanup.
 
 **Step 4: Run backend tests**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_backends.py -v`
-Expected: All PASS
+Run: `uv run pytest tests/unit/optimization/cmc/test_backends.py -v` Expected: All PASS
 
 **Step 5: Commit**
 
@@ -305,11 +326,12 @@ git add homodyne/optimization/cmc/backends/multiprocessing.py tests/unit/optimiz
 git commit -m "feat(cmc): dynamic XLA device count from num_chains for parallel chains"
 ```
 
----
+______________________________________________________________________
 
 ### Task 4: Persistent CMC Worker Pool — Core Implementation
 
 **Files:**
+
 - Create: `homodyne/optimization/cmc/backends/worker_pool.py`
 - Test: `tests/unit/optimization/cmc/test_worker_pool.py`
 
@@ -420,8 +442,8 @@ class TestWorkerPool:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_worker_pool.py -v`
-Expected: FAIL — `ImportError: cannot import name 'WorkerPool'`
+Run: `uv run pytest tests/unit/optimization/cmc/test_worker_pool.py -v` Expected: FAIL —
+`ImportError: cannot import name 'WorkerPool'`
 
 **Step 3: Implement WorkerPool**
 
@@ -653,8 +675,8 @@ def _worker_event_loop(
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/unit/optimization/cmc/test_worker_pool.py -v`
-Expected: All 5 tests PASS
+Run: `uv run pytest tests/unit/optimization/cmc/test_worker_pool.py -v` Expected: All 5
+tests PASS
 
 **Step 5: Commit**
 
@@ -663,15 +685,18 @@ git add homodyne/optimization/cmc/backends/worker_pool.py tests/unit/optimizatio
 git commit -m "feat(cmc): add persistent WorkerPool for multi-shard dispatch"
 ```
 
----
+______________________________________________________________________
 
 ### Task 5: Persistent Worker Pool — Integration with Multiprocessing Backend
 
 **Files:**
+
 - Modify: `homodyne/optimization/cmc/backends/multiprocessing.py`
 - Test: `tests/unit/optimization/cmc/test_backends.py`
 
-This task integrates the WorkerPool into the existing dispatch loop. The key change: replace per-shard `ctx.Process()` with pool-based dispatch while preserving all existing SharedMemory, LPT scheduling, heartbeat, timeout, and quality filtering.
+This task integrates the WorkerPool into the existing dispatch loop. The key change:
+replace per-shard `ctx.Process()` with pool-based dispatch while preserving all existing
+SharedMemory, LPT scheduling, heartbeat, timeout, and quality filtering.
 
 **Step 1: Write integration test**
 
@@ -699,19 +724,22 @@ class TestWorkerPoolIntegration:
 In `multiprocessing.py`, the dispatch loop (~lines 1230-1520) needs a conditional path:
 
 1. Import `should_use_pool, WorkerPool` from `worker_pool`
-2. Before dispatch: check `should_use_pool(n_shards, max_workers)`
-3. Pool path: create a pool-compatible wrapper around `_run_shard_worker`, submit tasks, collect results
-4. Non-pool path: existing per-shard `ctx.Process()` dispatch (unchanged)
+1. Before dispatch: check `should_use_pool(n_shards, max_workers)`
+1. Pool path: create a pool-compatible wrapper around `_run_shard_worker`, submit tasks,
+   collect results
+1. Non-pool path: existing per-shard `ctx.Process()` dispatch (unchanged)
 
 **Key constraints:**
-- Result format must match existing `{"type": "result", "shard_idx": ..., "samples": ...}` for quality filtering
+
+- Result format must match existing
+  `{"type": "result", "shard_idx": ..., "samples": ...}` for quality filtering
 - Pool workers need JAX module-level init (same env var setup)
-- Heartbeat: pool workers are persistent, so no per-shard heartbeat needed; monitor pool liveness instead
+- Heartbeat: pool workers are persistent, so no per-shard heartbeat needed; monitor pool
+  liveness instead
 
 **Step 3: Run full CMC tests**
 
-Run: `uv run pytest tests/unit/optimization/cmc/ -v --timeout=120`
-Expected: All PASS
+Run: `uv run pytest tests/unit/optimization/cmc/ -v --timeout=120` Expected: All PASS
 
 **Step 4: Commit**
 
@@ -720,11 +748,12 @@ git add homodyne/optimization/cmc/backends/multiprocessing.py tests/unit/optimiz
 git commit -m "feat(cmc): integrate WorkerPool into multiprocessing backend dispatch"
 ```
 
----
+______________________________________________________________________
 
 ### Task 6: Parallel NLSQ Streaming — Core Implementation
 
 **Files:**
+
 - Create: `homodyne/optimization/nlsq/parallel_accumulator.py`
 - Test: `tests/unit/optimization/nlsq/test_parallel_accumulator.py`
 
@@ -949,34 +978,43 @@ git add homodyne/optimization/nlsq/parallel_accumulator.py tests/unit/optimizati
 git commit -m "feat(nlsq): add parallel chunk accumulator with sequential fallback"
 ```
 
----
+______________________________________________________________________
 
 ### Task 7: Parallel NLSQ Streaming — Integration with Wrapper
 
 **Files:**
+
 - Modify: `homodyne/optimization/nlsq/wrapper.py`
 
 **Step 1: Locate the chunk accumulation loop**
 
-Search wrapper.py for `total_JtJ +=` or `for indices_chunk in` to find the sequential loop (~lines 5814-5835).
+Search wrapper.py for `total_JtJ +=` or `for indices_chunk in` to find the sequential
+loop (~lines 5814-5835).
 
 **Step 2: Add parallel path**
 
-Before the loop, count chunks from the iterator. If `should_use_parallel_accumulation(n_chunks)`:
+Before the loop, count chunks from the iterator. If
+`should_use_parallel_accumulation(n_chunks)`:
+
 1. Collect chunk data tuples
-2. Compute each chunk's `(JtJ, Jtr, chi2)` in parallel workers
-3. Reduce results
+1. Compute each chunk's `(JtJ, Jtr, chi2)` in parallel workers
+1. Reduce results
 
-The JIT kernel `compute_chunk_accumulators` cannot be pickled across processes. For Phase 1, use the simpler approach: pre-compute all chunk results in the parent (each chunk is a JAX JIT call), then the parallel accumulation is just the reduction. Since JIT compilation is cached, the per-chunk compute is ~5-15ms.
+The JIT kernel `compute_chunk_accumulators` cannot be pickled across processes. For
+Phase 1, use the simpler approach: pre-compute all chunk results in the parent (each
+chunk is a JAX JIT call), then the parallel accumulation is just the reduction. Since
+JIT compilation is cached, the per-chunk compute is ~5-15ms.
 
-Alternatively, restructure so workers each handle a partition of chunks end-to-end (compute + accumulate). This requires workers to have JAX initialized with the same JIT cache.
+Alternatively, restructure so workers each handle a partition of chunks end-to-end
+(compute + accumulate). This requires workers to have JAX initialized with the same JIT
+cache.
 
-The integration should preserve the existing progress bar, count tracking, and error handling.
+The integration should preserve the existing progress bar, count tracking, and error
+handling.
 
 **Step 3: Run NLSQ tests**
 
-Run: `uv run pytest tests/unit/ -k nlsq -v --timeout=120`
-Expected: All PASS
+Run: `uv run pytest tests/unit/ -k nlsq -v --timeout=120` Expected: All PASS
 
 **Step 4: Commit**
 
@@ -985,11 +1023,12 @@ git add homodyne/optimization/nlsq/wrapper.py
 git commit -m "feat(nlsq): integrate parallel chunk accumulation into streaming optimizer"
 ```
 
----
+______________________________________________________________________
 
 ### Task 8: Background I/O — PrefetchLoader and AsyncWriter
 
 **Files:**
+
 - Create: `homodyne/utils/async_io.py`
 - Test: `tests/unit/test_async_io.py`
 
@@ -1091,8 +1130,7 @@ class TestAsyncWriter:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/unit/test_async_io.py -v`
-Expected: FAIL — `ImportError`
+Run: `uv run pytest tests/unit/test_async_io.py -v` Expected: FAIL — `ImportError`
 
 **Step 3: Implement async I/O utilities**
 
@@ -1246,8 +1284,7 @@ class AsyncWriter:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/unit/test_async_io.py -v`
-Expected: All 6 tests PASS
+Run: `uv run pytest tests/unit/test_async_io.py -v` Expected: All 6 tests PASS
 
 **Step 5: Commit**
 
@@ -1256,31 +1293,36 @@ git add homodyne/utils/async_io.py tests/unit/test_async_io.py
 git commit -m "feat(utils): add PrefetchLoader and AsyncWriter for background I/O"
 ```
 
----
+______________________________________________________________________
 
 ### Task 9: Background I/O — Integration with CLI
 
 **Files:**
+
 - Modify: `homodyne/cli/commands.py`
 
 **Step 1: Identify result-writing locations**
 
-Search `commands.py` for `np.savez`, `json.dump`, or writer function calls. These are sites to wrap with `AsyncWriter`.
+Search `commands.py` for `np.savez`, `json.dump`, or writer function calls. These are
+sites to wrap with `AsyncWriter`.
 
 **Step 2: Wrap result writes**
 
-At the start of the main analysis function, create `AsyncWriter()`. Replace synchronous writes:
+At the start of the main analysis function, create `AsyncWriter()`. Replace synchronous
+writes:
+
 - `np.savez_compressed(...)` -> `writer.submit_npz(...)`
 - `json.dump(...)` -> `writer.submit_json(...)`
 
 At the end, `writer.wait_all()` ensures all writes finish before exit.
 
-For multi-dataset batch runs: wrap the dataset iterator with `PrefetchLoader(datasets, load_fn=load_hdf5)` to overlap loading with optimization.
+For multi-dataset batch runs: wrap the dataset iterator with
+`PrefetchLoader(datasets, load_fn=load_hdf5)` to overlap loading with optimization.
 
 **Step 3: Run CLI tests**
 
-Run: `uv run pytest tests/unit/test_cli_workflows.py -v --timeout=120`
-Expected: All PASS
+Run: `uv run pytest tests/unit/test_cli_workflows.py -v --timeout=120` Expected: All
+PASS
 
 **Step 4: Commit**
 
@@ -1289,19 +1331,17 @@ git add homodyne/cli/commands.py
 git commit -m "feat(cli): integrate AsyncWriter for background result serialization"
 ```
 
----
+______________________________________________________________________
 
 ### Task 10: Full Regression + Documentation
 
 **Step 1: Run full unit test suite**
 
-Run: `uv run pytest tests/unit/ -v --timeout=300`
-Expected: All 2718 tests PASS
+Run: `uv run pytest tests/unit/ -v --timeout=300` Expected: All 2718 tests PASS
 
 **Step 2: Run quality checks**
 
-Run: `make quality`
-Expected: Ruff + mypy clean
+Run: `make quality` Expected: Ruff + mypy clean
 
 **Step 3: Update CLAUDE.md**
 
