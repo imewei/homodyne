@@ -11,6 +11,7 @@ import multiprocessing
 import multiprocessing.context
 import multiprocessing.process
 import os
+import queue
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -50,27 +51,38 @@ class WorkerPool:
         Number of persistent worker processes.
     worker_fn : callable
         Function each worker calls per task.
-        Signature: ``worker_fn(task: dict, **init_kwargs) -> dict``.
+        Signature: ``worker_fn(task: dict, **init_kwargs) -> dict | None``.
         Must be picklable (module-level function).
+        If it returns ``None``, the pool does not put a result on the
+        result queue (useful when the worker manages its own queue).
     worker_init_kwargs : dict
         One-time kwargs passed to every worker_fn call.
+    worker_init_fn : callable or None
+        Optional one-time initialization function called once per worker
+        before the event loop starts.
+        Signature: ``worker_init_fn(worker_id: int, **init_kwargs) -> None``.
+        Use for expensive setup like JAX/OMP initialization.
     """
 
     def __init__(
         self,
         n_workers: int,
-        worker_fn: Callable[..., dict[str, Any]],
+        worker_fn: Callable[..., dict[str, Any] | None],
         worker_init_kwargs: dict[str, Any],
+        worker_init_fn: Callable[..., None] | None = None,
     ) -> None:
         self._n_workers = n_workers
         self._worker_fn = worker_fn
         self._init_kwargs = worker_init_kwargs
+        self._init_fn = worker_init_fn
 
         ctx = multiprocessing.get_context("spawn")
         self._task_queues: list[multiprocessing.Queue] = [
             ctx.Queue() for _ in range(n_workers)
         ]
-        self._result_queue: multiprocessing.Queue = ctx.Queue()
+        self._result_queue: multiprocessing.Queue = ctx.Queue(
+            maxsize=self._n_workers * 4
+        )
         self._processes: list[multiprocessing.process.BaseProcess] = []
         self._next_worker = 0
         self._alive = False
@@ -89,6 +101,7 @@ class WorkerPool:
                     self._result_queue,
                     self._worker_fn,
                     self._init_kwargs,
+                    self._init_fn,
                 ),
                 daemon=True,
             )
@@ -101,6 +114,11 @@ class WorkerPool:
     def n_workers(self) -> int:
         """Number of worker processes."""
         return self._n_workers
+
+    @property
+    def result_queue(self) -> multiprocessing.Queue:
+        """The shared result queue drained by the parent."""
+        return self._result_queue
 
     def is_alive(self) -> bool:
         """Check if pool has active workers."""
@@ -196,14 +214,24 @@ def _worker_event_loop(
     worker_id: int,
     task_queue: multiprocessing.Queue,
     result_queue: multiprocessing.Queue,
-    worker_fn: Callable[..., dict[str, Any]],
+    worker_fn: Callable[..., dict[str, Any] | None],
     init_kwargs: dict[str, Any],
+    init_fn: Callable[..., None] | None = None,
 ) -> None:
     """Persistent worker event loop.
 
     Processes tasks until a None sentinel is received.
     Results (or errors) are put on result_queue.
+
+    Parameters
+    ----------
+    init_fn : callable or None
+        If provided, called once with ``(worker_id, **init_kwargs)``
+        before the event loop starts.
     """
+    if init_fn is not None:
+        init_fn(worker_id, **init_kwargs)
+
     while True:
         try:
             task = task_queue.get()
@@ -216,8 +244,9 @@ def _worker_event_loop(
         task_id = task.get("task_id", "unknown")
         try:
             result = worker_fn(task, **init_kwargs)
-            result["worker_id"] = os.getpid()
-            result_queue.put(result)
+            if result is not None:
+                result["worker_id"] = os.getpid()
+                result_queue.put(result)
         except MemoryError:
             result_queue.put(
                 {
@@ -241,7 +270,7 @@ def _worker_event_loop(
                             "worker_id": os.getpid(),
                         }
                     )
-                except Exception:
+                except (queue.Empty, EOFError):
                     break
             break
         except Exception as e:

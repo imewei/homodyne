@@ -467,6 +467,140 @@ def _run_shard_worker_with_queue(
         pass
 
 
+def _pool_worker_init(worker_id: int, **init_kwargs: Any) -> None:
+    """One-time initialization for persistent pool workers.
+
+    Configures JAX/OMP environment and imports JAX once. Subsequent shards
+    processed by this worker skip re-initialization (env vars are idempotent,
+    JAX modules are cached).
+
+    Parameters
+    ----------
+    worker_id : int
+        Index of this worker in the pool (0-based).
+    **init_kwargs : Any
+        Must contain ``threads_per_worker`` (int).
+    """
+    import os
+    import re as _re
+
+    threads_per_worker = init_kwargs["threads_per_worker"]
+
+    # Thread pinning (same as _run_shard_worker lines 521-528)
+    os.environ["OMP_NUM_THREADS"] = str(threads_per_worker)
+    os.environ["MKL_NUM_THREADS"] = str(threads_per_worker)
+    os.environ["OPENBLAS_NUM_THREADS"] = str(threads_per_worker)
+    os.environ.pop("OMP_PROC_BIND", None)
+    os.environ.pop("OMP_PLACES", None)
+
+    # Float64 + XLA device count BEFORE JAX import (CLAUDE.md rule #8)
+    os.environ["JAX_ENABLE_X64"] = "true"
+    if "JAX_COMPILATION_CACHE_DIR" not in os.environ:
+        os.environ["JAX_COMPILATION_CACHE_DIR"] = str(
+            Path(os.path.expanduser("~/.cache/homodyne/jax_cache"))
+        )
+    _num_chains = int(os.environ.get("HOMODYNE_CMC_NUM_CHAINS", "4"))
+    _xla_flags = os.environ.get("XLA_FLAGS", "")
+    _xla_flags = _re.sub(
+        r"--xla_force_host_platform_device_count=\d+", "", _xla_flags
+    )
+    os.environ["XLA_FLAGS"] = (
+        _xla_flags.strip()
+        + f" --xla_force_host_platform_device_count={_num_chains}"
+    )
+
+    import jax
+
+    jax.config.update("jax_enable_x64", True)
+
+    # Persistent compilation cache (CLAUDE.md rule #9)
+    _cache_dir = os.environ.get(
+        "JAX_COMPILATION_CACHE_DIR",
+        str(Path(os.path.expanduser("~/.cache/homodyne/jax_cache"))),
+    )
+    jax.config.update("jax_compilation_cache_dir", _cache_dir)
+    jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+
+
+def _pool_shard_worker(task: dict[str, Any], **init_kwargs: Any) -> None:
+    """Per-shard worker for persistent pool dispatch.
+
+    Reconstructs shard data from shared memory, runs NUTS sampling via
+    ``_run_shard_worker``, and puts the result on ``result_queue``.
+    Returns ``None`` so WorkerPool does not double-queue results.
+
+    Parameters
+    ----------
+    task : dict
+        Per-shard task with keys: ``shard_idx``, ``shard_ref``, ``n_phi``,
+        ``rng_key_tuple``.
+    **init_kwargs : Any
+        Shared across all shards: ``model_fn``, ``config_ref``, ``iv_ref``,
+        ``ps_ref``, ``kwargs_ref``, ``tg_ref``, ``analysis_mode``,
+        ``threads_per_worker``, ``result_queue``.
+    """
+    shard_idx = task["shard_idx"]
+    result_queue = init_kwargs["result_queue"]
+
+    try:
+        # Reconstruct per-shard arrays from shared memory
+        shard_data = _load_shared_shard_data(task["shard_ref"])
+
+        # Reconstruct shared data from shared memory
+        config_dict = _load_shared_dict(init_kwargs["config_ref"])
+        parameter_space_dict = _load_shared_dict(init_kwargs["ps_ref"])
+        shared_kwargs = _load_shared_dict(init_kwargs["kwargs_ref"])
+        initial_values = (
+            _load_shared_dict(init_kwargs["iv_ref"])
+            if init_kwargs["iv_ref"] is not None
+            else None
+        )
+
+        # Reconstruct time_grid
+        time_grid = (
+            _load_shared_array(init_kwargs["tg_ref"])
+            if init_kwargs["tg_ref"] is not None
+            else None
+        )
+
+        # Merge shared kwargs into shard_data
+        shard_data["time_grid"] = time_grid
+        shard_data.update(shared_kwargs)
+
+        result = _run_shard_worker(
+            shard_idx=shard_idx,
+            shard_data=shard_data,
+            model_fn=init_kwargs["model_fn"],
+            config_dict=config_dict,
+            initial_values=initial_values,
+            parameter_space_dict=parameter_space_dict,
+            n_phi=task["n_phi"],
+            analysis_mode=init_kwargs["analysis_mode"],
+            threads_per_worker=init_kwargs["threads_per_worker"],
+            result_queue=result_queue,
+            rng_key_tuple=task["rng_key_tuple"],
+        )
+    except Exception as e:
+        import traceback
+
+        result = {
+            "type": "result",
+            "success": False,
+            "shard_idx": shard_idx,
+            "error": f"Pool worker init failed: {e}",
+            "error_category": "init_crash",
+            "traceback": traceback.format_exc(),
+            "duration": 0.0,
+        }
+
+    try:
+        result_queue.put_nowait(result)
+    except Exception:  # noqa: S110
+        pass
+
+    return None
+
+
 def _run_shard_worker(
     shard_idx: int,
     shard_data: dict[str, Any],
@@ -1201,17 +1335,54 @@ class MultiprocessingBackend(CMCBackend):
             use_pool = should_use_pool(
                 n_shards=n_shards, n_workers=actual_workers
             )
+            pool = None  # type: ignore[assignment]
             if use_pool:
-                # Phase 2 TODO: Replace per-shard spawn with WorkerPool dispatch.
-                # WorkerPool (worker_pool.py) is ready but integration requires
-                # adapting _run_single_shard_in_process to the pool's event loop.
-                run_logger.info(
-                    "Worker pool eligible (%d shards >= 3): "
-                    "pool dispatch available for %d workers "
-                    "(Phase 1: using per-shard spawn, pool dispatch in Phase 2)",
-                    n_shards,
-                    actual_workers,
-                )
+                try:
+                    from homodyne.optimization.cmc.backends.worker_pool import (
+                        WorkerPool,
+                    )
+
+                    pool = WorkerPool(
+                        n_workers=actual_workers,
+                        worker_fn=_pool_shard_worker,
+                        worker_init_kwargs={
+                            "model_fn": model,
+                            "config_ref": shared_config_ref,
+                            "iv_ref": shared_iv_ref,
+                            "ps_ref": shared_ps_ref,
+                            "kwargs_ref": shared_kwargs_ref,
+                            "tg_ref": shared_tg_ref,
+                            "analysis_mode": analysis_mode,
+                            "threads_per_worker": threads_per_worker,
+                            "result_queue": result_queue,
+                        },
+                        worker_init_fn=_pool_worker_init,
+                    )
+                    # Submit all shards (LPT-ordered via pending_shards)
+                    for shard_idx in list(pending_shards):
+                        pool.submit(
+                            {
+                                "task_id": f"shard_{shard_idx}",
+                                "shard_idx": shard_idx,
+                                "shard_ref": shared_shard_refs[shard_idx],
+                                "n_phi": shards[shard_idx].n_phi,
+                                "rng_key_tuple": shard_keys[shard_idx],
+                            }
+                        )
+                    # Clear pending so per-shard spawn loop is a no-op
+                    pending_shards.clear()
+                    run_logger.info(
+                        "WorkerPool dispatched %d shards to %d persistent workers",
+                        n_shards,
+                        actual_workers,
+                    )
+                except (OSError, RuntimeError, MemoryError) as exc:
+                    run_logger.warning(
+                        "WorkerPool creation failed (%s), "
+                        "falling back to per-shard spawn",
+                        exc,
+                    )
+                    pool = None
             else:
                 run_logger.debug(
                     "Per-shard spawn: %d shards < 3, pool not beneficial",
@@ -1333,8 +1504,11 @@ class MultiprocessingBackend(CMCBackend):
                                     f"Failure breakdown: {failure_categories}\n"
                                     f"Terminating remaining shards to save compute time."
                                 )
-                                # Clear pending shards and terminate active processes
+                                # Clear pending shards and terminate active processes/pool
                                 pending_shards.clear()
+                                if pool is not None:
+                                    pool.shutdown(timeout=5)
+                                    pool = None
                                 for idx, (proc, _) in list(active_processes.items()):
                                     run_logger.info(
                                         f"Terminating shard {idx} due to early abort"
@@ -1551,10 +1725,46 @@ class MultiprocessingBackend(CMCBackend):
 
                     time.sleep(poll_interval)
 
+                # Pool stall detection: if no result has arrived for longer than
+                # per_shard_timeout, the pool workers are likely stuck. Shut down
+                # the pool and mark remaining shards as timed out.
+                if (
+                    pool is not None
+                    and completed_count < n_shards
+                    and (time.time() - last_completion_time) > per_shard_timeout
+                ):
+                    stall_elapsed = time.time() - last_completion_time
+                    run_logger.warning(
+                        "WorkerPool stall detected: no result for %.0fs "
+                        "(per_shard_timeout=%.0fs). Shutting down pool.",
+                        stall_elapsed,
+                        per_shard_timeout,
+                    )
+                    pool.shutdown(timeout=5)
+                    pool = None
+                    # Mark all remaining shards as timed out
+                    missing = set(range(n_shards)) - recorded_shards
+                    for shard_idx in sorted(missing):
+                        results.append(
+                            {
+                                "type": "result",
+                                "success": False,
+                                "shard_idx": shard_idx,
+                                "error": f"Pool stall timeout after {stall_elapsed:.0f}s",
+                                "error_category": "timeout",
+                                "duration": stall_elapsed,
+                            }
+                        )
+                        recorded_shards.add(shard_idx)
+                        completed_count += 1
+                        pbar.update(1)
+                        pbar.set_postfix(shard=shard_idx, status="pool-timeout")
+
                 # If no processes remain and nothing is pending, mark any missing shards as failed
                 if (
                     not active_processes
                     and not pending_shards
+                    and pool is None
                     and completed_count < n_shards
                 ):
                     missing = set(range(n_shards)) - recorded_shards
@@ -1575,6 +1785,9 @@ class MultiprocessingBackend(CMCBackend):
 
         except KeyboardInterrupt:
             run_logger.warning("Interrupted - terminating all active processes")
+            if pool is not None:
+                pool.shutdown(timeout=2)
+                pool = None
             for shard_idx, (process, _) in active_processes.items():
                 run_logger.debug(f"Terminating shard {shard_idx} (pid={process.pid})")
                 process.terminate()
@@ -1584,7 +1797,10 @@ class MultiprocessingBackend(CMCBackend):
         finally:
             if pbar is not None:
                 pbar.close()
-            # Clean up any remaining active processes
+            # Shut down persistent worker pool if still active
+            if pool is not None:
+                pool.shutdown(timeout=5)
+            # Clean up any remaining active processes (per-shard spawn mode)
             for shard_idx, (process, _) in list(active_processes.items()):
                 if process.is_alive():
                     run_logger.warning(
