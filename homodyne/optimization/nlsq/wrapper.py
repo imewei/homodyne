@@ -5594,170 +5594,24 @@ class NLSQWrapper(NLSQAdapterBase):
         cost_change = float("inf")  # Initialize for multi-criteria convergence
 
         # ====================================================================
-        # JIT-compiled Chunk Kernel with FULL HOMODYNE PHYSICS (v2.14.1+)
+        # JIT-compiled Chunk Kernels via factory (single source of truth)
         # ====================================================================
-        # This kernel uses the same physics as stratified LS via compute_g2_scaled()
-        # Pattern: Build theory grid on unique times, extract chunk values via indexing
+        from homodyne.optimization.nlsq.parallel_accumulator import (
+            create_ooc_kernels,
+        )
 
-        @jax.jit
-        def compute_chunk_accumulators(p, phi_c, t1_c, t2_c, g2_c, sigma):
-            """Compute J^T J, J^T r, and chi2 for a chunk using FULL homodyne physics."""
-
-            def r_fn(curr_p):
-                # Unpack parameters (same pattern as stratified LS)
-                if per_angle_scaling:
-                    contrast_arr = curr_p[:n_phi]
-                    offset_arr = curr_p[n_phi : 2 * n_phi]
-                    physical_params = curr_p[2 * n_phi :]
-                else:
-                    contrast_scalar = curr_p[0]
-                    offset_scalar = curr_p[1]
-                    physical_params = curr_p[2:]
-
-                # === FULL PHYSICS: Vectorize over angles ===
-                # Same pattern as StratifiedResidualFunctionJIT in residual_jit.py
-                if per_angle_scaling:
-                    # vmap over angles with per-angle contrast/offset
-                    compute_g2_vmap = jax.vmap(
-                        lambda phi_val, c_val, o_val: jnp.squeeze(
-                            compute_g2_scaled(
-                                params=physical_params,
-                                t1=t1_unique_global,
-                                t2=t2_unique_global,
-                                phi=phi_val,
-                                q=q_val,
-                                L=L_val,
-                                contrast=c_val,
-                                offset=o_val,
-                                dt=dt_val,
-                            )
-                        ),
-                        in_axes=(0, 0, 0),
-                    )
-                    g2_theory_grid = compute_g2_vmap(
-                        phi_unique, contrast_arr, offset_arr
-                    )
-                else:
-                    # vmap over angles with single contrast/offset
-                    compute_g2_vmap = jax.vmap(
-                        lambda phi_val: jnp.squeeze(
-                            compute_g2_scaled(
-                                params=physical_params,
-                                t1=t1_unique_global,
-                                t2=t2_unique_global,
-                                phi=phi_val,
-                                q=q_val,
-                                L=L_val,
-                                contrast=contrast_scalar,
-                                offset=offset_scalar,
-                                dt=dt_val,
-                            )
-                        ),
-                        in_axes=0,
-                    )
-                    g2_theory_grid = compute_g2_vmap(phi_unique)
-
-                # NOTE: Diagonal correction skipped — residuals with t1==t2 are
-                # masked out below via `jnp.where(t1_c != t2_c, res, 0.0)`,
-                # so theory grid diagonal values are never used.
-
-                # === FLAT INDEXING: Extract chunk values from grid ===
-                # Grid shape: (n_phi, n_t1, n_t2) — C-order, phi slowest
-                g2_theory_flat = g2_theory_grid.flatten()
-
-                # Find indices in the separate unique arrays
-                phi_indices = jnp.searchsorted(phi_unique, phi_c)
-                t1_indices = jnp.searchsorted(t1_unique_global, t1_c)
-                t2_indices = jnp.searchsorted(t2_unique_global, t2_c)
-
-                # Compute flat indices (C-order: phi varies slowest)
-                flat_indices = (
-                    phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices
-                )
-
-                # Extract theory values for this chunk
-                g2_theory_chunk = g2_theory_flat[flat_indices]
-
-                # Weighted residuals with diagonal mask
-                w = 1.0 / sigma
-                res = (g2_c - g2_theory_chunk) * w
-                return jnp.where(t1_c != t2_c, res, 0.0)
-
-            # Compute Jacobian and residuals
-            J = jax.jacfwd(r_fn)(p)
-            r = r_fn(p)
-
-            return J.T @ J, J.T @ r, jnp.sum(r**2)
-
-        # JIT-compiled Chi2-only Kernel with FULL HOMODYNE PHYSICS (v2.14.1+)
-        @jax.jit
-        def compute_chunk_chi2(p, phi_c, t1_c, t2_c, g2_c, sigma):
-            """Compute chi2 for a chunk using FULL homodyne physics (no Jacobian)."""
-            # Unpack parameters
-            if per_angle_scaling:
-                contrast_arr = p[:n_phi]
-                offset_arr = p[n_phi : 2 * n_phi]
-                physical_params = p[2 * n_phi :]
-            else:
-                contrast_scalar = p[0]
-                offset_scalar = p[1]
-                physical_params = p[2:]
-
-            # === FULL PHYSICS: Vectorize over angles ===
-            if per_angle_scaling:
-                compute_g2_vmap = jax.vmap(
-                    lambda phi_val, c_val, o_val: jnp.squeeze(
-                        compute_g2_scaled(
-                            params=physical_params,
-                            t1=t1_unique_global,
-                            t2=t2_unique_global,
-                            phi=phi_val,
-                            q=q_val,
-                            L=L_val,
-                            contrast=c_val,
-                            offset=o_val,
-                            dt=dt_val,
-                        )
-                    ),
-                    in_axes=(0, 0, 0),
-                )
-                g2_theory_grid = compute_g2_vmap(phi_unique, contrast_arr, offset_arr)
-            else:
-                compute_g2_vmap = jax.vmap(
-                    lambda phi_val: jnp.squeeze(
-                        compute_g2_scaled(
-                            params=physical_params,
-                            t1=t1_unique_global,
-                            t2=t2_unique_global,
-                            phi=phi_val,
-                            q=q_val,
-                            L=L_val,
-                            contrast=contrast_scalar,
-                            offset=offset_scalar,
-                            dt=dt_val,
-                        )
-                    ),
-                    in_axes=0,
-                )
-                g2_theory_grid = compute_g2_vmap(phi_unique)
-
-            # NOTE: Diagonal correction skipped — chi2 with t1==t2 is masked
-            # out below via `jnp.where(t1_c != t2_c, res, 0.0)`.
-
-            # === FLAT INDEXING: Extract chunk values ===
-            # Grid shape: (n_phi, n_t1, n_t2) — C-order, phi slowest
-            g2_theory_flat = g2_theory_grid.flatten()
-            phi_indices = jnp.searchsorted(phi_unique, phi_c)
-            t1_indices = jnp.searchsorted(t1_unique_global, t1_c)
-            t2_indices = jnp.searchsorted(t2_unique_global, t2_c)
-            flat_indices = phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices
-            g2_theory_chunk = g2_theory_flat[flat_indices]
-
-            # Compute chi-squared with diagonal mask
-            w = 1.0 / sigma
-            res = (g2_c - g2_theory_chunk) * w
-            res = jnp.where(t1_c != t2_c, res, 0.0)
-            return jnp.sum(res**2)
+        compute_chunk_accumulators, compute_chunk_chi2 = create_ooc_kernels(
+            per_angle_scaling=per_angle_scaling,
+            n_phi=n_phi,
+            phi_unique=phi_unique,
+            t1_unique_global=t1_unique_global,
+            t2_unique_global=t2_unique_global,
+            n_t1=n_t1,
+            n_t2=n_t2,
+            q_val=q_val,
+            L_val=L_val,
+            dt_val=dt_val,
+        )
 
         def evaluate_total_chi2(params_eval):
             total_c2 = 0.0
@@ -5803,42 +5657,126 @@ class NLSQWrapper(NLSQAdapterBase):
         logger.info(f"Starting Out-of-Core Loop (Max iter: {max_iter})...")
         import time
 
-        # Lazy import for parallel chunk accumulation (Phase 1)
+        # Lazy import for parallel chunk accumulation
         from homodyne.optimization.nlsq.parallel_accumulator import (
+            OOCComputePool,
+            OOCSharedArrays,
             accumulate_chunks_parallel,
             accumulate_chunks_sequential,
             should_use_parallel_accumulation,
+            should_use_parallel_compute,
         )
+
+        # Create parallel compute pool if beneficial
+        ooc_pool: OOCComputePool | None = None
+        ooc_shared: OOCSharedArrays | None = None
+        n_total_chunks = len(iterator)
+
+        if should_use_parallel_compute(n_total_chunks):
+            try:
+                # Build chunk boundaries from the stratified iterator
+                chunk_boundaries: list[tuple[int, int]] = []
+                # Flatten all indices in iterator order into a single array
+                all_indices = []
+                offset = 0
+                for indices_chunk in iterator:
+                    all_indices.append(indices_chunk)
+                    chunk_boundaries.append((offset, offset + len(indices_chunk)))
+                    offset += len(indices_chunk)
+                all_indices_arr = np.concatenate(all_indices)
+
+                # Reorder flat arrays to match iterator order (contiguous chunks)
+                phi_ordered = np.asarray(phi_flat)[all_indices_arr]
+                t1_ordered = np.asarray(t1_flat)[all_indices_arr]
+                t2_ordered = np.asarray(t2_flat)[all_indices_arr]
+                g2_ordered = np.asarray(g2_flat)[all_indices_arr]
+                sigma_ordered = (
+                    np.asarray(sigma_flat)[all_indices_arr]
+                    if sigma_flat is not None
+                    else None
+                )
+
+                ooc_shared = OOCSharedArrays(
+                    phi_ordered, t1_ordered, t2_ordered, g2_ordered,
+                    sigma_ordered, chunk_boundaries,
+                )
+
+                physics_config = {
+                    "per_angle_scaling": per_angle_scaling,
+                    "n_phi": n_phi,
+                    "phi_unique": np.asarray(phi_unique),
+                    "t1_unique": np.asarray(t1_unique_global),
+                    "t2_unique": np.asarray(t2_unique_global),
+                    "n_t1": n_t1,
+                    "n_t2": n_t2,
+                    "q": q_val,
+                    "L": L_val,
+                    "dt": dt_val,
+                }
+
+                n_ooc_workers = max(1, min(4, os.cpu_count() or 1))
+                ooc_pool = OOCComputePool(
+                    n_workers=n_ooc_workers,
+                    shared_arrays=ooc_shared,
+                    physics_config=physics_config,
+                    chunk_boundaries=chunk_boundaries,
+                    threads_per_worker=max(
+                        1, (os.cpu_count() or 4) // n_ooc_workers
+                    ),
+                )
+                logger.info(
+                    "Parallel OOC compute: %d chunks across %d workers",
+                    n_total_chunks,
+                    n_ooc_workers,
+                )
+            except (OSError, RuntimeError, MemoryError) as exc:
+                logger.warning(
+                    "Parallel OOC pool creation failed (%s), using sequential",
+                    exc,
+                )
+                if ooc_shared is not None:
+                    ooc_shared.cleanup()
+                    ooc_shared = None
+                ooc_pool = None
 
         for i in range(max_iter):
             _iter_start = time.perf_counter()  # noqa: F841
 
-            # Pre-compute all chunk accumulators (JIT-cached, ~5-15ms each)
-            chunk_results: list[tuple[np.ndarray, np.ndarray, float]] = []
-            count = 0
-            for indices_chunk in iterator:
-                # Load chunk data using stratifying indices
-                # This is the "Zero-Copy" magic - we only copy small chunks
-                phi_c = phi_flat[indices_chunk]
-                t1_c = t1_flat[indices_chunk]
-                t2_c = t2_flat[indices_chunk]
-                g2_c = g2_flat[indices_chunk]
-                sigma_c = sigma_flat[indices_chunk] if sigma_flat is not None else 1.0
-
-                # Compute chunk accumulators (using FULL homodyne physics v2.14.1+)
-                JtJ, Jtr, chi2 = compute_chunk_accumulators(
-                    params_curr, phi_c, t1_c, t2_c, g2_c, sigma_c
+            if ooc_pool is not None:
+                # Parallel compute: dispatch all chunks to pool
+                chunk_results = ooc_pool.compute_accumulators(
+                    np.asarray(params_curr)
                 )
+                count = sum(
+                    end - start
+                    for start, end in chunk_boundaries  # noqa: F821
+                )
+            else:
+                # Sequential compute: iterate chunks locally
+                chunk_results_local: list[
+                    tuple[np.ndarray, np.ndarray, float]
+                ] = []
+                count = 0
+                for indices_chunk in iterator:
+                    phi_c = phi_flat[indices_chunk]
+                    t1_c = t1_flat[indices_chunk]
+                    t2_c = t2_flat[indices_chunk]
+                    g2_c = g2_flat[indices_chunk]
+                    sigma_c = (
+                        sigma_flat[indices_chunk]
+                        if sigma_flat is not None
+                        else 1.0
+                    )
+                    JtJ, Jtr, chi2 = compute_chunk_accumulators(
+                        params_curr, phi_c, t1_c, t2_c, g2_c, sigma_c
+                    )
+                    chunk_results_local.append(
+                        (np.asarray(JtJ), np.asarray(Jtr), float(chi2))
+                    )
+                    count += len(indices_chunk)
+                chunk_results = chunk_results_local
 
-                # Convert JAX arrays to numpy for accumulator compatibility
-                chunk_results.append((
-                    np.asarray(JtJ),
-                    np.asarray(Jtr),
-                    float(chi2),
-                ))
-                count += len(indices_chunk)
-
-            # Reduce chunk results (parallel when beneficial)
+            # Reduce chunk results (parallel reduction when beneficial)
             n_chunks = len(chunk_results)
             if n_chunks == 0:
                 total_JtJ = jnp.zeros((n_params, n_params))
@@ -5847,9 +5785,7 @@ class NLSQWrapper(NLSQAdapterBase):
             elif should_use_parallel_accumulation(n_chunks):
                 if i == 0:
                     logger.info(
-                        "Parallel chunk reduction: %d chunks "
-                        "across workers (Phase 1: reduction only, "
-                        "compute is sequential)",
+                        "Parallel chunk reduction: %d chunks",
                         n_chunks,
                     )
                 total_JtJ_np, total_Jtr_np, total_chi2, _ = (
@@ -5863,8 +5799,7 @@ class NLSQWrapper(NLSQAdapterBase):
             else:
                 if i == 0:
                     logger.debug(
-                        "Sequential chunk reduction: %d chunks "
-                        "(below parallel threshold)",
+                        "Sequential chunk reduction: %d chunks",
                         n_chunks,
                     )
                 total_JtJ_np, total_Jtr_np, total_chi2, _ = (
@@ -5991,6 +5926,12 @@ class NLSQWrapper(NLSQAdapterBase):
             if not step_accepted:
                 logger.warning("Could not find better step. Stopping.")
                 break
+
+        # Clean up parallel compute pool and shared memory
+        if ooc_pool is not None:
+            ooc_pool.shutdown()
+        if ooc_shared is not None:
+            ooc_shared.cleanup()
 
         # Determine final status (rel_change initialized to inf before loop)
         converged = rel_change < xtol and cost_change < ftol
