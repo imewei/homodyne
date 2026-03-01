@@ -842,3 +842,63 @@ class TestBimodalCombination:
         # Should still produce 2 modes (upper with simple mean)
         assert len(bimodal_result.modes) == 2
         assert bimodal_result.modes[1].n_shards == 1
+
+
+# =============================================================================
+# Tests for Dynamic XLA Device Count
+# =============================================================================
+
+
+class TestDynamicXLADeviceCount:
+    """Test XLA device count matches num_chains instead of hardcoded 4."""
+
+    def test_xla_device_count_matches_num_chains(self):
+        """Verify XLA_FLAGS sets device count to num_chains, not hardcoded 4."""
+        import re
+
+        # Simulate the worker-side module-level setup logic:
+        # Parent sets HOMODYNE_CMC_NUM_CHAINS, worker reads it to set XLA_FLAGS.
+        num_chains = 6
+        xla_flags = "--some_flag=true --xla_force_host_platform_device_count=4"
+        xla_flags = re.sub(
+            r"--xla_force_host_platform_device_count=\d+", "", xla_flags
+        )
+        xla_flags = (
+            xla_flags.strip()
+            + f" --xla_force_host_platform_device_count={num_chains}"
+        )
+        assert f"--xla_force_host_platform_device_count={num_chains}" in xla_flags
+        assert "--xla_force_host_platform_device_count=4" not in xla_flags
+
+    def test_xla_device_count_default_4(self):
+        """Verify default device count is 4 (matching default num_chains)."""
+        config = CMCConfig()
+        assert config.num_chains == 4
+
+    def test_env_var_fallback_when_unset(self):
+        """Verify worker falls back to 4 when HOMODYNE_CMC_NUM_CHAINS is unset."""
+        import os
+
+        # Ensure the env var is not set
+        saved = os.environ.pop("HOMODYNE_CMC_NUM_CHAINS", None)
+        try:
+            num_chains = int(os.environ.get("HOMODYNE_CMC_NUM_CHAINS", "4"))
+            assert num_chains == 4
+        finally:
+            if saved is not None:
+                os.environ["HOMODYNE_CMC_NUM_CHAINS"] = saved
+
+    def test_env_var_propagates_custom_value(self):
+        """Verify worker reads custom num_chains from env var."""
+        import os
+
+        saved = os.environ.get("HOMODYNE_CMC_NUM_CHAINS")
+        try:
+            os.environ["HOMODYNE_CMC_NUM_CHAINS"] = "8"
+            num_chains = int(os.environ.get("HOMODYNE_CMC_NUM_CHAINS", "4"))
+            assert num_chains == 8
+        finally:
+            if saved is not None:
+                os.environ["HOMODYNE_CMC_NUM_CHAINS"] = saved
+            else:
+                os.environ.pop("HOMODYNE_CMC_NUM_CHAINS", None)

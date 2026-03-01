@@ -539,13 +539,17 @@ def _run_shard_worker(
         os.environ["JAX_COMPILATION_CACHE_DIR"] = str(
             Path(os.path.expanduser("~/.cache/homodyne/jax_cache"))
         )
-    # Unconditionally ensure device_count=4, stripping any stale value first.
+    # Dynamic XLA device count: read num_chains from env var set by parent process.
+    # Previously hardcoded to 4, now matches config.num_chains so JAX sees the
+    # correct number of virtual devices for parallel chain execution.
     import re as _re
 
+    _num_chains = int(os.environ.get("HOMODYNE_CMC_NUM_CHAINS", "4"))
     _xla_flags = os.environ.get("XLA_FLAGS", "")
     _xla_flags = _re.sub(r"--xla_force_host_platform_device_count=\d+", "", _xla_flags)
     os.environ["XLA_FLAGS"] = (
-        _xla_flags.strip() + " --xla_force_host_platform_device_count=4"
+        _xla_flags.strip()
+        + f" --xla_force_host_platform_device_count={_num_chains}"
     )
 
     import jax
@@ -1165,6 +1169,9 @@ class MultiprocessingBackend(CMCBackend):
                 "MKL_NUM_THREADS": str(threads_per_worker),
                 "OPENBLAS_NUM_THREADS": str(threads_per_worker),
                 "VECLIB_MAXIMUM_THREADS": str(threads_per_worker),
+                # Pass num_chains so workers set XLA device count dynamically
+                # instead of the previous hardcoded value of 4.
+                "HOMODYNE_CMC_NUM_CHAINS": str(config.num_chains),
             }
             _worker_env_clear = ["OMP_PROC_BIND", "OMP_PLACES"]
 
