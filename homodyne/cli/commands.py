@@ -3325,9 +3325,9 @@ def _compute_theoretical_c2_from_mcmc(
     # Stack all angles
     c2_theoretical_scaled = np.array(c2_theoretical_list)
 
-    # Validate theoretical prediction quality
-    c2_min = float(np.min(c2_theoretical_scaled))
-    c2_max = float(np.max(c2_theoretical_scaled))
+    # Validate theoretical prediction quality (NaN-safe: per-angle fits can fail)
+    c2_min = float(np.nanmin(c2_theoretical_scaled))
+    c2_max = float(np.nanmax(c2_theoretical_scaled))
     c2_range = c2_max - c2_min
     logger.info(
         f"Theoretical C2 range: [{c2_min:.6f}, {c2_max:.6f}], variation: {c2_range:.6f}"
@@ -3336,8 +3336,8 @@ def _compute_theoretical_c2_from_mcmc(
     # Check if per-angle scaling produced reasonable variation
     if use_per_angle_lstsq and c2_exp is not None:
         c2_exp_arr = np.asarray(c2_exp)
-        exp_min = float(np.min(c2_exp_arr))
-        exp_max = float(np.max(c2_exp_arr))
+        exp_min = float(np.nanmin(c2_exp_arr))
+        exp_max = float(np.nanmax(c2_exp_arr))
         exp_range = exp_max - exp_min
         coverage = c2_range / exp_range if exp_range > 0.01 else 0
         logger.info(
