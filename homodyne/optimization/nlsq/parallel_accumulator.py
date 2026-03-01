@@ -300,7 +300,7 @@ def create_ooc_kernels(
 
             w = 1.0 / sigma
             res = (g2_c - g2_theory_chunk) * w
-            return jnp.where(t1_c != t2_c, res, 0.0)
+            return jnp.where(jnp.abs(t1_c - t2_c) > 1e-15, res, 0.0)
 
         J = jax.jacfwd(r_fn)(p)
         r = r_fn(p)
@@ -366,7 +366,7 @@ def create_ooc_kernels(
 
         w = 1.0 / sigma
         res = (g2_c - g2_theory_chunk) * w
-        res = jnp.where(t1_c != t2_c, res, 0.0)
+        res = jnp.where(jnp.abs(t1_c - t2_c) > 1e-15, res, 0.0)
         return jnp.sum(res**2)
 
     return compute_chunk_accumulators, compute_chunk_chi2
