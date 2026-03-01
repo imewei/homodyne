@@ -110,13 +110,37 @@ class AsyncWriter:
 
     def submit_npz(self, path: Path, data: dict[str, np.ndarray]) -> None:
         """Write NPZ file in background."""
-        future = self._executor.submit(self._write_npz, path, data)
+
+        def _write() -> None:
+            try:
+                self._write_npz(path, data)
+            except Exception:
+                logger.error("Failed to write NPZ: %s", path)
+                raise
+
+        future = self._executor.submit(_write)
         with self._lock:
             self._futures.append(future)
 
     def submit_json(self, path: Path, data: dict[str, Any]) -> None:
         """Write JSON file in background."""
-        future = self._executor.submit(self._write_json, path, data)
+
+        def _write() -> None:
+            try:
+                self._write_json(path, data)
+            except Exception:
+                logger.error("Failed to write JSON: %s", path)
+                raise
+
+        future = self._executor.submit(_write)
+        with self._lock:
+            self._futures.append(future)
+
+    def submit_task(
+        self, fn: Callable[..., None], *args: Any, **kwargs: Any
+    ) -> None:
+        """Submit an arbitrary callable for background execution."""
+        future = self._executor.submit(fn, *args, **kwargs)
         with self._lock:
             self._futures.append(future)
 
@@ -124,7 +148,6 @@ class AsyncWriter:
         """Wait for all pending writes. Returns list of errors."""
         with self._lock:
             pending = list(self._futures)
-            self._futures.clear()
         errors: list[Exception] = []
         for future in pending:
             try:
@@ -132,6 +155,13 @@ class AsyncWriter:
             except Exception as e:
                 logger.warning("Background write failed: %s", e)
                 errors.append(e)
+        # Remove only the futures we waited on; concurrent submits are preserved
+        with self._lock:
+            for f in pending:
+                try:
+                    self._futures.remove(f)
+                except ValueError:
+                    pass
         return errors
 
     def shutdown(self) -> None:

@@ -1738,30 +1738,21 @@ def _save_results(
     import numpy as np
     import yaml
 
-    # Phase 2 TODO: Wrap NPZ/JSON writes with AsyncWriter for background I/O.
-    # AsyncWriter (utils/async_io.py) is ready but integration requires
-    # refactoring _save_nlsq_results/_save_mcmc_results to use submit_npz/submit_json.
     from homodyne.utils.async_io import AsyncWriter
 
-    logger.debug(
-        "%s available for background I/O "
-        "(Phase 1: synchronous writes, async dispatch in Phase 2)",
-        AsyncWriter.__name__,
-    )
+    writer = AsyncWriter(max_workers=2)
 
-    # Route to appropriate saving method based on optimization method
+    # Route to appropriate saving method based on optimization method.
+    # Submit save functions to background writer so they overlap with
+    # results_summary construction and legacy save below.
     if args.method == "nlsq":
-        # Use comprehensive NLSQ saving (4 files: 3 JSON + 1 NPZ)
-        logger.info("Using comprehensive NLSQ result saving")
-        save_nlsq_results(result, data, config, args.output_dir)
-        # Also save legacy format for backward compatibility if requested
+        logger.info("Using comprehensive NLSQ result saving (async)")
+        writer.submit_task(save_nlsq_results, result, data, config, args.output_dir)
         if args.output_format != "json":
             logger.info("Saving legacy results summary for backward compatibility")
     elif args.method == "cmc":
-        # Use comprehensive CMC saving (4 files: 3 JSON + 1 NPZ + plots)
-        logger.info("Using comprehensive CMC result saving")
-        save_mcmc_results(result, data, config, args.output_dir)
-        # Also save legacy format for backward compatibility if requested
+        logger.info("Using comprehensive CMC result saving (async)")
+        writer.submit_task(save_mcmc_results, result, data, config, args.output_dir)
         if args.output_format != "json":
             logger.info("Saving legacy results summary for backward compatibility")
     # For other methods, continue with legacy saving format below
@@ -1828,6 +1819,16 @@ def _save_results(
 
     except Exception as e:
         logger.warning(f"Failed to save results: {e}")
+
+    # Wait for background writes to complete
+    errors = writer.wait_all(timeout=60.0)
+    if errors:
+        logger.warning(
+            "Background save errors (%d): %s",
+            len(errors),
+            [str(e) for e in errors],
+        )
+    writer.shutdown()
 
 
 def _handle_plotting(
