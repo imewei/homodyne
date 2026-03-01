@@ -1094,7 +1094,7 @@ class MultiprocessingBackend(CMCBackend):
         config: CMCConfig,
         shards: list[PreparedData] | None = None,
         initial_values: dict[str, float] | None = None,
-        parameter_space: ParameterSpace = None,
+        parameter_space: ParameterSpace | None = None,
         analysis_mode: str = "static",
         progress_bar: bool = True,
     ) -> MCMCSamples:
