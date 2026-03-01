@@ -1738,7 +1738,9 @@ def _save_results(
     import numpy as np
     import yaml
 
-    # Phase 1: Log async I/O availability for future integration
+    # Phase 2 TODO: Wrap NPZ/JSON writes with AsyncWriter for background I/O.
+    # AsyncWriter (utils/async_io.py) is ready but integration requires
+    # refactoring _save_nlsq_results/_save_mcmc_results to use submit_npz/submit_json.
     from homodyne.utils.async_io import AsyncWriter
 
     logger.debug(

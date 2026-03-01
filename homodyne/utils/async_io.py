@@ -10,7 +10,7 @@ import json
 from collections.abc import Callable, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
-from threading import Thread
+from threading import Lock, Thread
 from typing import Any, TypeVar
 
 import numpy as np
@@ -44,7 +44,7 @@ class PrefetchLoader(Iterator[R]):
         self._has_prefetched = False
         self._exhausted = False
         self._thread: Thread | None = None
-        self._error: BaseException | None = None
+        self._error: Exception | None = None
         self._start_prefetch()
 
     def _start_prefetch(self) -> None:
@@ -62,6 +62,7 @@ class PrefetchLoader(Iterator[R]):
                 self._error = e
                 self._exhausted = True
 
+        # daemon=True: prefetch is read-only; safe to abandon on exit
         self._thread = Thread(target=_load, daemon=True)
         self._thread.start()
 
@@ -70,7 +71,13 @@ class PrefetchLoader(Iterator[R]):
 
     def __next__(self) -> R:
         if self._thread is not None:
-            self._thread.join()
+            self._thread.join(timeout=120.0)
+            if self._thread.is_alive():
+                self._exhausted = True
+                self._thread = None
+                raise RuntimeError(
+                    "Prefetch thread did not complete within 120s timeout"
+                )
             self._thread = None
 
         if self._error is not None:
@@ -98,31 +105,40 @@ class AsyncWriter:
     def __init__(self, max_workers: int = 2) -> None:
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._futures: list[Future[None]] = []
+        self._lock = Lock()
+        self._shutdown = False
 
     def submit_npz(self, path: Path, data: dict[str, np.ndarray]) -> None:
         """Write NPZ file in background."""
         future = self._executor.submit(self._write_npz, path, data)
-        self._futures.append(future)
+        with self._lock:
+            self._futures.append(future)
 
     def submit_json(self, path: Path, data: dict[str, Any]) -> None:
         """Write JSON file in background."""
         future = self._executor.submit(self._write_json, path, data)
-        self._futures.append(future)
+        with self._lock:
+            self._futures.append(future)
 
     def wait_all(self, timeout: float = 60.0) -> list[Exception]:
         """Wait for all pending writes. Returns list of errors."""
+        with self._lock:
+            pending = list(self._futures)
+            self._futures.clear()
         errors: list[Exception] = []
-        for future in self._futures:
+        for future in pending:
             try:
                 future.result(timeout=timeout)
             except Exception as e:
                 logger.warning("Background write failed: %s", e)
                 errors.append(e)
-        self._futures.clear()
         return errors
 
     def shutdown(self) -> None:
-        """Wait for pending writes and shut down."""
+        """Wait for pending writes and shut down. Idempotent."""
+        if self._shutdown:
+            return
+        self._shutdown = True
         self.wait_all()
         self._executor.shutdown(wait=True)
 
