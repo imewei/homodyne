@@ -9,9 +9,6 @@ and (2) **Bayesian posterior sampling** via Consensus Monte Carlo (CMC) with NUT
 full posterior distributions. This page describes the mathematical foundations of both
 methods and the numerical techniques used to make them fast and reliable on CPU hardware.
 
-.. contents:: Contents
-   :local:
-   :depth: 2
 
 
 Non-Linear Least Squares (NLSQ)

@@ -3,9 +3,6 @@ I/O Module
 
 The :mod:`homodyne.io` module provides functions for saving and loading optimization results, experimental data, and analysis outputs.
 
-.. contents:: Contents
-   :local:
-   :depth: 2
 
 Overview
 --------

@@ -3,9 +3,6 @@ Visualization Module
 
 The :mod:`homodyne.viz` module provides comprehensive visualization utilities for homodyne scattering analysis, including experimental data plots, optimization results, and MCMC diagnostics.
 
-.. contents:: Contents
-   :local:
-   :depth: 2
 
 Overview
 --------

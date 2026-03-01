@@ -9,9 +9,6 @@ both diffusive and advective contributions to particle dynamics. This page deriv
 :math:`c_2` equation for homodyne detection under laminar shear flow, as implemented in the
 ``laminar_flow`` analysis mode.
 
-.. contents:: Contents
-   :local:
-   :depth: 2
 
 
 Taylor-Couette Geometry

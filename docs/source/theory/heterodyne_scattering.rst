@@ -9,9 +9,6 @@ contributions from cross-correlations between all component pairs. This page dev
 general :math:`N`-component heterodyne scattering formula from He et al. PNAS 2025 and
 details the special cases most relevant to colloidal suspensions undergoing yielding.
 
-.. contents:: Contents
-   :local:
-   :depth: 2
 
 
 Physical Motivation

@@ -6,9 +6,6 @@ The :mod:`homodyne.optimization` module provides two complementary optimization 
 1. **NLSQ** (Primary): Fast, reliable trust-region optimization using Levenberg-Marquardt
 2. **CMC** (Secondary): Bayesian uncertainty quantification using Consensus Monte Carlo
 
-.. contents:: Contents
-   :local:
-   :depth: 2
 
 Overview
 --------

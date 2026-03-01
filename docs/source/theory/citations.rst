@@ -6,9 +6,6 @@ References and Citations
 This page collects full bibliographic information for all works cited in the Theory section,
 along with BibTeX entries for inclusion in LaTeX documents.
 
-.. contents:: Contents
-   :local:
-   :depth: 2
 
 
 Primary References

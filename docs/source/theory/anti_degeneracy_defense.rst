@@ -6,9 +6,6 @@ introduced in Homodyne and enhanced with quantile-based per-angle scaling.
 The system addresses fundamental optimization challenges in laminar flow XPCS analysis
 where structural degeneracy and gradient cancellation prevent accurate parameter estimation.
 
-.. contents:: Contents
-   :local:
-   :depth: 3
 
 Introduction
 ------------

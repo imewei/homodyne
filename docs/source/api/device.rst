@@ -3,9 +3,6 @@ Device Module
 
 The :mod:`homodyne.device` module provides CPU device optimization and configuration for high-performance computing environments.
 
-.. contents:: Contents
-   :local:
-   :depth: 2
 
 Overview
 --------

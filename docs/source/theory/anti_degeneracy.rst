@@ -9,9 +9,6 @@ and the constant offset in :math:`c_2` are mathematically degenerate with the ph
 parameters :math:`D_0` and :math:`\dot{\gamma}_0`. This page explains the degeneracy
 mechanism and the per-angle scaling strategy that prevents it.
 
-.. contents:: Contents
-   :local:
-   :depth: 2
 
 
 The Parameter Absorption Degeneracy

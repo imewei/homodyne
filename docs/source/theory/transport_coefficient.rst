@@ -8,9 +8,6 @@ It encodes how the variance of particle displacements grows in time and provides
 bridge between microscopic stochastic dynamics and macroscopic rheological observables through
 a generalized Green-Kubo relation.
 
-.. contents:: Contents
-   :local:
-   :depth: 2
 
 
 Definition

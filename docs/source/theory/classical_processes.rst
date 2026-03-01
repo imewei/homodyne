@@ -8,9 +8,6 @@ classical Langevin equation. This page derives the transport coefficient :math:`
 four canonical stochastic processes relevant to soft-matter XPCS experiments, and compares
 their physical behaviour.
 
-.. contents:: Contents
-   :local:
-   :depth: 2
 
 
 The Langevin Equation

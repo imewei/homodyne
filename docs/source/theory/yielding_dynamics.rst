@@ -9,9 +9,6 @@ distinct yielding mechanisms are identified — **ductile Andrade creep** in rep
 and **brittle shear banding** in attractive systems — and connected to measurable signatures
 in the two-time correlation function :math:`c_2`.
 
-.. contents:: Contents
-   :local:
-   :depth: 2
 
 
 Overview: Repulsive vs Attractive Suspensions

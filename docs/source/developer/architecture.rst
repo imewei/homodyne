@@ -7,9 +7,6 @@ This page describes the module structure of homodyne, the data flow from user in
 analysis result, and the key design decisions that shape the codebase. Understanding the
 architecture is essential for contributing to any layer of the stack.
 
-.. contents:: Contents
-   :local:
-   :depth: 2
 
 
 Component Overview

@@ -9,9 +9,6 @@ scattering sample. This page derives the two-time correlation function :math:`c_
 principles and explains why the equilibrium approximation :math:`g_2(q,\tau)` is insufficient
 for non-stationary systems.
 
-.. contents:: Contents
-   :local:
-   :depth: 2
 
 
 Position Density and Scattered Field

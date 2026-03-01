@@ -6,9 +6,6 @@ Installation
 This page covers all supported installation methods for Homodyne, along with
 CPU optimization notes for production deployments.
 
-.. contents:: On this page
-   :local:
-   :depth: 2
 
 ----
 
