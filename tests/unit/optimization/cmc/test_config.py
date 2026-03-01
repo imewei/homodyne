@@ -187,6 +187,42 @@ class TestCMCConfig:
         assert result["heartbeat_timeout"] == 450
         assert result["combination"]["min_success_rate_warning"] == 0.75
 
+    def test_default_chain_method(self):
+        """Test that chain_method defaults to parallel."""
+        config = CMCConfig()
+        assert config.chain_method == "parallel"
+
+    def test_chain_method_from_dict(self):
+        """Test chain_method parsed from per_shard_mcmc section."""
+        config = CMCConfig.from_dict({
+            "per_shard_mcmc": {"chain_method": "sequential"},
+        })
+        assert config.chain_method == "sequential"
+
+    def test_chain_method_from_dict_default(self):
+        """Test chain_method defaults to parallel when not in dict."""
+        config = CMCConfig.from_dict({})
+        assert config.chain_method == "parallel"
+
+    def test_chain_method_validation_valid(self):
+        """Test valid chain_method values pass validation."""
+        for method in ("parallel", "sequential"):
+            config = CMCConfig(chain_method=method)
+            errors = config.validate()
+            assert not any("chain_method" in e for e in errors)
+
+    def test_chain_method_validation_invalid(self):
+        """Test invalid chain_method is caught by validation."""
+        config = CMCConfig(chain_method="invalid")
+        errors = config.validate()
+        assert any("chain_method" in e for e in errors)
+
+    def test_chain_method_to_dict(self):
+        """Test chain_method appears in to_dict output."""
+        config = CMCConfig(chain_method="sequential")
+        d = config.to_dict()
+        assert d["per_shard_mcmc"]["chain_method"] == "sequential"
+
 
 class TestGetModelParamCount:
     """Tests for get_model_param_count function."""

@@ -66,6 +66,12 @@ class CMCConfig:
         Number of posterior samples per chain.
     num_chains : int
         Number of MCMC chains.
+    chain_method : str
+        MCMC chain execution method. ``"parallel"`` (default) runs chains
+        concurrently via JAX vectorization. ``"sequential"`` runs chains
+        one at a time. Parallel is faster on multi-core CPUs but adds
+        ~5-15% overhead on very small shards (<500 points); the sampler
+        auto-falls-back to sequential in that case.
     target_accept_prob : float
         Target acceptance probability for NUTS.
     max_r_hat : float
@@ -144,6 +150,7 @@ class CMCConfig:
     num_warmup: int = 500
     num_samples: int = 1500
     num_chains: int = 4  # Increased from 2 for better R-hat convergence diagnostics
+    chain_method: str = "parallel"  # "parallel" (default) or "sequential"
     target_accept_prob: float = 0.85
 
     # Adaptive sampling (Feb 2026): Scale warmup/samples based on shard size
@@ -336,6 +343,7 @@ class CMCConfig:
             num_warmup=per_shard.get("num_warmup", 500),
             num_samples=per_shard.get("num_samples", 1500),
             num_chains=per_shard.get("num_chains", 4),
+            chain_method=per_shard.get("chain_method", "parallel"),
             target_accept_prob=per_shard.get("target_accept_prob", 0.85),
             # Adaptive sampling (Feb 2026)
             adaptive_sampling=per_shard.get("adaptive_sampling", True),
@@ -477,6 +485,14 @@ class CMCConfig:
             errors.append(f"num_samples must be positive int, got: {self.num_samples}")
         if not isinstance(self.num_chains, int) or self.num_chains <= 0:
             errors.append(f"num_chains must be positive int, got: {self.num_chains}")
+
+        # Validate chain_method
+        valid_chain_methods = ["parallel", "sequential"]
+        if self.chain_method not in valid_chain_methods:
+            errors.append(
+                f"chain_method must be one of {valid_chain_methods}, "
+                f"got: {self.chain_method}"
+            )
 
         # Validate target_accept_prob
         if not 0.0 < self.target_accept_prob < 1.0:
@@ -851,6 +867,7 @@ class CMCConfig:
                 "num_warmup": self.num_warmup,
                 "num_samples": self.num_samples,
                 "num_chains": self.num_chains,
+                "chain_method": self.chain_method,
                 "target_accept_prob": self.target_accept_prob,
                 "adaptive_sampling": self.adaptive_sampling,
                 "max_tree_depth": self.max_tree_depth,
