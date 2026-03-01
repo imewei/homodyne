@@ -976,9 +976,13 @@ class NLSQWrapper(NLSQAdapterBase):
                 )
                 _ooc_init_mode = _ooc_init_ad.get("per_angle_mode", "auto")
                 _ooc_init_thresh = _ooc_init_ad.get("constant_scaling_threshold", 3)
-                _ooc_init_n_phi = len(popt) - len(physical_param_names)
-                if _ooc_init_n_phi > 0:
-                    _ooc_init_n_phi = _ooc_init_n_phi // 2
+                # Use data.phi to count unique angles — reading n_phi from len(popt)
+                # is incorrect in auto_averaged mode where popt has compressed length
+                # (e.g. 9 for laminar_flow: 7 physical + 2 averaged) rather than
+                # the expanded length (2*n_phi + n_physical = 53 for 23 angles).
+                # Inferring (len(popt) - n_physical) // 2 gives 1, not 23, so the
+                # threshold check 1 >= 3 never fires and the DOF fix is silently skipped.
+                _ooc_init_n_phi = len(np.unique(np.asarray(data.phi)))
                 _ooc_init_n_physical = len(physical_param_names)
                 if _ooc_init_mode == "auto" and _ooc_init_n_phi >= _ooc_init_thresh:
                     _ooc_init_n_params_effective = (
