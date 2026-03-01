@@ -1202,15 +1202,20 @@ class MultiprocessingBackend(CMCBackend):
                 n_shards=n_shards, n_workers=actual_workers
             )
             if use_pool:
+                # Phase 2 TODO: Replace per-shard spawn with WorkerPool dispatch.
+                # WorkerPool (worker_pool.py) is ready but integration requires
+                # adapting _run_single_shard_in_process to the pool's event loop.
                 run_logger.info(
-                    f"Worker pool eligible ({n_shards} shards >= 3): "
-                    f"pool dispatch available for {actual_workers} workers "
-                    f"(Phase 1: using per-shard spawn, pool dispatch in Phase 2)"
+                    "Worker pool eligible (%d shards >= 3): "
+                    "pool dispatch available for %d workers "
+                    "(Phase 1: using per-shard spawn, pool dispatch in Phase 2)",
+                    n_shards,
+                    actual_workers,
                 )
             else:
                 run_logger.debug(
-                    f"Per-shard spawn: {n_shards} shards < 3, "
-                    f"pool not beneficial"
+                    "Per-shard spawn: %d shards < 3, pool not beneficial",
+                    n_shards,
                 )
 
             # M1-parent: Free per-shard numpy arrays now that they have been

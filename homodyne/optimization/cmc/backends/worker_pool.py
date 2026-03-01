@@ -11,7 +11,7 @@ import multiprocessing
 import multiprocessing.context
 import multiprocessing.process
 import os
-import traceback
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -74,6 +74,7 @@ class WorkerPool:
         self._processes: list[multiprocessing.process.BaseProcess] = []
         self._next_worker = 0
         self._alive = False
+        self._lock = threading.Lock()
 
         self._start_workers(ctx)
 
@@ -113,9 +114,10 @@ class WorkerPool:
         task : dict
             Task payload with at minimum a ``task_id`` key.
         """
-        worker_idx = self._next_worker % self._n_workers
-        self._task_queues[worker_idx].put(task)
-        self._next_worker += 1
+        with self._lock:
+            worker_idx = self._next_worker % self._n_workers
+            self._task_queues[worker_idx].put(task)
+            self._next_worker += 1
 
     def get_result(self, timeout: float = 300.0) -> dict[str, Any]:
         """Block until a result is available.
@@ -166,7 +168,7 @@ class WorkerPool:
                     "Worker %d did not exit gracefully, terminating", p.pid
                 )
                 p.terminate()
-                p.join(timeout=5)
+                p.join(timeout=15)
                 if p.is_alive():
                     p.kill()
 
@@ -216,13 +218,39 @@ def _worker_event_loop(
             result = worker_fn(task, **init_kwargs)
             result["worker_id"] = os.getpid()
             result_queue.put(result)
+        except MemoryError:
+            result_queue.put(
+                {
+                    "task_id": task_id,
+                    "success": False,
+                    "error": "MemoryError: worker ran out of memory",
+                    "worker_id": os.getpid(),
+                }
+            )
+            # Drain remaining queued tasks so parent's get_result() won't hang
+            while True:
+                try:
+                    remaining = task_queue.get(block=False)
+                    if remaining is None:
+                        break
+                    result_queue.put(
+                        {
+                            "task_id": remaining.get("task_id", "unknown"),
+                            "success": False,
+                            "error": "Worker terminated due to MemoryError",
+                            "worker_id": os.getpid(),
+                        }
+                    )
+                except Exception:
+                    break
+            break
         except Exception as e:
             result_queue.put(
                 {
                     "task_id": task_id,
                     "success": False,
                     "error": str(e),
-                    "traceback": traceback.format_exc(),
+                    "error_type": type(e).__name__,
                     "worker_id": os.getpid(),
                 }
             )

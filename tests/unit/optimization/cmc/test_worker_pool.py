@@ -95,3 +95,27 @@ class TestWorkerPool:
             assert "error" in result
         finally:
             pool.shutdown()
+
+    def test_context_manager(self):
+        """Test WorkerPool as context manager."""
+        from homodyne.optimization.cmc.backends.worker_pool import WorkerPool
+
+        with WorkerPool(
+            n_workers=1, worker_fn=_echo_worker, worker_init_kwargs={}
+        ) as pool:
+            assert pool.is_alive()
+            pool.submit({"task_id": 0, "value": 42})
+            result = pool.get_result(timeout=10.0)
+            assert result["value"] == 42
+        # After context exit, pool should be shut down
+        assert not pool.is_alive()
+
+    def test_shutdown_idempotent(self):
+        """Test that calling shutdown() twice is safe."""
+        from homodyne.optimization.cmc.backends.worker_pool import WorkerPool
+
+        pool = WorkerPool(n_workers=1, worker_fn=_echo_worker, worker_init_kwargs={})
+        pool.shutdown()
+        assert not pool.is_alive()
+        pool.shutdown()  # Should not raise
+        assert not pool.is_alive()
