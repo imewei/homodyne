@@ -2846,7 +2846,9 @@ class NLSQWrapper(NLSQAdapterBase):
         if hasattr(data, "phi_flat"):
             # Stratified data is already flattened - use directly
             g2_flat = np.asarray(data.g2_flat, dtype=np.float64)
-            xdata = np.arange(len(g2_flat), dtype=np.int32)
+            # Use int64 to avoid int32 overflow for large datasets
+            # (n_phi * n_t1 * n_t2 can exceed 2.147B for 100+ angles × 5000+ time points).
+            xdata = np.arange(len(g2_flat), dtype=np.int64)
             ydata = g2_flat
             return xdata, ydata
 
@@ -2875,8 +2877,9 @@ class NLSQWrapper(NLSQAdapterBase):
 
         # Flatten all arrays to 1D
         # For NLSQ curve_fit interface, xdata is typically just indices
-        # We'll use a simple index array matching the data size
-        xdata = np.arange(g2.size, dtype=np.int32)
+        # Use int64 to avoid int32 overflow for large datasets
+        # (n_phi * n_t1 * n_t2 can exceed 2.147B for 100+ angles × 5000+ time points).
+        xdata = np.arange(g2.size, dtype=np.int64)
 
         # Flatten observations
         ydata = g2.flatten().astype(np.float64, copy=False)
@@ -3978,7 +3981,8 @@ class NLSQWrapper(NLSQAdapterBase):
             physical_params = params_array[2 * n_phi :]
 
             # Get requested data point indices
-            indices = jnp.asarray(xdata, dtype=jnp.int32)
+            # Use int64 to prevent overflow when n_phi * n_t1 * n_t2 > 2.147B.
+            indices = jnp.asarray(xdata, dtype=jnp.int64)
 
             # CRITICAL FIX (Nov 11, 2025): Handle stratified vs non-stratified data
             if is_stratified:

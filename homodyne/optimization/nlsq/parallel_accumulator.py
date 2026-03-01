@@ -292,9 +292,13 @@ def create_ooc_kernels(
                 g2_theory_grid = compute_g2_vmap(phi_unique)  # type: ignore[call-arg]
 
             g2_theory_flat = g2_theory_grid.flatten()
-            phi_indices = jnp.searchsorted(phi_unique, phi_c)
-            t1_indices = jnp.searchsorted(t1_unique_global, t1_c)
-            t2_indices = jnp.searchsorted(t2_unique_global, t2_c)
+            # Cast to int64 BEFORE multiplication to prevent int32 overflow.
+            # jnp.searchsorted returns int32; for large OOC datasets
+            # (n_phi=100, n_t1=5000, n_t2=5000) the product 99 * 25_000_000 = 2.475B
+            # exceeds int32 max (2.147B), silently wrapping to a negative index.
+            phi_indices = jnp.searchsorted(phi_unique, phi_c).astype(jnp.int64)
+            t1_indices = jnp.searchsorted(t1_unique_global, t1_c).astype(jnp.int64)
+            t2_indices = jnp.searchsorted(t2_unique_global, t2_c).astype(jnp.int64)
             flat_indices = phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices
             g2_theory_chunk = g2_theory_flat[flat_indices]
 
@@ -358,9 +362,11 @@ def create_ooc_kernels(
             g2_theory_grid = compute_g2_vmap(phi_unique)  # type: ignore[call-arg]
 
         g2_theory_flat = g2_theory_grid.flatten()
-        phi_indices = jnp.searchsorted(phi_unique, phi_c)
-        t1_indices = jnp.searchsorted(t1_unique_global, t1_c)
-        t2_indices = jnp.searchsorted(t2_unique_global, t2_c)
+        # Cast to int64 BEFORE multiplication to prevent int32 overflow (same fix
+        # as compute_chunk_accumulators above).
+        phi_indices = jnp.searchsorted(phi_unique, phi_c).astype(jnp.int64)
+        t1_indices = jnp.searchsorted(t1_unique_global, t1_c).astype(jnp.int64)
+        t2_indices = jnp.searchsorted(t2_unique_global, t2_c).astype(jnp.int64)
         flat_indices = phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices
         g2_theory_chunk = g2_theory_flat[flat_indices]
 

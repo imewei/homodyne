@@ -372,9 +372,13 @@ class StratifiedResidualFunctionJIT:
         # unique arrays, so all values are guaranteed to be in range. The clip was
         # causing optimization to converge to wrong local minima (D0=91342 vs 19253).
         # Original clip added in ae4848c for streaming optimizer, but not needed here.
-        phi_indices = jnp.searchsorted(self.phi_unique, phi_chunk)
-        t1_indices = jnp.searchsorted(self.t1_unique, t1_chunk)
-        t2_indices = jnp.searchsorted(self.t2_unique, t2_chunk)
+        # Cast to int64 BEFORE multiplication to prevent int32 overflow.
+        # jnp.searchsorted returns int32; for large datasets (n_phi=100,
+        # n_t1=5000, n_t2=5000) the product 99*25_000_000=2.475B exceeds
+        # int32 max (2.147B), silently wrapping to a negative index.
+        phi_indices = jnp.searchsorted(self.phi_unique, phi_chunk).astype(jnp.int64)
+        t1_indices = jnp.searchsorted(self.t1_unique, t1_chunk).astype(jnp.int64)
+        t2_indices = jnp.searchsorted(self.t2_unique, t2_chunk).astype(jnp.int64)
 
         # Compute flat indices
         flat_indices = phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices

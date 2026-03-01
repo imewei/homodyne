@@ -780,7 +780,7 @@ if JAX_AVAILABLE:
             jnp.array(0.0, dtype=jnp.float64),  # sum_theory
             jnp.array(0.0, dtype=jnp.float64),  # sum_exp
             jnp.array(0.0, dtype=jnp.float64),  # sum_theory_exp
-            jnp.array(0, dtype=jnp.int32),  # n_data (already fixed in R6)
+            jnp.array(0, dtype=jnp.int64),  # n_data (R6: int→jnp, R4-4: int32→int64)
         )
 
         # Process all chunks

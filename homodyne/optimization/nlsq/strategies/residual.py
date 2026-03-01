@@ -226,10 +226,14 @@ class StratifiedResidualFunction:
         t1_jax = jnp.asarray(t1)
         t2_jax = jnp.asarray(t2)
 
-        # Find indices in the sorted unique arrays
-        phi_indices = jnp.searchsorted(phi_unique, phi_jax)
-        t1_indices = jnp.searchsorted(t1_unique, t1_jax)
-        t2_indices = jnp.searchsorted(t2_unique, t2_jax)
+        # Find indices in the sorted unique arrays.
+        # Cast to int64 BEFORE multiplication to prevent int32 overflow.
+        # jnp.searchsorted returns int32; for large datasets (n_phi=100,
+        # n_t1=5000, n_t2=5000) the product 99*25_000_000=2.475B exceeds
+        # int32 max (2.147B), silently wrapping to a negative index.
+        phi_indices = jnp.searchsorted(phi_unique, phi_jax).astype(jnp.int64)
+        t1_indices = jnp.searchsorted(t1_unique, t1_jax).astype(jnp.int64)
+        t2_indices = jnp.searchsorted(t2_unique, t2_jax).astype(jnp.int64)
 
         # Convert to flat grid indices: phi * (n_t1 * n_t2) + t1 * n_t2 + t2
         n_t1 = len(t1_unique)
@@ -319,7 +323,9 @@ class StratifiedResidualFunction:
         boundaries = [0]
         for size in chunk_sizes:
             boundaries.append(boundaries[-1] + size)
-        self.chunk_boundaries = jnp.array(boundaries, dtype=jnp.int32)
+        # Use int64 to prevent overflow when cumulative point count exceeds
+        # int32 max (2.147B) for large in-core datasets.
+        self.chunk_boundaries = jnp.array(boundaries, dtype=jnp.int64)
 
         # Store common chunk parameters (assumed same for all chunks)
         self._chunk_q = cast(float, self.chunks_jax[0]["q"])
