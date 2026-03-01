@@ -10,6 +10,8 @@ accumulation produces identical results to sequential.
 
 from __future__ import annotations
 
+import pickle
+
 import numpy as np
 
 from homodyne.utils.logging import get_logger
@@ -73,7 +75,8 @@ def accumulate_chunks_sequential(
         total_chi2 += chi2
         count += 1
 
-    assert total_JtJ is not None and total_Jtr is not None, "Empty chunks list"
+    if total_JtJ is None or total_Jtr is None:
+        raise ValueError("Cannot accumulate empty chunks list")
     return total_JtJ, total_Jtr, total_chi2, count
 
 
@@ -107,7 +110,14 @@ def accumulate_chunks_parallel(
     count : int
         Number of chunks accumulated.
     """
-    from concurrent.futures import ProcessPoolExecutor, as_completed
+    from concurrent.futures import (
+        ProcessPoolExecutor,
+        as_completed,
+    )
+    from concurrent.futures import TimeoutError as FuturesTimeoutError
+
+    if n_workers < 1:
+        return accumulate_chunks_sequential(chunks)
 
     if len(chunks) < _MIN_CHUNKS_FOR_PARALLEL:
         return accumulate_chunks_sequential(chunks)
@@ -133,7 +143,7 @@ def accumulate_chunks_parallel(
             total_count = 0
 
             for future in as_completed(futures):
-                JtJ, Jtr, chi2, count = future.result()
+                JtJ, Jtr, chi2, count = future.result(timeout=300)
                 if total_JtJ is None:
                     total_JtJ = np.zeros_like(JtJ)
                     total_Jtr = np.zeros_like(Jtr)
@@ -142,10 +152,11 @@ def accumulate_chunks_parallel(
                 total_chi2 += chi2
                 total_count += count
 
-        assert total_JtJ is not None and total_Jtr is not None, "No partitions"
+        if total_JtJ is None or total_Jtr is None:
+            raise ValueError("No partitions produced results")
         return total_JtJ, total_Jtr, total_chi2, total_count
 
-    except (OSError, RuntimeError) as e:
+    except (OSError, RuntimeError, pickle.PicklingError, FuturesTimeoutError) as e:
         logger.warning(
             "Parallel chunk accumulation failed (%s), falling back to sequential", e
         )

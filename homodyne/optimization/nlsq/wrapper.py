@@ -5855,7 +5855,7 @@ class NLSQWrapper(NLSQAdapterBase):
                 total_JtJ_np, total_Jtr_np, total_chi2, _ = (
                     accumulate_chunks_parallel(
                         chunk_results,
-                        n_workers=min(4, n_chunks // 4),
+                        n_workers=max(1, min(4, n_chunks // 4)),
                     )
                 )
                 total_JtJ = jnp.asarray(total_JtJ_np)
