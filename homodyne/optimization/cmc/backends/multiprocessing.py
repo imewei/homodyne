@@ -481,7 +481,6 @@ def _pool_worker_init(worker_id: int, **init_kwargs: Any) -> None:
     **init_kwargs : Any
         Must contain ``threads_per_worker`` (int).
     """
-    import os
     import re as _re
 
     threads_per_worker = init_kwargs["threads_per_worker"]
@@ -580,6 +579,15 @@ def _pool_shard_worker(task: dict[str, Any], **init_kwargs: Any) -> None:
             result_queue=result_queue,
             rng_key_tuple=task["rng_key_tuple"],
         )
+    except MemoryError:
+        result = {
+            "type": "result",
+            "success": False,
+            "shard_idx": shard_idx,
+            "error": f"Shard {shard_idx} failed: MemoryError",
+            "error_category": "memory_error",
+            "duration": 0.0,
+        }
     except Exception as e:
         import traceback
 
@@ -587,14 +595,14 @@ def _pool_shard_worker(task: dict[str, Any], **init_kwargs: Any) -> None:
             "type": "result",
             "success": False,
             "shard_idx": shard_idx,
-            "error": f"Pool worker init failed: {e}",
-            "error_category": "init_crash",
+            "error": f"Shard {shard_idx} failed: {e}",
+            "error_category": "shard_error",
             "traceback": traceback.format_exc(),
             "duration": 0.0,
         }
 
     try:
-        result_queue.put_nowait(result)
+        result_queue.put(result, timeout=30)
     except Exception:  # noqa: S110
         pass
 

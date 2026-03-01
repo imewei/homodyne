@@ -270,7 +270,7 @@ def _worker_event_loop(
                             "worker_id": os.getpid(),
                         }
                     )
-                except (queue.Empty, EOFError):
+                except (queue.Empty, queue.Full, EOFError):
                     break
             break
         except Exception as e:
