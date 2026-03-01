@@ -67,7 +67,7 @@ repos:
     hooks:
       - id: mdformat
         args: [--wrap=88]
-        exclude: ^(README\.md|docs/architecture/homodyne-architecture-overview\.md)$
+        exclude: ^(README\.md|docs/architecture/homodyne-architecture-overview\.md|homodyne_qa_report\.md)$
 
   # YAML/JSON formatting
   - repo: https://github.com/pre-commit/mirrors-prettier
