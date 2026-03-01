@@ -84,13 +84,14 @@ def compute_r_hat(
             r_hat_dict[name] = np.nan
             continue
 
-        # Between-chain variance
-        chain_means = np.mean(arr, axis=1)
-        B = n_samples * np.var(chain_means, ddof=1)
+        # Between-chain variance (NaN-safe: NUTS can produce NaN samples on
+        # divergent transitions even in "successful" shards)
+        chain_means = np.nanmean(arr, axis=1)
+        B = n_samples * np.nanvar(chain_means, ddof=1)
 
         # Within-chain variance
-        chain_vars = np.var(arr, axis=1, ddof=1)
-        W = np.mean(chain_vars)
+        chain_vars = np.nanvar(arr, axis=1, ddof=1)
+        W = np.nanmean(chain_vars)
 
         # Pooled variance estimate
         var_plus = ((n_samples - 1) * W + B) / n_samples
@@ -1249,7 +1250,7 @@ def cluster_shard_modes(
             for param in modal_params:
                 if param in successful_samples[shard_idx].samples:
                     mean_val = float(
-                        np.mean(successful_samples[shard_idx].samples[param])
+                        np.nanmean(successful_samples[shard_idx].samples[param])
                     )
                 else:
                     idx = modal_params.index(param)
