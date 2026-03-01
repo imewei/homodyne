@@ -844,12 +844,22 @@ def run_nuts_sampling(
     )
     num_warmup, num_samples = plan.n_warmup, plan.n_samples
 
+    # Determine effective chain method with auto-fallback for small shards
+    effective_chain_method = config.chain_method
+    if effective_chain_method == "parallel" and shard_size < 500:
+        run_logger.warning(
+            f"Shard size {shard_size:,} < 500: falling back to sequential "
+            f"chains (parallel overhead exceeds benefit for small shards)"
+        )
+        effective_chain_method = "sequential"
+
     # Create MCMC runner with adaptive sample counts
     mcmc = MCMC(
         kernel,
         num_warmup=num_warmup,
         num_samples=num_samples,
         num_chains=config.num_chains,
+        chain_method=effective_chain_method,
         progress_bar=progress_bar,
     )
 

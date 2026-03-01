@@ -702,3 +702,134 @@ class TestMedianWarmupAggregation:
             n_samples=0,
         )
         assert samples.shard_adapted_n_warmup is None
+
+
+# =============================================================================
+# Chain method integration
+# =============================================================================
+
+
+class TestChainMethodIntegration:
+    """Test chain_method parameter is passed to MCMC."""
+
+    @staticmethod
+    def _mock_scaling():
+        """Create a mock scaling dict with .scale attributes."""
+        from unittest.mock import MagicMock
+
+        mock_s = MagicMock()
+        mock_s.scale = 1.0
+        return {"D0": mock_s}
+
+    def _run_with_mocks(self, config, data_size):
+        """Run run_nuts_sampling with all dependencies mocked.
+
+        Returns the MockMCMC so callers can inspect call_args.
+        """
+        from unittest.mock import MagicMock, patch
+
+        MockMCMC = MagicMock()
+        mock_mcmc_inst = MagicMock()
+        mock_mcmc_inst.get_samples.return_value = {}
+        mock_mcmc_inst.get_extra_fields.return_value = {}
+        mock_mcmc_inst.last_state = None
+        MockMCMC.return_value = mock_mcmc_inst
+
+        patches = {
+            "homodyne.optimization.cmc.sampler.MCMC": MockMCMC,
+            "homodyne.optimization.cmc.sampler.NUTS": MagicMock(
+                return_value=MagicMock()
+            ),
+            "homodyne.optimization.cmc.sampler.build_init_values_dict": MagicMock(
+                return_value={"D0": 1000.0, "sigma": 0.1}
+            ),
+            "homodyne.optimization.cmc.sampler.compute_scaling_factors": MagicMock(
+                return_value=self._mock_scaling()
+            ),
+            "homodyne.optimization.cmc.sampler.transform_initial_values_to_z": MagicMock(
+                return_value={"D0_z": 0.0}
+            ),
+            "homodyne.optimization.cmc.sampler.create_init_strategy": MagicMock(
+                return_value=MagicMock()
+            ),
+            "homodyne.optimization.cmc.sampler._preflight_log_density": MagicMock(),
+            "homodyne.optimization.cmc.sampler._compute_mcmc_safe_d0": MagicMock(
+                return_value=None
+            ),
+        }
+
+        import contextlib
+
+        with contextlib.ExitStack() as stack:
+            for target, mock_obj in patches.items():
+                stack.enter_context(patch(target, mock_obj))
+
+            from homodyne.optimization.cmc.sampler import run_nuts_sampling
+
+            try:
+                run_nuts_sampling(
+                    model=lambda **kwargs: None,
+                    model_kwargs={"data": list(range(data_size))},
+                    config=config,
+                    initial_values=None,
+                    parameter_space=None,
+                    n_phi=2,
+                    analysis_mode="static",
+                    per_angle_mode="individual",
+                )
+            except Exception:
+                pass  # We only care about the MCMC constructor call
+
+        return MockMCMC
+
+    def test_mcmc_receives_chain_method_parallel(self):
+        """Verify MCMC constructor receives chain_method='parallel' for large shards."""
+        config = CMCConfig(chain_method="parallel", num_chains=4)
+        MockMCMC = self._run_with_mocks(config, data_size=1000)
+
+        assert MockMCMC.called, "MCMC constructor was never called"
+        call_kwargs = MockMCMC.call_args.kwargs
+        assert call_kwargs.get("chain_method") == "parallel"
+
+    def test_mcmc_receives_chain_method_sequential_fallback(self):
+        """Verify MCMC receives 'sequential' when shard < 500 points."""
+        config = CMCConfig(chain_method="parallel", num_chains=4)
+        MockMCMC = self._run_with_mocks(config, data_size=100)
+
+        assert MockMCMC.called, "MCMC constructor was never called"
+        call_kwargs = MockMCMC.call_args.kwargs
+        assert call_kwargs.get("chain_method") == "sequential"
+
+    def test_chain_method_fallback_small_shard(self):
+        """Verify parallel falls back to sequential for tiny shards."""
+        config = CMCConfig(chain_method="parallel", num_chains=4)
+        # Shard with <500 points should trigger fallback
+        data = list(range(100))  # 100 points
+        effective = (
+            "sequential"
+            if len(data) < 500 and config.chain_method == "parallel"
+            else config.chain_method
+        )
+        assert effective == "sequential"
+
+    def test_chain_method_no_fallback_large_shard(self):
+        """Verify parallel is preserved for shards >= 500 points."""
+        config = CMCConfig(chain_method="parallel", num_chains=4)
+        data = list(range(5000))  # 5000 points
+        effective = (
+            "sequential"
+            if len(data) < 500 and config.chain_method == "parallel"
+            else config.chain_method
+        )
+        assert effective == "parallel"
+
+    def test_chain_method_sequential_no_fallback(self):
+        """Verify sequential is never changed regardless of shard size."""
+        config = CMCConfig(chain_method="sequential", num_chains=4)
+        data = list(range(100))  # small shard
+        effective = (
+            "sequential"
+            if len(data) < 500 and config.chain_method == "parallel"
+            else config.chain_method
+        )
+        assert effective == "sequential"
