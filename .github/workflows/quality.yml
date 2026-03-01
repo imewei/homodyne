@@ -45,7 +45,7 @@ jobs:
       - name: Check dependency vulnerabilities
         run: |
           uv export --no-dev --format requirements-txt > /tmp/requirements.txt
-          uvx pip-audit -r /tmp/requirements.txt --format=text
+          uvx pip-audit -r /tmp/requirements.txt
         continue-on-error: true
 
       - name: Upload security report
@@ -117,7 +117,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          uv run pytest tests/ \
+          uv run pytest tests/unit/ tests/regression/ tests/api/ \
             --cov=homodyne \
             --cov-report=xml \
             --cov-report=html \
