@@ -860,12 +860,9 @@ class TestDynamicXLADeviceCount:
         # Parent sets HOMODYNE_CMC_NUM_CHAINS, worker reads it to set XLA_FLAGS.
         num_chains = 6
         xla_flags = "--some_flag=true --xla_force_host_platform_device_count=4"
-        xla_flags = re.sub(
-            r"--xla_force_host_platform_device_count=\d+", "", xla_flags
-        )
+        xla_flags = re.sub(r"--xla_force_host_platform_device_count=\d+", "", xla_flags)
         xla_flags = (
-            xla_flags.strip()
-            + f" --xla_force_host_platform_device_count={num_chains}"
+            xla_flags.strip() + f" --xla_force_host_platform_device_count={num_chains}"
         )
         assert f"--xla_force_host_platform_device_count={num_chains}" in xla_flags
         assert "--xla_force_host_platform_device_count=4" not in xla_flags

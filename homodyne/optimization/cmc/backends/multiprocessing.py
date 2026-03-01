@@ -500,12 +500,9 @@ def _pool_worker_init(worker_id: int, **init_kwargs: Any) -> None:
         )
     _num_chains = int(os.environ.get("HOMODYNE_CMC_NUM_CHAINS", "4"))
     _xla_flags = os.environ.get("XLA_FLAGS", "")
-    _xla_flags = _re.sub(
-        r"--xla_force_host_platform_device_count=\d+", "", _xla_flags
-    )
+    _xla_flags = _re.sub(r"--xla_force_host_platform_device_count=\d+", "", _xla_flags)
     os.environ["XLA_FLAGS"] = (
-        _xla_flags.strip()
-        + f" --xla_force_host_platform_device_count={_num_chains}"
+        _xla_flags.strip() + f" --xla_force_host_platform_device_count={_num_chains}"
     )
 
     import jax
@@ -690,8 +687,7 @@ def _run_shard_worker(
     _xla_flags = os.environ.get("XLA_FLAGS", "")
     _xla_flags = _re.sub(r"--xla_force_host_platform_device_count=\d+", "", _xla_flags)
     os.environ["XLA_FLAGS"] = (
-        _xla_flags.strip()
-        + f" --xla_force_host_platform_device_count={_num_chains}"
+        _xla_flags.strip() + f" --xla_force_host_platform_device_count={_num_chains}"
     )
 
     import jax
@@ -1340,9 +1336,7 @@ class MultiprocessingBackend(CMCBackend):
                 should_use_pool,
             )
 
-            use_pool = should_use_pool(
-                n_shards=n_shards, n_workers=actual_workers
-            )
+            use_pool = should_use_pool(n_shards=n_shards, n_workers=actual_workers)
             pool = None  # type: ignore[assignment]
             if use_pool:
                 try:

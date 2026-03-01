@@ -182,9 +182,7 @@ class WorkerPool:
         for p in self._processes:
             p.join(timeout=timeout)
             if p.is_alive():
-                logger.warning(
-                    "Worker %d did not exit gracefully, terminating", p.pid
-                )
+                logger.warning("Worker %d did not exit gracefully, terminating", p.pid)
                 p.terminate()
                 p.join(timeout=15)
                 if p.is_alive():

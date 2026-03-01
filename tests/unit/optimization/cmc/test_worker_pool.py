@@ -24,11 +24,13 @@ def _error_worker(task, **init_kwargs):
 def _raw_queue_worker(task, **init_kwargs):
     """Worker that puts results on an external queue and returns None."""
     ext_queue = init_kwargs["result_queue"]
-    ext_queue.put({
-        "task_id": task["task_id"],
-        "value": task["value"] * 2,
-        "success": True,
-    })
+    ext_queue.put(
+        {
+            "task_id": task["task_id"],
+            "value": task["value"] * 2,
+            "success": True,
+        }
+    )
     return None
 
 
@@ -86,7 +88,9 @@ class TestWorkerPool:
         """Test that a single worker handles multiple tasks."""
         from homodyne.optimization.cmc.backends.worker_pool import WorkerPool
 
-        pool = WorkerPool(n_workers=1, worker_fn=_counting_worker, worker_init_kwargs={})
+        pool = WorkerPool(
+            n_workers=1, worker_fn=_counting_worker, worker_init_kwargs={}
+        )
         try:
             for i in range(3):
                 pool.submit({"task_id": i})

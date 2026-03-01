@@ -194,9 +194,11 @@ class TestCMCConfig:
 
     def test_chain_method_from_dict(self):
         """Test chain_method parsed from per_shard_mcmc section."""
-        config = CMCConfig.from_dict({
-            "per_shard_mcmc": {"chain_method": "sequential"},
-        })
+        config = CMCConfig.from_dict(
+            {
+                "per_shard_mcmc": {"chain_method": "sequential"},
+            }
+        )
         assert config.chain_method == "sequential"
 
     def test_chain_method_from_dict_default(self):

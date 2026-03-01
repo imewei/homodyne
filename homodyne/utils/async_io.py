@@ -136,9 +136,7 @@ class AsyncWriter:
         with self._lock:
             self._futures.append(future)
 
-    def submit_task(
-        self, fn: Callable[..., None], *args: Any, **kwargs: Any
-    ) -> None:
+    def submit_task(self, fn: Callable[..., None], *args: Any, **kwargs: Any) -> None:
         """Submit an arbitrary callable for background execution."""
         future = self._executor.submit(fn, *args, **kwargs)
         with self._lock:

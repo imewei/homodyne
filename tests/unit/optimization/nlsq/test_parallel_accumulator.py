@@ -13,6 +13,7 @@ class TestParallelThreshold:
         from homodyne.optimization.nlsq.parallel_accumulator import (
             should_use_parallel_accumulation,
         )
+
         assert not should_use_parallel_accumulation(n_chunks=5)
         assert not should_use_parallel_accumulation(n_chunks=9)
 
@@ -20,6 +21,7 @@ class TestParallelThreshold:
         from homodyne.optimization.nlsq.parallel_accumulator import (
             should_use_parallel_accumulation,
         )
+
         assert should_use_parallel_accumulation(n_chunks=10)
         assert should_use_parallel_accumulation(n_chunks=500)
 
@@ -91,7 +93,11 @@ class TestAccumulationCorrectness:
         rng = np.random.default_rng(99)
         n_params = 3
         chunks = [
-            (rng.standard_normal((n_params, n_params)), rng.standard_normal(n_params), float(i))
+            (
+                rng.standard_normal((n_params, n_params)),
+                rng.standard_normal(n_params),
+                float(i),
+            )
             for i in range(12)
         ]
 
@@ -121,7 +127,11 @@ class TestAccumulationCorrectness:
         rng = np.random.default_rng(77)
         n_params = 3
         chunks = [
-            (rng.standard_normal((n_params, n_params)), rng.standard_normal(n_params), float(i))
+            (
+                rng.standard_normal((n_params, n_params)),
+                rng.standard_normal(n_params),
+                float(i),
+            )
             for i in range(12)
         ]
 
@@ -145,7 +155,11 @@ class TestAccumulationCorrectness:
         rng = np.random.default_rng(55)
         n_params = 3
         chunks = [
-            (rng.standard_normal((n_params, n_params)), rng.standard_normal(n_params), float(i))
+            (
+                rng.standard_normal((n_params, n_params)),
+                rng.standard_normal(n_params),
+                float(i),
+            )
             for i in range(12)
         ]
 

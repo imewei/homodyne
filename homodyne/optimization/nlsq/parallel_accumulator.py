@@ -177,6 +177,7 @@ def accumulate_chunks_parallel(
 # OOC Parallel Compute: Factory, shared memory, and worker pool
 # ============================================================================
 
+
 def should_use_parallel_compute(n_chunks: int) -> bool:
     """Determine if parallel chunk COMPUTE is worthwhile.
 
@@ -238,10 +239,12 @@ def create_ooc_kernels(
     from homodyne.core.physics_nlsq import compute_g2_scaled
 
     @jax.jit
-    def compute_chunk_accumulators(p, phi_c, t1_c, t2_c, g2_c, sigma):
+    def compute_chunk_accumulators(
+        p: Any, phi_c: Any, t1_c: Any, t2_c: Any, g2_c: Any, sigma: Any
+    ) -> Any:
         """Compute J^T J, J^T r, and chi2 for a chunk."""
 
-        def r_fn(curr_p):
+        def r_fn(curr_p: Any) -> Any:
             if per_angle_scaling:
                 contrast_arr = curr_p[:n_phi]
                 offset_arr = curr_p[n_phi : 2 * n_phi]
@@ -268,11 +271,9 @@ def create_ooc_kernels(
                     ),
                     in_axes=(0, 0, 0),
                 )
-                g2_theory_grid = compute_g2_vmap(
-                    phi_unique, contrast_arr, offset_arr
-                )
+                g2_theory_grid = compute_g2_vmap(phi_unique, contrast_arr, offset_arr)
             else:
-                compute_g2_vmap = jax.vmap(
+                compute_g2_vmap = jax.vmap(  # type: ignore[assignment]
                     lambda phi_val: jnp.squeeze(
                         compute_g2_scaled(
                             params=physical_params,
@@ -288,17 +289,13 @@ def create_ooc_kernels(
                     ),
                     in_axes=0,
                 )
-                g2_theory_grid = compute_g2_vmap(phi_unique)
+                g2_theory_grid = compute_g2_vmap(phi_unique)  # type: ignore[call-arg]
 
             g2_theory_flat = g2_theory_grid.flatten()
             phi_indices = jnp.searchsorted(phi_unique, phi_c)
             t1_indices = jnp.searchsorted(t1_unique_global, t1_c)
             t2_indices = jnp.searchsorted(t2_unique_global, t2_c)
-            flat_indices = (
-                phi_indices * (n_t1 * n_t2)
-                + t1_indices * n_t2
-                + t2_indices
-            )
+            flat_indices = phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices
             g2_theory_chunk = g2_theory_flat[flat_indices]
 
             w = 1.0 / sigma
@@ -310,7 +307,9 @@ def create_ooc_kernels(
         return J.T @ J, J.T @ r, jnp.sum(r**2)
 
     @jax.jit
-    def compute_chunk_chi2(p, phi_c, t1_c, t2_c, g2_c, sigma):
+    def compute_chunk_chi2(
+        p: Any, phi_c: Any, t1_c: Any, t2_c: Any, g2_c: Any, sigma: Any
+    ) -> Any:
         """Compute chi2 for a chunk (no Jacobian)."""
         if per_angle_scaling:
             contrast_arr = p[:n_phi]
@@ -338,11 +337,9 @@ def create_ooc_kernels(
                 ),
                 in_axes=(0, 0, 0),
             )
-            g2_theory_grid = compute_g2_vmap(
-                phi_unique, contrast_arr, offset_arr
-            )
+            g2_theory_grid = compute_g2_vmap(phi_unique, contrast_arr, offset_arr)
         else:
-            compute_g2_vmap = jax.vmap(
+            compute_g2_vmap = jax.vmap(  # type: ignore[assignment]
                 lambda phi_val: jnp.squeeze(
                     compute_g2_scaled(
                         params=physical_params,
@@ -358,15 +355,13 @@ def create_ooc_kernels(
                 ),
                 in_axes=0,
             )
-            g2_theory_grid = compute_g2_vmap(phi_unique)
+            g2_theory_grid = compute_g2_vmap(phi_unique)  # type: ignore[call-arg]
 
         g2_theory_flat = g2_theory_grid.flatten()
         phi_indices = jnp.searchsorted(phi_unique, phi_c)
         t1_indices = jnp.searchsorted(t1_unique_global, t1_c)
         t2_indices = jnp.searchsorted(t2_unique_global, t2_c)
-        flat_indices = (
-            phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices
-        )
+        flat_indices = phi_indices * (n_t1 * n_t2) + t1_indices * n_t2 + t2_indices
         g2_theory_chunk = g2_theory_flat[flat_indices]
 
         w = 1.0 / sigma
@@ -501,7 +496,7 @@ def _ooc_compute_chunk(
     t1_c = _w_t1[start:end]  # type: ignore[index]
     t2_c = _w_t2[start:end]  # type: ignore[index]
     g2_c = _w_g2[start:end]  # type: ignore[index]
-    sigma_c = _w_sigma[start:end] if _w_sigma is not None else 1.0  # type: ignore[index]
+    sigma_c = _w_sigma[start:end] if _w_sigma is not None else 1.0
 
     p = jnp.asarray(params_np)
     JtJ, Jtr, chi2 = _w_compute_accumulators(  # type: ignore[misc]
@@ -539,7 +534,7 @@ def _ooc_compute_chi2_chunk(
     t1_c = _w_t1[start:end]  # type: ignore[index]
     t2_c = _w_t2[start:end]  # type: ignore[index]
     g2_c = _w_g2[start:end]  # type: ignore[index]
-    sigma_c = _w_sigma[start:end] if _w_sigma is not None else 1.0  # type: ignore[index]
+    sigma_c = _w_sigma[start:end] if _w_sigma is not None else 1.0
 
     p = jnp.asarray(params_np)
     chi2 = _w_compute_chi2(  # type: ignore[misc]
@@ -591,9 +586,7 @@ class OOCSharedArrays:
             self._create_shm("sigma", sigma_flat)
 
     def _create_shm(self, name: str, arr: np.ndarray) -> None:
-        shm = multiprocessing.shared_memory.SharedMemory(
-            create=True, size=arr.nbytes
-        )
+        shm = multiprocessing.shared_memory.SharedMemory(create=True, size=arr.nbytes)
         buf = np.ndarray(arr.shape, dtype=arr.dtype, buffer=shm.buf)
         buf[:] = arr
         self._shm_blocks.append(shm)
@@ -702,9 +695,7 @@ class OOCComputePool:
             results.append(future.result(timeout=300))
         return results
 
-    def compute_chi2(
-        self, params: np.ndarray, stride: int = 1
-    ) -> float:
+    def compute_chi2(self, params: np.ndarray, stride: int = 1) -> float:
         """Dispatch chi2-only computation across workers (no Jacobian).
 
         Parameters

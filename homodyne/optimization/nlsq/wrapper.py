@@ -5619,9 +5619,7 @@ class NLSQWrapper(NLSQAdapterBase):
 
             # Use parallel pool for chi2 evaluation when available
             if ooc_pool is not None:
-                return ooc_pool.compute_chi2(
-                    np.asarray(params_eval), stride=stride
-                )
+                return ooc_pool.compute_chi2(np.asarray(params_eval), stride=stride)
 
             # Sequential fallback
             total_c2 = 0.0
@@ -5695,8 +5693,12 @@ class NLSQWrapper(NLSQAdapterBase):
                 )
 
                 ooc_shared = OOCSharedArrays(
-                    phi_ordered, t1_ordered, t2_ordered, g2_ordered,
-                    sigma_ordered, chunk_boundaries,
+                    phi_ordered,
+                    t1_ordered,
+                    t2_ordered,
+                    g2_ordered,
+                    sigma_ordered,
+                    chunk_boundaries,
                 )
 
                 physics_config = {
@@ -5718,9 +5720,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     shared_arrays=ooc_shared,
                     physics_config=physics_config,
                     chunk_boundaries=chunk_boundaries,
-                    threads_per_worker=max(
-                        1, (os.cpu_count() or 4) // n_ooc_workers
-                    ),
+                    threads_per_worker=max(1, (os.cpu_count() or 4) // n_ooc_workers),
                 )
                 logger.info(
                     "Parallel OOC compute: %d chunks across %d workers",
@@ -5755,9 +5755,7 @@ class NLSQWrapper(NLSQAdapterBase):
                     )
                 else:
                     # Sequential compute: iterate chunks locally
-                    chunk_results_local: list[
-                        tuple[np.ndarray, np.ndarray, float]
-                    ] = []
+                    chunk_results_local: list[tuple[np.ndarray, np.ndarray, float]] = []
                     count = 0
                     for indices_chunk in iterator:
                         phi_c = phi_flat[indices_chunk]
@@ -5765,9 +5763,7 @@ class NLSQWrapper(NLSQAdapterBase):
                         t2_c = t2_flat[indices_chunk]
                         g2_c = g2_flat[indices_chunk]
                         sigma_c = (
-                            sigma_flat[indices_chunk]
-                            if sigma_flat is not None
-                            else 1.0
+                            sigma_flat[indices_chunk] if sigma_flat is not None else 1.0
                         )
                         JtJ, Jtr, chi2 = compute_chunk_accumulators(
                             params_curr, phi_c, t1_c, t2_c, g2_c, sigma_c
@@ -5815,9 +5811,13 @@ class NLSQWrapper(NLSQAdapterBase):
 
                 # Check for invalid Jacobian/Residuals
                 if jnp.any(jnp.isnan(total_Jtr)) or jnp.any(jnp.isinf(total_JtJ)):
-                    logger.warning("Gradient/Hessian contains NaNs/Infs. Checking params.")
+                    logger.warning(
+                        "Gradient/Hessian contains NaNs/Infs. Checking params."
+                    )
                     if i == 0:
-                        raise RuntimeError("Initial parameters produced invalid gradients.")
+                        raise RuntimeError(
+                            "Initial parameters produced invalid gradients."
+                        )
                     break
 
                 diag_idx = jnp.diag_indices_from(total_JtJ)
