@@ -129,7 +129,7 @@ class AsyncWriter:
     @staticmethod
     def _write_npz(path: Path, data: dict[str, np.ndarray]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(str(path), **data)
+        np.savez_compressed(str(path), **data)  # type: ignore[arg-type]
 
     @staticmethod
     def _write_json(path: Path, data: dict[str, Any]) -> None:

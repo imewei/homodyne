@@ -59,8 +59,8 @@ def accumulate_chunks_sequential(
     count : int
         Number of chunks accumulated.
     """
-    total_JtJ = None
-    total_Jtr = None
+    total_JtJ: np.ndarray | None = None
+    total_Jtr: np.ndarray | None = None
     total_chi2 = 0.0
     count = 0
 
@@ -73,6 +73,7 @@ def accumulate_chunks_sequential(
         total_chi2 += chi2
         count += 1
 
+    assert total_JtJ is not None and total_Jtr is not None, "Empty chunks list"
     return total_JtJ, total_Jtr, total_chi2, count
 
 
@@ -126,8 +127,8 @@ def accumulate_chunks_parallel(
                 if partition
             ]
 
-            total_JtJ = None
-            total_Jtr = None
+            total_JtJ: np.ndarray | None = None
+            total_Jtr: np.ndarray | None = None
             total_chi2 = 0.0
             total_count = 0
 
@@ -141,6 +142,7 @@ def accumulate_chunks_parallel(
                 total_chi2 += chi2
                 total_count += count
 
+        assert total_JtJ is not None and total_Jtr is not None, "No partitions"
         return total_JtJ, total_Jtr, total_chi2, total_count
 
     except (OSError, RuntimeError) as e:
