@@ -1821,6 +1821,7 @@ def _save_results(
         logger.warning(f"Failed to save results: {e}")
 
     # Wait for background writes to complete
+    logger.debug("Waiting for background result writes to complete...")
     errors = writer.wait_all(timeout=60.0)
     if errors:
         logger.warning(
