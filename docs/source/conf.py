@@ -254,10 +254,29 @@ latex_use_xindy = False
 latex_elements = {
     "papersize": "letterpaper",
     "pointsize": "10pt",
+    "cmappkg": "",  # cmap is pdftex-only; not needed with xelatex
     "preamble": r"""
 \usepackage{fontspec}
 \usepackage{unicode-math}
 \setmonofont{DejaVu Sans Mono}
+% Suppress cosmetic box warnings from auto-generated code blocks and API docs
+\hbadness=10000
+\vbadness=10000
+\hfuzz=\maxdimen
+\vfuzz=\maxdimen
+\fvset{hfuzz=\maxdimen}
+% Redefine \sloppy so minipage/varwidth environments preserve our \hfuzz
+\makeatletter
+\DeclareRobustCommand\sloppy{%
+  \tolerance 9999%
+  \emergencystretch 3em%
+  \hfuzz\maxdimen
+  \vfuzz\hfuzz}
+\makeatother
+\sloppy
+% Suppress persistent page-oscillation warning in large (800+ page) documents
+\usepackage{silence}
+\WarningFilter{latex}{Label(s) may have changed}
 """,
     "fncychap": r"\usepackage[Sonny]{fncychap}",
 }
