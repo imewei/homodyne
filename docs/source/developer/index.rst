@@ -80,8 +80,9 @@ Architecture Overview
 - ``physics_utils.py`` provides shared utilities (``safe_exp``, ``safe_sinc``,
   ``calculate_diffusion_coefficient``).
 
-See :doc:`architecture` for module-level design decisions and :doc:`adrs/index`
-for Architecture Decision Records (ADRs).
+See :doc:`architecture` for module-level design decisions, :doc:`adrs/index`
+for Architecture Decision Records (ADRs), and :doc:`../architecture/index`
+for detailed subsystem architecture documentation.
 
 ----
 

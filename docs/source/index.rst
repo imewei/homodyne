@@ -159,6 +159,13 @@ Documentation
    developer/index
 
 .. toctree::
+   :maxdepth: 2
+   :caption: Architecture Deep Dives
+   :hidden:
+
+   architecture/index
+
+.. toctree::
    :maxdepth: 1
    :caption: Additional Resources
    :hidden:
@@ -183,6 +190,8 @@ Documentation
      - Worked examples for static and laminar flow analyses.
    * - :doc:`developer/index`
      - Contributing, architecture, and testing guide.
+   * - :doc:`architecture/index`
+     - Internal architecture deep dives for each subsystem.
 
 ----
 
