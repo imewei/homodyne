@@ -70,11 +70,13 @@ class WorkerPool:
         worker_fn: Callable[..., dict[str, Any] | None],
         worker_init_kwargs: dict[str, Any],
         worker_init_fn: Callable[..., None] | None = None,
+        startup_timeout: float = 120.0,
     ) -> None:
         self._n_workers = n_workers
         self._worker_fn = worker_fn
         self._init_kwargs = worker_init_kwargs
         self._init_fn = worker_init_fn
+        self._startup_timeout = startup_timeout
 
         ctx = multiprocessing.get_context("spawn")
         self._task_queues: list[multiprocessing.Queue] = [
@@ -91,7 +93,13 @@ class WorkerPool:
         self._start_workers(ctx)
 
     def _start_workers(self, ctx: multiprocessing.context.SpawnContext) -> None:
-        """Spawn persistent worker processes."""
+        """Spawn persistent worker processes and wait for readiness.
+
+        Each worker sends a ready signal after completing initialization
+        (module imports + init_fn). This ensures tasks are not submitted
+        to workers that are still starting up.
+        """
+        ready_queue: multiprocessing.Queue = ctx.Queue()
         for i in range(self._n_workers):
             p = ctx.Process(
                 target=_worker_event_loop,
@@ -102,13 +110,37 @@ class WorkerPool:
                     self._worker_fn,
                     self._init_kwargs,
                     self._init_fn,
+                    ready_queue,
                 ),
                 daemon=True,
             )
             p.start()
             self._processes.append(p)
+
+        # Wait for all workers to signal readiness
+        ready_count = 0
+        for _ in range(self._n_workers):
+            try:
+                ready_queue.get(timeout=self._startup_timeout)
+                ready_count += 1
+            except queue.Empty:
+                logger.warning(
+                    "Worker startup timed out after %.0fs (%d/%d ready)",
+                    self._startup_timeout,
+                    ready_count,
+                    self._n_workers,
+                )
+                break
+
+        try:
+            ready_queue.close()
+        except (OSError, ValueError):
+            pass
+
         self._alive = True
-        logger.info("WorkerPool started: %d persistent workers", self._n_workers)
+        logger.info(
+            "WorkerPool started: %d/%d workers ready", ready_count, self._n_workers
+        )
 
     @property
     def n_workers(self) -> int:
@@ -215,6 +247,7 @@ def _worker_event_loop(
     worker_fn: Callable[..., dict[str, Any] | None],
     init_kwargs: dict[str, Any],
     init_fn: Callable[..., None] | None = None,
+    ready_queue: multiprocessing.Queue | None = None,
 ) -> None:
     """Persistent worker event loop.
 
@@ -226,9 +259,17 @@ def _worker_event_loop(
     init_fn : callable or None
         If provided, called once with ``(worker_id, **init_kwargs)``
         before the event loop starts.
+    ready_queue : multiprocessing.Queue or None
+        If provided, a ready signal is sent after initialization completes.
     """
     if init_fn is not None:
         init_fn(worker_id, **init_kwargs)
+
+    if ready_queue is not None:
+        try:
+            ready_queue.put(worker_id)
+        except (OSError, ValueError):
+            pass
 
     while True:
         try:
