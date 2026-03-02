@@ -158,8 +158,8 @@ Large datasets benefit from XLA's ability to fuse memory operations:
 
 .. code-block:: bash
 
-   homodyne-config-xla --mode hpc --show
-   # Then apply the recommended XLA flags
+   homodyne-config-xla --mode cmc-hpc
+   # Reload shell to apply the new XLA_FLAGS
 
 See :doc:`../04_practical_guides/performance_tuning` for XLA configuration.
 

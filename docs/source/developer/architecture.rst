@@ -12,13 +12,13 @@ architecture is essential for contributing to any layer of the stack.
 Component Overview
 ------------------
 
-Homodyne is organized into seven top-level packages, each with a single well-defined
+Homodyne is organized into ten top-level packages, each with a single well-defined
 responsibility:
 
 .. code-block:: text
 
    homodyne/
-   ├── core/           # Physics kernel — JIT-compiled JAX functions
+   ├── core/           # Physics kernel -- JIT-compiled JAX functions
    ├── optimization/
    │   ├── nlsq/       # Primary optimizer: Trust-region Levenberg-Marquardt
    │   └── cmc/        # Secondary: Consensus Monte Carlo (NumPyro NUTS)
@@ -26,6 +26,9 @@ responsibility:
    ├── config/         # YAML configuration: parsing, validation, defaults
    ├── cli/            # Entry points and shell completion
    ├── device/         # CPU/NUMA topology detection
+   ├── io/             # Result serialization (JSON + NPZ writers)
+   ├── viz/            # Visualization (Matplotlib, datashader backend)
+   ├── runtime/        # Shell completion, system validation, post-install
    └── utils/          # Logging, exceptions, shared utilities
 
 The key architectural constraint is that **numerical logic never depends on Python-level
@@ -112,6 +115,7 @@ Core Module Map
    ├── physics_nlsq.py       # NLSQ-specific physics helpers
    ├── backend_api.py        # Abstract backend API (NLSQ/CMC interface)
    ├── diagonal_correction.py # Diagonal correction for c2 matrices
+   ├── numpy_gradients.py    # NumPy-based gradient/Hessian computation
    └── model_mixins.py       # Mixin classes for model composition
 
 **Critical distinction**: NLSQ and CMC use different physics implementations:
@@ -147,8 +151,20 @@ NLSQ Module Map
    ├── core.py               # Core NLSQ computation loop
    ├── data_prep.py          # Data preprocessing for NLSQ
    ├── memory.py             # Memory threshold / streaming selection
-   ├── results.py            # NLSQResult dataclass
+   ├── results.py            # OptimizationResult dataclass
+   ├── result_builder.py     # Result construction and quality flags
+   ├── multistart.py         # Multi-start optimization
+   ├── jacobian.py           # Jacobian computation utilities
+   ├── parallel_accumulator.py  # Parallel residual accumulation
+   ├── parameter_utils.py    # Parameter transformation utilities
+   ├── transforms.py         # Parameter bound transforms
+   ├── progress.py           # Progress reporting
    ├── strategies/           # Memory strategy implementations
+   │   ├── executors.py      #   Strategy selection and dispatch
+   │   ├── residual.py       #   Residual function (NumPy path)
+   │   ├── residual_jit.py   #   Residual function (JIT path)
+   │   ├── sequential.py     #   Sequential per-angle optimization
+   │   └── chunking.py       #   Out-of-core data chunking
    └── validation/           # Input validation for NLSQ
 
 
@@ -166,16 +182,22 @@ CMC Module Map
    ├── model.py              # NumPyro model definition
    │                         #   5 model variants, get_xpcs_model() factory
    ├── backends/
-   │   └── multiprocessing.py  # Multiprocessing backend
-   │                            #   Spawns N workers (physical_cores/2 - 1)
-   │                            #   Each worker has 4 virtual JAX devices
+   │   ├── base.py             # Backend abstract base class
+   │   ├── multiprocessing.py  # Primary: multiprocessing backend
+   │   │                       #   Spawns N workers (physical_cores/2 - 1)
+   │   │                       #   Each worker has 4 virtual JAX devices
+   │   ├── worker_pool.py      # Persistent WorkerPool + SharedDataManager
+   │   │                       #   Reuses workers across shards
+   │   │                       #   Shared memory for shard data arrays
+   │   ├── pbs.py              # PBS cluster backend
+   │   └── pjit.py             # pjit-based single-process backend
    ├── config.py             # CMCConfig dataclass, CMCConfig.from_dict()
    ├── data_prep.py          # Shard construction and data preparation
    ├── diagnostics.py        # ArviZ diagnostics: R-hat, ESS, BFMI
    ├── io.py                 # Result serialization
    ├── priors.py             # Prior distribution constructors
    ├── reparameterization.py # Log-space parameter reparameterization
-   │                         #   compute_t_ref(), reparameterize_nlsq()
+   │                         #   compute_t_ref(), transform_nlsq_to_reparam_space()
    ├── results.py            # CMCResult dataclass
    └── scaling.py            # Per-angle scaling for CMC
 

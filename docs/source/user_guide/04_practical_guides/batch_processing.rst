@@ -53,7 +53,7 @@ A minimal script to process a list of HDF5 files:
        stem = h5_path.stem
 
        # Override file_path in config for this specific file
-       config = ConfigManager.from_yaml(str(base_config_path))
+       config = ConfigManager(str(base_config_path))
        config.data.file_path = str(h5_path)
 
        try:
@@ -141,7 +141,7 @@ If each HDF5 file contains data at multiple q-values, iterate over q:
 
    results_by_q = {}
    for q in q_values:
-       config = ConfigManager.from_yaml("config_template.yaml")
+       config = ConfigManager("config_template.yaml")
        config.data.q_value = q
 
        data = load_xpcs_data(config=config)
@@ -240,7 +240,7 @@ On HPC clusters, use job arrays to process files in parallel:
        output_dir = Path(args.output)
        output_dir.mkdir(parents=True, exist_ok=True)
 
-       config = ConfigManager.from_yaml(args.config)
+       config = ConfigManager(args.config)
        config.data.file_path = args.input
 
        data = load_xpcs_data(config=config)

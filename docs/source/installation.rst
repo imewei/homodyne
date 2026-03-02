@@ -329,25 +329,35 @@ CPU Optimization Notes
 Homodyne uses XLA's CPU backend for all numerical computation. Two settings
 significantly affect performance on multi-core servers:
 
-**Virtual JAX devices (recommended):**
+**Set XLA mode (persists across sessions):**
 
 .. code-block:: bash
 
-   # Expose 8 virtual CPU devices to JAX
-   homodyne-config-xla --mode multicore --show
+   # CMC: 4 virtual devices for parallel NUTS chains (default)
+   homodyne-config-xla --mode cmc
+
+   # Auto-detect: scales device count by CPU cores (recommended)
+   homodyne-config-xla --mode auto
+
+   # NLSQ-only: 1 device (no parallelism needed)
+   homodyne-config-xla --mode nlsq
+
+   # HPC: 8 devices for nodes with 36+ cores
+   homodyne-config-xla --mode cmc-hpc
 
 This sets ``XLA_FLAGS=--xla_force_host_platform_device_count=N`` so that
-``jax.pmap`` can distribute work across logical CPU cores.
+NumPyro can run NUTS chains in parallel via ``jax.pmap``.
 
-**NUMA-aware threading:**
+**View current configuration:**
 
 .. code-block:: bash
 
-   # Configure NUMA-aware thread affinity
-   homodyne-config-xla --mode numa --show
+   homodyne-config-xla --show
 
-On NUMA systems, binding threads to specific cores can reduce memory-access
-latency by 20–40% for large XPCS datasets.
+.. note::
+
+   ``--show`` and ``--mode`` are mutually exclusive. Use ``--mode`` to set,
+   ``--show`` to view.
 
 See :doc:`user_guide/04_practical_guides/performance_tuning` for detailed
 benchmarks and tuning guidelines.

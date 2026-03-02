@@ -25,7 +25,7 @@ class loads, validates, and provides access to all settings:
 
    from homodyne.config import ConfigManager
 
-   config = ConfigManager.from_yaml("config.yaml")
+   config = ConfigManager("config.yaml")
 
    # Access configuration sections
    print(config.analysis_mode)              # "static" or "laminar_flow"
@@ -411,7 +411,7 @@ Or validate programmatically:
    from homodyne.config import ConfigManager
 
    try:
-       config = ConfigManager.from_yaml("config.yaml")
+       config = ConfigManager("config.yaml")
        print("Configuration valid")
    except ValueError as e:
        print(f"Configuration error: {e}")

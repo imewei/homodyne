@@ -14,9 +14,9 @@ transport properties in flowing soft matter systems.
 
 ## Homodyne Model
 
-$$c_2(\phi, t_1, t_2) = \text{offset} + \text{contrast} \times \exp\left(-q^2 \int_{t_1}^{t_2} D(t')\ dt'\right) \times \mathrm{sinc}^2\left(\frac{qL\cos(\phi_0 - \phi)}{2\pi} \int_{t_1}^{t_2} \dot{\gamma}(t')\ dt'\right)$$
+$$c_2(\phi, t_1, t_2) = \text{offset} + \text{contrast} \times \exp\left(-q^2 \int_{t_1}^{t_2} J(t')\ dt'\right) \times \mathrm{sinc}^2\left(\frac{qL\cos(\phi_0 - \phi)}{2\pi} \int_{t_1}^{t_2} \dot{\gamma}(t')\ dt'\right)$$
 
-$$D(t) = D_0 \cdot t^{\alpha} + D_{\text{offset}} \qquad \dot{\gamma}(t) = \dot{\gamma}_0 \cdot t^{\beta} + \dot{\gamma}_{\text{offset}}$$
+$$J(t) = D_0 \cdot t^{\alpha} + D_{\text{offset}} \qquad \dot{\gamma}(t) = \dot{\gamma}_0 \cdot t^{\beta} + \dot{\gamma}_{\text{offset}}$$
 
 All time integrals are evaluated numerically via cumulative trapezoid on the discrete time grid.
 

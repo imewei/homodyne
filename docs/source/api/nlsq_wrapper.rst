@@ -145,7 +145,7 @@ Direct usage of NLSQWrapper
    wrapper = NLSQWrapper(config=config)
    result = wrapper.fit(data=data, parameter_space=param_space)
 
-   print(result.params)
+   print(result.parameters)
    print(result.residuals)
 
 Large dataset (>100 M points) with streaming

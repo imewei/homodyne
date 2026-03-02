@@ -10,7 +10,7 @@ By the end of this section you will understand:
 - Why per-angle corrections are needed in XPCS
 - The four per-angle modes and their parameter counts
 - When to use each mode
-- How to configure per-angle modes for both NLSQ and CMC
+- How to configure per-angle modes for NLSQ and CMC (note: ``fourier`` is NLSQ-only)
 - How to diagnose and fix degeneracy issues
 
 ---
@@ -166,6 +166,12 @@ Configuration Examples
 -----------------------
 
 **NLSQ + CMC with matching per_angle_mode:**
+
+.. note::
+
+   CMC supports ``auto``, ``constant``, ``constant_averaged``, and ``individual``
+   per-angle modes. The ``fourier`` mode is **NLSQ-only** and is not valid for CMC.
+   If you use ``fourier`` in NLSQ, switch to ``auto`` or ``individual`` for CMC.
 
 Always set the same ``per_angle_mode`` in both NLSQ and CMC to ensure
 that the NLSQ warm-start priors match the CMC parameterization:

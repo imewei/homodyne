@@ -104,9 +104,9 @@ Basic static mode
    # Minimal usage — NLSQAdapter is used by default
    result = fit_nlsq_jax(data, config, use_adapter=True)
 
-   print(f"D0      = {result.params[0]:.4g}")
-   print(f"alpha   = {result.params[1]:.4f}")
-   print(f"D_offset= {result.params[2]:.4g}")
+   print(f"D0      = {result.parameters[0]:.4g}")
+   print(f"alpha   = {result.parameters[1]:.4f}")
+   print(f"D_offset= {result.parameters[2]:.4g}")
    print(f"chi^2   = {result.chi_squared:.4f}")
 
 Laminar flow with per-angle scaling

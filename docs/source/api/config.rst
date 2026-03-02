@@ -144,7 +144,7 @@ A complete YAML configuration file for ``laminar_flow`` analysis:
          max_divergence_rate: 0.10
          require_nlsq_warmstart: false
          max_r_hat: 1.1
-         min_ess: 100
+         min_ess: 400
 
    parameter_space:
      D0:

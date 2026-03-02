@@ -48,7 +48,7 @@ Complete Workflow
    logger = get_logger(__name__)
 
    # Step 1: Load configuration
-   config = ConfigManager.from_yaml("config.yaml")
+   config = ConfigManager("config.yaml")
 
    # Step 2: Load experimental data
    data = load_xpcs_data("config.yaml")

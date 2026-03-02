@@ -97,7 +97,7 @@ Basic Usage
    from homodyne.config import ConfigManager
 
    # Load configuration
-   config = ConfigManager.from_yaml("config.yaml")
+   config = ConfigManager("config.yaml")
 
    # Create loader and load data
    loader = XPCSDataLoader(config_path="config.yaml")

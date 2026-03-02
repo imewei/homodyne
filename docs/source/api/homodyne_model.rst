@@ -82,7 +82,7 @@ Key Attributes
      - Sample-detector gap [Å]
    * - ``analysis_mode``
      - ``str``
-     - ``"laminar_flow"``, ``"static_isotropic"``, or ``"static_anisotropic"``
+     - ``"static"`` or ``"laminar_flow"``
 
 ----
 

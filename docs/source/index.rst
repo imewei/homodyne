@@ -97,15 +97,15 @@ Or from Python:
    from homodyne.optimization.nlsq import fit_nlsq_jax
 
    # Load configuration and experimental data
-   config = ConfigManager.from_yaml("my_config.yaml")
-   data   = XPCSDataLoader(config).load()
+   config = ConfigManager("my_config.yaml")
+   data   = XPCSDataLoader(config_dict=config.config).load_experimental_data()
 
    # Run NLSQ fit
    result = fit_nlsq_jax(data, config)
 
-   print(f"D0      = {result.params['D0']:.4e}")
-   print(f"alpha   = {result.params['alpha']:.3f}")
-   print(f"Chi2/n  = {result.chi2_reduced:.4f}")
+   print(f"Success:  {result.success}")
+   print(f"Chi2/n:   {result.reduced_chi_squared:.4f}")
+   print(f"Params:   {result.parameters}")
 
 See :doc:`quickstart` for the full five-minute guide.
 

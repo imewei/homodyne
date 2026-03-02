@@ -1424,7 +1424,11 @@ For most users, the default configuration provides robust fitting:
    )
 
    # gamma_dot_t0 should now be correctly estimated
-   print(f"gamma_dot_t0 = {result.params['gamma_dot_t0']:.4e}")
+   # result.parameters is an ndarray; use parameter_names for labels
+   from homodyne.config.parameter_names import get_physical_param_names
+   names = get_physical_param_names("laminar_flow")
+   for name, val in zip(names, result.parameters):
+       print(f"{name} = {val:.4e}")
 
 Advanced Usage: Fine-Tuning
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1436,7 +1440,7 @@ For challenging datasets, you may need to adjust settings:
    from homodyne.config import ConfigManager
 
    # Load configuration from YAML
-   config = ConfigManager.from_yaml("my_config.yaml")
+   config = ConfigManager("my_config.yaml")
 
    # Or modify programmatically
    config.optimization.nlsq.anti_degeneracy.hierarchical.max_outer_iterations = 10
@@ -1466,8 +1470,9 @@ If fitting still produces collapsed parameters:
        print("Gradient collapse was detected!")
        print(f"Response taken: {diagnostics['gradient_monitor']['response_actions']}")
 
-   # Check per-angle parameter CV
-   contrast_cv = np.std(result.params['contrast']) / np.mean(result.params['contrast'])
+   # Check per-angle contrast from diagnostics
+   contrast_vals = diagnostics.get("per_angle_contrast", [])
+   contrast_cv = np.nanstd(contrast_vals) / np.nanmean(contrast_vals) if len(contrast_vals) else 0.0
    if contrast_cv > 0.20:
        print(f"Warning: High contrast variation (CV={contrast_cv:.2%})")
 

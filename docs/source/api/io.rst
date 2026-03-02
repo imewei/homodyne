@@ -105,38 +105,39 @@ Usage Examples
 
 **Saving NLSQ Results**::
 
+    from pathlib import Path
     from homodyne.io import save_nlsq_json_files, save_nlsq_npz_file
 
-    # Save JSON files
+    # Save JSON files (3 separate dicts: parameters, analysis, convergence)
     save_nlsq_json_files(
-        result=nlsq_result,
-        output_dir="./results",
-        config=config_dict
+        param_dict=param_dict,
+        analysis_dict=analysis_dict,
+        convergence_dict=convergence_dict,
+        output_dir=Path("./results"),
     )
 
-    # Save NPZ file
+    # Save NPZ file (arrays for fitted data, residuals, scaling)
     save_nlsq_npz_file(
-        result=nlsq_result,
-        c2_fitted=fitted_surface,
-        output_dir="./results"
+        phi_angles=phi_angles,
+        c2_exp=c2_exp,
+        c2_raw=c2_raw,
+        c2_scaled=c2_scaled,
+        c2_solver=c2_solver,
+        per_angle_scaling=per_angle_scaling,
+        per_angle_scaling_solver=per_angle_scaling_solver,
+        residuals=residuals,
+        output_dir=Path("./results"),
     )
 
 **Creating MCMC Output**::
 
     from homodyne.io import create_mcmc_parameters_dict, create_mcmc_diagnostics_dict
 
-    # Format parameters for output
-    params = create_mcmc_parameters_dict(
-        samples=posterior_samples,
-        param_names=['D0', 'alpha', 'D_offset']
-    )
+    # Format parameters for output (takes the full CMCResult)
+    params = create_mcmc_parameters_dict(result=cmc_result)
 
-    # Format diagnostics
-    diagnostics = create_mcmc_diagnostics_dict(
-        r_hat=r_hat_values,
-        ess=ess_values,
-        divergences=divergence_count
-    )
+    # Format diagnostics (takes the full CMCResult)
+    diagnostics = create_mcmc_diagnostics_dict(result=cmc_result)
 
 **JSON-Safe Conversion**::
 

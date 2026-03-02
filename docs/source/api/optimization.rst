@@ -61,11 +61,11 @@ Pattern 1: NLSQ only (fast, no uncertainties)
    from homodyne.data.xpcs_loader import XPCSDataLoader
 
    config_manager = ConfigManager("my_config.yaml")
-   loader = XPCSDataLoader(config_manager)
-   data = loader.load()
+   loader = XPCSDataLoader(config_dict=config_manager.config)
+   data = loader.load_experimental_data()
 
    result = fit_nlsq_jax(data, config_manager.config)
-   print(result.params)        # best-fit physical parameters
+   print(result.parameters)    # best-fit physical parameters (ndarray)
    print(result.chi_squared)   # goodness-of-fit
 
 Pattern 2: NLSQ warm-start → CMC (recommended for publications)
@@ -79,8 +79,8 @@ Pattern 2: NLSQ warm-start → CMC (recommended for publications)
    from homodyne.data.xpcs_loader import XPCSDataLoader
 
    config_manager = ConfigManager("my_config.yaml")
-   loader = XPCSDataLoader(config_manager)
-   data = loader.load()
+   loader = XPCSDataLoader(config_dict=config_manager.config)
+   data = loader.load_experimental_data()
 
    # Step 1 — NLSQ warm-start
    nlsq_result = fit_nlsq_jax(data, config_manager.config)
@@ -92,9 +92,10 @@ Pattern 2: NLSQ warm-start → CMC (recommended for publications)
        nlsq_result=nlsq_result,
    )
 
-   print(cmc_result.posterior_mean)     # posterior means
-   print(cmc_result.posterior_std)      # posterior standard deviations
-   print(cmc_result.diagnostics)        # R-hat, ESS, divergence rate
+   print(cmc_result.parameters)         # posterior means
+   print(cmc_result.uncertainties)      # posterior standard deviations
+   print(cmc_result.r_hat)              # R-hat per parameter
+   print(cmc_result.ess_bulk)           # bulk ESS per parameter
 
 Pattern 3: CLI workflow (two-step)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -123,7 +124,7 @@ Package Structure
    │   ├── wrapper.py           # NLSQWrapper (streaming, full anti-degeneracy)
    │   ├── config.py            # NLSQConfig dataclass
    │   ├── cmaes_wrapper.py     # CMA-ES global optimizer
-   │   ├── anti_degeneracy_layer.py  # Per-angle scaling defense
+   │   ├── anti_degeneracy_controller.py  # Per-angle scaling defense
    │   ├── strategies/          # Fitting strategy implementations
    │   └── validation/          # Input and result validation
    └── cmc/

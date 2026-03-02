@@ -168,7 +168,7 @@ YAML Configuration Reference
        validation:
          max_divergence_rate: 0.10
          max_r_hat: 1.1
-         min_ess: 100
+         min_ess: 400
 
 ----
 
@@ -208,7 +208,7 @@ Standard NLSQ → CMC workflow
    from homodyne.data.xpcs_loader import XPCSDataLoader
 
    config_manager = ConfigManager("config.yaml")
-   data = XPCSDataLoader(config_manager).load()
+   data = XPCSDataLoader(config_dict=config_manager.config).load_experimental_data()
 
    # Step 1 — NLSQ warm-start
    nlsq_result = fit_nlsq_jax(data, config_manager.config)
@@ -220,8 +220,8 @@ Standard NLSQ → CMC workflow
        nlsq_result=nlsq_result,
    )
 
-   print("Posterior means:", cmc_result.posterior_mean)
-   print("Posterior stds:", cmc_result.posterior_std)
+   print("Posterior means:", cmc_result.parameters)
+   print("Posterior stds:", cmc_result.uncertainties)
 
 CMC without warm-start (exploratory)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -237,13 +237,11 @@ Accessing diagnostics
 
 .. code-block:: python
 
-   diagnostics = cmc_result.diagnostics
-
-   for param, rhat in diagnostics["r_hat"].items():
+   for param, rhat in cmc_result.r_hat.items():
        print(f"{param}: R-hat = {rhat:.3f}")
 
-   print(f"Divergence rate: {diagnostics['divergence_rate']:.2%}")
-   print(f"Effective sample size (min): {min(diagnostics['ess'].values()):.0f}")
+   print(f"Divergences: {cmc_result.divergences}")
+   print(f"ESS (bulk, min): {min(cmc_result.ess_bulk.values()):.0f}")
 
 ----
 

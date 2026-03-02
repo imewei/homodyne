@@ -26,7 +26,7 @@ After calling ``fit_nlsq_jax``, you receive an ``OptimizationResult``:
    from homodyne.config import ConfigManager
    from homodyne.data import load_xpcs_data
 
-   config = ConfigManager.from_yaml("config.yaml")
+   config = ConfigManager("config.yaml")
    data = load_xpcs_data("config.yaml")
    result = fit_nlsq_jax(data, config)
 

@@ -120,7 +120,7 @@ Enable strict validation via:
 Output Data Structure
 ---------------------
 
-``XPCSDataLoader.load()`` returns a dictionary with the following keys:
+``XPCSDataLoader.load_experimental_data()`` returns a dictionary with the following keys:
 
 .. list-table::
    :widths: 20 20 60
@@ -159,39 +159,23 @@ Output Data Structure
 Usage Examples
 --------------
 
-Basic loading
-~~~~~~~~~~~~~
+From a YAML config file
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-   from homodyne.config.manager import ConfigManager
    from homodyne.data.xpcs_loader import XPCSDataLoader
 
-   config_manager = ConfigManager("my_config.yaml")
-   loader = XPCSDataLoader(config_manager)
-   data = loader.load()
+   loader = XPCSDataLoader(config_path="my_config.yaml")
+   data = loader.load_experimental_data()
 
    print(f"Data points:  {len(data['c2'])}")
    print(f"Phi angles:   {data['n_phi']}")
-   print(f"q:            {data['q']:.4g} Å⁻¹")
+   print(f"q:            {data['q']:.4g} Angstrom^-1")
    print(f"Time step dt: {data['dt']:.4g} s")
 
-Direct HDF5 loading
-~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-   from homodyne.data.xpcs_loader import XPCSDataLoader
-
-   loader = XPCSDataLoader.from_file(
-       hdf5_path="/data/xpcs/sample_001.h5",
-       q=0.01,        # override q if not in file
-       dt=1e-3,
-   )
-   data = loader.load()
-
-With validation enabled
-~~~~~~~~~~~~~~~~~~~~~~~
+From a ConfigManager
+~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -199,12 +183,17 @@ With validation enabled
    from homodyne.data.xpcs_loader import XPCSDataLoader
 
    config_manager = ConfigManager("config.yaml")
-   loader = XPCSDataLoader(config_manager, validate=True)
+   loader = XPCSDataLoader(config_dict=config_manager.config)
+   data = loader.load_experimental_data()
 
-   try:
-       data = loader.load()
-   except ValueError as e:
-       print(f"Data validation failed: {e}")
+Using the convenience function
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   from homodyne.data import load_xpcs_data
+
+   data = load_xpcs_data(config_path="my_config.yaml")
 
 ----
 

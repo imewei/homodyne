@@ -107,12 +107,12 @@ If still uncertain, fit both modes and compare:
    data = load_xpcs_data("config.yaml")
 
    # Fit static mode
-   config_static = ConfigManager.from_yaml("config_static.yaml")
+   config_static = ConfigManager("config_static.yaml")
    result_static = fit_nlsq_jax(data, config_static)
    print(f"Static  chi2_nu: {result_static.reduced_chi_squared:.3f}")
 
    # Fit laminar flow mode
-   config_flow = ConfigManager.from_yaml("config_flow.yaml")
+   config_flow = ConfigManager("config_flow.yaml")
    result_flow = fit_nlsq_jax(data, config_flow)
    print(f"Flow    chi2_nu: {result_flow.reduced_chi_squared:.3f}")
 

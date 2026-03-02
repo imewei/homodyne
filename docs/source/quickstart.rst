@@ -85,15 +85,16 @@ Homodyne reads two-time correlation matrices (C2) from HDF5 files:
    from homodyne.config import ConfigManager
 
    # Load configuration
-   config = ConfigManager.from_yaml("my_config.yaml")
+   config = ConfigManager("my_config.yaml")
 
    # Load experimental data
-   loader = XPCSDataLoader(config)
-   data   = loader.load()
+   loader = XPCSDataLoader(config_dict=config.config)
+   data   = loader.load_experimental_data()
 
-   print(f"C2 shape:   {data.c2.shape}")      # (n_q, n_t, n_t)
-   print(f"Time grid:  {data.t_grid.shape}")  # (n_t,)
-   print(f"q-values:   {data.q_values}")      # (n_q,) in nm^-1
+   print(f"C2 shape:   {data['c2_exp'].shape}")           # (n_phi, n_t, n_t)
+   print(f"Time grids: {data['t1'].shape}")               # (n_t,)
+   print(f"q-values:   {data['wavevector_q_list']}")       # (n_q,) in nm^-1
+   print(f"Phi angles: {data['phi_angles_list'].shape}")   # (n_phi,)
 
 The loader validates shape, dtype, and NaN presence before returning.
 
@@ -110,21 +111,21 @@ Levenberg-Marquardt with JAX-JIT compiled residuals:
 .. code-block:: python
 
    from homodyne.optimization.nlsq import fit_nlsq_jax
+   from homodyne.config.parameter_names import get_physical_param_names
 
    result = fit_nlsq_jax(data, config)
 
    # Inspect fit quality
-   print(f"Reduced chi-squared: {result.chi2_reduced:.4f}")
-   print(f"Converged:           {result.converged}")
+   print(f"Reduced chi-squared: {result.reduced_chi_squared:.4f}")
+   print(f"Converged:           {result.success}")
 
-   # Physical parameters
-   params = result.params
-   print(f"D0       = {params['D0']:.4e}  nm^2/s")
-   print(f"alpha    = {params['alpha']:.3f}  (anomalous exponent)")
-   print(f"D_offset = {params['D_offset']:.4e}  nm^2/s")
+   # Physical parameters (ndarray, named via parameter_names)
+   names = get_physical_param_names("static_isotropic")
+   for name, val in zip(names, result.parameters):
+       print(f"{name:>12s} = {val:.4e}")
 
-For ``laminar_flow`` mode the result also contains ``gamma_dot_0``,
-``beta``, ``gamma_dot_offset``, and ``phi_0``.
+For ``laminar_flow`` mode the result also contains ``gamma_dot_t0``,
+``beta``, ``gamma_dot_t_offset``, and ``phi0``.
 
 ----
 
@@ -164,20 +165,21 @@ Interpreting Results
      - 1e-3 – 1e4 nm²/s
      - Diffusion coefficient at zero shear
    * - ``alpha``
-     - 0.5 – 2.0
+     - -2.0 – 2.0
      - Anomalous diffusion exponent (1 = Fickian)
    * - ``D_offset``
      - 0 – D0
      - Background / static diffusion contribution
-   * - ``chi2_reduced``
+   * - ``reduced_chi_squared``
      - ~1.0
      - Goodness-of-fit (1 = perfect, >2 = poor fit)
-   * - ``converged``
+   * - ``success``
      - True / False
-     - Whether the optimizer reached a solution
+     - Whether the optimizer converged
 
-A ``chi2_reduced`` near 1.0 indicates a good fit. Values significantly
-greater than 1 suggest the model or initial parameters need adjustment.
+A ``reduced_chi_squared`` near 1.0 indicates a good fit. Values
+significantly greater than 1 suggest the model or initial parameters
+need adjustment.
 
 ----
 

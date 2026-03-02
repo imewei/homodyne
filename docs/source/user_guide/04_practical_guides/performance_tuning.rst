@@ -40,14 +40,17 @@ for common CPU configurations:
    # Show recommended settings for your hardware
    homodyne-config-xla --show
 
-   # Apply settings for a standard workstation
-   homodyne-config-xla --mode workstation
+   # Configure for CMC Bayesian inference
+   homodyne-config-xla --mode cmc
 
-   # Apply settings for a 36-core HPC node
-   homodyne-config-xla --mode hpc
+   # Configure for CMC on HPC nodes
+   homodyne-config-xla --mode cmc-hpc
 
-   # Apply for a 128-core dual-socket node
-   homodyne-config-xla --mode hpc_large
+   # Configure for NLSQ fitting
+   homodyne-config-xla --mode nlsq
+
+   # Auto-detect best settings
+   homodyne-config-xla --mode auto
 
 **Example output:**
 
@@ -114,7 +117,7 @@ Or let homodyne configure it automatically (recommended):
 
 .. code-block:: bash
 
-   homodyne-config-xla --mode workstation
+   homodyne-config-xla --mode auto
    source ~/.homodyne_xla_config  # Apply the generated config
 
 ---
@@ -207,7 +210,7 @@ Profile memory usage to tune the memory_fraction threshold:
    from homodyne.optimization.nlsq import fit_nlsq_jax
 
    tracemalloc.start()
-   config = ConfigManager.from_yaml("config.yaml")
+   config = ConfigManager("config.yaml")
    data = load_xpcs_data("config.yaml")
    result = fit_nlsq_jax(data, config)
    current, peak = tracemalloc.get_traced_memory()

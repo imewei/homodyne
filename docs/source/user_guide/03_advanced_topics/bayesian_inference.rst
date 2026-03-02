@@ -103,7 +103,7 @@ the NLSQ point estimate.
    from homodyne.utils.logging import get_logger, log_phase
 
    logger = get_logger(__name__)
-   config = ConfigManager.from_yaml("config.yaml")
+   config = ConfigManager("config.yaml")
    data = load_xpcs_data("config.yaml")
 
    # Step 1: NLSQ warm-start (fast, point estimate)
@@ -269,6 +269,94 @@ Empirical comparison (same workload, 4 chains):
 
 - ``parallel``: 4.9 s wall time
 - ``vectorized``: 101 s wall time
+
+.. note::
+
+   The ``parallel`` method automatically falls back to ``sequential`` for
+   shards with fewer than 500 data points, where pmap overhead exceeds the
+   parallel benefit.
+
+---
+
+Parameter Reparameterization
+-----------------------------
+
+CMC supports reparameterized NLSQ priors for parameters that span
+different scales. The ``reparameterization`` module transforms parameters
+into log-space for more efficient NUTS sampling:
+
+.. code-block:: python
+
+   from homodyne.optimization.cmc.reparameterization import (
+       compute_t_ref,
+       transform_nlsq_to_reparam_space,
+   )
+
+   # t_ref is computed from the data time grid
+   t_ref = compute_t_ref(dt, t_max)  # raises ValueError if inputs invalid
+
+   # Transform NLSQ params to log-space for CMC priors
+   reparam_values = transform_nlsq_to_reparam_space(nlsq_params, t_ref)
+
+Reparameterized values (log-space D0, etc.) are computed **after** the
+time grid is constructed, since ``t_ref = sqrt(dt * t_max)`` depends on
+the data. If ``compute_t_ref()`` raises ``ValueError`` for invalid inputs,
+the CMC core module falls back to ``t_ref=1.0``.
+
+---
+
+Shard Scheduling
+-----------------
+
+Shards are dispatched using **noise-weighted LPT (Longest Processing Time
+first)** scheduling. The estimated cost per shard is:
+
+.. code-block:: text
+
+   cost = n_points * (1 + normalized_noise)
+
+where noise is normalized to [0, 1] across shards. Largest/noisiest shards
+are dispatched first to minimize tail latency, since NUTS convergence time
+varies 2--10x depending on data characteristics (noisy shards require more
+leapfrog steps).
+
+---
+
+Worker Pool and Shared Memory
+-------------------------------
+
+The multiprocessing backend uses a persistent ``WorkerPool`` for datasets
+with 3 or more shards. This avoids JAX re-initialization overhead on each
+shard:
+
+- **WorkerPool**: Maintains a pool of worker processes that persist across
+  shard dispatches. Workers initialize JAX and compile JIT functions once.
+- **SharedDataManager**: Places per-shard data arrays (data, t1, t2,
+  phi_unique, phi_indices) in shared memory via
+  ``SharedDataManager.create_shared_shard_arrays()``, eliminating
+  per-process serialization overhead through the ``spawn`` mechanism.
+
+For datasets with fewer than 3 shards, the backend spawns individual
+processes instead (the overhead of maintaining a pool is not worthwhile).
+
+---
+
+Heterogeneity Detection
+------------------------
+
+The multiprocessing backend uses bounds-aware coefficient of variation (CV)
+for heterogeneity detection across shard posteriors. For near-zero
+parameters (e.g., gamma_dot_0 ~ 1e-3), CV is computed relative to the
+parameter's bounds range rather than its mean:
+
+.. code-block:: text
+
+   # For near-zero params: scale = param_range * 0.01
+   # Falls back to: scale = max(abs(mean), 1e-10)
+
+This prevents false heterogeneity flags for parameters whose means are
+legitimately near zero but whose variation is small relative to their
+physical range.
 
 ---
 

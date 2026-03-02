@@ -2331,7 +2331,7 @@ Usage Examples
         mode="static"
     )
 
-    print(f"Best-fit D0: {result.params['D0']:.2f}")
+    print(f"Best-fit D0: {result.parameters[0]:.2f}")
 
 **CMC Optimization**::
 

@@ -67,27 +67,21 @@ Usage Example
 
 ::
 
+    from pathlib import Path
     from homodyne.viz import plot_experimental_data, plot_fit_comparison
 
-    # Plot experimental C2 heatmaps
-    fig = plot_experimental_data(
-        t1=t1,
-        t2=t2,
-        c2_exp=c2_exp,
-        phi_angles=phi_angles,
-        title="Experimental Data"
+    # Plot experimental C2 heatmaps (saves to plots_dir)
+    plot_experimental_data(
+        data=data,          # dict from XPCSDataLoader
+        plots_dir=Path("plots/"),
     )
-    fig.savefig("experimental_data.png", dpi=300)
 
-    # Compare fit to data
-    fig = plot_fit_comparison(
-        t1=t1,
-        t2=t2,
-        c2_exp=c2_exp,
-        c2_fit=c2_fit,
-        phi_angles=phi_angles
+    # Compare fit to data (saves to plots_dir)
+    plot_fit_comparison(
+        result=nlsq_result,  # optimization result object
+        data=data,
+        plots_dir=Path("plots/"),
     )
-    fig.savefig("fit_comparison.png", dpi=300)
 
 NLSQ Optimization Plots
 ------------------------
@@ -114,23 +108,23 @@ Usage Example
 
 ::
 
+    from pathlib import Path
     from homodyne.viz import generate_nlsq_plots
 
-    # Generate comprehensive NLSQ plots
-    figures = generate_nlsq_plots(
-        result=nlsq_result,
+    # Generate comprehensive NLSQ plots (saves to output_dir)
+    generate_nlsq_plots(
+        phi_angles=phi_angles,
+        c2_exp=c2_exp,
+        c2_theoretical_scaled=c2_fitted,
+        residuals=residuals,
         t1=t1,
         t2=t2,
-        c2_exp=c2_exp,
-        phi_angles=phi_angles,
-        output_dir="plots/"
+        output_dir=Path("plots/"),
     )
 
-    # Figures include:
+    # Output includes:
     # - Fit comparison heatmaps
     # - Residual plots
-    # - Parameter correlation matrix
-    # - Chi-squared evolution
 
 MCMC Diagnostic Plots
 ----------------------
@@ -161,12 +155,11 @@ Trace Plots
 
     from homodyne.viz import plot_trace_plots
 
-    # Plot MCMC traces for all parameters
-    fig = plot_trace_plots(
-        arviz_data=cmc_result.arviz_data,
-        title="MCMC Trace Plots"
+    # Plot MCMC traces for all parameters (saves to save_path)
+    plot_trace_plots(
+        result=cmc_result,
+        save_path="trace_plots.png",
     )
-    fig.savefig("trace_plots.png", dpi=300)
 
 **Trace plots show**:
 
@@ -182,11 +175,11 @@ Convergence Diagnostics
 
     from homodyne.viz import plot_convergence_diagnostics
 
-    # Plot R-hat and ESS diagnostics
-    fig = plot_convergence_diagnostics(
-        arviz_data=cmc_result.arviz_data
+    # Plot R-hat and ESS diagnostics (saves to save_path)
+    plot_convergence_diagnostics(
+        result=cmc_result,
+        save_path="convergence.png",
     )
-    fig.savefig("convergence.png", dpi=300)
 
 **Diagnostics include**:
 
@@ -202,12 +195,11 @@ Posterior Distributions
 
     from homodyne.viz import plot_posterior_comparison
 
-    # Plot posterior distributions
-    fig = plot_posterior_comparison(
-        arviz_data=cmc_result.arviz_data,
-        prior_samples=prior_samples  # optional
+    # Plot posterior distributions (saves to save_path)
+    plot_posterior_comparison(
+        result=cmc_result,
+        save_path="posteriors.png",
     )
-    fig.savefig("posteriors.png", dpi=300)
 
 **Posterior plots show**:
 
@@ -223,15 +215,11 @@ CMC Summary Dashboard
 
     from homodyne.viz import plot_cmc_summary_dashboard
 
-    # Generate comprehensive CMC dashboard
-    fig = plot_cmc_summary_dashboard(
-        cmc_result=cmc_result,
-        t1=t1,
-        t2=t2,
-        c2_exp=c2_exp,
-        phi_angles=phi_angles
+    # Generate comprehensive CMC dashboard (saves to save_path)
+    plot_cmc_summary_dashboard(
+        result=cmc_result,
+        save_path="cmc_dashboard.png",
     )
-    fig.savefig("cmc_dashboard.png", dpi=300)
 
 **Dashboard includes**:
 
@@ -248,11 +236,11 @@ KL Divergence Matrix
 
     from homodyne.viz import plot_kl_divergence_matrix
 
-    # Plot KL divergence between chains
-    fig = plot_kl_divergence_matrix(
-        arviz_data=cmc_result.arviz_data
+    # Plot KL divergence between chains (saves to save_path)
+    plot_kl_divergence_matrix(
+        result=cmc_result,
+        save_path="kl_divergence.png",
     )
-    fig.savefig("kl_divergence.png", dpi=300)
 
 **KL divergence**:
 
@@ -289,16 +277,17 @@ Usage Example
 
 ::
 
+    from pathlib import Path
     from homodyne.viz import plot_c2_heatmap_fast
 
-    # Fast rendering for large datasets
-    fig = plot_c2_heatmap_fast(
+    # Fast rendering for large datasets (saves directly to output_path)
+    plot_c2_heatmap_fast(
+        c2_data=c2_exp,
         t1=t1,
         t2=t2,
-        c2=c2_exp,
-        title="Experimental C2"
+        output_path=Path("c2_fast.png"),
+        title="Experimental C2",
     )
-    fig.savefig("c2_fast.png", dpi=300)
 
 **Performance**:
 
@@ -336,13 +325,12 @@ Usage Example
     # Compute statistics for diagonal overlay
     stats = compute_diagonal_overlay_stats(
         c2_exp=c2_exp,
-        c2_fit=c2_fit,
-        t1=t1,
-        t2=t2
+        c2_solver=c2_solver,
+        c2_posthoc=c2_posthoc,
+        phi_index=0,
     )
 
-    print(f"Mean deviation: {stats.mean_deviation:.4f}")
-    print(f"RMS error: {stats.rms_error:.4f}")
+    # stats is a DiagonalOverlayResult with trace arrays and statistics
 
 Publication-Quality Figures
 ----------------------------

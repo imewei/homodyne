@@ -158,10 +158,10 @@ A complete analysis pipeline:
    YAML config
        |
        v
-   ConfigManager.from_yaml()      # Parse and validate configuration
+   ConfigManager()                # Parse and validate configuration
        |
        v
-   XPCSDataLoader.load()          # Load HDF5 data, validate arrays
+   XPCSDataLoader.load_experimental_data()  # Load HDF5 data, validate arrays
        |
        v
    fit_nlsq_jax(data, config)     # Trust-region NLSQ optimization

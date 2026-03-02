@@ -296,6 +296,7 @@ suppress_warnings = [
     "myst.xref_missing",
     "autosummary.import_cycle",
     "toc.not_included",
+    "sphinx_autodoc_typehints.forward_reference",  # matplotlib internal ColorType
 ]
 
 # -- Options for linkcheck ---------------------------------------------------
