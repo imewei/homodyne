@@ -601,6 +601,9 @@ optimization:
       num_warmup: 500
       num_samples: 1500
       num_chains: 4
+      chain_method: "parallel" # "parallel" (default) or "sequential"
+        # "parallel" runs chains concurrently via JAX vmap (faster on multi-core)
+        # "sequential" runs one at a time (lower memory; auto-fallback for shards <500 pts)
       target_accept_prob: 0.85
 
       # -----------------------------------------------------------------------
