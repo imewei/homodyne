@@ -989,7 +989,7 @@ class TestNLSQCLIIntegration:
         """Test that _save_results() uses legacy format for MCMC method."""
         import tempfile
         from pathlib import Path
-        from unittest.mock import Mock
+        from unittest.mock import Mock, patch
 
         from homodyne.cli.commands import _save_results
 
@@ -1002,12 +1002,19 @@ class TestNLSQCLIIntegration:
             args.output_dir = output_dir
             args.output_format = "json"
 
-            # Create mock MCMC result
-            result = Mock()  # Mocks CMCResult
+            # Create mock MCMC result with explicit attributes to prevent
+            # Mock auto-generation. Bare Mock() returns Mock on any access,
+            # causing infinite recursion in json_safe() (Mock.tolist() -> Mock
+            # -> json_safe(Mock) -> Mock.tolist() -> ...).
+            result = Mock(spec=[])  # spec=[] disables auto-attributes
             result.mean_contrast = 0.5
             result.mean_offset = 1.0
             result.mean_params = np.array([1000.0, 0.5, 10.0])
             result.samples_params = None
+            result.inference_data = None
+            result.analysis_mode = "static"
+            result.success = True
+            result.optimization_time = 0.0
 
             data = create_mock_data_dict(n_angles=3, n_t1=10, n_t2=10)
             config_dict = create_mock_config_manager(analysis_mode="static")
@@ -1016,8 +1023,10 @@ class TestNLSQCLIIntegration:
             config.get_config.return_value = config_dict
             device_config = {"device": "cpu"}
 
-            # Call _save_results which should use legacy format
-            _save_results(args, result, device_config, data, config)
+            # Patch save_mcmc_results to skip the heavy async CMC save.
+            # This test only validates routing (legacy JSON created, no nlsq/ dir).
+            with patch("homodyne.cli.commands.save_mcmc_results"):
+                _save_results(args, result, device_config, data, config)
 
             # Verify legacy file was created (not nlsq/ subdirectory)
             legacy_file = output_dir / "homodyne_results.json"
