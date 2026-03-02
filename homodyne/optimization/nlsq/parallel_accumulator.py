@@ -140,7 +140,8 @@ def accumulate_chunks_parallel(
         partitions[i % n_workers].append(chunk)
 
     try:
-        with ProcessPoolExecutor(max_workers=n_workers) as executor:
+        ctx = multiprocessing.get_context("spawn")
+        with ProcessPoolExecutor(max_workers=n_workers, mp_context=ctx) as executor:
             futures = [
                 executor.submit(accumulate_chunks_sequential, partition)
                 for partition in partitions
