@@ -143,15 +143,26 @@ class AsyncWriter:
             self._futures.append(future)
 
     def wait_all(self, timeout: float = 60.0) -> list[Exception]:
-        """Wait for all pending writes. Returns list of errors."""
+        """Wait for all pending writes. Returns list of errors.
+
+        TimeoutError is not treated as a failure — the write is still
+        in progress and will complete during shutdown().
+        """
         with self._lock:
             pending = list(self._futures)
         errors: list[Exception] = []
         for future in pending:
             try:
                 future.result(timeout=timeout)
+            except TimeoutError:
+                logger.info(
+                    "Background write still in progress after %.0fs "
+                    "(will complete during shutdown)",
+                    timeout,
+                )
             except Exception as e:
-                logger.warning("Background write failed: %s", e)
+                logger.warning("Background write failed (%s): %s", type(e).__name__, e)
+                logger.debug("Background write traceback:", exc_info=True)
                 errors.append(e)
         # Remove only the futures we waited on; concurrent submits are preserved
         with self._lock:
