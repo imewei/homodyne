@@ -790,7 +790,7 @@ def _generate_plots_datashader(
             with ctx.Pool(
                 processes=n_workers, initializer=_worker_init_cpu_only
             ) as pool:
-                timeout_seconds = (30 * len(phi_angles) / n_workers) + 60
+                timeout_seconds = (60 * len(phi_angles) / n_workers) + 120
                 logger.debug(f"Parallel plotting timeout: {timeout_seconds:.0f}s")
 
                 result = pool.map_async(_plot_single_angle_datashader, args_list)
