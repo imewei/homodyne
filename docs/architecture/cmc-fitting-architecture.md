@@ -816,6 +816,7 @@ def select_backend(config: CMCConfig) -> CMCBackend:
 │  • Call run_nuts_sampling() on shard                                       │
 │  • Return serialized MCMCSamples                                           │
 └───────────────────────────────────────────────────────────────────────────┘
+```
 
 ### Chain Parallelism (chain_method)
 
@@ -849,7 +850,6 @@ chain_method: "parallel"  # "parallel" (default) or "sequential"
 │  Config validation (config.py):                                            │
 │    chain_method must be in ["parallel", "sequential"]                      │
 └───────────────────────────────────────────────────────────────────────────┘
-```
 ```
 
 ______________________________________________________________________
