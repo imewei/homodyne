@@ -10,6 +10,11 @@ from __future__ import annotations
 import argparse
 import json
 import time
+
+try:
+    from homodyne._version import __version__ as _pkg_version
+except ImportError:
+    _pkg_version = "unknown"
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -384,7 +389,7 @@ def _get_default_config(args: argparse.Namespace) -> dict[str, Any]:
 
     config = {
         "metadata": {
-            "config_version": "2.1",
+            "config_version": _pkg_version,
             "description": "CLI-generated configuration",
         },
         "analysis_mode": analysis_mode,
