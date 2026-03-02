@@ -1827,7 +1827,7 @@ def _save_results(
         logger.warning(
             "Background save errors (%d): %s",
             len(errors),
-            [str(e) for e in errors],
+            [f"{type(e).__name__}: {e}" for e in errors],
         )
     writer.shutdown()
 
@@ -2671,7 +2671,10 @@ def save_nlsq_results(
 
     logger.info(f"OK: NLSQ results saved successfully to {nlsq_dir}")
     logger.info("  - 3 JSON files (parameters, analysis results, convergence metrics)")
-    logger.info("  - 1 NPZ file (10 arrays: experimental + theoretical + residuals)")
+    n_arrays = 10 + (1 if fits_dict.get("c2_solver_scaled") is not None else 0)
+    logger.info(
+        f"  - 1 NPZ file ({n_arrays} arrays: experimental + theoretical + residuals)"
+    )
 
     # Step 9: Generate plots with graceful degradation
     try:
