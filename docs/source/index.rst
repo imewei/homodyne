@@ -34,9 +34,9 @@ At a Glance
    * - **Language**
      - Python 3.12+
    * - **Compute backend**
-     - JAX |geq| 0.8.2 (CPU-only, XLA-accelerated)
+     - JAX :math:`\geq` 0.8.2 (CPU-only, XLA-accelerated)
    * - **Optimizer**
-     - NLSQ |geq| 0.6.4 (trust-region Levenberg-Marquardt)
+     - NLSQ :math:`\geq` 0.6.4 (trust-region Levenberg-Marquardt)
    * - **Bayesian engine**
      - NumPyro / NUTS / Consensus Monte Carlo
    * - **Analysis modes**
@@ -47,8 +47,6 @@ At a Glance
      - JSON + NPZ result bundles
    * - **License**
      - MIT
-
-.. |geq| unicode:: U+2265
 
 .. _key-features:
 
