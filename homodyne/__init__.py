@@ -40,6 +40,13 @@ import os
 import sys
 import warnings
 
+# Force non-interactive matplotlib backend for CLI (renders to files only).
+# Must be set before any matplotlib import — including transitive imports
+# from ArviZ (imported by commands.py via cli/__init__.py).  Without this,
+# the default TkAgg backend creates tkinter objects that crash during GC
+# when background threads are still alive at process shutdown.
+os.environ.setdefault("MPLBACKEND", "Agg")
+
 # ============================================================================
 # Third-Party Deprecation Warning Filters (MUST be set before imports)
 # ============================================================================

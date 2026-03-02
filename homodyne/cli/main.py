@@ -35,6 +35,12 @@ else:
 # Suppress NLSQ GPU warnings (v2.3.0 is CPU-only)
 os.environ.setdefault("NLSQ_SKIP_GPU_CHECK", "1")
 
+# Force non-interactive matplotlib backend for CLI (renders to files only).
+# Must be set before any matplotlib import. Without this, the default TkAgg
+# backend creates tkinter objects that crash during GC when background threads
+# (e.g. performance_engine) are still alive at shutdown.
+os.environ.setdefault("MPLBACKEND", "Agg")
+
 # Suppress JAX backend logs (set to ERROR to hide GPU fallback warnings)
 # This must be done before any imports that trigger JAX initialization
 import logging  # noqa: E402 - Must import after os.environ configuration
