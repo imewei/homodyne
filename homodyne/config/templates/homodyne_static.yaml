@@ -10,15 +10,15 @@
 # For comprehensive documentation of all parameters, see:
 #   homodyne_master_template.yaml
 #
-# VERSION: 2.22.2
-# UPDATED: 2026-02-22
+# VERSION: 2.22.3
+# UPDATED: 2026-03-02
 # ==============================================================================
 
 # ==============================================================================
 # METADATA
 # ==============================================================================
 metadata:
-  config_version: "2.22.2"
+  config_version: "2.22.3"
   description: "Static diffusion analysis - 3-parameter model"
   analysis_mode: "static"
   parameter_count: 3

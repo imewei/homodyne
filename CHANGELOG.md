@@ -7,20 +7,210 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
-## [Unreleased]
+## [2.22.3] - 2026-03-02
 
-### Reliability Hardening, Code Quality Sweep, and Tooling Modernization
+### Parallel Computing, Deep Reliability Hardening, and Code Quality Sweep
 
-Comprehensive reliability sweep (QA round 11, 6 sub-rounds) addressing NaN-unsafe NumPy
-operations, missing file encoding declarations, Unicode/emoji in runtime strings, and
-dead test infrastructure. Plus full codebase reformatting to 88-char line limit and
-tooling configuration updates for mypy and pre-commit.
+Major feature release adding parallel computing infrastructure (persistent worker pools,
+parallel chunk accumulation, async background I/O, NUTS chain parallelism), deep
+reliability hardening across 10 RCA rounds with ~345 fixes, and a comprehensive code
+quality sweep (NaN-safe NumPy, explicit file encoding, Unicode-to-ASCII normalization).
 
-90 files changed across 39 commits; 2718 tests pass.
+196 files changed, 12740 insertions, 5438 deletions across 161 commits.
+
+#### Added
+
+**Parallel computing infrastructure:**
+
+- **feat(utils)**: Add `PrefetchLoader` for background data prefetching and
+  `AsyncWriter` for non-blocking NPZ/JSON result serialization — both are GIL-safe
+  since HDF5 and NumPy release the GIL during I/O (`async_io.py`)
+
+- **feat(cli)**: Integrate `AsyncWriter` for background result saving — NLSQ and CMC
+  result files (NPZ, JSON, diagnostics) are serialized in a background thread pool while
+  the main thread continues to the next analysis step (`commands.py`)
+
+- **feat(nlsq)**: Add parallel chunk accumulator for out-of-core streaming optimizer —
+  distributes chunk computation over shared memory with automatic fallback to sequential
+  when parallelism overhead exceeds benefit (`parallel_accumulator.py`, `wrapper.py`)
+
+- **feat(nlsq)**: Parallelize out-of-core chi-squared evaluation across shared memory
+  segments with explicit memory cleanup after accumulation (`wrapper.py`)
+
+- **feat(cmc)**: Add persistent `WorkerPool` with queue-based shard dispatch —
+  eliminates per-shard process spawn overhead; workers stay alive across the full CMC run
+  with readiness synchronization via `mp.Queue` (`multiprocessing.py`)
+
+- **feat(cmc)**: Add `chain_method` configuration parameter (default: `"parallel"`) for
+  NUTS chain parallelism — runs chains in parallel via NumPyro with automatic fallback to
+  sequential for shards with <500 points (`config.py`, `sampler.py`)
+
+- **feat(cmc)**: Dynamic XLA device count — automatically sets
+  `xla_force_host_platform_device_count` to match `num_chains` for parallel chain
+  execution (`multiprocessing.py`)
+
+- **feat(config)**: Expose `chain_method` as a top-level MCMC configuration parameter
+  with YAML validation (`config.py`)
+
+#### Performance
+
+**NLSQ parallel chunk accumulation:**
+
+- **perf(nlsq)**: Parallel shared-memory chunk computation in the streaming optimizer —
+  multiple chunks are computed concurrently with results accumulated into device-side
+  arrays, improving throughput for large out-of-core datasets (`wrapper.py`,
+  `parallel_accumulator.py`)
+
+**CMC persistent worker pool:**
+
+- **perf(cmc)**: Persistent worker pool eliminates per-shard process spawn overhead —
+  workers are pre-forked at pool creation and receive shard assignments via a work queue,
+  reducing dispatch latency for multi-shard CMC runs (`multiprocessing.py`)
+
+**Background I/O:**
+
+- **perf(cli)**: Async result serialization overlaps I/O with computation — NPZ arrays
+  and JSON metadata are written in background threads while the main thread proceeds to
+  the next optimization step (`commands.py`)
 
 #### Fixed
 
-**NaN-safe NumPy operations (~50 sites):**
+**Deep reliability hardening (RCA rounds 7-10, ~300 fixes across ~55 files):**
+
+*NLSQ optimizer:*
+
+- **fix(nlsq)**: Correct DOF in `auto_averaged` reduced chi-squared and covariance —
+  uses compressed parameter count (7/9) not expanded count (53) for s-squared scaling
+  (`wrapper.py`)
+
+- **fix(nlsq)**: Prevent int32 overflow in flat index computation for large datasets
+  (`wrapper.py`)
+
+- **fix(nlsq)**: Fix OOC initial path DOF inference — derive from `data.phi` not `popt`
+  length (`wrapper.py`)
+
+- **fix(nlsq)**: Use epsilon-based diagonal masking in OOC JIT kernels instead of exact
+  equality comparison (`residual.py`, `residual_jit.py`)
+
+- **fix(nlsq)**: Correct per-angle parameter indexing and dispatch in sequential
+  optimizer (`sequential.py`)
+
+- **fix(nlsq)**: Handle singular matrix in covariance inversion with proper SVD fallback
+  and fix chunked sigma tracking (`wrapper.py`)
+
+- **fix(nlsq)**: Correct anti-degeneracy controller fallback and gradient monitor
+  history pop — collapse flag now properly re-arms after recovery (`gradient_monitor.py`)
+
+- **fix(nlsq)**: Fix AdaptiveRegularizer silently skipping regularization in
+  `auto_averaged` mode (`adaptive_regularization.py`)
+
+- **fix(nlsq)**: Executor `info["success"]=True` no longer overwrites optimizer's
+  `False` result (`executors.py`)
+
+- **fix(nlsq)**: CMAESResult.success now reflects actual convergence instead of always
+  `True` (`cmaes_wrapper.py`)
+
+- **fix(nlsq)**: Shared `_full_params_buffer` between loss/grad closures replaced with
+  local copy per closure in hierarchical optimizer (`hierarchical.py`)
+
+*CMC reliability:*
+
+- **fix(cmc)**: Synchronize worker pool startup with readiness queue — prevents shard
+  dispatch before workers are initialized (`multiprocessing.py`)
+
+- **fix(cmc)**: Handle `MemoryError` during worker pool dispatch with graceful
+  degradation (`multiprocessing.py`)
+
+- **fix(cmc)**: Improve pool worker error handling and queue EOF resilience — workers
+  no longer crash on sentinel values or unexpected queue closure (`multiprocessing.py`)
+
+- **fix(cmc)**: NaN-safe numpy in fallback R-hat computation and shard clustering
+  (`results.py`, `diagnostics.py`)
+
+- **fix(cmc)**: Add NaN guard and warning in bimodal consensus path — prevents silent
+  NaN propagation through posterior combination (`results.py`)
+
+- **fix(cmc)**: Correct `ParameterSpace` type annotations to `Optional` for nullable
+  fields (`config.py`)
+
+- **fix(cmc)**: Bounds-aware coefficient of variation for heterogeneity detection —
+  for near-zero parameters (e.g., shear rate ~ 1e-3), CV is computed relative to bounds
+  range rather than mean (`multiprocessing.py`)
+
+- **fix(cmc)**: Cap prior tempering for log-space params at 10 log-units to prevent
+  divergent NUTS exploration (`model.py`)
+
+- **fix(cmc)**: Correct divergence rate denominator from `n_shards` to
+  `shards_succeeded` (`diagnostics.py`)
+
+- **fix(cmc)**: Fix `D_offset_frac` not clipped to `[0, 0.5]` in reparameterization
+  (`sampler.py`)
+
+*Core physics and data:*
+
+- **fix(core)**: Correct dt fallback in `precompute_shard_grid` — silent `None` fallback
+  replaced with `ValueError` (`physics_cmc.py`)
+
+- **fix(core)**: Singular matrix offset fallback `0.0` changed to `1.0` (XPCS baseline)
+  across 4 sites in `fitting.py`
+
+- **fix(core)**: Physics factor dt lower bound `1e-3` changed to `1e-6` for
+  microsecond-resolution XPCS (`physics_factors.py`)
+
+- **fix(data)**: Correct time array upper bound off-by-one (`<` to `<=`) in XPCS loader
+  (`xpcs_loader.py`)
+
+- **fix(data)**: Fix AND mask for wrapped phi ranges (phi_min > phi_max) changed to OR
+  logic — was silently loading 0 angles for wide-angle experiments (`filtering_utils.py`)
+
+- **fix(data)**: Deep copy in `_standardize_format` and `_correct_diagonal_enhanced` to
+  prevent cross-reference mutation (`preprocessing.py`)
+
+- **fix(data)**: Inverted LRU eviction comparison (`<` to `>`) in performance engine
+  cache (`performance_engine.py`)
+
+- **fix(io)**: NaN-safe MCMC stats — guard `int(NaN)` crash in tree depth warnings,
+  filter non-finite R-hat/ESS in JSON/NPZ export (`mcmc_writers.py`)
+
+- **fix(io)**: Sanitize NaN/Infinity values in JSON/YAML serializers (`mcmc_writers.py`,
+  `nlsq_writers.py`)
+
+*CLI and visualization:*
+
+- **fix(cli)**: Force `Agg` matplotlib backend to prevent tkinter GC crashes in
+  headless environments (`commands.py`)
+
+- **fix(cli)**: Improve background save error logging and dynamic NPZ array count
+  (`commands.py`)
+
+- **fix(cli)**: Add diagnostic logging and timeout to async I/O wait (`commands.py`)
+
+- **fix(viz)**: NaN-safe `np.min`/`np.max`/`np.percentile` in all plotting backends
+  (`nlsq_plots.py`, `mcmc_plots.py`, `experimental_plots.py`, `datashader_backend.py`)
+
+- **fix(viz)**: Increase datashader multiprocessing timeout to prevent failure on slow
+  CI runners (`datashader_backend.py`)
+
+- **fix(viz)**: Close matplotlib figures after saving to prevent memory leaks
+  (`nlsq_plots.py`, `mcmc_plots.py`)
+
+*Multiprocessing safety:*
+
+- **fix(nlsq)**: Use `spawn` multiprocessing context to prevent JAX deadlocks — `fork`
+  context inherits parent JAX state which causes hangs (`wrapper.py`)
+
+- **fix(nlsq)**: Disable automatic data rescaling for index-based xdata — rescaling
+  integer indices corrupts the time grid mapping (`wrapper.py`)
+
+- **fix(async_io)**: Suppress `TimeoutError` during `wait_all` as it is not a failure
+  condition (`async_io.py`)
+
+- **fix(utils)**: Improve `AsyncWriter` thread-safety and `PrefetchLoader` timeout
+  handling (`async_io.py`)
+
+**Code quality sweep (QA round 11, 6 sub-rounds):**
+
+*NaN-safe NumPy operations (~50 sites):*
 
 - **fix(core)**: Replace `np.mean`/`np.min`/`np.max`/`np.std` with NaN-safe variants
   (`nanmean`, `nanmin`, `nanmax`, `nanstd`) across all data arrays that can contain NaN:
@@ -44,7 +234,7 @@ tooling configuration updates for mypy and pre-commit.
   prevents matplotlib crashes on datasets with NaN values (`nlsq_plots.py`,
   `mcmc_plots.py`, `experimental_plots.py`, `datashader_backend.py`, `diagnostics.py`)
 
-**Explicit file encoding (~20 sites):**
+*Explicit file encoding (~20 sites):*
 
 - **fix(cli)**: Add `encoding="utf-8"` to all text-mode `open()` calls in CLI commands,
   config generator, and XLA config (`commands.py`, `config_generator.py`,
@@ -68,7 +258,7 @@ tooling configuration updates for mypy and pre-commit.
 - **fix(runtime)**: Add `encoding="utf-8"` to post-install and uninstall script I/O
   (`post_install.py`, `uninstall_scripts.py`)
 
-**Unicode/emoji to ASCII in runtime strings (~40 sites):**
+*Unicode/emoji to ASCII in runtime strings (~40 sites):*
 
 - **fix(core)**: Replace Unicode checkmarks, arrows, and symbols with ASCII equivalents
   in `__repr__`, `__str__`, and log messages — prevents encoding errors on non-UTF-8
@@ -91,7 +281,7 @@ tooling configuration updates for mypy and pre-commit.
   where rendering requires it (`nlsq_plots.py`, `mcmc_plots.py`,
   `experimental_plots.py`)
 
-**Narrow exception handlers (~5 sites):**
+*Narrow exception handlers and type safety:*
 
 - **fix(core)**: Narrow `except Exception` to specific types (`ValueError`, `TypeError`,
   `RuntimeError`) at function boundaries (`jax_backend.py`)
@@ -101,12 +291,8 @@ tooling configuration updates for mypy and pre-commit.
 - **fix(data)**: Remove GPU/TPU references from CPU-only package (`xpcs_loader.py`,
   `performance_engine.py`)
 
-**Pessimistic success defaults:**
-
 - **fix(optimization)**: Default MCMC shard success to `False` (was `True`) — prevents
   failed shards from being silently included in posterior combination (`results.py`)
-
-**Mypy and type checking:**
 
 - **fix(cli)**: Resolve mypy errors in `config_generator.py` — `ruamel.yaml` import
   handling
@@ -119,22 +305,6 @@ tooling configuration updates for mypy and pre-commit.
 
 #### Changed
 
-**Test infrastructure cleanup:**
-
-- **perf(tests)**: Remove unnecessary JAX cache clearing from conftest — eliminates
-  redundant `jax.clear_caches()` calls that added ~28% overhead to test suite
-  (`conftest.py`)
-
-- **fix(tests)**: Reduce memory in `test_plots` contrast warning test — prevents OOM on
-  CI runners (`viz/test_plots.py`)
-
-- **fix(tests)**: Stabilize flaky JIT compilation overhead test — increase tolerance for
-  timing-sensitive assertion (`test_nlsq_core.py`)
-
-- **chore(tests)**: Remove unused fixtures (`large_xpcs_data`, `test_parameters`), dead
-  test files (`test_chunking.py`, `test_numerical_validator_fixtures_demo.py`), and
-  stale conftest code (`conftest.py`)
-
 **Code formatting:**
 
 - **style**: Reformat entire codebase to 88-character line limit via `ruff format` —
@@ -143,18 +313,54 @@ tooling configuration updates for mypy and pre-commit.
 
 - **style**: Fix end-of-file newlines in 4 Jupyter notebooks and `conftest.py`
 
+**Test infrastructure:**
+
+- **perf(tests)**: Remove unnecessary JAX cache clearing from conftest — eliminates
+  redundant `jax.clear_caches()` calls that added ~28% overhead to test suite
+  (`conftest.py`)
+
+- **fix(tests)**: Use context manager for `np.load` to prevent file handle leaks in
+  NLSQ result tests (`test_nlsq_*.py`)
+
+- **fix(tests)**: Constrain mock object creation to prevent infinite recursion in JSON
+  serialization (`test_cli_workflows.py`)
+
+- **fix(tests)**: Reduce memory in `test_plots` contrast warning test — prevents OOM on
+  CI runners (`viz/test_plots.py`)
+
+- **fix(tests)**: Stabilize flaky JIT compilation overhead test — increase tolerance for
+  timing-sensitive assertion (`test_nlsq_core.py`)
+
+- **fix(tests)**: Relax prefetch timing assertions to handle CI runner jitter
+  (`test_async_io.py`)
+
+- **chore(tests)**: Remove unused fixtures (`large_xpcs_data`, `test_parameters`), dead
+  test files (`test_chunking.py`, `test_numerical_validator_fixtures_demo.py`), and
+  stale conftest code (`conftest.py`)
+
 **Documentation:**
 
-- **docs(architecture)**: Add comprehensive architecture documentation — system
-  overview, physical model, NLSQ fitting, CMC fitting, and data handler architecture
-  (`docs/architecture/`)
+- **docs(architecture)**: Migrate and integrate fitting architecture documentation into
+  Sphinx — NLSQ and CMC fitting architecture now rendered as part of the official docs
+  site (`docs/source/architecture/`)
+
+- **docs**: Comprehensive update of API references and user guide (`docs/source/`)
+
+- **docs(plans)**: Remove completed parallel computing design documents
 
 - **fix(docs)**: Fix RST docstring indentation in `combine_shard_samples` that caused
   Sphinx build warnings (`backends/base.py`)
 
-- **chore(tooling)**: Exclude `homodyne-architecture-overview.md` from mdformat
-  pre-commit hook — file triggers a known mdformat roundtrip bug
+- **chore(tooling)**: Exclude architecture markdown files from mdformat pre-commit hook
   (`.pre-commit-config.yaml`)
+
+**CI/CD:**
+
+- **ci**: Increase test job timeout to 24 hours to accommodate slow macOS runners
+
+- **ci**: Prevent OOM on Ubuntu runner by running integration tests sequentially
+
+- **ci**: Optimize quality workflow coverage and fix pip-audit
 
 ______________________________________________________________________
 
