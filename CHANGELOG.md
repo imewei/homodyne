@@ -9,11 +9,22 @@ ______________________________________________________________________
 
 ## [2.22.4] - 2026-03-02
 
-### Documentation and Build Improvements
+### Documentation, Build, and CLI Improvements
 
-Minor release with documentation build improvements and formatting fixes.
+Minor release with documentation build improvements, CLI consistency fixes, and shell
+completion updates.
 
-5 files changed, 40 insertions, 7 deletions across 4 commits.
+8 files changed, 57 insertions, 9 deletions across 7 commits.
+
+**Fixes:**
+
+- **fix(cli)**: Use dynamic package version for CLI-generated config files instead of
+  stale hardcoded `"2.1"` (`commands.py`)
+
+- **feat(cli)**: Add missing `hxla`, `hsetup`, `hclean` tool aliases to fallback zsh
+  completion, matching the source-of-truth `completion.sh` (`post_install.py`)
+
+- **style(cli)**: Add missing return type annotation to `xla_config.py` main function
 
 **Build:**
 
