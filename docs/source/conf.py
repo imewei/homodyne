@@ -248,13 +248,18 @@ html_show_sourcelink = False
 htmlhelp_basename = "homodynedoc"
 
 # -- Options for LaTeX output ------------------------------------------------
+latex_engine = "xelatex"
+latex_use_xindy = False
+
 latex_elements = {
     "papersize": "letterpaper",
     "pointsize": "10pt",
     "preamble": r"""
-\usepackage{amsmath}
-\usepackage{amssymb}
+\usepackage{fontspec}
+\usepackage{unicode-math}
+\setmonofont{DejaVu Sans Mono}
 """,
+    "fncychap": r"\usepackage[Sonny]{fncychap}",
 }
 
 latex_documents = [

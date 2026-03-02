@@ -51,6 +51,12 @@ strict:
 	@echo
 	@echo "Strict build finished. The HTML pages are in $(BUILDDIR)/html."
 
+# Build LaTeX PDF (requires XeLaTeX)
+latexpdf:
+	@$(SPHINXBUILD) -M latexpdf "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+	@echo
+	@echo "Build finished. The PDF is in $(BUILDDIR)/latex."
+
 # Watch for changes and rebuild automatically (requires sphinx-autobuild)
 watch:
 	@command -v sphinx-autobuild >/dev/null 2>&1 || { echo "sphinx-autobuild not found. Install with: pip install sphinx-autobuild"; exit 1; }
