@@ -816,6 +816,40 @@ def select_backend(config: CMCConfig) -> CMCBackend:
 │  • Call run_nuts_sampling() on shard                                       │
 │  • Return serialized MCMCSamples                                           │
 └───────────────────────────────────────────────────────────────────────────┘
+
+### Chain Parallelism (chain_method)
+
+**File:** `sampler.py` (run_nuts_sampling)
+
+```yaml
+# Config field in per_shard_mcmc:
+chain_method: "parallel"  # "parallel" (default) or "sequential"
+```
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Chain Method Selection                                                     │
+│                                                                            │
+│  "parallel" (default):                                                     │
+│    NumPyro runs num_chains NUTS chains concurrently via JAX vmap.          │
+│    XLA device count dynamically matches num_chains via                      │
+│    HOMODYNE_CMC_NUM_CHAINS env var.                                        │
+│    Fastest on multi-core CPUs where per-chain NUTS is the bottleneck.      │
+│                                                                            │
+│  "sequential":                                                             │
+│    Chains run one at a time. Lower peak memory.                            │
+│    Preferred when per-shard data is very small.                            │
+│                                                                            │
+│  Auto-fallback (in run_nuts_sampling):                                     │
+│    if chain_method == "parallel" and shard_size < 500:                      │
+│        effective_chain_method = "sequential"                                │
+│    Rationale: For tiny shards, NUTS runs in microseconds per step;         │
+│    the JAX vmap overhead for parallel chains exceeds the compute benefit.  │
+│                                                                            │
+│  Config validation (config.py):                                            │
+│    chain_method must be in ["parallel", "sequential"]                      │
+└───────────────────────────────────────────────────────────────────────────┘
+```
 ```
 
 ______________________________________________________________________

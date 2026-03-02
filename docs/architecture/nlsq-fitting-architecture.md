@@ -853,6 +853,146 @@ ______________________________________________________________________
 ╚═══════════════════════════════════════════════════════════════════════════╝
 ```
 
+### Parallel Chunk Accumulation
+
+**File:** `nlsq/parallel_accumulator.py`
+
+The OOC and HYBRID_STREAMING strategies share a parallel acceleration layer for
+dispatching chunk computations to persistent workers and reducing their results.
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Parallel Accumulator Architecture                                         │
+│                                                                           │
+│  Two-tier parallelism:                                                    │
+│                                                                           │
+│  Tier 1 — OOCComputePool (compute-level parallelism)                      │
+│    Persistent process pool that computes JtJ, Jtr, chi2 per chunk.        │
+│    Workers share flat data arrays via shared memory (zero-copy).           │
+│    Each worker caches JIT kernels across L-M iterations — compile once.    │
+│                                                                           │
+│  Tier 2 — accumulate_chunks_parallel (reduction-level parallelism)        │
+│    Reduces pre-computed (JtJ, Jtr, chi2) tuples across workers.           │
+│    Exploits associativity of matrix addition for safe partitioning.        │
+│                                                                           │
+│  Both tiers fall back to sequential when n_chunks < 10 or on failure.     │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Shared Memory Layout (OOCSharedArrays)
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ OOCSharedArrays — Zero-Copy Shared Memory                                 │
+│                                                                           │
+│  Parent process:                                                          │
+│    Allocates POSIX shared memory blocks for 5 flat arrays:                │
+│      phi_flat, t1_flat, t2_flat, g2_flat, sigma_flat (optional)           │
+│    Stores picklable refs: { shm_name, shape, dtype } per array            │
+│                                                                           │
+│  Worker processes:                                                        │
+│    Attach to named shared memory blocks (create=False)                    │
+│    Construct np.ndarray views over shm.buf (zero-copy)                    │
+│    Workers read chunk slices via chunk_boundaries                         │
+│                                                                           │
+│  Lifecycle:                                                               │
+│    with OOCSharedArrays(...) as shared:                                   │
+│        pool = OOCComputePool(n_workers, shared, ...)                      │
+│        ...  # iterate                                                     │
+│    # shared.__exit__ -> close + unlink all shm blocks                     │
+│    # pool.__exit__ -> shutdown executor                                   │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+#### OOCComputePool — Persistent Worker Pool
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ OOCComputePool Lifecycle                                                  │
+│                                                                           │
+│  1. Create ProcessPoolExecutor (spawn context)                            │
+│     initializer = _ooc_worker_init                                        │
+│     initargs = (shm_refs, physics_config, chunk_boundaries,               │
+│                 threads_per_worker)                                        │
+│                                                                           │
+│  2. Worker initialization (_ooc_worker_init):                             │
+│     a. Thread pinning (OMP/MKL/OPENBLAS_NUM_THREADS)                      │
+│     b. Float64 before JAX import (JAX_ENABLE_X64=true)                    │
+│     c. Persistent JIT compilation cache                                   │
+│        jax.config.update("jax_compilation_cache_dir", cache_dir)          │
+│        jax.config.update("jax_persistent_cache_min_compile_time_secs", 0) │
+│     d. Attach to shared memory arrays (zero-copy np.ndarray views)        │
+│     e. create_ooc_kernels() -> JIT kernel pair:                           │
+│        compute_chunk_accumulators: (p, phi, t1, t2, g2, sigma) -> JtJ,    │
+│                                    Jtr, chi2                              │
+│        compute_chunk_chi2:         (p, ...) -> chi2 (no Jacobian)         │
+│     f. Register atexit cleanup for shm handles                            │
+│                                                                           │
+│  3. Per L-M iteration:                                                    │
+│     pool.compute_accumulators(params)                                     │
+│       -> submit _ooc_compute_chunk(params, chunk_id) to all chunks        │
+│       -> collect (JtJ, Jtr, chi2) tuples via as_completed                 │
+│       -> reduce via accumulate_chunks_parallel or sequential              │
+│                                                                           │
+│  4. Shutdown: executor.shutdown(wait=True, cancel_futures=True)           │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+#### JIT Kernel Factory (create_ooc_kernels)
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ create_ooc_kernels()                                                      │
+│                                                                           │
+│  Inputs (physics constants, closed over):                                 │
+│    per_angle_scaling, n_phi, phi_unique, t1_unique, t2_unique,            │
+│    n_t1, n_t2, q_val, L_val, dt_val                                      │
+│                                                                           │
+│  Returns two @jax.jit kernels:                                            │
+│                                                                           │
+│    compute_chunk_accumulators(p, phi_c, t1_c, t2_c, g2_c, sigma):         │
+│      1. residual_fn(p) -> r  (uses compute_g2_scaled from physics_nlsq)   │
+│      2. J = jax.jacobian(residual_fn)(p)                                  │
+│      3. JtJ = J^T @ J,  Jtr = J^T @ r                                    │
+│      4. chi2 = sum(r^2 / sigma^2)  (or unweighted)                        │
+│      -> (JtJ, Jtr, chi2)                                                  │
+│                                                                           │
+│    compute_chunk_chi2(p, phi_c, t1_c, t2_c, g2_c, sigma):                 │
+│      -> chi2 only (no Jacobian, used for cost probes)                     │
+│                                                                           │
+│  Handles both per_angle_scaling (vmapped per phi) and scalar scaling      │
+│  Single source of truth for sequential and parallel OOC paths             │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Parallel Reduction (accumulate_chunks_parallel)
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ accumulate_chunks_parallel(chunks, n_workers)                             │
+│                                                                           │
+│  Gate: n_chunks >= 10 (_MIN_CHUNKS_FOR_PARALLEL)                          │
+│        Falls back to sequential below threshold                           │
+│                                                                           │
+│  Algorithm:                                                               │
+│    1. Round-robin partition chunks across n_workers                        │
+│    2. Each worker: accumulate_chunks_sequential(partition)                 │
+│       -> (partial_JtJ, partial_Jtr, partial_chi2, count)                  │
+│    3. Main process: reduce partial sums via as_completed                   │
+│       total_JtJ += partial_JtJ  (matrix addition is associative)          │
+│       total_Jtr += partial_Jtr                                            │
+│       total_chi2 += partial_chi2                                          │
+│                                                                           │
+│  Error handling:                                                          │
+│    OSError, RuntimeError, PicklingError, TimeoutError (300s)              │
+│    -> fallback to accumulate_chunks_sequential                            │
+│                                                                           │
+│  Mathematical correctness:                                                │
+│    J^T J = sum_i(J_i^T J_i) regardless of summation order                 │
+│    Parallel and sequential produce identical results                      │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
 ______________________________________________________________________
 
 ## 10. Error Recovery
