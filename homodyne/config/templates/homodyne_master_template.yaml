@@ -1144,7 +1144,8 @@ optimization:
       num_warmup: 500 # CONSTRAINT: > 0
       num_samples: 1500 # CONSTRAINT: > 0
       num_chains: 4 # ≥2 for R-hat diagnostics; 4 recommended (CONSTRAINT: > 0)
-      chain_method: "parallel" # "parallel" (default) or "sequential"
+      chain_method:
+        "parallel" # "parallel" (default) or "sequential"
         # "parallel" runs chains concurrently via JAX vmap (faster on multi-core CPUs)
         # "sequential" runs chains one at a time (lower memory; auto-fallback for shards <500 pts)
       target_accept_prob: 0.85 # CONSTRAINT: (0, 1)
