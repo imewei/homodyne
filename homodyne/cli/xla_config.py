@@ -115,7 +115,7 @@ def show_config():
         print(f"  JAX devices: Error - {e}")
 
 
-def main():
+def main() -> None:
     """Main entry point for homodyne-config-xla."""
     parser = argparse.ArgumentParser(
         description="Configure XLA_FLAGS for Homodyne workflows",
