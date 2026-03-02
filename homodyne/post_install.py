@@ -95,6 +95,11 @@ if [[ -z "$_HOMODYNE_ZSH_COMPLETION_LOADED" ]]; then
     alias hexp='homodyne --plot-experimental-data'
     alias hsim='homodyne --plot-simulated-data'
 
+    # Tool aliases
+    alias hxla='homodyne-config-xla'
+    alias hsetup='homodyne-post-install'
+    alias hclean='homodyne-cleanup'
+
     # Helper function
     homodyne_help() {
         echo "Homodyne command shortcuts:"
@@ -112,6 +117,11 @@ if [[ -z "$_HOMODYNE_ZSH_COMPLETION_LOADED" ]]; then
         echo "Plotting shortcuts:"
         echo "  hexp     = homodyne --plot-experimental-data"
         echo "  hsim     = homodyne --plot-simulated-data"
+        echo ""
+        echo "Tool shortcuts:"
+        echo "  hxla     = homodyne-config-xla"
+        echo "  hsetup   = homodyne-post-install"
+        echo "  hclean   = homodyne-cleanup"
     }
 fi"""
 
