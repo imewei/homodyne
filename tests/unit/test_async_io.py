@@ -73,8 +73,8 @@ class TestAsyncWriter:
                 writer.wait_all(timeout=10.0)
 
                 assert path.exists()
-                loaded = np.load(path)
-                np.testing.assert_array_equal(loaded["arr"], np.arange(100))
+                with np.load(path) as loaded:
+                    np.testing.assert_array_equal(loaded["arr"], np.arange(100))
 
     def test_write_json(self):
         import json
