@@ -7,6 +7,32 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
+## [2.22.4] - 2026-03-02
+
+### Documentation and Build Improvements
+
+Minor release with documentation build improvements and formatting fixes.
+
+5 files changed, 40 insertions, 7 deletions across 4 commits.
+
+**Build:**
+
+- **build(docs)**: Configure XeLaTeX and custom fonts for PDF documentation generation
+  (`conf.py`, `.readthedocs.yaml`, `Makefile`)
+
+- **build(docs)**: Suppress cosmetic box and page-oscillation warnings in XeLaTeX PDF
+  build (`conf.py`)
+
+**Documentation:**
+
+- **docs(api)**: Replace Unicode geq symbol with MathJax equivalent for LaTeX/PDF
+  compatibility (`index.rst`)
+
+- **docs(architecture)**: Format code block for YAML configuration snippet in CMC
+  documentation (`cmc-fitting-architecture.md`)
+
+______________________________________________________________________
+
 ## [2.22.3] - 2026-03-02
 
 ### Parallel Computing, Deep Reliability Hardening, and Code Quality Sweep
@@ -23,8 +49,8 @@ quality sweep (NaN-safe NumPy, explicit file encoding, Unicode-to-ASCII normaliz
 **Parallel computing infrastructure:**
 
 - **feat(utils)**: Add `PrefetchLoader` for background data prefetching and
-  `AsyncWriter` for non-blocking NPZ/JSON result serialization — both are GIL-safe
-  since HDF5 and NumPy release the GIL during I/O (`async_io.py`)
+  `AsyncWriter` for non-blocking NPZ/JSON result serialization — both are GIL-safe since
+  HDF5 and NumPy release the GIL during I/O (`async_io.py`)
 
 - **feat(cli)**: Integrate `AsyncWriter` for background result saving — NLSQ and CMC
   result files (NPZ, JSON, diagnostics) are serialized in a background thread pool while
@@ -38,12 +64,12 @@ quality sweep (NaN-safe NumPy, explicit file encoding, Unicode-to-ASCII normaliz
   segments with explicit memory cleanup after accumulation (`wrapper.py`)
 
 - **feat(cmc)**: Add persistent `WorkerPool` with queue-based shard dispatch —
-  eliminates per-shard process spawn overhead; workers stay alive across the full CMC run
-  with readiness synchronization via `mp.Queue` (`multiprocessing.py`)
+  eliminates per-shard process spawn overhead; workers stay alive across the full CMC
+  run with readiness synchronization via `mp.Queue` (`multiprocessing.py`)
 
 - **feat(cmc)**: Add `chain_method` configuration parameter (default: `"parallel"`) for
-  NUTS chain parallelism — runs chains in parallel via NumPyro with automatic fallback to
-  sequential for shards with <500 points (`config.py`, `sampler.py`)
+  NUTS chain parallelism — runs chains in parallel via NumPyro with automatic fallback
+  to sequential for shards with \<500 points (`config.py`, `sampler.py`)
 
 - **feat(cmc)**: Dynamic XLA device count — automatically sets
   `xla_force_host_platform_device_count` to match `num_chains` for parallel chain
@@ -64,8 +90,8 @@ quality sweep (NaN-safe NumPy, explicit file encoding, Unicode-to-ASCII normaliz
 **CMC persistent worker pool:**
 
 - **perf(cmc)**: Persistent worker pool eliminates per-shard process spawn overhead —
-  workers are pre-forked at pool creation and receive shard assignments via a work queue,
-  reducing dispatch latency for multi-shard CMC runs (`multiprocessing.py`)
+  workers are pre-forked at pool creation and receive shard assignments via a work
+  queue, reducing dispatch latency for multi-shard CMC runs (`multiprocessing.py`)
 
 **Background I/O:**
 
@@ -99,7 +125,8 @@ quality sweep (NaN-safe NumPy, explicit file encoding, Unicode-to-ASCII normaliz
   and fix chunked sigma tracking (`wrapper.py`)
 
 - **fix(nlsq)**: Correct anti-degeneracy controller fallback and gradient monitor
-  history pop — collapse flag now properly re-arms after recovery (`gradient_monitor.py`)
+  history pop — collapse flag now properly re-arms after recovery
+  (`gradient_monitor.py`)
 
 - **fix(nlsq)**: Fix AdaptiveRegularizer silently skipping regularization in
   `auto_averaged` mode (`adaptive_regularization.py`)
@@ -121,8 +148,8 @@ quality sweep (NaN-safe NumPy, explicit file encoding, Unicode-to-ASCII normaliz
 - **fix(cmc)**: Handle `MemoryError` during worker pool dispatch with graceful
   degradation (`multiprocessing.py`)
 
-- **fix(cmc)**: Improve pool worker error handling and queue EOF resilience — workers
-  no longer crash on sentinel values or unexpected queue closure (`multiprocessing.py`)
+- **fix(cmc)**: Improve pool worker error handling and queue EOF resilience — workers no
+  longer crash on sentinel values or unexpected queue closure (`multiprocessing.py`)
 
 - **fix(cmc)**: NaN-safe numpy in fallback R-hat computation and shard clustering
   (`results.py`, `diagnostics.py`)
@@ -133,8 +160,8 @@ quality sweep (NaN-safe NumPy, explicit file encoding, Unicode-to-ASCII normaliz
 - **fix(cmc)**: Correct `ParameterSpace` type annotations to `Optional` for nullable
   fields (`config.py`)
 
-- **fix(cmc)**: Bounds-aware coefficient of variation for heterogeneity detection —
-  for near-zero parameters (e.g., shear rate ~ 1e-3), CV is computed relative to bounds
+- **fix(cmc)**: Bounds-aware coefficient of variation for heterogeneity detection — for
+  near-zero parameters (e.g., shear rate ~ 1e-3), CV is computed relative to bounds
   range rather than mean (`multiprocessing.py`)
 
 - **fix(cmc)**: Cap prior tempering for log-space params at 10 log-units to prevent
@@ -161,7 +188,8 @@ quality sweep (NaN-safe NumPy, explicit file encoding, Unicode-to-ASCII normaliz
   (`xpcs_loader.py`)
 
 - **fix(data)**: Fix AND mask for wrapped phi ranges (phi_min > phi_max) changed to OR
-  logic — was silently loading 0 angles for wide-angle experiments (`filtering_utils.py`)
+  logic — was silently loading 0 angles for wide-angle experiments
+  (`filtering_utils.py`)
 
 - **fix(data)**: Deep copy in `_standardize_format` and `_correct_diagonal_enhanced` to
   prevent cross-reference mutation (`preprocessing.py`)
@@ -177,8 +205,8 @@ quality sweep (NaN-safe NumPy, explicit file encoding, Unicode-to-ASCII normaliz
 
 *CLI and visualization:*
 
-- **fix(cli)**: Force `Agg` matplotlib backend to prevent tkinter GC crashes in
-  headless environments (`commands.py`)
+- **fix(cli)**: Force `Agg` matplotlib backend to prevent tkinter GC crashes in headless
+  environments (`commands.py`)
 
 - **fix(cli)**: Improve background save error logging and dynamic NPZ array count
   (`commands.py`)
@@ -319,8 +347,8 @@ quality sweep (NaN-safe NumPy, explicit file encoding, Unicode-to-ASCII normaliz
   redundant `jax.clear_caches()` calls that added ~28% overhead to test suite
   (`conftest.py`)
 
-- **fix(tests)**: Use context manager for `np.load` to prevent file handle leaks in
-  NLSQ result tests (`test_nlsq_*.py`)
+- **fix(tests)**: Use context manager for `np.load` to prevent file handle leaks in NLSQ
+  result tests (`test_nlsq_*.py`)
 
 - **fix(tests)**: Constrain mock object creation to prevent infinite recursion in JSON
   serialization (`test_cli_workflows.py`)

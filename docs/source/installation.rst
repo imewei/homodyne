@@ -158,7 +158,7 @@ Expected output:
 
 .. code-block:: text
 
-   Homodyne:  2.22.3
+   Homodyne:  2.22.4
    JAX:       0.8.x
    Devices:   [CpuDevice(id=0)]
    JAX dot:   (100, 100)

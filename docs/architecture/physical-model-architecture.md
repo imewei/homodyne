@@ -2,7 +2,7 @@
 
 Complete documentation of the physical model implementation in homodyne.
 
-**Version:** 2.22.3 **Last Updated:** March 2026
+**Version:** 2.22.4 **Last Updated:** March 2026
 
 ## Table of Contents
 

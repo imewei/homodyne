@@ -53,14 +53,14 @@ Complete template with all available options:
     # HOMODYNE STATIC DIFFUSION CONFIGURATION TEMPLATE
     # ==============================================================================
     # Equilibrium systems with 3-parameter model: D(t) = D₀·t^α + D_offset
-    # VERSION: 2.22.3 | Python: 3.12+ | JAX: 0.8.2+ (CPU-only)
+    # VERSION: 2.22.4 | Python: 3.12+ | JAX: 0.8.2+ (CPU-only)
     # ==============================================================================
 
     # ==============================================================================
     # METADATA (Required)
     # ==============================================================================
     metadata:
-      config_version: "2.22.3"
+      config_version: "2.22.4"
       description: "Static diffusion analysis - equilibrium system"
       analysis_mode: "static"
       parameter_count: 3
@@ -419,11 +419,11 @@ Complete template:
     # HOMODYNE LAMINAR FLOW CONFIGURATION TEMPLATE
     # ==============================================================================
     # Non-equilibrium systems with 7-parameter model including shear effects
-    # VERSION: 2.22.3 | Python: 3.12+ | JAX: 0.8.2+ (CPU-only)
+    # VERSION: 2.22.4 | Python: 3.12+ | JAX: 0.8.2+ (CPU-only)
     # ==============================================================================
 
     metadata:
-      config_version: "2.22.3"
+      config_version: "2.22.4"
       description: "Laminar flow analysis - non-equilibrium system under shear"
       analysis_mode: "laminar_flow"
       parameter_count: 7
