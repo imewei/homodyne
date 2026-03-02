@@ -163,6 +163,7 @@ class StandardExecutor(OptimizationExecutor):
                 max_nfev=5000,
                 verbose=0,
                 stability="auto",  # Enable memory management and stability
+                rescale_data=False,  # xdata is indices, not physical data
             )
 
             _duration = time.perf_counter() - _start_time

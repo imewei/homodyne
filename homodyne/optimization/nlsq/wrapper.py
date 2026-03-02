@@ -2131,6 +2131,7 @@ class NLSQWrapper(NLSQAdapterBase):
                             full_output=True,
                             show_progress=strategy_info["supports_progress"],
                             stability="auto",
+                            rescale_data=False,  # xdata is indices, not physical data
                         )
                         popt, pcov, info = result_tuple  # type: ignore[misc]
                     else:
@@ -2147,6 +2148,7 @@ class NLSQWrapper(NLSQAdapterBase):
                             max_nfev=5000,
                             verbose=0,
                             stability="auto",
+                            rescale_data=False,  # xdata is indices, not physical data
                         )
                         info = {}
 
@@ -2604,6 +2606,7 @@ class NLSQWrapper(NLSQAdapterBase):
                         max_nfev=5000,  # Increased max function evaluations
                         verbose=2,  # Show iteration details
                         stability="auto",  # Enable memory management and stability
+                        rescale_data=False,  # xdata is indices, not physical data
                     )
                     info = {"initial_cost": initial_cost}
 
