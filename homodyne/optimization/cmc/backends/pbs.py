@@ -36,6 +36,45 @@ logger = get_logger(__name__)
 
 _SAFE_PATH_RE = re.compile(r"^[/a-zA-Z0-9._-]+$")
 _PBS_JOB_ID_RE = re.compile(r"^\d+(\.\w+)*$")
+_PBS_QUEUE_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+_PBS_WALLTIME_RE = re.compile(r"^\d{1,3}:\d{2}:\d{2}$")
+_PBS_MEMORY_RE = re.compile(r"^\d+[kmgKMG][bB]$")
+
+
+def _validate_pbs_params(*, queue: str, walltime: str, memory: str) -> None:
+    """Validate PBS parameters to prevent shell injection.
+
+    Parameters
+    ----------
+    queue : str
+        PBS queue name. Must contain only alphanumeric chars, hyphens,
+        and underscores.
+    walltime : str
+        Job walltime in HH:MM:SS format (hours may be 1-3 digits).
+    memory : str
+        Memory specification (e.g. "8gb", "16GB", "512mb").
+
+    Raises
+    ------
+    ValueError
+        If any parameter fails validation.
+    """
+    if not _PBS_QUEUE_RE.match(queue):
+        raise ValueError(
+            f"Invalid PBS queue name {queue!r}: must contain only "
+            "alphanumeric characters, hyphens, and underscores"
+        )
+    if not _PBS_WALLTIME_RE.match(walltime):
+        raise ValueError(
+            f"Invalid PBS walltime {walltime!r}: must match HH:MM:SS format "
+            "(e.g. '04:00:00', '120:00:00')"
+        )
+    if not _PBS_MEMORY_RE.match(memory):
+        raise ValueError(
+            f"Invalid PBS memory {memory!r}: must match pattern like "
+            "'8gb', '16GB', '512mb', '4kb'"
+        )
+
 
 # Default PBS job template
 PBS_JOB_TEMPLATE = """#!/bin/bash
@@ -92,6 +131,8 @@ class PBSBackend(CMCBackend):
         max_wait_time: int = 14400,
     ) -> None:
         """Initialize PBS backend."""
+        _validate_pbs_params(queue=queue, walltime=walltime, memory=memory)
+
         self.queue = queue
         self.ppn = ppn
         self.walltime = walltime

@@ -938,3 +938,84 @@ class TestWorkerPoolIntegration:
         # (avoids respawn overhead)
         assert should_use_pool(n_shards=3, n_workers=1)
         assert not should_use_pool(n_shards=2, n_workers=1)
+
+
+# =============================================================================
+# Tests for PBS Parameter Sanitization (Issue #18)
+# =============================================================================
+
+
+class TestPBSParameterSanitization:
+    """Tests for PBS queue/walltime/memory input validation."""
+
+    def test_valid_queue_names(self):
+        """Test that valid queue names are accepted."""
+        from homodyne.optimization.cmc.backends.pbs import _validate_pbs_params
+
+        for queue in ("batch", "long", "gpu-queue", "test_queue", "q1"):
+            _validate_pbs_params(queue=queue, walltime="04:00:00", memory="8gb")
+
+    def test_invalid_queue_names_rejected(self):
+        """Test that queue names with shell-injection chars are rejected."""
+        from homodyne.optimization.cmc.backends.pbs import _validate_pbs_params
+
+        for bad_queue in (
+            "batch; rm -rf /",
+            "queue$(whoami)",
+            "queue`id`",
+            "batch\necho pwned",
+            "queue name",
+            "batch/sub",
+            "",
+        ):
+            with pytest.raises(ValueError, match="Invalid PBS queue name"):
+                _validate_pbs_params(queue=bad_queue, walltime="04:00:00", memory="8gb")
+
+    def test_valid_walltime_formats(self):
+        """Test that valid walltime strings are accepted."""
+        from homodyne.optimization.cmc.backends.pbs import _validate_pbs_params
+
+        for wt in ("00:30:00", "04:00:00", "24:00:00", "120:00:00", "999:59:59"):
+            _validate_pbs_params(queue="batch", walltime=wt, memory="8gb")
+
+    def test_invalid_walltime_formats_rejected(self):
+        """Test that malformed or malicious walltime strings are rejected."""
+        from homodyne.optimization.cmc.backends.pbs import _validate_pbs_params
+
+        for bad_wt in (
+            "4:00:00",  # single-digit hour without leading zero is actually valid
+            "04:00",  # missing seconds
+            "04:00:00; id",  # shell injection
+            "not-a-time",
+            "",
+            "1234:00:00",  # 4-digit hours
+        ):
+            # 4:00:00 is 1-digit hour, which IS valid per regex \d{1,3}
+            if bad_wt == "4:00:00":
+                _validate_pbs_params(queue="batch", walltime=bad_wt, memory="8gb")
+            else:
+                with pytest.raises(ValueError, match="Invalid PBS walltime"):
+                    _validate_pbs_params(queue="batch", walltime=bad_wt, memory="8gb")
+
+    def test_valid_memory_formats(self):
+        """Test that valid memory strings are accepted."""
+        from homodyne.optimization.cmc.backends.pbs import _validate_pbs_params
+
+        for mem in ("4gb", "16GB", "512mb", "8Gb", "1024MB", "4kb", "2KB"):
+            _validate_pbs_params(queue="batch", walltime="04:00:00", memory=mem)
+
+    def test_invalid_memory_formats_rejected(self):
+        """Test that malformed or malicious memory strings are rejected."""
+        from homodyne.optimization.cmc.backends.pbs import _validate_pbs_params
+
+        for bad_mem in (
+            "8gb; rm -rf /",
+            "8",  # no unit
+            "gb",  # no number
+            "8 gb",  # space
+            "8tb",  # 't' not in allowed set
+            "",
+            "8gb\necho pwn",
+        ):
+            with pytest.raises(ValueError, match="Invalid PBS memory"):
+                _validate_pbs_params(queue="batch", walltime="04:00:00", memory=bad_mem)
