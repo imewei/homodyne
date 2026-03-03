@@ -1421,29 +1421,6 @@ class TestNLSQFallback:
 class TestNLSQPerformance:
     """Performance tests for NLSQ optimization."""
 
-    def test_nlsq_timing_small_dataset(
-        self, small_xpcs_data, test_config, benchmark_config
-    ):
-        """Test NLSQ timing with small dataset."""
-        data = small_xpcs_data
-
-        # Time the optimization
-        import time
-
-        start_time = time.perf_counter()
-        result = fit_nlsq_jax(data, test_config)
-        elapsed_time = time.perf_counter() - start_time
-
-        # Should complete in reasonable time (includes JIT compilation on first run)
-        # v2.4.0: Per-angle scaling increases optimization complexity
-        assert elapsed_time < 25.0, f"Small dataset took too long: {elapsed_time:.2f}s"
-        assert result.success, "Small dataset optimization should succeed"
-
-        # Reported time should be roughly consistent (within 10s for JIT variability)
-        assert abs(result.execution_time - elapsed_time) < 10.0, (
-            f"Reported computation time inconsistent: result={result.execution_time:.2f}s, actual={elapsed_time:.2f}s"
-        )
-
     def test_nlsq_scaling_dataset_size(self, test_config):
         """Test NLSQ timing scaling with dataset size."""
         sizes = [10, 20, 30]

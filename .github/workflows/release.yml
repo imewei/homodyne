@@ -76,7 +76,6 @@ jobs:
         run: |
           uv run pytest tests/ \
             -v \
-            -n 2 \
             --tb=short \
             -m "not slow" \
             --cov=homodyne \
