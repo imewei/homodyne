@@ -187,7 +187,7 @@ def samples_to_arviz(
 
     posterior_dict = {name: samples[:, :, i] for i, name in enumerate(param_names)}
 
-    return az.from_dict(posterior=posterior_dict)
+    return az.from_dict({"posterior": posterior_dict})
 
 
 def save_fitted_data_npz(

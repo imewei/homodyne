@@ -6,6 +6,7 @@ including R-hat, effective sample size (ESS), and divergence checks.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -57,8 +58,10 @@ def compute_r_hat(
     # Prefer ArviZ split-R-hat (Vehtari et al. 2021) over manual formula.
     if HAS_ARVIZ:
         try:
-            idata = az.from_dict(posterior=samples)
-            rhat_ds = az.rhat(idata)
+            idata = az.from_dict({"posterior": samples})
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                rhat_ds = az.rhat(idata)
             r_hat_dict: dict[str, float] = {}
             for name in samples:
                 if hasattr(rhat_ds, name):
@@ -132,11 +135,13 @@ def compute_ess(
         if not HAS_ARVIZ:
             raise ImportError("Arviz is required for full ESS computation")
 
-        idata = az.from_dict(posterior=samples)
+        idata = az.from_dict({"posterior": samples})
 
-        # Compute ESS using ArviZ
-        ess_bulk = az.ess(idata, method="bulk")
-        ess_tail = az.ess(idata, method="tail")
+        # Compute ESS using ArviZ (suppress RuntimeWarning from degenerate chains)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            ess_bulk = az.ess(idata, method="bulk")
+            ess_tail = az.ess(idata, method="tail")
 
         # Extract values
         for name in samples.keys():

@@ -528,11 +528,11 @@ def create_inference_data(mcmc_samples: MCMCSamples) -> az.InferenceData:
             else:
                 stats[key] = val
 
-    # Create InferenceData
-    idata = az.from_dict(
-        posterior=posterior_dict,
-        sample_stats=stats,
-    )
+    # Create InferenceData (ArviZ 1.0+ uses nested dict API)
+    from_dict_data: dict[str, dict[str, np.ndarray]] = {"posterior": posterior_dict}
+    if stats:
+        from_dict_data["sample_stats"] = stats
+    idata = az.from_dict(from_dict_data)
 
     return idata
 
