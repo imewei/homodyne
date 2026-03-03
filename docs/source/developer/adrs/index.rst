@@ -15,6 +15,7 @@ what alternatives were considered.
    adr_003_anti_degeneracy
    adr_004_consensus_monte_carlo
    adr_005_per_angle_scaling
+   adr_006_no_consumer_gpu
 
 ----
 
@@ -41,6 +42,9 @@ what alternatives were considered.
      - Accepted
    * - 005
      - Per-angle scaling modes (auto/constant/individual/fourier)
+     - Accepted
+   * - 006
+     - No GPU acceleration on consumer hardware
      - Accepted
 
 .. note::

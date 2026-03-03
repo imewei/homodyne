@@ -144,6 +144,7 @@ for the target deployment environment. May be reconsidered in a future version.
 
 .. seealso::
 
+   - :ref:`adr_no_consumer_gpu` — quantitative GPU feasibility assessment (RTX 4090)
    - :ref:`developer_architecture` — overall system design
    - :ref:`adr_nlsq_primary` — NLSQ optimizer choice
    - :ref:`adr_cmc_consensus` — CMC multiprocessing architecture
