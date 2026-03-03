@@ -268,12 +268,12 @@ homodyne/                              # Root package (358 lines)
 │   ├── diagnostics.py          59 L   #   Diagonal overlay
 │   └── validation.py           49 L   #   Plot input validation
 │
-├── cli/                    4,635 L    # Command-line interface
-│   ├── commands.py         3,361 L    #   4-phase pipeline orchestration
-│   ├── config_generator.py   537 L    #   Template generation + builder
+├── cli/                    4,672 L    # Command-line interface
+│   ├── commands.py         3,384 L    #   4-phase pipeline orchestration
+│   ├── config_generator.py   545 L    #   Template generation + builder
 │   ├── args_parser.py        449 L    #   Argument definition + parsing
 │   ├── xla_config.py         156 L    #   XLA device parallelism
-│   └── main.py               111 L    #   Entry point + env setup
+│   └── main.py               117 L    #   Entry point + env setup
 │
 ├── device/                 1,055 L    # CPU/NUMA configuration
 │   ├── cpu.py                514 L    #   HPC CPU optimization
@@ -284,13 +284,16 @@ homodyne/                              # Root package (358 lines)
 │   ├── logging.py          1,145 L    #   Structured logging framework
 │   └── path_validation.py    299 L    #   Path traversal prevention
 │
-├── runtime/                  ~700 L   # Deployment & shell integration
+├── runtime/                2,268 L    # Deployment & shell integration
 │   ├── utils/
-│   │   └── system_validator.py 1,472 L #  Comprehensive health checks
+│   │   └── system_validator.py 1,470 L #  Comprehensive health checks
 │   └── shell/
-│       └── completion.sh      680 L   #   Tab completion + aliases
+│       ├── completion.sh      680 L   #   Tab completion + aliases (bash/zsh)
+│       └── activation/
+│           ├── xla_config.bash 125 L  #   XLA env setup (bash)
+│           └── xla_config.fish 102 L  #   XLA env setup (fish)
 │
-├── post_install.py           981 L    # Shell completion installer
+├── post_install.py           995 L    # Shell completion installer
 └── uninstall_scripts.py      750 L    # Cleanup utility
 ```
 
@@ -302,9 +305,9 @@ homodyne/                              # Root package (358 lines)
 | data/ | 12,302 | 14.0% | HDF5 loading, preprocessing, QC, caching |
 | core/ | 9,399 | 10.7% | Physics models, JIT kernels, fitting |
 | config/ | 4,832 | 5.5% | YAML/JSON config, parameter management |
-| cli/ | 4,635 | 5.3% | CLI entry points, pipeline orchestration |
+| cli/ | 4,672 | 5.3% | CLI entry points, pipeline orchestration |
 | viz/ | 3,761 | 4.3% | NLSQ/MCMC plots, datashader backend |
-| runtime/ | 3,219 | 3.7% | System validator, shell completion, installer |
+| runtime/ | 2,268 | 2.6% | System validator, shell completion, XLA activation |
 | utils/ | 1,478 | 1.7% | Structured logging, path security |
 | device/ | 1,055 | 1.2% | CPU topology, NUMA, HPC optimization |
 | io/ | 953 | 1.1% | JSON/NPZ/NetCDF result writers |
@@ -361,7 +364,7 @@ ______________________________________________________________________
 
 ## 3. CLI Layer
 
-**Location:** `homodyne/cli/` (4,635 lines)
+**Location:** `homodyne/cli/` (4,672 lines)
 
 ### Console Scripts
 
@@ -890,7 +893,7 @@ ______________________________________________________________________
 
 ## 13. Runtime & Deployment
 
-### System Validator (`runtime/utils/system_validator.py`, 1,472 lines)
+### System Validator (`runtime/utils/system_validator.py`, 1,470 lines)
 
 Comprehensive pre-flight checks:
 
@@ -907,26 +910,58 @@ Comprehensive pre-flight checks:
 
 ### Shell Completion System
 
+**Installer:** `post_install.py` (995 lines) | **Cleanup:** `uninstall_scripts.py` (750 lines)
+
 ```
 homodyne-post-install
     │
     ├── Copies completion.sh (680 L) into $VENV/etc/homodyne/shell/
-    ├── Configures venv activation script to source it
+    ├── Copies xla_config.{bash,fish} into $VENV/etc/homodyne/shell/activation/
+    ├── Configures venv activation script to source completion + XLA config
     │
     └── Provides:
         ├── Tab completion for all 5 console scripts
         ├── Shell aliases: hm, hconfig, hm-nlsq, hm-cmc, hc-stat, hc-flow, ...
+        ├── XLA environment setup (auto-configures device count on venv activate)
         └── Interactive config builder (bash/zsh)
+
+homodyne-cleanup
+    │
+    ├── Removes $VENV/etc/homodyne/ directory
+    ├── Removes activation hook modifications
+    └── Supports: -i (interactive), -n (dry-run), -f (force)
 ```
+
+**Shell support matrix:**
+
+| Shell | Completion Source | Features |
+|-------|-------------------|----------|
+| bash/zsh | `$VENV/etc/homodyne/shell/completion.sh` | Tab completion + aliases + interactive builder |
+| fish | `$VENV/etc/homodyne/shell/completion.fish` (generated) | Native fish `complete` + aliases |
+| fallback | `$VENV/etc/zsh/homodyne-completion.zsh` | Aliases only (no tab completion) |
+
+**XLA activation scripts:**
+
+| Shell | Script | Purpose |
+|-------|--------|---------|
+| bash | `runtime/shell/activation/xla_config.bash` (125 L) | Sets `XLA_FLAGS` on venv activate |
+| fish | `runtime/shell/activation/xla_config.fish` (102 L) | Fish-native `set -gx` for XLA |
+
+**Aliases (all shells):**
 
 | Alias | Expansion |
 |-------|-----------|
 | `hm` | `homodyne` |
+| `hconfig` | `homodyne-config` |
 | `hm-nlsq` | `homodyne --method nlsq` |
 | `hm-cmc` | `homodyne --method cmc` |
-| `hconfig` | `homodyne-config` |
 | `hc-stat` | `homodyne-config --mode static` |
 | `hc-flow` | `homodyne-config --mode laminar_flow` |
+| `hexp` | `homodyne --plot-experimental-data` |
+| `hsim` | `homodyne --plot-simulated-data` |
+| `hxla` | `homodyne-config-xla` |
+| `hsetup` | `homodyne-post-install` |
+| `hclean` | `homodyne-cleanup` |
 
 ______________________________________________________________________
 

@@ -185,7 +185,7 @@ Documentation
    * - :doc:`api/index`
      - Python API reference (autodoc).
    * - :doc:`examples/index`
-     - Worked examples for static and laminar flow analyses.
+     - Example workflows for static and laminar flow analyses.
    * - :doc:`developer/index`
      - Contributing, architecture, and testing guide.
    * - :doc:`architecture/index`
