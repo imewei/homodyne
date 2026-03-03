@@ -141,10 +141,10 @@ class ParameterManager:
                 "name": "gamma_dot_t_offset",
                 "type": "TruncatedNormal",
             },
-            # phi0 in radians, consistent with physics model and ParameterRegistry
+            # phi0 in degrees, consistent with physics model and ParameterRegistry
             "phi0": {
-                "min": -3.141592653589793,  # -pi
-                "max": 3.141592653589793,  # +pi
+                "min": -10.0,
+                "max": 10.0,
                 "name": "phi0",
                 "type": "TruncatedNormal",
             },

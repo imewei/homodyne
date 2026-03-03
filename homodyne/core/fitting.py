@@ -82,44 +82,28 @@ class ParameterSpace:
     # - contrast (β): Physical range [0, 1] where 0=no signal, 1=perfect contrast
     # - offset: Deviation from baseline=1.0, range [0.5, 1.5] allows ±50% variation
     contrast_bounds: tuple[float, float] = (0.0, 1.0)  # Physical contrast range
-    offset_bounds: tuple[float, float] = (
-        0.5,
-        1.5,
-    )  # Baseline ± 50% deviation (tighter for MCMC stability)
-    contrast_prior: tuple[float, float] = (
-        0.5,
-        0.2,
-    )  # (mu, sigma) centered at 0.5, wider sigma
-    offset_prior: tuple[float, float] = (
-        1.0,
-        0.3,
-    )  # (mu, sigma) centered at 1.0, wider sigma
+    offset_bounds: tuple[float, float] = (0.5, 1.5)
+    contrast_prior: tuple[float, float] = (0.5, 0.25)  # (mu, sigma)
+    offset_prior: tuple[float, float] = (1.0, 0.25)  # (mu, sigma)
 
-    # Physical parameter bounds (mode-dependent) - STANDARDIZED VALUES
-    D0_bounds: tuple[float, float] = (1.0, 1000000.0)
-    alpha_bounds: tuple[float, float] = (-2.0, 2.0)  # FIXED: Was (-10, 10)
-    # Extreme values like alpha=-4.96 cause numerical underflow: exp(-q²*D₀*t^α*dt/2) → 0
-    D_offset_bounds: tuple[float, float] = (
-        -100000.0,
-        100000.0,
-    )  # Consistent with physics.py
+    # Physical parameter bounds (mode-dependent)
+    D0_bounds: tuple[float, float] = (100.0, 100000.0)
+    alpha_bounds: tuple[float, float] = (-2.0, 2.0)
+    D_offset_bounds: tuple[float, float] = (-100000.0, 100000.0)
 
-    # Laminar flow parameters (only for laminar_flow mode) - STANDARDIZED VALUES
-    gamma_dot_t0_bounds: tuple[float, float] = (1e-5, 1.0)
-    beta_bounds: tuple[float, float] = (-2.0, 2.0)  # FIXED: Was (-10, 10)
-    gamma_dot_t_offset_bounds: tuple[float, float] = (
-        -1.0,
-        1.0,
-    )  # Consistent with physics.py
-    phi0_bounds: tuple[float, float] = (-30.0, 30.0)  # Consistent with physics.py
+    # Laminar flow parameters (only for laminar_flow mode)
+    gamma_dot_t0_bounds: tuple[float, float] = (1e-6, 10000.0)
+    beta_bounds: tuple[float, float] = (-2.0, 2.0)
+    gamma_dot_t_offset_bounds: tuple[float, float] = (0.01, 100.0)
+    phi0_bounds: tuple[float, float] = (-10.0, 10.0)  # degrees
 
-    # Prior means (mu) and standard deviations (sigma) - STANDARDIZED VALUES
-    D0_prior: tuple[float, float] = (10000.0, 1000.0)
-    alpha_prior: tuple[float, float] = (-1.5, 0.1)
-    D_offset_prior: tuple[float, float] = (0.0, 10.0)
-    gamma_dot_t0_prior: tuple[float, float] = (0.001, 0.01)
-    beta_prior: tuple[float, float] = (0.0, 0.1)
-    gamma_dot_t_offset_prior: tuple[float, float] = (0.0, 0.001)
+    # Prior means (mu) and standard deviations (sigma)
+    D0_prior: tuple[float, float] = (50050.0, 24975.0)
+    alpha_prior: tuple[float, float] = (0.0, 1.0)
+    D_offset_prior: tuple[float, float] = (0.0, 50000.0)
+    gamma_dot_t0_prior: tuple[float, float] = (5000.0, 2500.0)
+    beta_prior: tuple[float, float] = (0.0, 1.0)
+    gamma_dot_t_offset_prior: tuple[float, float] = (50.005, 24.99)
     phi0_prior: tuple[float, float] = (0.0, 5.0)
 
     # Data ranges

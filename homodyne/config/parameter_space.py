@@ -781,8 +781,8 @@ class ParameterSpace:
                 "delta_floor": 1e-3,
             }
 
-        d0_bounds = self.bounds.get("D0", (1.0, 1e5))
-        d_offset_bounds = self.bounds.get("D_offset", (-1e3, 1e3))
+        d0_bounds = self.bounds.get("D0", (100.0, 1e5))
+        d_offset_bounds = self.bounds.get("D_offset", (-1e5, 1e5))
         center_mu = d0_prior.mu + d_offset_prior.mu
         if center_mu <= 0:
             center_mu = max(

@@ -75,26 +75,24 @@ class PhysicsConstants:
     TIME_MAX_XPCS = 1e3  # Kilosecond measurements
 
     # Diffusion coefficient ranges (Å²/s)
-    DIFFUSION_MIN = 1.0  # Realistic minimum for molecular diffusion
-    DIFFUSION_MAX = 1e6  # Extended range for fast colloidal systems
+    DIFFUSION_MIN = 100.0  # Minimum for colloidal systems
+    DIFFUSION_MAX = 1e5  # Maximum for fast colloidal systems
     DIFFUSION_TYPICAL = 100.0
 
     # Shear rate ranges (s⁻¹)
-    SHEAR_RATE_MIN = 1e-5  # Very gentle shear flows
-    SHEAR_RATE_MAX = 1.0  # Realistic maximum experimental shear rate
+    SHEAR_RATE_MIN = 1e-6  # Quasi-static limit
+    SHEAR_RATE_MAX = 1e4  # High-shear regime
     SHEAR_RATE_TYPICAL = 1.0
 
     # Angular ranges (degrees) - focused range for laminar flow analysis
-    ANGLE_MIN = -30.0
-    ANGLE_MAX = 30.0
+    ANGLE_MIN = -10.0
+    ANGLE_MAX = 10.0
 
     # Offset parameter bounds
-    DIFFUSION_OFFSET_MIN = (
-        -1e5
-    )  # Allow negative diffusion offsets for baseline correction
+    DIFFUSION_OFFSET_MIN = -1e5  # Allow negative for jammed/arrested systems
     DIFFUSION_OFFSET_MAX = 1e5  # Maximum positive diffusion offset
-    SHEAR_OFFSET_MIN = -1.0  # Allow negative shear rate offsets
-    SHEAR_OFFSET_MAX = 1.0  # Maximum positive shear rate offset
+    SHEAR_OFFSET_MIN = 0.01  # Minimum shear rate offset
+    SHEAR_OFFSET_MAX = 100.0  # Maximum shear rate offset
 
     # Numerical stability
     EPS = 1e-12  # Avoid division by zero
@@ -360,7 +358,7 @@ def get_default_parameters(model_type: str) -> np.ndarray:
             [
                 PhysicsConstants.SHEAR_RATE_TYPICAL,  # gamma_dot_t0 = 1 s⁻¹
                 0.0,  # beta = 0 (constant shear)
-                0.0,  # gamma_dot_t_offset = 0
+                PhysicsConstants.SHEAR_OFFSET_MIN,  # gamma_dot_t_offset = 0.01
                 0.0,  # phi0 = 0 degrees
             ],
         ),
@@ -373,7 +371,7 @@ def get_default_parameters(model_type: str) -> np.ndarray:
                 # Shear defaults
                 PhysicsConstants.SHEAR_RATE_TYPICAL,  # gamma_dot_t0 = 1 s⁻¹
                 0.0,  # beta = 0
-                0.0,  # gamma_dot_t_offset = 0
+                PhysicsConstants.SHEAR_OFFSET_MIN,  # gamma_dot_t_offset = 0.01
                 0.0,  # phi0 = 0 degrees
             ],
         ),

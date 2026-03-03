@@ -61,7 +61,7 @@ PARAMETER_DESCRIPTIONS = {
     "gamma_dot_t0": "Shear rate amplitude at t=0 [s⁻¹]",
     "beta": "Shear rate time exponent (γ̇(t) = γ̇₀ × t^β)",
     "gamma_dot_t_offset": "Baseline shear rate offset [s⁻¹]",
-    "phi0": "Flow direction angle [radians]",
+    "phi0": "Flow direction angle [degrees]",
 }
 
 # =============================================================================

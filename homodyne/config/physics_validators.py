@@ -19,8 +19,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
-
 
 # Severity levels for constraint violations
 class ConstraintSeverity:
@@ -125,8 +123,8 @@ PHYSICS_CONSTRAINTS: dict[str, list[ConstraintRule]] = {
     ],
     "phi0": [
         ConstraintRule(
-            condition=lambda v: abs(v) > np.pi,
-            message="flow angle outside [-π, π] (will wrap to equivalent angle)",
+            condition=lambda v: abs(v) > 10.0,
+            message="flow angle outside [-10, 10] degrees (check alignment)",
             severity=ConstraintSeverity.INFO,
         ),
     ],
