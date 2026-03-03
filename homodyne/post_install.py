@@ -652,26 +652,6 @@ fi
 # GPU acceleration removed in v2.3.0 - function removed for CPU-only architecture
 
 
-def install_macos_shell_completion() -> None:
-    """Install shell completion for macOS."""
-    import sys
-    from pathlib import Path
-
-    venv_path = Path(sys.prefix)
-    config_dir = venv_path / "etc" / "homodyne"
-    config_dir.mkdir(parents=True, exist_ok=True)
-
-    # NOTE (Dec 2025): macOS shell aliases feature is not yet implemented.
-    # This function is a placeholder for future macOS shell completion support.
-    # Users can manually add aliases to their ~/.zshrc or ~/.bashrc:
-    #
-    #   alias hm='homodyne --method cmc'
-    #   alias hconfig='homodyne --config'
-    #
-    # See docs/README.md for CLI usage documentation.
-    pass
-
-
 def install_advanced_features() -> bool:
     """Install advanced features: completion caching and system validation."""
     logger.info("Installing Advanced Features...")
@@ -806,30 +786,6 @@ def interactive_setup() -> tuple[bool, list[str]]:
             results.append("[FAIL] Advanced features failed")
 
     return len([r for r in results if r.startswith("[OK]")]) > 0, results
-
-
-def show_installation_summary(interactive_results: list[str] | None = None) -> None:
-    """Show installation summary with available commands."""
-    logger.info("Quick Start Commands:")
-    logger.info("   homodyne --method nlsq --config config.yaml")
-    logger.info(
-        "   homodyne --method cmc --config config.yaml  # Automatic NUTS/CMC selection"
-    )
-    logger.info("   homodyne-config --mode static -o my_config.yaml")
-    logger.info("Available Shortcuts (after shell restart):")
-    logger.info("   Base commands:")
-    logger.info("     hm       = homodyne")
-    logger.info("     hconfig  = homodyne-config")
-    logger.info("   Method shortcuts (hm- prefix):")
-    logger.info("     hm-nlsq  = homodyne --method nlsq  # NLSQ trust-region (primary)")
-    logger.info("     hm-cmc  = homodyne --method cmc  # Consensus Monte Carlo")
-    logger.info("   Config mode shortcuts (hc- prefix):")
-    logger.info("     hc-stat  = homodyne-config --mode static")
-    logger.info("     hc-flow  = homodyne-config --mode laminar_flow")
-    logger.info("Help:")
-    logger.info("   homodyne --help")
-    logger.info("   homodyne-config --help")
-    logger.info("   homodyne_help               # View all shortcuts")
 
 
 def main() -> int:

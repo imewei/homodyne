@@ -7,7 +7,7 @@ Part of Phase 3 architecture refactoring to reduce wrapper.py complexity.
 
 Config Consolidation (v2.14.0, FR-014):
 - Single entry point: NLSQConfig.from_yaml() or NLSQConfig.from_dict()
-- Safe type conversion utilities: safe_float, safe_int, safe_bool
+- Safe type conversion utilities: safe_float, safe_int
 - Full validation via validate() method
 """
 
@@ -90,40 +90,6 @@ def safe_int(value: Any, default: int) -> int:
         return int(value)
     except (ValueError, TypeError):
         logger.warning(f"Could not convert {value!r} to int, using default {default}")
-        return default
-
-
-def safe_bool(value: Any, default: bool) -> bool:
-    """Convert value to bool safely, returning default on failure.
-
-    Handles string values like "true", "false", "1", "0".
-
-    Parameters
-    ----------
-    value : Any
-        Value to convert to bool.
-    default : bool
-        Default value to return if conversion fails.
-
-    Returns
-    -------
-    bool
-        Converted bool value or default.
-    """
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        lower = value.lower()
-        if lower in ("true", "1", "yes", "on"):
-            return True
-        if lower in ("false", "0", "no", "off"):
-            return False
-    try:
-        return bool(value)
-    except (ValueError, TypeError):
-        logger.warning(f"Could not convert {value!r} to bool, using default {default}")
         return default
 
 

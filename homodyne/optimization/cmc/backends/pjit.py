@@ -239,31 +239,3 @@ class PjitBackend(CMCBackend):
         logger.info(f"PjitBackend: Completed in {elapsed:.1f}s")
 
         return combined
-
-
-def create_sharded_model(
-    model: Callable,
-    n_shards: int,
-) -> Callable:
-    """Create a sharded version of the model for pjit.
-
-    Parameters
-    ----------
-    model : Callable
-        Original NumPyro model.
-    n_shards : int
-        Number of shards.
-
-    Returns
-    -------
-    Callable
-        Sharded model function.
-
-    Note
-    ----
-    This is a placeholder for future pjit optimization.
-    Currently, shards are processed sequentially with device placement.
-    """
-    # For now, return the original model
-    # Future: implement true pjit sharding with jax.experimental.pjit
-    return model

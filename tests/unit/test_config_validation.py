@@ -607,14 +607,3 @@ class TestNLSQConfigValidation:
         assert safe_int(None, 10) == 10
         assert safe_int("invalid", 5) == 5
         assert safe_int(3.7, 0) == 3
-
-    def test_safe_bool_conversion(self):
-        """Test safe_bool handles various input types."""
-        from homodyne.optimization.nlsq.config import safe_bool
-
-        assert safe_bool("true", False) is True
-        assert safe_bool("false", True) is False
-        assert safe_bool("1", False) is True
-        assert safe_bool("0", True) is False
-        assert safe_bool(None, True) is True
-        assert safe_bool(True, False) is True

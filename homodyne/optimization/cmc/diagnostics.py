@@ -17,7 +17,7 @@ try:
     HAS_ARVIZ = True
 except ImportError:
     HAS_ARVIZ = False
-    az = None  # type: ignore[assignment]
+    az = None  # type: ignore[assignment,unused-ignore]
 
 import numpy as np
 from sklearn.mixture import GaussianMixture
@@ -166,26 +166,6 @@ def compute_ess(
             ess_tail_dict[name] = float(n_total / 10)
 
     return ess_bulk_dict, ess_tail_dict
-
-
-def count_divergences(
-    extra_fields: dict[str, Any],
-) -> int:
-    """Count total divergent transitions.
-
-    Parameters
-    ----------
-    extra_fields : dict[str, Any]
-        Extra fields from MCMC sampler.
-
-    Returns
-    -------
-    int
-        Total number of divergent transitions.
-    """
-    if "diverging" in extra_fields:
-        return int(np.sum(extra_fields["diverging"]))
-    return 0
 
 
 def check_convergence(
