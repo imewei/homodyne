@@ -7,6 +7,45 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
+## [2.22.5] - 2026-03-03
+
+### Security, Compatibility, and Codebase Cleanup
+
+Maintenance release with a security fix for PBS job submission, ArviZ 1.0+
+compatibility, removal of obsolete code, and dependency updates.
+
+52 files changed, 343 insertions, 6467 deletions across 7 commits.
+
+**Security:**
+
+- **fix(cmc)**: Sanitize PBS job parameters to prevent shell injection
+  (`pbs.py`, `test_pbs_security.py`)
+
+**Fixes:**
+
+- **fix(cmc)**: Resolve ArviZ 1.0+ `from_dict` API changes and suppress
+  runtime warnings (`results.py`, `diagnostics.py`, `io/mcmc_writers.py`)
+
+**Refactoring:**
+
+- **refactor(core)**: Remove obsolete `backend_api` facade and JAX debugging
+  utilities
+
+- **chore**: Remove obsolete configurations, performance tests,
+  pjit/diagnostics stubs, and dummy shell completions (20 files, -4749 lines)
+
+**Build:**
+
+- **build(deps)**: Update dependencies and lockfile
+
+**Documentation:**
+
+- **docs**: Clean up and update architecture and API documentation
+
+- **docs**: Remove deprecated notebooks and update architecture overview
+
+______________________________________________________________________
+
 ## [2.22.4] - 2026-03-02
 
 ### Documentation, Build, and CLI Improvements

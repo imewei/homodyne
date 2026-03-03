@@ -35,7 +35,7 @@ Verify the installation:
 .. code-block:: bash
 
    homodyne --version
-   # Homodyne 2.22.4
+   # Homodyne 2.22.5
 
 ----
 
