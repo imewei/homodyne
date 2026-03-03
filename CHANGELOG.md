@@ -7,6 +7,52 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
+## [2.22.6] - 2026-03-03
+
+### Parameter Bounds Standardization and Architecture Decisions
+
+Minor release expanding parameters bounds for colloidal systems, tightening angle
+constraints for stability, and formally documenting the project's stance on consumer GPU
+acceleration.
+
+28 files changed, 557 insertions(+), 237 deletions(-) across 4 commits.
+
+**Refactoring:**
+
+- **refactor(core,config)**: Standardize physical parameter bounds and domain
+  consistency
+  - Extends `D0` boundaries to `[100, 1e5]` and `D_offset` bounds to `[-1e5, 1e5]` for
+    arrested systems.
+  - Narrows angle `phi0` boundary to `[-10, 10]` degrees.
+  - Updates prior means and distributions in `ParameterRegistry` and `fitting.py`.
+  - Resolves inconsistencies between physics constants and configuration validation
+    rules.
+
+**Tests:**
+
+- **test**: Align param bounds in core and cmc optimization tests
+  - Fix bounds assertions in config and physics test suites
+  - Adjust default values and prior tests to match the expanded D0 and offset bounds
+  - Fix timeout smoke tests for NLSQ warmstart expectations
+
+**Documentation:**
+
+- **docs**: Document cross-system parameter bound consistency
+
+  - Updates Analysis Modes documentation with `[100, 1e5]` `D0` ranges.
+  - Defines YAML overriding chain for parameter bounding.
+  - Adds comprehensive verification table matching registry, models, fitting layer.
+
+- **docs(adrs)**: Formalize decision against consumer GPU acceleration
+
+  - Adds ADR-006 explaining quantitative reasons for avoiding consumer GPUs (Float64
+    penalty, PCIe overhead, CMC architecture incompatibility).
+  - Links ADR-006 from ADR-001.
+  - Adds explanatory comment referencing ADR in `homodyne/device/cpu.py` where
+    `JAX_PLATFORMS` is set.
+
+______________________________________________________________________
+
 ## [2.22.5] - 2026-03-03
 
 ### Security, Compatibility, and Codebase Cleanup
@@ -18,21 +64,20 @@ compatibility, removal of obsolete code, and dependency updates.
 
 **Security:**
 
-- **fix(cmc)**: Sanitize PBS job parameters to prevent shell injection
-  (`pbs.py`, `test_pbs_security.py`)
+- **fix(cmc)**: Sanitize PBS job parameters to prevent shell injection (`pbs.py`,
+  `test_pbs_security.py`)
 
 **Fixes:**
 
-- **fix(cmc)**: Resolve ArviZ 1.0+ `from_dict` API changes and suppress
-  runtime warnings (`results.py`, `diagnostics.py`, `io/mcmc_writers.py`)
+- **fix(cmc)**: Resolve ArviZ 1.0+ `from_dict` API changes and suppress runtime warnings
+  (`results.py`, `diagnostics.py`, `io/mcmc_writers.py`)
 
 **Refactoring:**
 
-- **refactor(core)**: Remove obsolete `backend_api` facade and JAX debugging
-  utilities
+- **refactor(core)**: Remove obsolete `backend_api` facade and JAX debugging utilities
 
-- **chore**: Remove obsolete configurations, performance tests,
-  pjit/diagnostics stubs, and dummy shell completions (20 files, -4749 lines)
+- **chore**: Remove obsolete configurations, performance tests, pjit/diagnostics stubs,
+  and dummy shell completions (20 files, -4749 lines)
 
 **Build:**
 
