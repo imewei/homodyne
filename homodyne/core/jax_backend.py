@@ -89,7 +89,6 @@ from functools import partial, wraps
 from typing import Any, cast
 
 from homodyne.core.physics_utils import (
-    EPS,
     PI,
     safe_sinc,
 )
@@ -287,21 +286,6 @@ def reset_cache_stats() -> None:
     }
 
 
-def log_cache_stats() -> None:
-    """T065: Log meshgrid cache statistics at DEBUG level.
-
-    Call this periodically during long optimization runs to monitor
-    cache effectiveness. High hit rates (>80%) indicate good cache
-    utilization.
-    """
-    stats = get_cache_stats()
-    logger.debug(
-        f"Meshgrid cache stats: hits={stats['hits']}, misses={stats['misses']}, "
-        f"hit_rate={stats['hit_rate']:.1%}, size={stats['cache_size']}/{stats['max_cache_size']}, "
-        f"evictions={stats['evictions']}"
-    )
-
-
 # Global flags for availability checking
 jax_available = JAX_AVAILABLE
 numpy_gradients_available = NUMPY_GRADIENTS_AVAILABLE if not JAX_AVAILABLE else False
@@ -402,13 +386,6 @@ def _create_no_hessian_fallback(func_name: str) -> Callable:
         raise ImportError(error_msg)
 
     return no_hessian_available
-
-
-# safe_divide is kept here as it's only used in jax_backend.py
-@partial(jit, static_argnums=(2,))
-def safe_divide(a: jnp.ndarray, b: jnp.ndarray, default: float = 0.0) -> jnp.ndarray:
-    """Safe division with numerical stability."""
-    return jnp.where(jnp.abs(b) > EPS, a / b, default)
 
 
 # Core physics computations with discrete numerical integration

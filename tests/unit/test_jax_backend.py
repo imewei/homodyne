@@ -24,14 +24,13 @@ except ImportError:
     jnp = np
 
 from homodyne.core.jax_backend import (
-    EPS,
     compute_chi_squared,
     compute_g1_diffusion,
     compute_g1_shear,
     compute_g2_scaled,
 )
 from homodyne.core.jax_backend import jax_available as BACKEND_JAX_AVAILABLE
-from homodyne.core.physics_utils import safe_len
+from homodyne.core.physics_utils import EPS, safe_len
 
 # =============================================================================
 # Local helper functions for test compatibility
