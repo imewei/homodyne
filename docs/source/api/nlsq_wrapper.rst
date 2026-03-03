@@ -123,7 +123,6 @@ Safe type conversion utilities
 
 .. autofunction:: homodyne.optimization.nlsq.config.safe_float
 .. autofunction:: homodyne.optimization.nlsq.config.safe_int
-.. autofunction:: homodyne.optimization.nlsq.config.safe_bool
 
 ----
 

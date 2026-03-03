@@ -1790,7 +1790,6 @@ Key Functions
 
    homodyne.optimization.cmc.diagnostics.compute_r_hat
    homodyne.optimization.cmc.diagnostics.compute_ess
-   homodyne.optimization.cmc.diagnostics.count_divergences
    homodyne.optimization.cmc.diagnostics.check_convergence
    homodyne.optimization.cmc.diagnostics.create_diagnostics_dict
    homodyne.optimization.cmc.diagnostics.summarize_diagnostics
@@ -2093,7 +2092,6 @@ Key Classes
    homodyne.optimization.nlsq.config.NLSQConfig
    homodyne.optimization.nlsq.config.safe_float
    homodyne.optimization.nlsq.config.safe_int
-   homodyne.optimization.nlsq.config.safe_bool
 
 Configuration Entry Point
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2118,10 +2116,11 @@ Configuration Utilities (Deprecated)
    Use ``homodyne.optimization.nlsq.config`` instead. The ``safe_float``, ``safe_int``,
    and ``safe_bool`` utilities have been moved to ``config.py``.
 
-.. automodule:: homodyne.optimization.nlsq.config_utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. note::
+
+   ``config_utils`` was merged into ``homodyne.optimization.nlsq.config``.
+   See :func:`~homodyne.optimization.nlsq.config.safe_float` and
+   :func:`~homodyne.optimization.nlsq.config.safe_int`.
 
 .. _nlsq-adapter-base:
 

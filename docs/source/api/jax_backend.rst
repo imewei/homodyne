@@ -151,8 +151,6 @@ recomputing ``(t1_grid, t2_grid)`` on every function call.
 
 .. autofunction:: homodyne.core.jax_backend.reset_cache_stats
 
-.. autofunction:: homodyne.core.jax_backend.log_cache_stats
-
 ----
 
 Diagnostics

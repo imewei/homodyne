@@ -531,7 +531,7 @@ eight sources of parameter bounds in the codebase.
      - [-2, 2]
      - [-2, 2]
      - [-2, 2]
-     - |v| > 2 warn
+     - \|v\| > 2 warn
      - [-2, 2]
    * - gamma_dot_t_offset
      - [0.01, 100]
@@ -547,7 +547,7 @@ eight sources of parameter bounds in the codebase.
      - [-10, 10]
      - [-10, 10]
      - [-10, 10]
-     - |v| > 10 info
+     - \|v\| > 10 info
      - [-10, 10]
    * - contrast
      - [0, 1]
