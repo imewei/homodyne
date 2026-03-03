@@ -148,7 +148,8 @@ JIT compilation cache:
 
    optimization:
      cmc:
-       backend_name: "auto"
+       backend_config:
+         name: "auto"
        per_shard_mcmc:
          chain_method: "parallel"
          num_chains: 4
@@ -199,7 +200,8 @@ Selecting the multiprocessing backend explicitly
 
    optimization:
      cmc:
-       backend_name: "multiprocessing"
+       backend_config:
+         name: "multiprocessing"
        per_shard_mcmc:
          chain_method: "parallel"
          num_chains: 4

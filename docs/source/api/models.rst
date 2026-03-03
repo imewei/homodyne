@@ -141,7 +141,7 @@ Usage Example
 
    model = CombinedModel()
 
-   # Parameters: [D0, alpha, D_offset, gamma_dot0, beta, gamma_dot_offset, phi0]
+   # Parameters: [D0, alpha, D_offset, gamma_dot0, beta, gamma_dot_t_offset, phi0]
    params = jnp.array([100.0, 0.5, 0.01, 1e-3, 0.0, 0.0, 0.0])
    phi = jnp.array([0.0, 45.0, 90.0, 135.0])   # degrees
    t1 = jnp.linspace(0.001, 1.0, 50)

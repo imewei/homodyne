@@ -241,7 +241,7 @@ Provide custom initial parameters to guide the optimizer:
        "D_offset": 0.1,
        "gamma_dot_0": 0.5,    # s⁻¹ (laminar_flow only)
        "beta": 0.0,
-       "gamma_dot_offset": 0.001,
+       "gamma_dot_t_offset": 0.001,
        "phi_0": 0.0,
    }
 

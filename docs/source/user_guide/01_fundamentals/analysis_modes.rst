@@ -186,7 +186,7 @@ convention). See :ref:`theory_homodyne_scattering` for the full derivation.
      - :math:`\beta`
      - dimensionless
      - Shear rate time-dependence exponent
-   * - ``gamma_dot_offset``
+   * - ``gamma_dot_t_offset``
      - :math:`\dot\gamma_\text{offset}`
      - s⁻¹
      - Baseline shear rate
@@ -233,7 +233,7 @@ default bounds.
      beta:
        initial: -0.5
        bounds: [-2.0, 0.0]
-     gamma_dot_offset:
+     gamma_dot_t_offset:
        initial: 0.001
        bounds: [0.0, 1.0]
      phi_0:

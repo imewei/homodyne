@@ -231,7 +231,7 @@ Analogous to :math:`\alpha` for the shear rate:
 
 **Default bounds:** ``[-2.0, 2.0]``
 
-gamma_dot_offset — Baseline Shear Rate
+gamma_dot_t_offset — Baseline Shear Rate
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Symbol:** :math:`\dot\gamma_\text{offset}`
@@ -353,7 +353,7 @@ Parameter Reference Table
      - -0.5
      - [-2, 2]
      - laminar_flow
-   * - ``gamma_dot_offset``
+   * - ``gamma_dot_t_offset``
      - :math:`\dot\gamma_\text{offset}`
      - s⁻¹
      - 0.001

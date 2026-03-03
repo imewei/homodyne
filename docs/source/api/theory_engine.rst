@@ -41,7 +41,7 @@ Computes the normalised field autocorrelation function:
 Parameters ``params`` must be ordered according to the ``analysis_mode``:
 
 - ``"static"``: ``[D0, alpha, D_offset]``
-- ``"laminar_flow"``: ``[D0, alpha, D_offset, gamma_dot0, beta, gamma_dot_offset, phi0]``
+- ``"laminar_flow"``: ``[D0, alpha, D_offset, gamma_dot0, beta, gamma_dot_t_offset, phi0]``
 
 ----
 
@@ -90,7 +90,7 @@ Laminar-flow mode (multi-angle)
 
    engine = TheoryEngine(analysis_mode="laminar_flow")
 
-   # Parameters: [D0, alpha, D_offset, gamma_dot0, beta, gamma_dot_offset, phi0]
+   # Parameters: [D0, alpha, D_offset, gamma_dot0, beta, gamma_dot_t_offset, phi0]
    params = np.array([100.0, 0.5, 0.01, 1e-3, 0.0, 0.0, 0.0])
 
    t1 = np.linspace(0.001, 2.0, 200)

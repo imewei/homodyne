@@ -89,7 +89,7 @@ Minimum required configuration:
      beta:
        initial: 0.0
        bounds: [-2.0, 2.0]
-     gamma_dot_offset:
+     gamma_dot_t_offset:
        initial: 0.001
        bounds: [0.0, 1.0e3]
      phi_0:

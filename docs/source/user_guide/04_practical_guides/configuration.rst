@@ -147,22 +147,22 @@ defaults:
          require_nlsq_warmstart: false  # True = fail if no NLSQ warm-start
 
        # Execution backend
-       backend_name: "auto"            # "auto", "multiprocessing", "pjit", "pbs"
-       num_workers: null               # null = physical_cores/2 - 1
+       backend_config:
+         name: "auto"                  # "auto", "multiprocessing", "pjit", "pbs"
 
        # Posterior combination
-       combination_method: "consensus_mc"  # Recommended
+       combination:
+         method: "consensus_mc"        # Recommended
+         min_success_rate: 0.90
        # "consensus_mc": precision-weighted means (correct)
        # "weighted_gaussian": legacy element-wise (deprecated)
        # "simple_average": unweighted (deprecated)
 
-       # Convergence criteria
-       max_r_hat: 1.05                 # Maximum R-hat for accepted shards
-       min_ess: 400                    # Minimum effective sample size
-
-       # Checkpointing
-       enable_checkpoints: false
-       checkpoint_dir: "./checkpoints"
+       # Convergence criteria (under validation section)
+       validation:
+         max_divergence_rate: 0.10
+         max_per_shard_rhat: 1.05      # Maximum R-hat for accepted shards
+         min_ess: 400                  # Minimum effective sample size
 
    # ============================================================
    # PARAMETER SPACE SECTION
@@ -203,7 +203,7 @@ defaults:
        bounds: [-2.0, 2.0]
        prior: "uniform"
 
-     gamma_dot_offset:
+     gamma_dot_t_offset:
        initial: 0.001
        bounds: [0.0, 1.0e3]
        prior: "uniform"

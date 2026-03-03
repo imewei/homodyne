@@ -99,10 +99,11 @@ Computing correlation matrices
 
    config = {
        "analysis_mode": "laminar_flow",
-       "wavevector_q": 0.01,
-       "stator_rotor_gap": 2_000_000.0,
-       "dt": 0.001,
-       "n_time": 100,
+       "analyzer_parameters": {
+           "temporal": {"dt": 0.001, "start_frame": 0, "end_frame": 99},
+           "scattering": {"wavevector_q": 0.01},
+           "geometry": {"stator_rotor_gap": 2_000_000.0},
+       },
    }
 
    model = HomodyneModel(config)

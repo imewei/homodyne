@@ -17,9 +17,9 @@ Homodyne. It wraps the NLSQ package's ``CurveFit`` class with:
 .. note::
 
    For the simplest usage, call :func:`~homodyne.optimization.nlsq.core.fit_nlsq_jax`
-   with ``use_adapter=True`` (the default). ``NLSQAdapter`` is used internally.
-   Drop to ``NLSQAdapter`` directly only when you need fine-grained control over
-   adapter configuration.
+   with ``use_adapter=True`` (default is ``False``). ``NLSQAdapter`` is used
+   internally when enabled. Drop to ``NLSQAdapter`` directly only when you need
+   fine-grained control over adapter configuration.
 
 ----
 
@@ -131,20 +131,20 @@ Direct NLSQAdapter usage
 .. code-block:: python
 
    from homodyne.optimization.nlsq.adapter import NLSQAdapter, AdapterConfig
-   from homodyne.core.fitting import ParameterSpace
 
    adapter_config = AdapterConfig(
-       enable_jit=True,
-       enable_model_cache=True,
+       enable_recovery=True,
+       enable_stability=True,
        fallback_to_wrapper=True,
    )
 
    adapter = NLSQAdapter(config=adapter_config)
-   param_space = ParameterSpace.from_config(config)
 
    result = adapter.fit(
        data=data,
-       parameter_space=param_space,
+       config=config,
+       initial_params=initial_params,
+       bounds=bounds,
        analysis_mode="laminar_flow",
    )
 
@@ -153,15 +153,14 @@ Multi-start optimisation
 
 .. code-block:: python
 
-   from homodyne.optimization.nlsq.adapter import NLSQAdapter, AdapterConfig
+   from homodyne.optimization.nlsq import fit_nlsq_multistart
    from homodyne.optimization.nlsq.multistart import MultiStartConfig
 
-   adapter = NLSQAdapter(config=AdapterConfig(enable_model_cache=True))
    ms_config = MultiStartConfig(n_starts=8, strategy="latin_hypercube")
 
-   best_result = adapter.fit_multistart(
+   best_result = fit_nlsq_multistart(
        data=data,
-       parameter_space=param_space,
+       config=config,
        multistart_config=ms_config,
    )
 

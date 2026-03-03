@@ -201,7 +201,7 @@ via cumulative trapezoid on the experimental time grid.
    * - ``beta``
      - :math:`\beta_\gamma`
      - Shear rate power-law exponent
-   * - ``gamma_dot_offset``
+   * - ``gamma_dot_t_offset``
      - :math:`\dot{\gamma}_\mathrm{offset}`
      - Constant shear rate background
    * - ``phi_0``
@@ -224,7 +224,7 @@ Code Example
        "D_offset": 0.1,
        "gamma_dot_0": 1e-3,      # s^{-1}
        "beta": -0.67,            # shear rate exponent
-       "gamma_dot_offset": 0.0,
+       "gamma_dot_t_offset": 0.0,
        "phi_0": 0.0,
    }
 

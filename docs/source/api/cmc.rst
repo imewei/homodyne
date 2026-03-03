@@ -153,16 +153,18 @@ YAML Configuration Reference
          strategy: "random"               # random | stratified | contiguous
          max_points_per_shard: "auto"     # ALWAYS use auto
          min_points_per_param: 1500       # Minimum data points per parameter
-       backend_name: "auto"               # auto | multiprocessing | pjit | pbs
+       backend_config:
+         name: "auto"                     # auto | multiprocessing | pjit | pbs
        per_angle_mode: "auto"             # Match NLSQ per_angle_mode
-       combination_method: "robust_consensus_mc"  # Default: MAD-based outlier detection
-       min_success_rate: 0.80
+       combination:
+         method: "robust_consensus_mc"    # Default: MAD-based outlier detection
+         min_success_rate: 0.90
        per_shard_mcmc:
          num_warmup: 500
          num_samples: 1500
          num_chains: 4
          chain_method: "parallel"         # parallel | vectorized | sequential
-         target_accept_prob: 0.8
+         target_accept_prob: 0.85
          max_tree_depth: 10
          adaptive_sampling: true
        validation:

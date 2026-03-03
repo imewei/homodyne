@@ -78,7 +78,7 @@ Quick Physics Reference
      - ``beta``
      - Shear rate power-law exponent
    * - :math:`\dot{\gamma}_\mathrm{offset}`
-     - ``gamma_dot_offset``
+     - ``gamma_dot_t_offset``
      - Constant shear rate background
    * - :math:`\phi_0`
      - ``phi_0``

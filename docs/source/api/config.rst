@@ -124,16 +124,18 @@ A complete YAML configuration file for ``laminar_flow`` analysis:
        sharding:
          strategy: "stratified"
          max_points_per_shard: "auto"
-       backend_name: "auto"
+       backend_config:
+         name: "auto"
        per_angle_mode: "auto"
-       combination_method: "consensus_mc"
-       min_success_rate: 0.80
+       combination:
+         method: "consensus_mc"
+         min_success_rate: 0.90
        per_shard_mcmc:
          num_warmup: 500
          num_samples: 1500
          num_chains: 4
          chain_method: "parallel"
-         target_accept_prob: 0.8
+         target_accept_prob: 0.85
          max_tree_depth: 10
          adaptive_sampling: true
          min_warmup: 100
@@ -162,7 +164,7 @@ A complete YAML configuration file for ``laminar_flow`` analysis:
      beta:
        bounds: [-2.0, 2.0]
        prior: {type: "normal", mean: 0.0, std: 0.5}
-     gamma_dot_offset:
+     gamma_dot_t_offset:
        bounds: [-10.0, 10.0]
        prior: {type: "normal", mean: 0.0, std: 0.1}
      phi0:

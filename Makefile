@@ -311,11 +311,11 @@ test-performance:
 
 test-nlsq:
 	@echo "$(BOLD)$(BLUE)Running NLSQ optimization tests...$(RESET)"
-	$(RUN_CMD) $(PYTEST) $(TEST_DIR)/unit/test_optimization_nlsq.py -v
+	$(RUN_CMD) $(PYTEST) $(TEST_DIR)/unit/test_nlsq_core.py $(TEST_DIR)/unit/test_nlsq_anti_degeneracy.py -v
 
 test-mcmc:
 	@echo "$(BOLD)$(BLUE)Running MCMC optimization tests...$(RESET)"
-	$(RUN_CMD) $(PYTEST) $(TEST_DIR)/unit/test_optimization_mcmc.py -v 2>/dev/null || echo "MCMC tests not found"
+	$(RUN_CMD) $(PYTEST) $(TEST_DIR)/unit/optimization/cmc -v
 
 test-quick:
 	@echo "$(BOLD)$(BLUE)Running quick tests...$(RESET)"
@@ -417,7 +417,7 @@ verify-fast:
 # ===================
 benchmark:
 	@echo "$(BOLD)$(BLUE)Running performance benchmarks...$(RESET)"
-	$(RUN_CMD) $(PYTEST) $(TEST_DIR)/performance/test_benchmarks.py -v --tb=short
+	$(RUN_CMD) $(PYTEST) $(TEST_DIR)/performance -v --tb=short
 
 profile-nlsq:
 	@echo "$(BOLD)$(BLUE)Profiling NLSQ optimization...$(RESET)"

@@ -55,17 +55,20 @@ Open ``my_config.yaml`` and set the path to your HDF5 data file:
 
 .. code-block:: yaml
 
-   data:
-     path: /path/to/your/data.h5
-     group: /exchange          # HDF5 group containing C2 matrix
+   analysis_mode: "static"             # static | laminar_flow
 
-   analysis:
-     mode: static              # static | laminar_flow
-     q_min: 0.001              # Minimum q-value (nm^-1)
-     q_max: 0.1                # Maximum q-value (nm^-1)
+   experimental_data:
+     file_path: /path/to/your/data.h5  # HDF5 file with C2 matrix
+
+   analyzer_parameters:
+     dt: 0.001                          # Time step [seconds]
+     start_frame: 1
+     end_frame: 2000
+     scattering:
+       wavevector_q: 0.0054             # Wave vector [A^-1]
 
    optimization:
-     method: nlsq              # nlsq | cmc
+     method: nlsq                       # nlsq | cmc
 
 See :doc:`user_guide/04_practical_guides/configuration` for the full
 configuration reference.
