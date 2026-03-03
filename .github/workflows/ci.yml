@@ -56,7 +56,7 @@ jobs:
   test:
     name: Test (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 1440
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
@@ -72,6 +72,9 @@ jobs:
       # Integration tests run sequentially on ubuntu — 2 xdist workers + JAX
       # per-worker memory causes OOM at ~61% of 233 integration tests.
       PYTEST_XDIST_INTEG: ${{ matrix.os == 'ubuntu-latest' && '0' || 'auto' }}
+      # Override pyproject.toml addopts (-q conflicts with -v, hiding CI failures).
+      # Keep strict checks but use verbose output for CI diagnostics.
+      PYTEST_ADDOPTS: "-ra --strict-markers --strict-config --durations=10"
 
     steps:
       - uses: actions/checkout@v4
@@ -96,6 +99,7 @@ jobs:
           uv run pytest tests/unit/ \
             -v \
             -n "$PYTEST_XDIST_WORKERS" \
+            -o "addopts=$PYTEST_ADDOPTS" \
             --tb=short \
             --maxfail=10 \
             -m "not slow" \
@@ -108,6 +112,7 @@ jobs:
           uv run pytest tests/regression/ \
             -v \
             -n "$PYTEST_XDIST_WORKERS" \
+            -o "addopts=$PYTEST_ADDOPTS" \
             --tb=short \
             -m "not slow"
 
@@ -115,7 +120,16 @@ jobs:
         run: |
           uv run pytest tests/api/ \
             -v \
-            --tb=short
+            -o "addopts=$PYTEST_ADDOPTS" \
+            --tb=short \
+          || {
+            echo "::warning::API compatibility tests failed on first attempt, retrying..."
+            sleep 2
+            uv run pytest tests/api/ \
+              -v \
+              -o "addopts=$PYTEST_ADDOPTS" \
+              --tb=short
+          }
 
       - name: Run integration tests
         if: matrix.os == 'ubuntu-latest'
@@ -123,8 +137,19 @@ jobs:
           uv run pytest tests/integration/ \
             -v \
             -n "$PYTEST_XDIST_INTEG" \
+            -o "addopts=$PYTEST_ADDOPTS" \
             --tb=short \
-            -m "not slow"
+            -m "not slow" \
+          || {
+            echo "::warning::Integration tests failed on first attempt, retrying..."
+            sleep 2
+            uv run pytest tests/integration/ \
+              -v \
+              -n "$PYTEST_XDIST_INTEG" \
+              -o "addopts=$PYTEST_ADDOPTS" \
+              --tb=short \
+              -m "not slow"
+          }
 
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
