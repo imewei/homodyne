@@ -71,13 +71,13 @@ Parameter Bounds (Static Mode)
      - Max
      - Notes
    * - D0
-     - 1.0
-     - 1,000,000
-     - Wide range for diverse diffusion systems
+     - 100
+     - 100,000
+     - Consistent with Stokes-Einstein range for nm-scale particles
    * - alpha
      - -2.0
      - 2.0
-     - Tighter bounds for numerical stability (was ±10)
+     - Covers subdiffusive to superdiffusive regimes
    * - D_offset
      - -100,000
      - 100,000
@@ -159,32 +159,32 @@ Parameter Bounds (Laminar Flow Mode)
      - Max
      - Notes
    * - D0
-     - 1.0
-     - 1,000,000
-     - Wide range for diverse diffusion systems
+     - 100
+     - 100,000
+     - Consistent with Stokes-Einstein range for nm-scale particles
    * - alpha
      - -2.0
      - 2.0
-     - Tighter bounds for numerical stability (was ±10)
+     - Covers subdiffusive to superdiffusive regimes
    * - D_offset
      - -100,000
      - 100,000
      - Allows negative for arrested systems
    * - gamma_dot_t0
-     - 1e-5
-     - 1.0
-     - Realistic shear rates for XPCS
+     - 1e-6
+     - 10,000
+     - Spans quasi-static to high shear rate regimes
    * - beta
      - -2.0
      - 2.0
-     - Tighter bounds for numerical stability (was ±10)
+     - Covers shear thinning to thickening regimes
    * - gamma_dot_t_offset
-     - -1.0
-     - 1.0
-     - Allows negative offsets
+     - 0.01
+     - 100
+     - Positive baseline shear rate
    * - phi0
-     - -30.0
-     - 30.0
+     - -10.0
+     - 10.0
      - Flow direction angle offset (degrees)
 
 Shear Integral
@@ -208,6 +208,8 @@ Parameter Bounds and Priors (NLSQ & CMC)
   used; if those are missing, the fallbacks are:
   - ``contrast``: [0.0, 1.0]
   - ``offset``: [0.5, 1.5]
+  - ``D0``: [100, 1e5]
+  - ``D_offset``: [-1e5, 1e5]
   - other parameters: [0.0, 1.0]
 - **NLSQ usage:** Bounds are used for deterministic optimization only; NLSQ does not
   sample priors.
@@ -279,7 +281,7 @@ For each azimuthal angle :math:`\phi_i`, two scaling parameters are fitted:
    * - offset_i
      - :math:`c_{0,i}`
      - [0.5, 1.5]
-     - Per-angle baseline offset
+     - Per-angle baseline offset (ideal: 1.0)
 
 Total Parameter Count
 ~~~~~~~~~~~~~~~~~~~~~
@@ -366,13 +368,13 @@ YAML configuration for laminar flow mode with 3 angles:
        - gamma_dot_t_offset
        - phi0
      values:
-       - 1000.0    # D0
-       - 0.0       # alpha (normal diffusion)
-       - 0.0       # D_offset
-       - 0.01      # gamma_dot_t0
-       - 0.0       # beta
-       - 0.0       # gamma_dot_t_offset
-       - 0.0       # phi0 (degrees)
+       - 1000.0    # D0 (bounds: [100, 1e5])
+       - 0.0       # alpha (bounds: [-2, 2])
+       - 0.0       # D_offset (bounds: [-1e5, 1e5])
+       - 0.01      # gamma_dot_t0 (bounds: [1e-6, 1e4])
+       - 0.0       # beta (bounds: [-2, 2])
+       - 0.01      # gamma_dot_t_offset (bounds: [0.01, 100])
+       - 0.0       # phi0 in degrees (bounds: [-10, 10])
 
    # Per-angle scaling is automatically enabled
 

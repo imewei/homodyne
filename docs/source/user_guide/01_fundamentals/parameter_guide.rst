@@ -86,7 +86,7 @@ D₀ — Reference Diffusion Coefficient
      - 0.01–10
      - Sub-diffusive
 
-**Default bounds:** ``[0.0, 1.0e6]`` Å²/s
+**Default bounds:** ``[100, 1e5]`` Å²/s
 
 .. note::
 
@@ -162,7 +162,7 @@ diffusion integral, independent of :math:`\alpha`.
 - Can also absorb contributions from laser speckle in mixed detection setups
 - Often near zero for pure samples; relevant for heterogeneous systems
 
-**Default bounds:** ``[0.0, 1.0e4]`` Å²/s
+**Default bounds:** ``[-1e5, 1e5]`` Å²/s
 
 ---
 
@@ -195,7 +195,7 @@ The accumulated shear strain is the numerical integral:
 - Typical Couette shear rates: 0.01–1000 s⁻¹
 - :math:`\dot\gamma_0 \approx 0` for a sample at rest in the shear cell
 
-**Default bounds:** ``[0.0, 1.0e4]`` s⁻¹
+**Default bounds:** ``[1e-6, 1e4]`` s⁻¹
 
 .. note::
 
@@ -241,7 +241,7 @@ Constant shear rate contribution, independent of time. Analogous to
 :math:`D_\text{offset}` for shear. Represents steady background flow
 superimposed on the time-dependent component.
 
-**Default bounds:** ``[0.0, 1.0e3]`` s⁻¹
+**Default bounds:** ``[0.01, 100]`` s⁻¹
 
 phi_0 — Angular Offset
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -261,7 +261,7 @@ and zero when perpendicular.
 - Misalignment between shear cell and detector introduces a non-zero :math:`\phi_0`
 - The value should be consistent across measurements with the same cell alignment
 
-**Default bounds:** ``[-180.0, 180.0]`` degrees
+**Default bounds:** ``[-10, 10]`` degrees
 
 ---
 
@@ -326,56 +326,56 @@ Parameter Reference Table
    * - ``D0``
      - :math:`D_0`
      - Å²/s
-     - 1.0
-     - [0, 1e6]
+     - 50050
+     - [100, 1e5]
      - static, laminar_flow
    * - ``alpha``
      - :math:`\alpha`
      - —
-     - -0.5
+     - 0.0
      - [-2, 2]
      - static, laminar_flow
    * - ``D_offset``
      - :math:`D_\text{offset}`
      - Å²/s
-     - 0.01
-     - [0, 1e4]
+     - 0.0
+     - [-1e5, 1e5]
      - static, laminar_flow
    * - ``gamma_dot_0``
      - :math:`\dot\gamma_0`
      - s⁻¹
-     - 0.01
-     - [0, 1e4]
+     - 5000
+     - [1e-6, 1e4]
      - laminar_flow
    * - ``beta``
      - :math:`\beta`
      - —
-     - -0.5
+     - 0.0
      - [-2, 2]
      - laminar_flow
    * - ``gamma_dot_t_offset``
      - :math:`\dot\gamma_\text{offset}`
      - s⁻¹
-     - 0.001
-     - [0, 1e3]
+     - 50.005
+     - [0.01, 100]
      - laminar_flow
    * - ``phi_0``
      - :math:`\phi_0`
      - degrees
      - 0.0
-     - [-180, 180]
+     - [-10, 10]
      - laminar_flow
    * - ``contrast``
      - :math:`\beta_\phi`
      - —
-     - 0.1
+     - 0.5
      - [0, 1]
      - per-angle
    * - ``offset``
      - —
      - —
      - 1.0
-     - [0.5, 2.0]
+     - [0.5, 1.5]
      - per-angle
 
 ---
@@ -409,6 +409,175 @@ guidelines:
 **For gamma_dot_0:** use the nominal applied shear rate from your rheometer setting.
 
 **For phi_0:** use 0 if the geometry is known to be aligned; scan if uncertain.
+
+---
+
+.. _parameter_override:
+
+Overriding Parameter Bounds via YAML
+-------------------------------------
+
+All default bounds, priors, and initial values can be overridden through the
+YAML configuration file. The override chain is:
+
+.. code-block:: text
+
+   YAML config
+     -> ConfigManager (parses parameter_space section)
+       -> ParameterManager._load_config_bounds() (dict.update())
+         -> ParameterSpace.from_config() (builds optimizer-ready arrays)
+           -> NLSQ / CMC optimizer
+
+**YAML format:**
+
+.. code-block:: yaml
+
+   parameter_space:
+     model: laminar_flow   # or "static"
+     bounds:
+       - name: D0
+         min: 500.0        # override lower bound
+         max: 5e4          # override upper bound
+         prior_mu: 1e3     # CMC prior mean
+         prior_sigma: 5e2  # CMC prior std
+         type: TruncatedNormal  # prior distribution type
+       - name: alpha
+         min: -1.0
+         max: 1.0
+       - name: contrast    # applies to all contrast_i per-angle params
+         min: 0.05
+         max: 0.8
+         prior_mu: 0.3
+         prior_sigma: 0.15
+         type: BetaScaled
+
+**What can be overridden:**
+
+- **Bounds** (``min``, ``max``): Used by both NLSQ (box constraints) and
+  CMC (truncation limits for priors).
+- **Priors** (``prior_mu``, ``prior_sigma``, ``type``): Used by CMC only.
+  NLSQ ignores prior specifications.
+- **Per-angle parameters**: Setting ``contrast`` or ``offset`` bounds in YAML
+  applies to all per-angle instances (``contrast_0``, ``contrast_1``, etc.).
+
+**Fallback behavior when not specified:**
+
+1. If a parameter appears in the YAML ``bounds`` list, those values are used.
+2. If omitted, ``ParameterManager`` supplies defaults from ``ParameterRegistry``.
+3. If the registry lookup fails, hard-coded fallbacks apply:
+   ``contrast`` [0.0, 1.0], ``offset`` [0.5, 1.5], others [0.0, 1.0].
+4. For CMC priors not specified in YAML: ``TruncatedNormal`` with
+   ``mu = (min + max) / 2`` and ``sigma = (max - min) / 4``.
+
+---
+
+.. _parameter_cross_system:
+
+Cross-System Bounds Consistency
+--------------------------------
+
+The canonical parameter bounds are maintained in ``ParameterRegistry``
+(``homodyne/config/parameter_registry.py``) and propagated consistently to
+all subsystems. The following table confirms the current state across all
+eight sources of parameter bounds in the codebase.
+
+.. list-table:: Cross-System Bounds Verification
+   :header-rows: 1
+   :widths: 16 12 12 12 12 12 12 12
+
+   * - Parameter
+     - Registry
+     - Manager
+     - Physics
+     - Fitting
+     - Models
+     - Validators
+     - Docs
+   * - D0
+     - [100, 1e5]
+     - [100, 1e5]
+     - [100, 1e5]
+     - [100, 1e5]
+     - [100, 1e5]
+     - v > 1e7 warn
+     - [100, 1e5]
+   * - alpha
+     - [-2, 2]
+     - [-2, 2]
+     - [-2, 2]
+     - [-2, 2]
+     - [-2, 2]
+     - v < -1.5 warn
+     - [-2, 2]
+   * - D_offset
+     - [-1e5, 1e5]
+     - [-1e5, 1e5]
+     - --
+     - [-1e5, 1e5]
+     - --
+     - v < 0 warn
+     - [-1e5, 1e5]
+   * - gamma_dot_t0
+     - [1e-6, 1e4]
+     - [1e-6, 1e4]
+     - [1e-6, 1e4]
+     - [1e-6, 1e4]
+     - [1e-6, 1e4]
+     - v > 1 warn
+     - [1e-6, 1e4]
+   * - beta
+     - [-2, 2]
+     - [-2, 2]
+     - [-2, 2]
+     - [-2, 2]
+     - [-2, 2]
+     - |v| > 2 warn
+     - [-2, 2]
+   * - gamma_dot_t_offset
+     - [0.01, 100]
+     - [0.01, 100]
+     - [0.01, 100]
+     - [0.01, 100]
+     - [0.01, 100]
+     - v < 0 warn
+     - [0.01, 100]
+   * - phi0
+     - [-10, 10]
+     - [-10, 10]
+     - [-10, 10]
+     - [-10, 10]
+     - [-10, 10]
+     - |v| > 10 info
+     - [-10, 10]
+   * - contrast
+     - [0, 1]
+     - [0, 1]
+     - --
+     - --
+     - --
+     - v <= 0 err
+     - [0, 1]
+   * - offset
+     - [0.5, 1.5]
+     - [0.5, 1.5]
+     - --
+     - --
+     - --
+     - v <= 0 err
+     - [0.5, 1.5]
+
+**Legend:** Registry = ``parameter_registry.py``, Manager = ``parameter_manager.py``,
+Physics = ``core/physics.py``, Fitting = ``core/fitting.py``,
+Models = ``core/models.py``, Validators = ``physics_validators.py``,
+Docs = this page. "--" means the parameter is not defined in that source.
+
+.. note::
+
+   CMC uses these bounds to construct ``TruncatedNormal`` priors by default.
+   The prior mean is set to the midpoint of the bounds interval and the
+   standard deviation to one quarter of the interval width. Parameters
+   marked ``log_space=True`` in the registry (D0, D_offset, gamma_dot_t0,
+   gamma_dot_t_offset) are reparameterized in log-space for CMC sampling.
 
 ---
 
