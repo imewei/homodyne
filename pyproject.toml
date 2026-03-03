@@ -182,8 +182,6 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"docs/notebooks/*.ipynb" = ["E402", "B905"]
-
 [tool.bandit]
 exclude_dirs = ["tests", "docs", "build", "dist"]
 skips = ["B101", "B110", "B403", "B404", "B603"]
