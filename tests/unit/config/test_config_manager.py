@@ -103,13 +103,11 @@ class TestParameterBounds:
 
     def test_default_bounds_for_phi0(self):
         """Test default bounds for phi0 parameter."""
-        import math
-
         pm = ParameterManager()
         assert "phi0" in pm._default_bounds
         bounds = pm._default_bounds["phi0"]
-        assert abs(bounds["min"] - (-math.pi)) < 1e-10  # -pi radians
-        assert abs(bounds["max"] - math.pi) < 1e-10  # +pi radians
+        assert bounds["min"] == -10.0  # degrees
+        assert bounds["max"] == 10.0  # degrees
 
     def test_bounds_have_correct_structure(self):
         """Test that bounds have required keys."""

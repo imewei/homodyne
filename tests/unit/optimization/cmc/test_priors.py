@@ -154,7 +154,7 @@ class TestBuildPrior:
                 bounds = {
                     "contrast": (0.0, 1.0),
                     "offset": (0.5, 1.5),
-                    "D0": (1.0, 1000000.0),
+                    "D0": (100.0, 100000.0),
                     "alpha": (-2.0, 2.0),
                 }
                 result = bounds.get(param_name)
@@ -367,7 +367,7 @@ class TestBuildInitValuesDict:
                 bounds = {
                     "contrast": (0.0, 1.0),
                     "offset": (0.5, 1.5),
-                    "D0": (1.0, 1e6),
+                    "D0": (100.0, 1e5),
                     "alpha": (-2.0, 2.0),
                     "D_offset": (-1e5, 1e5),
                 }

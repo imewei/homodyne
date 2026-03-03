@@ -1105,16 +1105,16 @@ class TestInfoLevelViolations:
         assert "very low shear rate" in result.violations[0].lower()
         assert "quasi-static" in result.violations[0].lower()
 
-    def test_angle_outside_pi_range(self):
-        """Test INFO for phi0 outside [-π, π]."""
+    def test_angle_outside_bounds_range(self):
+        """Test INFO for phi0 outside [-10, 10] degrees."""
         pm = ParameterManager(None, "laminar_flow")
-        params = {"phi0": 4.0}
+        params = {"phi0": 15.0}
 
         result = pm.validate_physical_constraints(params, severity_level="info")
 
         assert result.valid is False
         assert "phi0" in result.violations[0]
-        assert "will wrap" in result.violations[0].lower()
+        assert "check alignment" in result.violations[0].lower()
 
 
 class TestCrossParameterConstraints:

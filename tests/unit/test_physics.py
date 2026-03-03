@@ -65,7 +65,7 @@ class TestValidateParametersDetailed:
     def test_all_valid_parameters(self):
         """Test validation with all parameters within bounds."""
         params = np.array([0.5, 1.0, 1000.0, 0.5, 10.0])
-        bounds = [(0.0, 1.0), (0.0, 2.0), (1.0, 1e6), (0.0, 1.0), (0.0, 100.0)]
+        bounds = [(0.0, 1.0), (0.5, 1.5), (100.0, 1e5), (-2.0, 2.0), (-1e5, 1e5)]
         param_names = ["contrast", "offset", "D0", "alpha", "D_offset"]
 
         result = validate_parameters_detailed(params, bounds, param_names)
@@ -78,7 +78,7 @@ class TestValidateParametersDetailed:
     def test_parameter_above_bounds(self):
         """Test validation with parameter above upper bound."""
         params = np.array([1.5, 1.0, 1000.0, 0.5, 10.0])  # contrast > 1.0
-        bounds = [(0.0, 1.0), (0.0, 2.0), (1.0, 1e6), (0.0, 1.0), (0.0, 100.0)]
+        bounds = [(0.0, 1.0), (0.5, 1.5), (100.0, 1e5), (-2.0, 2.0), (-1e5, 1e5)]
         param_names = ["contrast", "offset", "D0", "alpha", "D_offset"]
 
         result = validate_parameters_detailed(params, bounds, param_names)
@@ -91,8 +91,8 @@ class TestValidateParametersDetailed:
 
     def test_parameter_below_bounds(self):
         """Test validation with parameter below lower bound."""
-        params = np.array([0.5, 1.0, 0.5, 0.5, 10.0])  # D0 < 1.0
-        bounds = [(0.0, 1.0), (0.0, 2.0), (1.0, 1e6), (0.0, 1.0), (0.0, 100.0)]
+        params = np.array([0.5, 1.0, 50.0, 0.5, 10.0])  # D0 < 100
+        bounds = [(0.0, 1.0), (0.5, 1.5), (100.0, 1e5), (-2.0, 2.0), (-1e5, 1e5)]
         param_names = ["contrast", "offset", "D0", "alpha", "D_offset"]
 
         result = validate_parameters_detailed(params, bounds, param_names)
@@ -105,9 +105,9 @@ class TestValidateParametersDetailed:
 
     def test_multiple_violations(self):
         """Test validation with multiple parameters out of bounds."""
-        params = np.array([1.5, -0.5, 0.5, 1.5, 150.0])
-        # contrast > 1.0, offset < 0.0, D0 < 1.0, alpha > 1.0, D_offset > 100.0
-        bounds = [(0.0, 1.0), (0.0, 2.0), (1.0, 1e6), (0.0, 1.0), (0.0, 100.0)]
+        params = np.array([1.5, 0.2, 50.0, 2.5, 2e5])
+        # contrast > 1.0, offset < 0.5, D0 < 100, alpha > 2.0, D_offset > 1e5
+        bounds = [(0.0, 1.0), (0.5, 1.5), (100.0, 1e5), (-2.0, 2.0), (-1e5, 1e5)]
         param_names = ["contrast", "offset", "D0", "alpha", "D_offset"]
 
         result = validate_parameters_detailed(params, bounds, param_names)
@@ -227,20 +227,20 @@ class TestValidationIntegration:
                 49.298,  # D_offset
                 9.65e-4,  # gamma_dot_t0
                 0.5018,  # beta
-                3.13e-5,  # gamma_dot_t_offset
+                0.05,  # gamma_dot_t_offset
                 8.99e-2,  # phi0
             ]
         )
         bounds = [
             (0.0, 1.0),  # contrast
-            (0.0, 10.0),  # offset
-            (1.0, 1e6),  # D0
+            (0.5, 1.5),  # offset
+            (100.0, 1e5),  # D0
             (-2.0, 2.0),  # alpha
-            (0.0, 1e6),  # D_offset
-            (1e-10, 1.0),  # gamma_dot_t0
+            (-1e5, 1e5),  # D_offset
+            (1e-6, 1e4),  # gamma_dot_t0
             (-2.0, 2.0),  # beta
-            (1e-10, 1.0),  # gamma_dot_t_offset
-            (-np.pi, np.pi),  # phi0
+            (0.01, 100.0),  # gamma_dot_t_offset
+            (-10.0, 10.0),  # phi0 (degrees)
         ]
         param_names = [
             "contrast",
@@ -271,10 +271,10 @@ class TestValidationIntegration:
         )
         bounds = [
             (0.0, 1.0),  # contrast
-            (0.0, 10.0),  # offset
-            (1.0, 1e6),  # D0
+            (0.5, 1.5),  # offset
+            (100.0, 1e5),  # D0
             (-2.0, 2.0),  # alpha
-            (0.0, 1e6),  # D_offset
+            (-1e5, 1e5),  # D_offset
         ]
         param_names = ["contrast", "offset", "D0", "alpha", "D_offset"]
 

@@ -225,9 +225,9 @@ class TestBuildInitValuesDictWithData:
                 bounds_map = {
                     "contrast": (0.0, 1.0),
                     "offset": (0.5, 1.5),
-                    "D0": (1e3, 1e6),
-                    "alpha": (-2.0, 0.0),
-                    "D_offset": (0.0, 1e4),
+                    "D0": (100.0, 1e5),
+                    "alpha": (-2.0, 2.0),
+                    "D_offset": (-1e5, 1e5),
                 }
                 return bounds_map.get(name, (0.0, 1.0))
 

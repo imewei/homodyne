@@ -168,9 +168,9 @@ class TestComputeScalingFactors:
                 bounds = {
                     "contrast": (0.0, 1.0),
                     "offset": (0.5, 1.5),
-                    "D0": (1e3, 1e5),
-                    "alpha": (-3.0, 1.0),
-                    "D_offset": (0.0, 5e3),
+                    "D0": (100.0, 1e5),
+                    "alpha": (-2.0, 2.0),
+                    "D_offset": (-1e5, 1e5),
                 }
                 return bounds.get(name.split("_")[0], (-1.0, 1.0))
 
@@ -185,7 +185,7 @@ class TestComputeScalingFactors:
         assert "contrast_0" in scalings
 
         # Center should fall back to midpoint of bounds.
-        assert scalings["D0"].center == pytest.approx((1e3 + 1e5) / 2)
+        assert scalings["D0"].center == pytest.approx((100.0 + 1e5) / 2)
         # use_log_space was removed from ParameterScaling (Round 5 refactor);
         # homodyne uses purely linear z-space scaling for all parameters.
 

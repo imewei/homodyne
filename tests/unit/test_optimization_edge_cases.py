@@ -155,30 +155,30 @@ class TestNLSQBoundsHandling:
     def test_bounds_to_arrays_static_mode(self):
         """Bounds should be converted to arrays correctly for static mode."""
         bounds = {
-            "contrast": (0.01, 1.0),
-            "offset": (0.01, 2.0),
-            "D0": (1.0, 1e15),
-            "alpha": (-5.0, 5.0),
-            "D_offset": (-1e14, 1e14),
+            "contrast": (0.0, 1.0),
+            "offset": (0.5, 1.5),
+            "D0": (100.0, 1e5),
+            "alpha": (-2.0, 2.0),
+            "D_offset": (-1e5, 1e5),
         }
         lower, upper = _bounds_to_arrays(bounds, "static")
         assert len(lower) == 5
         assert len(upper) == 5
-        assert float(lower[0]) == 0.01  # contrast lower
+        assert float(lower[0]) == 0.0  # contrast lower
         assert float(upper[0]) == 1.0  # contrast upper
 
     def test_bounds_to_arrays_laminar_mode(self):
         """Bounds should be converted to arrays correctly for laminar mode."""
         bounds = {
-            "contrast": (0.01, 1.0),
-            "offset": (0.01, 2.0),
-            "D0": (1.0, 1e15),
-            "alpha": (-5.0, 5.0),
-            "D_offset": (-1e14, 1e14),
-            "gamma_dot_t0": (0.0, 10.0),
-            "beta": (-5.0, 5.0),
-            "gamma_dot_t_offset": (-1.0, 1.0),
-            "phi0": (-180.0, 180.0),
+            "contrast": (0.0, 1.0),
+            "offset": (0.5, 1.5),
+            "D0": (100.0, 1e5),
+            "alpha": (-2.0, 2.0),
+            "D_offset": (-1e5, 1e5),
+            "gamma_dot_t0": (1e-6, 1e4),
+            "beta": (-2.0, 2.0),
+            "gamma_dot_t_offset": (0.01, 100.0),
+            "phi0": (-10.0, 10.0),
         }
         lower, upper = _bounds_to_arrays(bounds, "laminar_flow")
         assert len(lower) == 9

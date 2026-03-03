@@ -44,30 +44,30 @@ class MockParameterSpace:
     def __init__(self, analysis_mode: str = "static"):
         self.analysis_mode = analysis_mode
         self._priors = {
-            "contrast": MockPriorSpec("TruncatedNormal", 0.0, 1.0, 0.5, 0.2),
-            "offset": MockPriorSpec("TruncatedNormal", 0.5, 1.5, 1.0, 0.2),
-            "D0": MockPriorSpec("TruncatedNormal", 100.0, 100000.0, 1000.0, 500.0),
-            "alpha": MockPriorSpec("TruncatedNormal", 0.1, 2.0, 0.5, 0.3),
-            "D_offset": MockPriorSpec("TruncatedNormal", 0.0, 1000.0, 10.0, 50.0),
+            "contrast": MockPriorSpec("TruncatedNormal", 0.0, 1.0, 0.5, 0.25),
+            "offset": MockPriorSpec("TruncatedNormal", 0.5, 1.5, 1.0, 0.25),
+            "D0": MockPriorSpec("TruncatedNormal", 100.0, 100000.0, 50050.0, 24975.0),
+            "alpha": MockPriorSpec("TruncatedNormal", -2.0, 2.0, 0.0, 1.0),
+            "D_offset": MockPriorSpec("TruncatedNormal", -1e5, 1e5, 0.0, 50000.0),
             "gamma_dot_t0": MockPriorSpec(
-                "TruncatedNormal", 1.0, 10000.0, 100.0, 200.0
+                "TruncatedNormal", 1e-6, 10000.0, 5000.0, 2500.0
             ),
-            "beta": MockPriorSpec("TruncatedNormal", 0.1, 2.0, 0.5, 0.3),
+            "beta": MockPriorSpec("TruncatedNormal", -2.0, 2.0, 0.0, 1.0),
             "gamma_dot_t_offset": MockPriorSpec(
-                "TruncatedNormal", -100.0, 100.0, 0.0, 20.0
+                "TruncatedNormal", 0.01, 100.0, 50.005, 24.99
             ),
-            "phi0": MockPriorSpec("TruncatedNormal", -np.pi, np.pi, 0.0, 1.0),
+            "phi0": MockPriorSpec("TruncatedNormal", -10.0, 10.0, 0.0, 5.0),
         }
         self._bounds = {
             "contrast": (0.0, 1.0),
             "offset": (0.5, 1.5),
             "D0": (100.0, 100000.0),
-            "alpha": (0.1, 2.0),
-            "D_offset": (0.0, 1000.0),
-            "gamma_dot_t0": (1.0, 10000.0),
-            "beta": (0.1, 2.0),
-            "gamma_dot_t_offset": (-100.0, 100.0),
-            "phi0": (-np.pi, np.pi),
+            "alpha": (-2.0, 2.0),
+            "D_offset": (-1e5, 1e5),
+            "gamma_dot_t0": (1e-6, 10000.0),
+            "beta": (-2.0, 2.0),
+            "gamma_dot_t_offset": (0.01, 100.0),
+            "phi0": (-10.0, 10.0),
         }
 
     def get_prior(self, param_name: str) -> MockPriorSpec:

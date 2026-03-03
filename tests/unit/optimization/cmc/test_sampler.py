@@ -49,8 +49,8 @@ class MockParameterSpace:
             "contrast": (0.0, 1.0),
             "offset": (0.5, 1.5),
             "D0": (100.0, 100000.0),
-            "alpha": (0.1, 2.0),
-            "D_offset": (0.0, 1000.0),
+            "alpha": (-2.0, 2.0),
+            "D_offset": (-1e5, 1e5),
         }
 
     def get_bounds(self, param_name: str) -> tuple[float, float]:

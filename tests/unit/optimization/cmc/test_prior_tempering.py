@@ -42,15 +42,15 @@ class MockParameterSpace:
             "contrast": MockPriorSpec("TruncatedNormal", 0.0, 1.0, 0.5, 0.2),
             "offset": MockPriorSpec("TruncatedNormal", 0.5, 1.5, 1.0, 0.2),
             "D0": MockPriorSpec("TruncatedNormal", 100.0, 100000.0, 1000.0, 500.0),
-            "alpha": MockPriorSpec("TruncatedNormal", 0.1, 2.0, 0.5, 0.3),
-            "D_offset": MockPriorSpec("TruncatedNormal", 0.0, 1000.0, 10.0, 50.0),
+            "alpha": MockPriorSpec("TruncatedNormal", -2.0, 2.0, 0.0, 1.0),
+            "D_offset": MockPriorSpec("TruncatedNormal", -1e5, 1e5, 0.0, 50000.0),
         }
         self._bounds = {
             "contrast": (0.0, 1.0),
             "offset": (0.5, 1.5),
             "D0": (100.0, 100000.0),
-            "alpha": (0.1, 2.0),
-            "D_offset": (0.0, 1000.0),
+            "alpha": (-2.0, 2.0),
+            "D_offset": (-1e5, 1e5),
         }
 
     def get_prior(self, param_name: str) -> MockPriorSpec:

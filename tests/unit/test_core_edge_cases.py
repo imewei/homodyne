@@ -442,10 +442,10 @@ class TestDiffusionModelEdgeCases:
     def test_parameter_bounds_cover_physical_range(self, model):
         """Parameter bounds should cover physically meaningful range."""
         bounds = model.get_parameter_bounds()
-        # D0 should allow typical colloidal diffusion (1-1e6 Å²/s)
-        assert bounds[0][0] <= 1.0
+        # D0 should allow typical colloidal diffusion (100-1e5 Å²/s)
+        assert bounds[0][0] <= 100.0
         assert bounds[0][1] >= 1e5
-        # α should allow anomalous diffusion
+        # alpha should allow anomalous diffusion
         assert bounds[1][0] <= -2.0
         assert bounds[1][1] >= 2.0
 

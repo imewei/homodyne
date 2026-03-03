@@ -28,13 +28,13 @@ class _MockParameterSpace:
         self._bounds = {
             "contrast": (0.0, 1.0),
             "offset": (0.5, 1.5),
-            "D0": (1e3, 1e5),
-            "alpha": (-3.0, 1.0),
-            "D_offset": (0.0, 5e3),
-            "gamma_dot_t0": (-1.0, 1.0),
-            "beta": (-1.0, 1.0),
-            "gamma_dot_t_offset": (-1.0, 1.0),
-            "phi0": (-180.0, 180.0),
+            "D0": (100.0, 1e5),
+            "alpha": (-2.0, 2.0),
+            "D_offset": (-1e5, 1e5),
+            "gamma_dot_t0": (1e-6, 1e4),
+            "beta": (-2.0, 2.0),
+            "gamma_dot_t_offset": (0.01, 100.0),
+            "phi0": (-10.0, 10.0),
         }
 
     def get_bounds(self, name: str):
