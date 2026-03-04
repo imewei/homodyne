@@ -97,7 +97,7 @@ PHYSICS_CONSTRAINTS: dict[str, list[ConstraintRule]] = {
             severity=ConstraintSeverity.ERROR,
         ),
         ConstraintRule(
-            condition=lambda v: v > 1.0,
+            condition=lambda v: v > 0.5,
             message="very high shear rate (check units: s⁻¹ expected)",
             severity=ConstraintSeverity.WARNING,
         ),
@@ -116,8 +116,8 @@ PHYSICS_CONSTRAINTS: dict[str, list[ConstraintRule]] = {
     ],
     "gamma_dot_t_offset": [
         ConstraintRule(
-            condition=lambda v: v < 0,
-            message="negative shear rate offset (check if intended)",
+            condition=lambda v: abs(v) > 0.1,
+            message="shear rate offset outside [-0.1, 0.1] (check units: s⁻¹ expected)",
             severity=ConstraintSeverity.WARNING,
         ),
     ],

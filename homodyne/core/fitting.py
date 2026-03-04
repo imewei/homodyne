@@ -92,18 +92,18 @@ class ParameterSpace:
     D_offset_bounds: tuple[float, float] = (-100000.0, 100000.0)
 
     # Laminar flow parameters (only for laminar_flow mode)
-    gamma_dot_t0_bounds: tuple[float, float] = (1e-6, 10000.0)
+    gamma_dot_t0_bounds: tuple[float, float] = (1e-6, 0.5)
     beta_bounds: tuple[float, float] = (-2.0, 2.0)
-    gamma_dot_t_offset_bounds: tuple[float, float] = (0.01, 100.0)
+    gamma_dot_t_offset_bounds: tuple[float, float] = (-0.1, 0.1)
     phi0_bounds: tuple[float, float] = (-10.0, 10.0)  # degrees
 
     # Prior means (mu) and standard deviations (sigma)
-    D0_prior: tuple[float, float] = (50050.0, 24975.0)
-    alpha_prior: tuple[float, float] = (0.0, 1.0)
-    D_offset_prior: tuple[float, float] = (0.0, 50000.0)
-    gamma_dot_t0_prior: tuple[float, float] = (5000.0, 2500.0)
-    beta_prior: tuple[float, float] = (0.0, 1.0)
-    gamma_dot_t_offset_prior: tuple[float, float] = (50.005, 24.99)
+    D0_prior: tuple[float, float] = (1000.0, 1000.0)
+    alpha_prior: tuple[float, float] = (0.5, 0.5)
+    D_offset_prior: tuple[float, float] = (10.0, 200.0)
+    gamma_dot_t0_prior: tuple[float, float] = (0.01, 0.1)
+    beta_prior: tuple[float, float] = (0.0, 0.5)
+    gamma_dot_t_offset_prior: tuple[float, float] = (0.0, 0.02)
     phi0_prior: tuple[float, float] = (0.0, 5.0)
 
     # Data ranges

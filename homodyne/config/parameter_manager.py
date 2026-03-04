@@ -119,11 +119,11 @@ class ParameterManager:
                 "type": "TruncatedNormal",
             },
             # Physical parameters - shear flow
-            # gamma_dot_t0 upper bound aligned with ParameterRegistry (10000.0)
-            # Supports high-shear regime; lower bound 1e-6 (quasi-static limit)
+            # gamma_dot_t0 upper bound aligned with ParameterRegistry (0.5)
+            # Aligned with YAML template; lower bound 1e-6 (quasi-static limit)
             "gamma_dot_t0": {
                 "min": 1e-6,
-                "max": 1e4,
+                "max": 0.5,
                 "name": "gamma_dot_t0",
                 "type": "TruncatedNormal",
             },
@@ -133,11 +133,11 @@ class ParameterManager:
                 "name": "beta",
                 "type": "TruncatedNormal",
             },
-            # gamma_dot_t_offset: aligned with ParameterRegistry (lower_bound=0.01).
-            # Negative values are flagged as physically suspicious by physics validators.
+            # gamma_dot_t_offset: aligned with ParameterRegistry and YAML template.
+            # Allows small negative values (instrument baseline drift).
             "gamma_dot_t_offset": {
-                "min": 0.01,
-                "max": 100.0,
+                "min": -0.1,
+                "max": 0.1,
                 "name": "gamma_dot_t_offset",
                 "type": "TruncatedNormal",
             },
@@ -330,7 +330,7 @@ class ParameterManager:
             gamma_dot = params["gamma_dot_t0"]
             if gamma_dot < 0:
                 add_violation("gamma_dot_t0", gamma_dot, "negative shear rate", "error")
-            elif gamma_dot > 1.0:
+            elif gamma_dot > 0.5:
                 add_violation(
                     "gamma_dot_t0", gamma_dot, "very high shear rate", "warning"
                 )
@@ -340,14 +340,6 @@ class ParameterManager:
         if "beta" in params and (params["beta"] < -2.0 or params["beta"] > 2.0):
             add_violation(
                 "beta", params["beta"], "time exponent outside range", "warning"
-            )
-
-        if "gamma_dot_t_offset" in params and params["gamma_dot_t_offset"] < 0:
-            add_violation(
-                "gamma_dot_t_offset",
-                params["gamma_dot_t_offset"],
-                "negative offset",
-                "warning",
             )
 
         if "phi0" in params and abs(params["phi0"]) > np.pi:

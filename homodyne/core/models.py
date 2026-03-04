@@ -250,15 +250,15 @@ class ShearModel(PhysicsModelBase):
     def get_parameter_bounds(self) -> list[tuple[float, float]]:
         """Standard bounds for shear parameters."""
         return [
-            (1e-6, 1e4),  # gamma_dot_t0: 1e-6 to 1e4 s⁻¹
+            (1e-6, 0.5),  # gamma_dot_t0: 1e-6 to 0.5 s⁻¹
             (-2.0, 2.0),  # beta: -2 to 2
-            (0.01, 100.0),  # gamma_dot_t_offset: 0.01 to 100 s⁻¹
+            (-0.1, 0.1),  # gamma_dot_t_offset: -0.1 to 0.1 s⁻¹
             (-10.0, 10.0),  # phi0: -10 to 10 degrees
         ]
 
     def get_default_parameters(self) -> jnp.ndarray:
         """Default values for typical shear flow."""
-        return jnp.array([1.0, 0.0, 0.01, 0.0])  # Constant shear, minimal offset
+        return jnp.array([0.01, 0.0, 0.0, 0.0])  # Constant shear, zero offset
 
 
 class CombinedModel(

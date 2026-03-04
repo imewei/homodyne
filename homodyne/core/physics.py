@@ -81,8 +81,8 @@ class PhysicsConstants:
 
     # Shear rate ranges (s⁻¹)
     SHEAR_RATE_MIN = 1e-6  # Quasi-static limit
-    SHEAR_RATE_MAX = 1e4  # High-shear regime
-    SHEAR_RATE_TYPICAL = 1.0
+    SHEAR_RATE_MAX = 0.5  # Upper bound aligned with YAML template
+    SHEAR_RATE_TYPICAL = 0.01
 
     # Angular ranges (degrees) - focused range for laminar flow analysis
     ANGLE_MIN = -10.0
@@ -91,8 +91,8 @@ class PhysicsConstants:
     # Offset parameter bounds
     DIFFUSION_OFFSET_MIN = -1e5  # Allow negative for jammed/arrested systems
     DIFFUSION_OFFSET_MAX = 1e5  # Maximum positive diffusion offset
-    SHEAR_OFFSET_MIN = 0.01  # Minimum shear rate offset
-    SHEAR_OFFSET_MAX = 100.0  # Maximum shear rate offset
+    SHEAR_OFFSET_MIN = -0.1  # Minimum shear rate offset (allows small negative)
+    SHEAR_OFFSET_MAX = 0.1  # Maximum shear rate offset
 
     # Numerical stability
     EPS = 1e-12  # Avoid division by zero
