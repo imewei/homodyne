@@ -371,9 +371,9 @@ YAML configuration for laminar flow mode with 3 angles:
        - 1000.0    # D0 (bounds: [100, 1e5])
        - 0.0       # alpha (bounds: [-2, 2])
        - 0.0       # D_offset (bounds: [-1e5, 1e5])
-       - 0.01      # gamma_dot_t0 (bounds: [1e-6, 1e4])
+       - 0.01      # gamma_dot_t0 (bounds: [1e-6, 0.5])
        - 0.0       # beta (bounds: [-2, 2])
-       - 0.01      # gamma_dot_t_offset (bounds: [0.01, 100])
+       - 0.0       # gamma_dot_t_offset (bounds: [-0.1, 0.1])
        - 0.0       # phi0 in degrees (bounds: [-10, 10])
 
    # Per-angle scaling is automatically enabled

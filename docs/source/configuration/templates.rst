@@ -196,7 +196,21 @@ Complete template with all available options:
           prior_sigma: 150.0
           unit: "Å²/s"
 
-      priors: null
+      # Data-driven priors for MCMC (optional)
+      priors:
+        contrast:
+          dist_type: TruncatedNormal
+          mu: 0.06                      # Static typically has lower contrast
+          sigma: 0.05
+          min_val: 0.0
+          max_val: 0.5
+
+        offset:
+          dist_type: TruncatedNormal
+          mu: 1.0
+          sigma: 0.1
+          min_val: 0.8
+          max_val: 1.2
 
     # ==============================================================================
     # OPTIMIZATION METHODS
@@ -537,51 +551,64 @@ Complete template:
           min: -2.0
           max: 2.0
           type: TruncatedNormal
-          prior_mu: -1.2
-          prior_sigma: 0.3
+          prior_mu: 0.5              # Superdiffusion common under shear
+          prior_sigma: 0.5
           unit: "dimensionless"
 
         - name: D_offset
           min: -100000.0
           max: 100000.0
           type: TruncatedNormal
-          prior_mu: 0.0
-          prior_sigma: 150.0
+          prior_mu: 10.0
+          prior_sigma: 200.0
           unit: "Å²/s"
 
         - name: gamma_dot_t0
-          min: 0.001
-          max: 1000.0
+          min: 1.0e-6
+          max: 0.5
           type: TruncatedNormal
-          prior_mu: 1.0
-          prior_sigma: 10.0
+          prior_mu: 0.01
+          prior_sigma: 0.1
           unit: "s⁻¹"
 
         - name: beta
           min: -2.0
           max: 2.0
           type: TruncatedNormal
-          prior_mu: 0.5
+          prior_mu: 0.0              # Constant shear common
           prior_sigma: 0.5
           unit: "dimensionless"
 
         - name: gamma_dot_t_offset
-          min: -1000.0
-          max: 1000.0
+          min: -0.1
+          max: 0.1
           type: TruncatedNormal
           prior_mu: 0.0
-          prior_sigma: 10.0
+          prior_sigma: 0.02
           unit: "s⁻¹"
 
         - name: phi0
-          min: -180.0
-          max: 180.0
+          min: -10.0                 # Tight bounds for MCMC convergence
+          max: 10.0
           type: TruncatedNormal
           prior_mu: 0.0
-          prior_sigma: 45.0
+          prior_sigma: 5.0
           unit: "degrees"
 
-      priors: null
+      priors:
+        contrast:
+          dist_type: TruncatedNormal
+          mu: 0.27
+          sigma: 0.15
+          min_val: 0.0
+          max_val: 1.0
+
+        offset:
+          dist_type: TruncatedNormal
+          mu: 1.0
+          sigma: 0.15
+          min_val: 0.5
+          max_val: 1.5
 
     optimization:
       method: "nlsq"

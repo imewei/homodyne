@@ -331,9 +331,9 @@ Same as static + 4 additional parameters:
 
 **gamma_dot_t0** (Shear rate prefactor):
 
-- min: 0.001
-- max: 1000.0
-- typical: 0.01 - 100 s⁻¹
+- min: 1e-6
+- max: 0.5
+- typical: 0.001 - 0.1 s⁻¹
 - unit: s⁻¹
 - Physical meaning: Shear rate scale
 
@@ -347,16 +347,16 @@ Same as static + 4 additional parameters:
 
 **gamma_dot_t_offset** (Baseline shear rate):
 
-- min: -1000.0
-- max: 1000.0
-- typical: -10 to 10 s⁻¹
+- min: -0.1
+- max: 0.1
+- typical: near 0 s⁻¹
 - unit: s⁻¹
 
 **phi0** (Flow angle):
 
-- min: -180.0
-- max: 180.0
-- typical: any angle
+- min: -10.0
+- max: 10.0
+- typical: -5 to 5 degrees
 - unit: degrees
 - Physical meaning: Flow direction relative to measurement
 

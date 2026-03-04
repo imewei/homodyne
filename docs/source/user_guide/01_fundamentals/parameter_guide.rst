@@ -195,13 +195,14 @@ The accumulated shear strain is the numerical integral:
 - Typical Couette shear rates: 0.01–1000 s⁻¹
 - :math:`\dot\gamma_0 \approx 0` for a sample at rest in the shear cell
 
-**Default bounds:** ``[1e-6, 1e4]`` s⁻¹
+**Default bounds:** ``[1e-6, 0.5]`` s⁻¹
 
 .. note::
 
-   For multi-scale problems where :math:`D_0 \sim 10^4` and
-   :math:`\dot\gamma_0 \sim 10^{-3}` (scale ratio > 10⁶), consider enabling
-   CMA-ES global optimization. See
+   The upper bound of 0.5 s⁻¹ is aligned with the YAML template and
+   ``ParameterRegistry``. For multi-scale problems where :math:`D_0 \sim 10^4`
+   and :math:`\dot\gamma_0 \sim 10^{-3}` (scale ratio > 10⁶), consider
+   enabling CMA-ES global optimization. See
    :doc:`../03_advanced_topics/cmaes_optimization`.
 
 beta — Shear Rate Time-Dependence Exponent
@@ -241,7 +242,7 @@ Constant shear rate contribution, independent of time. Analogous to
 :math:`D_\text{offset}` for shear. Represents steady background flow
 superimposed on the time-dependent component.
 
-**Default bounds:** ``[0.01, 100]`` s⁻¹
+**Default bounds:** ``[-0.1, 0.1]`` s⁻¹
 
 phi_0 — Angular Offset
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -326,40 +327,40 @@ Parameter Reference Table
    * - ``D0``
      - :math:`D_0`
      - Å²/s
-     - 50050
+     - 1000.0
      - [100, 1e5]
      - static, laminar_flow
    * - ``alpha``
      - :math:`\alpha`
      - —
-     - 0.0
+     - 0.5
      - [-2, 2]
      - static, laminar_flow
    * - ``D_offset``
      - :math:`D_\text{offset}`
      - Å²/s
-     - 0.0
+     - 10.0
      - [-1e5, 1e5]
      - static, laminar_flow
-   * - ``gamma_dot_0``
+   * - ``gamma_dot_t0``
      - :math:`\dot\gamma_0`
      - s⁻¹
-     - 5000
-     - [1e-6, 1e4]
+     - 0.01
+     - [1e-6, 0.5]
      - laminar_flow
    * - ``beta``
      - :math:`\beta`
      - —
-     - 0.0
+     - 0.5
      - [-2, 2]
      - laminar_flow
    * - ``gamma_dot_t_offset``
      - :math:`\dot\gamma_\text{offset}`
      - s⁻¹
-     - 50.005
-     - [0.01, 100]
+     - 0.0
+     - [-0.1, 0.1]
      - laminar_flow
-   * - ``phi_0``
+   * - ``phi0``
      - :math:`\phi_0`
      - degrees
      - 0.0
@@ -512,19 +513,19 @@ eight sources of parameter bounds in the codebase.
    * - D_offset
      - [-1e5, 1e5]
      - [-1e5, 1e5]
-     - --
      - [-1e5, 1e5]
-     - --
+     - [-1e5, 1e5]
+     - [-1e5, 1e5]
      - v < 0 warn
      - [-1e5, 1e5]
    * - gamma_dot_t0
-     - [1e-6, 1e4]
-     - [1e-6, 1e4]
-     - [1e-6, 1e4]
-     - [1e-6, 1e4]
-     - [1e-6, 1e4]
-     - v > 1 warn
-     - [1e-6, 1e4]
+     - [1e-6, 0.5]
+     - [1e-6, 0.5]
+     - [1e-6, 0.5]
+     - [1e-6, 0.5]
+     - [1e-6, 0.5]
+     - v > 0.5 warn
+     - [1e-6, 0.5]
    * - beta
      - [-2, 2]
      - [-2, 2]
@@ -534,13 +535,13 @@ eight sources of parameter bounds in the codebase.
      - \|v\| > 2 warn
      - [-2, 2]
    * - gamma_dot_t_offset
-     - [0.01, 100]
-     - [0.01, 100]
-     - [0.01, 100]
-     - [0.01, 100]
-     - [0.01, 100]
-     - v < 0 warn
-     - [0.01, 100]
+     - [-0.1, 0.1]
+     - [-0.1, 0.1]
+     - [-0.1, 0.1]
+     - [-0.1, 0.1]
+     - [-0.1, 0.1]
+     - (none)
+     - [-0.1, 0.1]
    * - phi0
      - [-10, 10]
      - [-10, 10]
@@ -574,10 +575,12 @@ Docs = this page. "--" means the parameter is not defined in that source.
 .. note::
 
    CMC uses these bounds to construct ``TruncatedNormal`` priors by default.
-   The prior mean is set to the midpoint of the bounds interval and the
-   standard deviation to one quarter of the interval width. Parameters
-   marked ``log_space=True`` in the registry (D0, D_offset, gamma_dot_t0,
-   gamma_dot_t_offset) are reparameterized in log-space for CMC sampling.
+   The prior mean and standard deviation are set from the ``ParameterRegistry``
+   defaults (see table above), or from YAML ``prior_mu``/``prior_sigma``
+   overrides. Parameters marked ``log_space=True`` in the registry
+   (D0, D_offset, gamma_dot_t0) are reparameterized in log-space for CMC
+   sampling. Note that ``gamma_dot_t_offset`` has ``log_space=False`` because
+   its bounds include negative values.
 
 ---
 

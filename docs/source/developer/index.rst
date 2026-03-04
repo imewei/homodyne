@@ -19,6 +19,7 @@ Homodyne's internal design, run the test suite, or submit improvements.
 
    architecture
    adrs/index
+   parameter_bounds_verification
 
 ----
 
