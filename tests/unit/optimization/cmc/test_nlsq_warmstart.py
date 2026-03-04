@@ -31,9 +31,9 @@ class _MockParameterSpace:
             "D0": (100.0, 1e5),
             "alpha": (-2.0, 2.0),
             "D_offset": (-1e5, 1e5),
-            "gamma_dot_t0": (1e-6, 1e4),
+            "gamma_dot_t0": (1e-6, 0.5),
             "beta": (-2.0, 2.0),
-            "gamma_dot_t_offset": (0.01, 100.0),
+            "gamma_dot_t_offset": (-0.1, 0.1),
             "phi0": (-10.0, 10.0),
         }
 

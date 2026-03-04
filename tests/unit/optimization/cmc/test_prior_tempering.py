@@ -42,8 +42,8 @@ class MockParameterSpace:
             "contrast": MockPriorSpec("TruncatedNormal", 0.0, 1.0, 0.5, 0.2),
             "offset": MockPriorSpec("TruncatedNormal", 0.5, 1.5, 1.0, 0.2),
             "D0": MockPriorSpec("TruncatedNormal", 100.0, 100000.0, 1000.0, 500.0),
-            "alpha": MockPriorSpec("TruncatedNormal", -2.0, 2.0, 0.0, 1.0),
-            "D_offset": MockPriorSpec("TruncatedNormal", -1e5, 1e5, 0.0, 50000.0),
+            "alpha": MockPriorSpec("TruncatedNormal", -2.0, 2.0, 0.5, 0.5),
+            "D_offset": MockPriorSpec("TruncatedNormal", -1e5, 1e5, 10.0, 200.0),
         }
         self._bounds = {
             "contrast": (0.0, 1.0),

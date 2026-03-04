@@ -237,9 +237,9 @@ class TestValidationIntegration:
             (100.0, 1e5),  # D0
             (-2.0, 2.0),  # alpha
             (-1e5, 1e5),  # D_offset
-            (1e-6, 1e4),  # gamma_dot_t0
+            (1e-6, 0.5),  # gamma_dot_t0
             (-2.0, 2.0),  # beta
-            (0.01, 100.0),  # gamma_dot_t_offset
+            (-0.1, 0.1),  # gamma_dot_t_offset
             (-10.0, 10.0),  # phi0 (degrees)
         ]
         param_names = [

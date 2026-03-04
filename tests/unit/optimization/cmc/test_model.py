@@ -46,15 +46,13 @@ class MockParameterSpace:
         self._priors = {
             "contrast": MockPriorSpec("TruncatedNormal", 0.0, 1.0, 0.5, 0.25),
             "offset": MockPriorSpec("TruncatedNormal", 0.5, 1.5, 1.0, 0.25),
-            "D0": MockPriorSpec("TruncatedNormal", 100.0, 100000.0, 50050.0, 24975.0),
-            "alpha": MockPriorSpec("TruncatedNormal", -2.0, 2.0, 0.0, 1.0),
-            "D_offset": MockPriorSpec("TruncatedNormal", -1e5, 1e5, 0.0, 50000.0),
-            "gamma_dot_t0": MockPriorSpec(
-                "TruncatedNormal", 1e-6, 10000.0, 5000.0, 2500.0
-            ),
-            "beta": MockPriorSpec("TruncatedNormal", -2.0, 2.0, 0.0, 1.0),
+            "D0": MockPriorSpec("TruncatedNormal", 100.0, 100000.0, 1000.0, 1000.0),
+            "alpha": MockPriorSpec("TruncatedNormal", -2.0, 2.0, 0.5, 0.5),
+            "D_offset": MockPriorSpec("TruncatedNormal", -1e5, 1e5, 10.0, 200.0),
+            "gamma_dot_t0": MockPriorSpec("TruncatedNormal", 1e-6, 0.5, 0.01, 0.1),
+            "beta": MockPriorSpec("TruncatedNormal", -2.0, 2.0, 0.0, 0.5),
             "gamma_dot_t_offset": MockPriorSpec(
-                "TruncatedNormal", 0.01, 100.0, 50.005, 24.99
+                "TruncatedNormal", -0.1, 0.1, 0.0, 0.02
             ),
             "phi0": MockPriorSpec("TruncatedNormal", -10.0, 10.0, 0.0, 5.0),
         }
@@ -64,9 +62,9 @@ class MockParameterSpace:
             "D0": (100.0, 100000.0),
             "alpha": (-2.0, 2.0),
             "D_offset": (-1e5, 1e5),
-            "gamma_dot_t0": (1e-6, 10000.0),
+            "gamma_dot_t0": (1e-6, 0.5),
             "beta": (-2.0, 2.0),
-            "gamma_dot_t_offset": (0.01, 100.0),
+            "gamma_dot_t_offset": (-0.1, 0.1),
             "phi0": (-10.0, 10.0),
         }
 

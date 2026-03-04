@@ -1027,7 +1027,7 @@ class TestWarningLevelViolations:
         assert "negative offset" in result.violations[0].lower()
 
     def test_very_high_shear_rate(self):
-        """Test WARNING for gamma_dot_t0 > 1.0."""
+        """Test WARNING for gamma_dot_t0 > 0.5."""
         pm = ParameterManager(None, "laminar_flow")
         params = {"gamma_dot_t0": 5.0}
 
@@ -1055,15 +1055,14 @@ class TestWarningLevelViolations:
         assert "beta" in result_low.violations[0]
         assert "beta" in result_high.violations[0]
 
-    def test_negative_gamma_dot_offset(self):
-        """Test WARNING for negative gamma_dot_t_offset."""
+    def test_small_negative_gamma_dot_offset_valid(self):
+        """Test that small negative gamma_dot_t_offset is now valid (within bounds)."""
         pm = ParameterManager(None, "laminar_flow")
         params = {"gamma_dot_t_offset": -0.0001}
 
         result = pm.validate_physical_constraints(params, severity_level="warning")
 
-        assert result.valid is False
-        assert "gamma_dot_t_offset" in result.violations[0]
+        assert result.valid is True
 
     def test_very_low_contrast(self):
         """Test WARNING for contrast < 0.1."""

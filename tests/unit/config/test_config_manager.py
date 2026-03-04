@@ -91,7 +91,7 @@ class TestParameterBounds:
         assert "gamma_dot_t0" in pm._default_bounds
         bounds = pm._default_bounds["gamma_dot_t0"]
         assert bounds["min"] == 1e-6
-        assert bounds["max"] == 1e4  # aligned with ParameterRegistry upper_bound
+        assert bounds["max"] == 0.5  # aligned with ParameterRegistry upper_bound
 
     def test_default_bounds_for_beta(self):
         """Test default bounds for beta parameter."""
