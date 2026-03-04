@@ -431,7 +431,7 @@ optimization:
     # (D₀ ~ 1e4 vs γ̇₀ ~ 1e-3, scale ratio > 1e7)
     # Requires: pip install nlsq[evosax]
     cmaes:
-      enable: true # RECOMMENDED for laminar_flow
+      enable: false # RECOMMENDED for laminar_flow
       preset: "cmaes-global" # "cmaes-fast" (50) | "cmaes" (100) | "cmaes-global" (200+)
       max_generations: 300 # 300 for 13-param space convergence
       sigma: 0.5 # Broader initial search, refined by CMA-ES
