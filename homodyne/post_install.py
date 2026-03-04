@@ -26,6 +26,19 @@ from pathlib import Path
 logger = logging.getLogger("homodyne.post_install")
 
 
+def _resolve_venv_path() -> Path:
+    """Resolve the virtual environment path.
+
+    Prefers $VIRTUAL_ENV (set by venv activation) over sys.prefix,
+    because sys.prefix follows the script's shebang interpreter and
+    may point to the system Python even when a venv is activated.
+    """
+    virtual_env = os.environ.get("VIRTUAL_ENV")
+    if virtual_env:
+        return Path(virtual_env)
+    return Path(sys.prefix)
+
+
 def is_linux() -> bool:
     """Check if running on Linux."""
     return platform.system() == "Linux"
@@ -560,7 +573,7 @@ def install_shell_completion(
         logger.warning("Shell completion recommended only in virtual environments")
         return False
 
-    venv_path = Path(sys.prefix)
+    venv_path = _resolve_venv_path()
 
     try:
         # Create minimal zsh aliases as fallback
@@ -657,7 +670,7 @@ def install_advanced_features() -> bool:
     logger.info("Installing Advanced Features...")
 
     try:
-        venv_path = Path(sys.prefix)
+        venv_path = _resolve_venv_path()
 
         # Find the homodyne source directory
         try:

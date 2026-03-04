@@ -29,6 +29,19 @@ import sys
 from pathlib import Path
 
 
+def _resolve_venv_path() -> Path:
+    """Resolve the virtual environment path.
+
+    Prefers $VIRTUAL_ENV (set by venv activation) over sys.prefix,
+    because sys.prefix follows the script's shebang interpreter and
+    may point to the system Python even when a venv is activated.
+    """
+    virtual_env = os.environ.get("VIRTUAL_ENV")
+    if virtual_env:
+        return Path(virtual_env)
+    return _resolve_venv_path()
+
+
 def is_virtual_environment() -> bool:
     """Check if running in a virtual environment."""
     return (
@@ -42,7 +55,7 @@ def is_virtual_environment() -> bool:
 
 def cleanup_completion_files() -> list[tuple[str, str]]:
     """Remove shell completion files from virtual environment."""
-    venv_path = Path(sys.prefix)
+    venv_path = _resolve_venv_path()
     removed_files = []
 
     # Bash completion
@@ -162,7 +175,7 @@ def cleanup_activate_script_hooks() -> list[tuple[str, str]]:
 
     Creates a ``.bak`` backup of each modified script before writing changes.
     """
-    venv_path = Path(sys.prefix)
+    venv_path = _resolve_venv_path()
     bin_dir = venv_path / "bin"
     cleaned = []
 
@@ -196,7 +209,7 @@ def cleanup_activate_script_hooks() -> list[tuple[str, str]]:
 
 def cleanup_gpu_files() -> list[tuple[str, str]]:
     """Remove GPU acceleration files from virtual environment."""
-    venv_path = Path(sys.prefix)
+    venv_path = _resolve_venv_path()
     removed_files = []
 
     gpu_files = [
@@ -217,7 +230,7 @@ def cleanup_gpu_files() -> list[tuple[str, str]]:
 
 def cleanup_advanced_features() -> list[tuple[str, str]]:
     """Remove advanced features CLI commands and activation scripts."""
-    venv_path = Path(sys.prefix)
+    venv_path = _resolve_venv_path()
     removed_files = []
 
     # Advanced features CLI commands and activation scripts
@@ -256,7 +269,7 @@ def cleanup_xla_config() -> list[tuple[str, str]]:
 
 def cleanup_xla_activation_scripts() -> list[tuple[str, str]]:
     """Remove XLA activation scripts from virtual environment."""
-    venv_path = Path(sys.prefix)
+    venv_path = _resolve_venv_path()
     removed_files = []
 
     xla_activation_files = [
@@ -277,7 +290,7 @@ def cleanup_xla_activation_scripts() -> list[tuple[str, str]]:
 
 def cleanup_old_system_files() -> list[tuple[str, str]]:
     """Remove old modular system files if they exist."""
-    venv_path = Path(sys.prefix)
+    venv_path = _resolve_venv_path()
     removed_files = []
 
     # Old system files to remove
@@ -407,7 +420,7 @@ def cleanup_all_files() -> bool:
         print("   System installations don't create extra files")
         return False
 
-    print(f"\n[SCAN] Scanning for homodyne files in: {sys.prefix}")
+    print(f"\n[SCAN] Scanning for homodyne files in: {_resolve_venv_path()}")
 
     try:
         # Clean up all types of files
@@ -421,7 +434,7 @@ def cleanup_all_files() -> bool:
         all_removed.extend(cleanup_xla_activation_scripts())
 
         # Clean up empty directories
-        venv_path = Path(sys.prefix)
+        venv_path = _resolve_venv_path()
         directories_to_clean = [
             venv_path / "etc" / "homodyne" / "gpu",
             venv_path / "etc" / "homodyne" / "shell",
@@ -476,10 +489,10 @@ def show_dry_run() -> bool:
         print("   System installations don't create extra files")
         return False
 
-    print(f"\n[SCAN] Would scan for homodyne files in: {sys.prefix}")
+    print(f"\n[SCAN] Would scan for homodyne files in: {_resolve_venv_path()}")
 
     # Simulate finding files without removing them
-    venv_path = Path(sys.prefix)
+    venv_path = _resolve_venv_path()
     files_to_remove = []
 
     # Check for completion files
