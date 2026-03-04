@@ -35,7 +35,7 @@ Requirements
      - Trust-region LM optimizer (Homodyne's ``curve_fit``)
    * - NumPyro
      - 0.19
-     - Bayesian / CMC inference (optional but recommended)
+     - Bayesian / CMC inference
    * - h5py
      - 3.15
      - HDF5 data loading
@@ -103,7 +103,7 @@ Clone the repository and install with all development dependencies:
 
    git clone https://github.com/imewei/homodyne.git
    cd homodyne
-   make dev           # equivalent to: uv sync --all-extras
+   make dev           # equivalent to: uv sync
 
 This installs the package in editable mode along with testing, linting, and
 documentation tools.
@@ -117,7 +117,7 @@ Available ``make`` targets during development:
    * - Command
      - Purpose
    * - ``make dev``
-     - Install with all dev extras
+     - Install in editable mode (all dependencies included)
    * - ``make test``
      - Run unit tests (``tests/unit``)
    * - ``make test-all``
@@ -158,7 +158,7 @@ Expected output:
 
 .. code-block:: text
 
-   Homodyne:  2.22.5
+   Homodyne:  2.22.6
    JAX:       0.8.x
    Devices:   [CpuDevice(id=0)]
    JAX dot:   (100, 100)

@@ -45,12 +45,13 @@ Installing Development Environment
 
    .. code-block:: bash
 
-       uv pip install -e ".[dev,docs]"
+       uv sync
 
-   This installs:
-   - Core dependencies (JAX ≥0.8.2 CPU-only, NumPyro, BlackJAX)
-   - Development tools (pytest, black, ruff, mypy)
-   - Documentation tools (sphinx, sphinx-rtd-theme, myst-parser)
+   This installs all dependencies (core, dev tools, and documentation tools
+   are consolidated into a single dependency set):
+   - Core: JAX ≥0.8.2 (CPU-only), NumPyro, BlackJAX, NLSQ
+   - Dev tools: pytest, ruff, mypy, pre-commit
+   - Documentation: Sphinx, Furo, myst-parser
 
 Verifying Installation
 ^^^^^^^^^^^^^^^^^^^^^^
