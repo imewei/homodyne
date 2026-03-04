@@ -20,7 +20,14 @@ except ImportError:
     az = None  # type: ignore[assignment,unused-ignore]
 
 import numpy as np
-from sklearn.mixture import GaussianMixture
+
+try:
+    from sklearn.mixture import GaussianMixture
+
+    HAS_SKLEARN = True
+except (ImportError, ValueError):
+    HAS_SKLEARN = False
+    GaussianMixture = None  # type: ignore[assignment,misc]
 
 from homodyne.utils.logging import get_logger
 
@@ -977,6 +984,17 @@ def detect_bimodal(
     BimodalResult
         Detection result with component details.
     """
+    if not HAS_SKLEARN:
+        logger.debug("sklearn not available, skipping bimodality detection")
+        return BimodalResult(
+            is_bimodal=False,
+            weights=(1.0, 0.0),
+            means=(float(np.nanmean(samples)), float(np.nanmean(samples))),
+            stds=(0.0, 0.0),
+            separation=0.0,
+            relative_separation=0.0,
+        )
+
     samples_2d = samples.reshape(-1, 1)
 
     # GaussianMixture requires at least n_components (2) samples.
