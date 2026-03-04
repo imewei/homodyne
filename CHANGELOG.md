@@ -9,13 +9,13 @@ ______________________________________________________________________
 
 ## [2.22.6] - 2026-03-03
 
-### Parameter Bounds Standardization and Architecture Decisions
+### Parameter Bounds, Dependency Consolidation, and Runtime Fixes
 
-Minor release expanding parameters bounds for colloidal systems, tightening angle
-constraints for stability, and formally documenting the project's stance on consumer GPU
-acceleration.
+Release expanding parameter bounds for colloidal systems, consolidating all optional
+dependencies into the standard install, fixing runtime recursion bugs, and improving
+sklearn compatibility in CMC diagnostics.
 
-28 files changed, 557 insertions(+), 237 deletions(-) across 4 commits.
+49 files changed, 1195 insertions(+), 445 deletions(-) across 18 commits.
 
 **Refactoring:**
 
@@ -27,6 +27,28 @@ acceleration.
   - Updates prior means and distributions in `ParameterRegistry` and `fitting.py`.
   - Resolves inconsistencies between physics constants and configuration validation
     rules.
+
+**Fixes:**
+
+- **fix(runtime)**: Robust venv path resolution in install scripts, resolving infinite
+  recursion in `post_install.py` and `uninstall_scripts.py` venv path discovery
+
+- **fix(cmc)**: Lazy sklearn import for bimodal detection in `diagnostics.py` — avoids
+  import-time errors when sklearn is not yet loaded
+
+- **fix(cmc)**: Silence mypy unused-ignore warning for sklearn fallback
+
+- **fix(ci)**: Remove flaky timing test and fix release workflow OOM
+
+**Build:**
+
+- **build**: Consolidate optional dependencies into standard dependencies — removes
+  `[dev]`, `[docs]`, and `[cmc]` extras from `pyproject.toml`. All dependencies
+  (core, dev tools, docs) are now installed with `uv sync` or `pip install -e .`
+
+- **build(deps)**: Update imagesize dependency in lockfile
+
+- **ci**: Update GitHub workflows to use `uv sync` instead of `uv sync --all-extras`
 
 **Tests:**
 
@@ -50,6 +72,11 @@ acceleration.
   - Links ADR-006 from ADR-001.
   - Adds explanatory comment referencing ADR in `homodyne/device/cpu.py` where
     `JAX_PLATFORMS` is set.
+
+- **docs(api)**: Remove obsolete references and fix Sphinx warnings
+
+- **docs**: Align installation docs, README, Makefile, and contributing guide with
+  dependency consolidation (no more extras-based install)
 
 ______________________________________________________________________
 

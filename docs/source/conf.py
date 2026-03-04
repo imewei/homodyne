@@ -20,7 +20,7 @@ try:
     # Strip any .post or +dirty suffixes to get the clean base version
     version = _pkg_version.split(".post")[0].split("+")[0]
 except ImportError:
-    version = "2.22.5"
+    version = "2.22.6"
 
 release = version
 
