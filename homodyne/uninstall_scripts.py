@@ -35,11 +35,13 @@ def _resolve_venv_path() -> Path:
     Prefers $VIRTUAL_ENV (set by venv activation) over sys.prefix,
     because sys.prefix follows the script's shebang interpreter and
     may point to the system Python even when a venv is activated.
+
+    NOTE: Duplicated in post_install.py (this file is kept standalone for uninstall reliability).
     """
     virtual_env = os.environ.get("VIRTUAL_ENV")
     if virtual_env:
         return Path(virtual_env)
-    return _resolve_venv_path()
+    return Path(sys.prefix)
 
 
 def is_virtual_environment() -> bool:
