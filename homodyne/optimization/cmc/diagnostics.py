@@ -27,7 +27,7 @@ try:
     HAS_SKLEARN = True
 except (ImportError, ValueError):
     HAS_SKLEARN = False
-    GaussianMixture = None  # type: ignore[assignment,misc]
+    GaussianMixture = None  # type: ignore[assignment,misc,unused-ignore]
 
 from homodyne.utils.logging import get_logger
 
