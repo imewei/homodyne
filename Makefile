@@ -159,7 +159,7 @@ install:
 
 dev:
 	@echo "$(BOLD)$(BLUE)Installing development dependencies...$(RESET)"
-	@$(INSTALL_CMD) -e ".[dev,docs]"
+	@$(INSTALL_CMD) -e .
 	@echo "$(BOLD)$(GREEN)✓ Dev dependencies installed!$(RESET)"
 	@echo "  Platform: $(PLATFORM)"
 	@echo "  Python: $(shell $(PYTHON) --version 2>&1)"

@@ -38,7 +38,7 @@ For development:
 ```bash
 git clone https://github.com/imewei/homodyne.git
 cd homodyne
-make dev    # or: uv sync --extra dev
+make dev    # or: uv sync
 ```
 
 **Requirements:** Python 3.12+, CPU-only (no GPU). Runs on Linux, macOS, and Windows.
