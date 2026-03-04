@@ -148,7 +148,7 @@ except ImportError:
     HAS_OPTIMIZATION = False
 
 # Version and feature information
-__version__ = "2.22.5"
+__version__ = "2.22.6"
 __features__ = {
     "xpcs_loader": HAS_XPCS_LOADER,
     "validation": HAS_VALIDATION,

@@ -3,7 +3,7 @@
 Complete documentation of the data loading, configuration, and result writing systems in
 homodyne.
 
-**Version:** 2.22.5 **Last Updated:** March 2026
+**Version:** 2.22.6 **Last Updated:** March 2026
 
 ## Table of Contents
 

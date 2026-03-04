@@ -12,7 +12,7 @@
 # For comprehensive documentation of all parameters, see:
 #   homodyne_master_template.yaml
 #
-# VERSION: 2.22.5
+# VERSION: 2.22.6
 # UPDATED: 2026-03-03
 # ==============================================================================
 
@@ -20,7 +20,7 @@
 # METADATA
 # ==============================================================================
 metadata:
-  config_version: "2.22.5"
+  config_version: "2.22.6"
   description: "Laminar flow analysis - 7-parameter model"
   analysis_mode: "laminar_flow"
   parameter_count: 7
