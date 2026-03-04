@@ -44,8 +44,8 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install package with docs dependencies
-        run: uv sync --extra docs
+      - name: Install package
+        run: uv sync
 
       - name: Build documentation with Sphinx
         run: |
