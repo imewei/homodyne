@@ -84,10 +84,9 @@ dependencies = [
     "xarray>=2025.12",
     # Machine learning utilities (for GMM bimodal detection)
     "scikit-learn>=1.6",
-]
-
-[project.optional-dependencies]
-dev = [
+    # Interactive computing
+    "ipykernel>=7.2.0",
+    # Development tools
     "pytest>=9.0.2",
     "pytest-cov>=7.0",
     "pytest-xdist>=3.8",
@@ -95,18 +94,12 @@ dev = [
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
     "types-pyyaml>=6.0.12.20250915",
-]
-
-docs = [
+    # Documentation
     "sphinx>=9.1.0",
     "furo>=2025.12.19",
     "myst-parser>=5.0.0",
     "sphinx-autodoc-typehints>=3.6.3",
     "sphinx-copybutton>=0.5.2",
-]
-
-all = [
-    "homodyne[dev,docs]",
 ]
 
 [project.urls]
@@ -384,11 +377,6 @@ output_format = "yaml"
 cpu_threads = "auto"
 enable_jit = true
 cache_compilation = true
-
-[dependency-groups]
-dev = [
-    "ipykernel>=7.2.0",
-]
 
 [tool.uv]
 # Override uvloop to be Unix-only (orbax-checkpoint declares it unconditionally,
