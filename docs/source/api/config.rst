@@ -225,6 +225,36 @@ Default Parameter Values
 
 ----
 
+.. _api-parameter-registry:
+
+ParameterRegistry
+-----------------
+
+Centralized parameter registry that provides the single source of truth for
+parameter metadata (names, types, bounds, defaults, descriptions). Used by
+NLSQ (bounds), CMC (prior construction), and configuration validation.
+
+.. autoclass:: homodyne.config.parameter_registry.ParameterInfo
+   :members:
+   :undoc-members:
+
+.. autoclass:: homodyne.config.parameter_registry.ParameterRegistry
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autofunction:: homodyne.config.parameter_registry.get_registry
+
+.. autofunction:: homodyne.config.parameter_registry.get_param_names
+
+.. autofunction:: homodyne.config.parameter_registry.get_all_param_names
+
+.. autofunction:: homodyne.config.parameter_registry.get_bounds
+
+.. autofunction:: homodyne.config.parameter_registry.get_defaults
+
+----
+
 .. automodule:: homodyne.config.manager
    :members:
    :undoc-members:

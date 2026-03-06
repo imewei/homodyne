@@ -2361,5 +2361,5 @@ See Also
 
 - :mod:`homodyne.core` - Core physics and computation
 - :mod:`homodyne.config` - Parameter management
-- External: `NLSQ Package Documentation <https://nlsq.readthedocs.io/>`_
-- External: `NumPyro Documentation <https://num.pyro.ai/>`_
+- External: `NLSQ Package Documentation <https://nlsq.readthedocs.io/en/latest/>`_
+- External: `NumPyro Documentation <https://num.pyro.ai/en/stable/>`_

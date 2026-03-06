@@ -53,7 +53,7 @@ Module Overview
    * - :doc:`data`
      - ``XPCSDataLoader`` — HDF5 data ingestion and validation
    * - :doc:`config`
-     - ``ConfigManager``, ``ParameterSpace``, YAML schema
+     - ``ConfigManager``, ``ParameterSpace``, ``ParameterRegistry``, YAML schema
    * - :doc:`cli`
      - All CLI entry points and shell completion system
    * - :doc:`device`

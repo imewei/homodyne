@@ -69,7 +69,7 @@ Key Design Decisions
 
 **JAX-first computation**
 
-All numerical computations use `JAX <https://github.com/google/jax>`_, which
+All numerical computations use `JAX <https://github.com/jax-ml/jax>`_, which
 provides:
 
 - JIT compilation of compute-intensive loops to native CPU code

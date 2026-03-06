@@ -286,7 +286,7 @@ JAX and Scientific Stack
 
 **Bradbury et al. (2018)**
    Bradbury, J., et al. "JAX: composable transformations of Python+NumPy programs."
-   Version 0.8, 2018. http://github.com/jax-ml/jax.
+   Version 0.8, 2018. https://github.com/jax-ml/jax.
 
    The JAX library providing JIT compilation and automatic differentiation for all
    numerical kernels in homodyne.
@@ -299,7 +299,7 @@ JAX and Scientific Stack
                      Necula, George and Paszke, Adam and VanderPlas, Jake and
                      Wanderman-Milne, Skye and Zhang, Qiao},
         title     = {{JAX}: composable transformations of {Python+NumPy} programs},
-        url       = {http://github.com/jax-ml/jax},
+        url       = {https://github.com/jax-ml/jax},
         version   = {0.8},
         year      = {2018},
       }

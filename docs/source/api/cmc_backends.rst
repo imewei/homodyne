@@ -20,6 +20,8 @@ compute resources and combining the results.
      - JAX ``pjit``-based backend for single-host multi-device execution
    * - ``pbs``
      - HPC batch scheduler backend (PBS/SLURM)
+   * - ``worker_pool``
+     - Persistent worker pool — amortizes JAX init across shards
    * - ``base``
      - Abstract ``CMCBackend`` base class and shard combination utilities
 
@@ -174,6 +176,26 @@ the scale is computed relative to the parameter's bounds range:
 
 Shards with abnormally high cross-shard CV are flagged for review and may be
 excluded before the consensus combination step.
+
+----
+
+Worker Pool
+------------
+
+The ``worker_pool`` module provides a persistent worker pool that avoids
+repeated JAX re-initialization overhead. Workers are spawned once, process
+multiple shards via task queues, and shut down when the pool context exits.
+
+Falls back to per-shard process spawning when ``n_shards < 3`` (where pool
+overhead exceeds the amortization benefit).
+
+.. autofunction:: homodyne.optimization.cmc.backends.worker_pool.should_use_pool
+
+.. autoclass:: homodyne.optimization.cmc.backends.worker_pool.WorkerPool
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :special-members: __init__
 
 ----
 
