@@ -456,7 +456,9 @@ class CMCResult:
         if n_phi is None:
             # Infer from samples (only count indexed per-angle sites)
             _first_scaling = _SCALING_NAMES[0]
-            contrast_params = [p for p in self.param_names if p.startswith(f"{_first_scaling}_")]
+            contrast_params = [
+                p for p in self.param_names if p.startswith(f"{_first_scaling}_")
+            ]
             n_phi = len(contrast_params) if contrast_params else 0
 
         if n_phi > 0:

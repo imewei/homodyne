@@ -43,8 +43,8 @@ sklearn compatibility in CMC diagnostics.
 **Build:**
 
 - **build**: Consolidate optional dependencies into standard dependencies — removes
-  `[dev]`, `[docs]`, and `[cmc]` extras from `pyproject.toml`. All dependencies
-  (core, dev tools, docs) are now installed with `uv sync` or `pip install -e .`
+  `[dev]`, `[docs]`, and `[cmc]` extras from `pyproject.toml`. All dependencies (core,
+  dev tools, docs) are now installed with `uv sync` or `pip install -e .`
 
 - **build(deps)**: Update imagesize dependency in lockfile
 
