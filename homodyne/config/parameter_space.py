@@ -347,18 +347,16 @@ class ParameterSpace:
                         f"Using default bounds for '{param_name}': [{min_val}, {max_val}]"
                     )
                 else:
-                    # Ultimate fallback with special defaults for scaling parameters
-                    if param_name == "contrast":
-                        min_val, max_val = 0.0, 1.0
+                    # Ultimate fallback: use registry bounds if known
+                    from homodyne.config.parameter_registry import ParameterRegistry
+
+                    try:
+                        info = ParameterRegistry().get_param_info(param_name)
+                        min_val, max_val = info.lower_bound, info.upper_bound
                         logger.debug(
-                            f"Using default bounds for '{param_name}': [{min_val}, {max_val}]"
+                            f"Using registry bounds for '{param_name}': [{min_val}, {max_val}]"
                         )
-                    elif param_name == "offset":
-                        min_val, max_val = 0.5, 1.5
-                        logger.debug(
-                            f"Using default bounds for '{param_name}': [{min_val}, {max_val}]"
-                        )
-                    else:
+                    except KeyError:
                         min_val, max_val = 0.0, 1.0
                         logger.warning(
                             f"No bounds found for '{param_name}', using [0.0, 1.0]"

@@ -259,9 +259,9 @@ def build_prior_from_spec(
 def _get_base_param_name(param_name: str) -> str:
     """Get base parameter name for per-angle parameters.
 
-    Maps 'contrast_0', 'contrast_1', etc. to 'contrast',
-    and 'offset_0', 'offset_1', etc. to 'offset'.
-    Other parameter names are returned unchanged.
+    Maps indexed scaling names (e.g. ``'contrast_0'``) back to their
+    base name (``'contrast'``), derived from the registry's ``is_scaling``
+    flag.  Non-scaling parameter names are returned unchanged.
 
     Parameters
     ----------
@@ -273,10 +273,11 @@ def _get_base_param_name(param_name: str) -> str:
     str
         Base parameter name.
     """
-    if param_name.startswith("contrast_"):
-        return "contrast"
-    elif param_name.startswith("offset_"):
-        return "offset"
+    from homodyne.config.parameter_registry import ParameterRegistry
+
+    for sname in ParameterRegistry().scaling_names:
+        if param_name.startswith(f"{sname}_"):
+            return sname
     return param_name
 
 
@@ -526,14 +527,15 @@ def build_init_values_dict(
         and len(c2_data) >= 100
     )
 
-    # Check if contrast/offset are missing from initial_values
+    # Check if scaling parameters are present in initial_values
+    # (uses _get_base_param_name which derives from registry is_scaling flag)
     has_contrast = initial_values is not None and (
         "contrast" in initial_values
-        or any(k.startswith("contrast_") for k in initial_values)
+        or any(_get_base_param_name(k) == "contrast" for k in initial_values)
     )
     has_offset = initial_values is not None and (
         "offset" in initial_values
-        or any(k.startswith("offset_") for k in initial_values)
+        or any(_get_base_param_name(k) == "offset" for k in initial_values)
     )
 
     # Compute data-driven estimates if needed

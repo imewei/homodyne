@@ -2,6 +2,7 @@
 
 import multiprocessing
 import os
+from unittest.mock import patch
 
 
 def _echo_worker(task, **init_kwargs):
@@ -38,6 +39,50 @@ def _init_fn_that_sets_flag(worker_id, **init_kwargs):
     """Init function that writes worker_id to a shared value."""
     shared_val = init_kwargs["shared_init_flag"]
     shared_val.value = worker_id + 100
+
+
+class TestEstimatePhysicalWorkers:
+    """Test _estimate_physical_workers helper."""
+
+    def test_uses_physical_cores_minus_one(self):
+        """Physical core detection reserves 1 core for the main process."""
+        from homodyne.optimization.cmc.backends.worker_pool import (
+            _estimate_physical_workers,
+        )
+
+        mock_info = {"physical_cores": 8, "logical_cores": 16}
+        with patch(
+            "homodyne.device.detect_cpu_info",
+            return_value=mock_info,
+        ):
+            assert _estimate_physical_workers() == 7
+
+    def test_single_core_returns_one(self):
+        """Single-core system still guarantees at least 1 worker."""
+        from homodyne.optimization.cmc.backends.worker_pool import (
+            _estimate_physical_workers,
+        )
+
+        mock_info = {"physical_cores": 1, "logical_cores": 2}
+        with patch(
+            "homodyne.device.detect_cpu_info",
+            return_value=mock_info,
+        ):
+            assert _estimate_physical_workers() == 1
+
+    def test_fallback_on_detection_failure(self):
+        """Falls back to os.cpu_count() when detect_cpu_info is unavailable."""
+        from homodyne.optimization.cmc.backends.worker_pool import (
+            _estimate_physical_workers,
+        )
+
+        with patch(
+            "homodyne.device.detect_cpu_info",
+            side_effect=ImportError("no psutil"),
+        ):
+            with patch("os.cpu_count", return_value=8):
+                # logical=8, physical estimate=4, workers=4-1=3
+                assert _estimate_physical_workers() == 3
 
 
 class TestWorkerPool:

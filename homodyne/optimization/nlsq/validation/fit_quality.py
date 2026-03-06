@@ -119,27 +119,26 @@ def _classify_parameter_status(
 def _is_physical_param(label: str) -> bool:
     """Check if a parameter label is for a physical parameter (not per-angle scaling).
 
-    Physical parameters include: D0, alpha, D_offset, gamma_dot_t0, beta,
-    gamma_dot_t_offset, phi0.
-
-    Per-angle scaling parameters are: contrast[*], offset[*].
+    Derives scaling identity from the ``is_scaling`` flag on
+    :class:`~homodyne.config.parameter_registry.ParameterInfo`.
 
     Parameters
     ----------
     label : str
-        Parameter label.
+        Parameter label (e.g. ``"D0"``, ``"contrast_0"``).
 
     Returns
     -------
     bool
         True if this is a physical parameter.
     """
-    # Per-angle scaling patterns to exclude
-    scaling_patterns = ["contrast[", "offset[", "contrast_", "offset_"]
-    for pattern in scaling_patterns:
-        if pattern in label.lower():
-            return False
-    return True
+    from homodyne.config.parameter_registry import ParameterRegistry
+
+    scaling = ParameterRegistry().scaling_names
+    return not any(
+        label.startswith(f"{s}_") or label.startswith(f"{s}[") or label == s
+        for s in scaling
+    )
 
 
 def validate_fit_quality(

@@ -21,6 +21,36 @@ from homodyne.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+def _estimate_physical_workers() -> int:
+    """Estimate the number of worker processes from physical core count.
+
+    Uses :func:`homodyne.device.detect_cpu_info` for accurate physical-core
+    detection (via psutil), reserves one core for the main process, and
+    guarantees at least 1 worker.
+
+    Falls back to ``os.cpu_count() // 2 - 1`` when ``detect_cpu_info``
+    is unavailable (e.g. psutil not installed).
+
+    Returns
+    -------
+    int
+        Recommended number of CMC worker processes (>= 1).
+    """
+    try:
+        from homodyne.device import detect_cpu_info
+
+        info = detect_cpu_info()
+        physical: int | None = info.get("physical_cores")
+        if physical is not None and physical >= 1:
+            return max(1, physical - 1)
+    except (ImportError, OSError, RuntimeError):
+        logger.debug("detect_cpu_info unavailable, falling back to os.cpu_count")
+
+    # Fallback: assume hyper-threading (logical = 2 * physical)
+    logical = os.cpu_count() or 2
+    return max(1, logical // 2 - 1)
+
+
 def should_use_pool(n_shards: int, n_workers: int) -> bool:
     """Determine if worker pool is beneficial.
 

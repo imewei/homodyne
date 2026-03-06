@@ -31,6 +31,17 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+
+def _is_scaling_var(name: str) -> bool:
+    """Check if a variable name is a per-angle scaling parameter.
+
+    Derives identity from the registry's ``is_scaling`` flag.
+    """
+    from homodyne.config.parameter_registry import ParameterRegistry
+
+    return any(name.startswith(f"{s}_") for s in ParameterRegistry().scaling_names)
+
+
 # Default figure settings
 DEFAULT_FIGSIZE = (12, 10)
 DEFAULT_DPI = 150
@@ -159,8 +170,8 @@ def plot_pair(
         # Get parameter names, limit to avoid huge plots
         all_vars = list(idata.posterior.data_vars)
         # Prioritize physical parameters over per-angle scaling
-        physical = [v for v in all_vars if not v.startswith(("contrast_", "offset_"))]
-        scaling = [v for v in all_vars if v.startswith(("contrast_", "offset_"))]
+        physical = [v for v in all_vars if not _is_scaling_var(v)]
+        scaling = [v for v in all_vars if _is_scaling_var(v)]
 
         # Limit per-angle to first 3
         scaling_limited = scaling[:6]  # contrast_0,1,2 + offset_0,1,2
@@ -332,7 +343,7 @@ def plot_autocorr(
     if var_names is None:
         all_vars = list(idata.posterior.data_vars)
         # Focus on physical parameters
-        var_names = [v for v in all_vars if not v.startswith(("contrast_", "offset_"))]
+        var_names = [v for v in all_vars if not _is_scaling_var(v)]
         if len(var_names) == 0:
             var_names = all_vars[:6]
 
@@ -383,7 +394,7 @@ def plot_rank(
     # Limit parameters
     if var_names is None:
         all_vars = list(idata.posterior.data_vars)
-        var_names = [v for v in all_vars if not v.startswith(("contrast_", "offset_"))]
+        var_names = [v for v in all_vars if not _is_scaling_var(v)]
         if len(var_names) == 0:
             var_names = all_vars[:6]
 
@@ -433,7 +444,7 @@ def plot_ess(
     # Limit parameters
     if var_names is None:
         all_vars = list(idata.posterior.data_vars)
-        var_names = [v for v in all_vars if not v.startswith(("contrast_", "offset_"))]
+        var_names = [v for v in all_vars if not _is_scaling_var(v)]
         if len(var_names) == 0:
             var_names = all_vars[:6]
 
@@ -484,7 +495,7 @@ def plot_trace(
     # Limit parameters
     if var_names is None:
         all_vars = list(idata.posterior.data_vars)
-        var_names = [v for v in all_vars if not v.startswith(("contrast_", "offset_"))]
+        var_names = [v for v in all_vars if not _is_scaling_var(v)]
         if len(var_names) == 0:
             var_names = all_vars[:6]
 

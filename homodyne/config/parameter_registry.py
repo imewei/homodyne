@@ -246,6 +246,22 @@ class ParameterRegistry:
             cls._instance = super().__new__(cls)
         return cls._instance
 
+    @property
+    def scaling_names(self) -> tuple[str, ...]:
+        """Base names of all scaling parameters (derived from ``is_scaling`` flag).
+
+        Returns a tuple in registration order (contrast, offset) so that
+        downstream consumers produce deterministic parameter orderings.
+
+        Returns
+        -------
+        tuple[str, ...]
+            e.g. ``("contrast", "offset")``
+        """
+        return tuple(
+            name for name, info in self._PARAMETERS.items() if info.is_scaling
+        )
+
     def get_param_info(self, name: str) -> ParameterInfo:
         """Get parameter metadata.
 
@@ -325,16 +341,13 @@ class ParameterRegistry:
         NumPyro requires parameters in EXACT order as model.sample().
         This method returns parameters in the correct order for init_to_value().
         """
-        names = []
+        names: list[str] = []
 
         if include_scaling:
-            # Per-angle contrast FIRST
-            for i in range(n_angles):
-                names.append(f"contrast_{i}")
-
-            # Per-angle offset SECOND
-            for i in range(n_angles):
-                names.append(f"offset_{i}")
+            # Per-angle scaling names derived from is_scaling flag
+            for sname in self.scaling_names:
+                for i in range(n_angles):
+                    names.append(f"{sname}_{i}")
 
         # Physical parameters LAST
         names.extend(self.get_param_names(analysis_mode))
@@ -540,23 +553,18 @@ class ParameterRegistry:
          'offset_0': 1.0, 'offset_1': 1.0, 'offset_2': 1.0,
          'D0': 1000}
         """
-        result = {}
+        result: dict[str, float] = {}
 
-        # Expand contrast
-        contrast_val = initial_values.get(
-            "contrast", self._PARAMETERS["contrast"].default
-        )
-        for i in range(n_angles):
-            result[f"contrast_{i}"] = contrast_val
+        # Expand scaling parameters (derived from is_scaling flag)
+        scaling = self.scaling_names
+        for sname in scaling:
+            val = initial_values.get(sname, self._PARAMETERS[sname].default)
+            for i in range(n_angles):
+                result[f"{sname}_{i}"] = val
 
-        # Expand offset
-        offset_val = initial_values.get("offset", self._PARAMETERS["offset"].default)
-        for i in range(n_angles):
-            result[f"offset_{i}"] = offset_val
-
-        # Copy physical parameters as-is
+        # Copy non-scaling parameters as-is
         for key, value in initial_values.items():
-            if key not in ("contrast", "offset"):
+            if key not in scaling:
                 result[key] = value
 
         return result

@@ -78,10 +78,14 @@ def save_samples_npz(
     # Individual mode: "contrast_0", "contrast_1", ... → n_phi = count of indexed sites.
     # Auto mode: "contrast" (single unindexed site) → n_phi = 1 (at least one angle).
     # Constant/constant_averaged mode: no sampled contrast sites → n_phi = 0.
+    # Pick the first scaling name from the registry to count indexed sites
+    from homodyne.config.parameter_registry import ParameterRegistry
+
+    _first_scaling = ParameterRegistry().scaling_names[0]
     _contrast_indexed = sum(
-        1 for name in result.param_names if name.startswith("contrast_")
+        1 for name in result.param_names if name.startswith(f"{_first_scaling}_")
     )
-    _has_contrast_auto = "contrast" in result.param_names
+    _has_contrast_auto = _first_scaling in result.param_names
     n_phi = (
         _contrast_indexed if _contrast_indexed > 0 else (1 if _has_contrast_auto else 0)
     )

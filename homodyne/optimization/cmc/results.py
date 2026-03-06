@@ -20,11 +20,23 @@ except ImportError:
 
 import numpy as np
 
+from homodyne.config.parameter_registry import ParameterRegistry
 from homodyne.optimization.cmc.diagnostics import DEFAULT_MIN_ESS
 from homodyne.optimization.cmc.sampler import MCMCSamples, SamplingStats
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Scaling base names derived from registry is_scaling flag
+_SCALING_NAMES = ParameterRegistry().scaling_names
+
+
+def _get_scaling_base(name: str) -> str | None:
+    """Return the base scaling name if *name* is an indexed scaling param, else None."""
+    for sname in _SCALING_NAMES:
+        if name.startswith(f"{sname}_"):
+            return sname
+    return None
 
 
 class ParameterStats(dict):
@@ -260,10 +272,12 @@ class CMCResult:
                 # CRITICAL FIX (Dec 2025): Exclude _z (z-space) parameters from legacy stats
                 # The scaled model samples contrast_0_z ~ N(0,1) and registers contrast_0 as
                 # deterministic. Only use original-space values (without _z suffix).
-                if name.startswith("contrast_") and not name.endswith("_z"):
+                # Classify using registry is_scaling flag
+                _base = _get_scaling_base(name)
+                if _base == "contrast" and not name.endswith("_z"):
                     contrast_values.append(float(parameters[i]))
                     contrast_stds.append(float(uncertainties[i]))
-                elif name.startswith("offset_") and not name.endswith("_z"):
+                elif _base == "offset" and not name.endswith("_z"):
                     offset_values.append(float(parameters[i]))
                     offset_stds.append(float(uncertainties[i]))
                 elif not name.endswith("_z"):
@@ -441,7 +455,8 @@ class CMCResult:
         # Checking for contrast_0..N in those modes produces spurious warnings.
         if n_phi is None:
             # Infer from samples (only count indexed per-angle sites)
-            contrast_params = [p for p in self.param_names if p.startswith("contrast_")]
+            _first_scaling = _SCALING_NAMES[0]
+            contrast_params = [p for p in self.param_names if p.startswith(f"{_first_scaling}_")]
             n_phi = len(contrast_params) if contrast_params else 0
 
         if n_phi > 0:

@@ -1069,16 +1069,16 @@ class MultiprocessingBackend(CMCBackend):
         spawn_method : str
             Process start method: "spawn", "fork", or "forkserver".
         """
-        # Estimate physical cores (half of logical threads for HT systems)
-        logical_cpus = mp.cpu_count()
-        physical_cores_estimate = max(1, logical_cpus // 2)
+        from homodyne.optimization.cmc.backends.worker_pool import (
+            _estimate_physical_workers,
+        )
 
         if n_workers is None:
-            # Default to estimated physical cores, leaving some headroom
-            n_workers = max(1, physical_cores_estimate - 1)
+            n_workers = _estimate_physical_workers()
         else:
-            # Cap user-specified workers to avoid over-subscription
-            n_workers = min(n_workers, physical_cores_estimate)
+            # Cap user-specified workers to physical core count
+            physical_cap = _estimate_physical_workers() + 1  # undo -1 reserve
+            n_workers = min(n_workers, physical_cap)
 
         self.n_workers = max(1, n_workers)
         self.spawn_method = spawn_method
