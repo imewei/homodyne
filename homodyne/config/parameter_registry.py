@@ -252,15 +252,21 @@ class ParameterRegistry:
 
         Returns a tuple in registration order (contrast, offset) so that
         downstream consumers produce deterministic parameter orderings.
+        Cached after first access since ``_PARAMETERS`` is immutable.
 
         Returns
         -------
         tuple[str, ...]
             e.g. ``("contrast", "offset")``
         """
-        return tuple(
-            name for name, info in self._PARAMETERS.items() if info.is_scaling
-        )
+        try:
+            return self._scaling_names_cache
+        except AttributeError:
+            result = tuple(
+                name for name, info in self._PARAMETERS.items() if info.is_scaling
+            )
+            self._scaling_names_cache: tuple[str, ...] = result
+            return result
 
     def get_param_info(self, name: str) -> ParameterInfo:
         """Get parameter metadata.

@@ -1076,9 +1076,8 @@ class MultiprocessingBackend(CMCBackend):
         if n_workers is None:
             n_workers = _estimate_physical_workers()
         else:
-            # Cap user-specified workers to physical core count
-            physical_cap = _estimate_physical_workers() + 1  # undo -1 reserve
-            n_workers = min(n_workers, physical_cap)
+            # Cap user-specified workers to estimated worker count
+            n_workers = min(n_workers, _estimate_physical_workers())
 
         self.n_workers = max(1, n_workers)
         self.spawn_method = spawn_method
