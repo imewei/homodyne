@@ -28,10 +28,8 @@ COMMON_XPCS_ANGLES = [0, 30, 45, 60, 90, 120, 135, 150, 180]
 # Import core modules with fallback
 try:
     from homodyne.config.manager import ConfigManager
-
-    _HAS_CONFIG_MANAGER = True
 except ImportError:
-    _HAS_CONFIG_MANAGER = False
+    pass
 
 
 def _exclude_t0_from_analysis(data: dict[str, Any]) -> dict[str, Any]:
@@ -210,14 +208,17 @@ def _apply_angle_filtering_for_optimization(
         else cast(dict[str, Any], config)
     )
 
+    def _data_with_normalized_angles() -> dict[str, Any]:
+        """Build a new dict with normalized phi_angles and all other keys copied."""
+        result = {key: data[key] for key in data}
+        result["phi_angles_list"] = phi_angles
+        return result
+
     # Check if filtering is enabled
     phi_filtering_config = config_dict.get("phi_filtering", {})
     if not phi_filtering_config.get("enabled", False):
         logger.debug("Phi filtering not enabled, using all angles for optimization")
-        # Return data with normalized angles even when filtering disabled
-        normalized_data = data.copy()
-        normalized_data["phi_angles_list"] = phi_angles
-        return normalized_data
+        return _data_with_normalized_angles()
 
     # Check for target_ranges
     target_ranges = phi_filtering_config.get("target_ranges", [])
@@ -225,10 +226,7 @@ def _apply_angle_filtering_for_optimization(
         logger.warning(
             "Phi filtering enabled but no target_ranges specified, using all angles",
         )
-        # Return data with normalized angles
-        normalized_data = data.copy()
-        normalized_data["phi_angles_list"] = phi_angles
-        return normalized_data
+        return _data_with_normalized_angles()
 
     # Normalize target_ranges to [-180, 180] for consistency
     normalized_ranges = []
@@ -289,20 +287,14 @@ def _apply_angle_filtering_for_optimization(
     # Check if any angles were filtered
     if not filtered_indices:
         logger.warning("No angles matched phi_filtering criteria, using all angles")
-        # Return data with normalized angles
-        normalized_data = data.copy()
-        normalized_data["phi_angles_list"] = phi_angles
-        return normalized_data
+        return _data_with_normalized_angles()
 
     # Check if all angles matched (no actual filtering)
     if len(filtered_indices) == len(phi_angles):
         logger.debug(
             f"All {len(phi_angles)} angles matched filter criteria, no reduction",
         )
-        # Return data with normalized angles
-        normalized_data = data.copy()
-        normalized_data["phi_angles_list"] = phi_angles
-        return normalized_data
+        return _data_with_normalized_angles()
 
     # Create filtered data dictionary
     filtered_data = {

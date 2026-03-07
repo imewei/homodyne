@@ -257,7 +257,7 @@ def _resolve_nlsq_warmstart(
                 _log_warmstart_physical_params(nlsq_result.parameters)
             return nlsq_result
         return None
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         logger.warning(
             f"NLSQ warm-start failed: {e}. Proceeding with CMC without warm-start."
         )

@@ -11,7 +11,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
-import jax.numpy as jnp
 import numpy as np
 
 from homodyne.config.parameter_names import get_physical_param_names
@@ -43,7 +42,7 @@ from homodyne.optimization.nlsq.validation.fit_quality import (
     FitQualityConfig,
     validate_fit_quality,
 )
-from homodyne.utils.logging import get_logger
+from homodyne.utils.logging import get_logger, log_exception
 
 logger = get_logger(__name__)
 
@@ -486,8 +485,8 @@ def _save_results(
 
         logger.info(f"OK: Results saved: {output_file}")
 
-    except Exception as e:
-        logger.warning(f"Failed to save results: {e}")
+    except (OSError, ValueError, TypeError) as e:
+        log_exception(logger, e, "Failed to save results")
 
     # Wait for background writes to complete
     logger.debug("Waiting for background result writes to complete...")
@@ -664,7 +663,7 @@ def save_nlsq_results(
                 lower = np.array([b["min"] for b in bounds_list])
                 upper = np.array([b["max"] for b in bounds_list])
                 bounds = (lower, upper)
-    except Exception as e:
+    except (AttributeError, KeyError, TypeError, ValueError) as e:
         logger.debug(f"Could not get bounds for quality validation: {e}")
 
     # Create quality config from nlsq settings
@@ -781,8 +780,7 @@ def save_nlsq_results(
         )
         logger.info(f"  - {len(phi_angles)} PNG plots")
     except Exception as e:
-        logger.warning(f"Plot generation failed (data files still saved): {e}")
-        logger.debug("Plot error details:", exc_info=True)
+        log_exception(logger, e, "Plot generation failed (data files still saved)")
 
 
 def save_mcmc_results(
@@ -832,9 +830,8 @@ def save_mcmc_results(
         with open(param_file, "w", encoding="utf-8") as f:
             json.dump(param_dict, f, indent=2, default=_json_serializer)
         logger.debug(f"Saved parameters to {param_file}")
-    except Exception as e:
-        logger.warning(f"Failed to save parameters.json: {e}")
-        logger.debug("Parameter saving error:", exc_info=True)
+    except (OSError, ValueError, TypeError) as e:
+        log_exception(logger, e, "Failed to save parameters.json")
 
     # Step 2: Save samples.npz with full posterior
     try:
@@ -916,9 +913,8 @@ def save_mcmc_results(
             logger.debug(
                 f"Saved posterior samples to {samples_file} ({samples_size_mb:.2f} MB)"
             )
-    except Exception as e:
-        logger.warning(f"Failed to save samples.npz: {e}")
-        logger.debug("Samples saving error:", exc_info=True)
+    except (OSError, ValueError, TypeError) as e:
+        log_exception(logger, e, "Failed to save samples.npz")
 
     # Step 3: Save analysis_results_mcmc.json
     try:
@@ -927,9 +923,8 @@ def save_mcmc_results(
         with open(analysis_file, "w", encoding="utf-8") as f:
             json.dump(analysis_dict, f, indent=2, default=_json_serializer)
         logger.debug(f"Saved analysis results to {analysis_file}")
-    except Exception as e:
-        logger.warning(f"Failed to save analysis_results_{method_name}.json: {e}")
-        logger.debug("Analysis results saving error:", exc_info=True)
+    except (OSError, ValueError, TypeError) as e:
+        log_exception(logger, e, f"Failed to save analysis_results_{method_name}.json")
 
     # Step 4: Save diagnostics.json
     try:
@@ -938,9 +933,8 @@ def save_mcmc_results(
         with open(diagnostics_file, "w", encoding="utf-8") as f:
             json.dump(diagnostics_dict, f, indent=2, default=_json_serializer)
         logger.debug(f"Saved diagnostics to {diagnostics_file}")
-    except Exception as e:
-        logger.warning(f"Failed to save diagnostics.json: {e}")
-        logger.debug("Diagnostics saving error:", exc_info=True)
+    except (OSError, ValueError, TypeError) as e:
+        log_exception(logger, e, "Failed to save diagnostics.json")
 
     # Step 4b: Save shard_diagnostics.json for CMC results
     if (
@@ -955,9 +949,8 @@ def save_mcmc_results(
                     result.per_shard_diagnostics, f, indent=2, default=_json_serializer
                 )
             logger.debug(f"Saved per-shard diagnostics to {shard_diag_file}")
-        except Exception as e:
-            logger.warning(f"Failed to save shard_diagnostics.json: {e}")
-            logger.debug("Shard diagnostics saving error:", exc_info=True)
+        except (OSError, ValueError, TypeError) as e:
+            log_exception(logger, e, "Failed to save shard_diagnostics.json")
 
     # Step 5: Generate heatmap plots (reuse NLSQ plotting)
     try:
@@ -1027,8 +1020,9 @@ def save_mcmc_results(
         )
         logger.info(f"  - {len(filtered_data['phi_angles_list'])} PNG heatmap plots")
     except Exception as e:
-        logger.warning(f"Heatmap plot generation failed (data files still saved): {e}")
-        logger.debug("Plot error details:", exc_info=True)
+        log_exception(
+            logger, e, "Heatmap plot generation failed (data files still saved)"
+        )
 
     # T057: Calculate and log total file sizes
     json_files = list(method_dir.glob("*.json"))
@@ -1250,6 +1244,8 @@ def _compute_theoretical_c2_from_mcmc(
         )
 
     # Pre-compute angle-independent factors outside the loop
+    import jax.numpy as jnp
+
     from homodyne.core.jax_backend import _compute_g1_total_core
 
     params_jax = jnp.array(mean_params)
@@ -1307,7 +1303,7 @@ def _compute_theoretical_c2_from_mcmc(
                         f"  Angle {i} (phi={phi:.2f} deg): fitted contrast={contrast_i:.4f}, "
                         f"offset={offset_i:.4f}"
                     )
-            except Exception as e:
+            except (np.linalg.LinAlgError, ValueError) as e:
                 logger.warning(f"lstsq failed for angle {i}, using global values: {e}")
                 contrast_i = contrast
                 offset_i = offset
