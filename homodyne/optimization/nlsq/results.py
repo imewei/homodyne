@@ -84,6 +84,7 @@ class OptimizationResult:
     streaming_diagnostics: dict[str, Any] | None = None
     stratification_diagnostics: StratificationDiagnostics | None = None
     nlsq_diagnostics: dict[str, Any] | None = None
+    sigma_is_default: bool = False
 
     @property
     def success(self) -> bool:

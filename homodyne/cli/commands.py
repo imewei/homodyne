@@ -3,6 +3,17 @@
 
 Handles command execution and coordination between CLI arguments,
 configuration, and optimization methods.
+
+This module serves as the main orchestrator and re-export hub.
+Implementation details are in focused submodules:
+- config_handling: Device config, config loading, CLI overrides
+- data_pipeline: Data loading, t=0 exclusion, angle filtering, MCMC pooling
+- optimization_runner: NLSQ/CMC optimization, warm-start
+- result_saving: JSON/NPZ saving for NLSQ and MCMC results
+- plot_dispatch: Plotting dispatch for experimental/simulated data
+
+Functions that are mock-patched by tests via @patch("homodyne.cli.commands.X")
+remain in this module to preserve test compatibility.
 """
 
 from __future__ import annotations
@@ -10,116 +21,86 @@ from __future__ import annotations
 import argparse
 import json
 import time
-
-try:
-    from homodyne._version import __version__ as _pkg_version
-except ImportError:
-    _pkg_version = "unknown"
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
-import jax.numpy as jnp
 import numpy as np
-import yaml
 from numpy.typing import NDArray
 
 from homodyne.cli.args_parser import validate_args
-from homodyne.config.parameter_names import get_physical_param_names  # noqa: E402
-from homodyne.config.parameter_space import ParameterSpace  # noqa: E402
-from homodyne.config.types import (  # noqa: E402
-    LAMINAR_FLOW_PARAM_NAMES,
-    SCALING_PARAM_NAMES,
-    STATIC_PARAM_NAMES,
+
+# Re-export from config_handling
+from homodyne.cli.config_handling import (  # noqa: F401
+    _apply_cli_overrides,
+    _build_mcmc_runtime_kwargs,
+    _configure_device,
+    _get_default_config,
+    _load_configuration,
 )
-from homodyne.data.angle_filtering import (  # noqa: E402
+
+# Re-export from data_pipeline
+from homodyne.cli.data_pipeline import (  # noqa: F401
+    COMMON_XPCS_ANGLES,
+    _apply_angle_filtering,
+    _apply_angle_filtering_for_optimization,
+    _exclude_t0_from_analysis,
+    _pool_mcmc_data,
+    _prepare_cmc_config,
+)
+
+# Re-export from optimization_runner
+from homodyne.cli.optimization_runner import (  # noqa: F401
+    _resolve_nlsq_warmstart,
+    _run_nlsq_optimization,
+    load_nlsq_result_from_file,
+)
+
+# Re-export from plot_dispatch
+from homodyne.cli.plot_dispatch import (  # noqa: F401
+    _apply_angle_filtering_for_plot,
+    _handle_plotting,
+    generate_nlsq_plots,
+)
+
+# Re-export from result_saving
+from homodyne.cli.result_saving import (  # noqa: F401
+    _compute_theoretical_c2_from_mcmc,
+    _extract_nlsq_metadata,
+    _json_safe,
+    _json_serializer,
+    _prepare_parameter_data,
+    _save_nlsq_json_files,
+    _save_nlsq_npz_file,
+    _save_results,
+    save_mcmc_results,
+    save_nlsq_results,
+)
+from homodyne.config.parameter_space import ParameterSpace
+from homodyne.data.angle_filtering import (
     angle_in_range as _data_angle_in_range,
 )
-from homodyne.data.angle_filtering import (  # noqa: E402
-    apply_angle_filtering as _data_apply_angle_filtering,
-)
-from homodyne.data.angle_filtering import (  # noqa: E402
-    apply_angle_filtering_for_plot as _data_apply_angle_filtering_for_plot,
-)
-from homodyne.data.angle_filtering import (  # noqa: E402
+from homodyne.data.angle_filtering import (
     normalize_angle_to_symmetric_range as _data_normalize_angle_to_symmetric_range,
 )
-from homodyne.io.json_utils import json_safe as _io_json_safe  # noqa: E402
-from homodyne.io.mcmc_writers import (  # noqa: E402
-    create_mcmc_analysis_dict as _io_create_mcmc_analysis_dict,
-)
-from homodyne.io.mcmc_writers import (  # noqa: E402
-    create_mcmc_diagnostics_dict as _io_create_mcmc_diagnostics_dict,
-)
-from homodyne.io.mcmc_writers import (  # noqa: E402
-    create_mcmc_parameters_dict as _io_create_mcmc_parameters_dict,
-)
-from homodyne.io.nlsq_writers import (  # noqa: E402
-    save_nlsq_json_files as _io_save_nlsq_json_files,
-)
-from homodyne.io.nlsq_writers import (  # noqa: E402
-    save_nlsq_npz_file as _io_save_nlsq_npz_file,
-)
-from homodyne.optimization.nlsq.fit_computation import (  # noqa: E402
-    compute_theoretical_fits,
-)
-from homodyne.optimization.nlsq.validation.fit_quality import (  # noqa: E402
-    FitQualityConfig,
-    validate_fit_quality,
-)
-from homodyne.utils.logging import (  # noqa: E402
+from homodyne.utils.logging import (
     AnalysisSummaryLogger,
     configure_logging,
     get_logger,
     log_exception,
     log_phase,
 )
-from homodyne.viz.experimental_plots import (  # noqa: E402
-    plot_experimental_data as _viz_plot_experimental_data,
-)
-from homodyne.viz.experimental_plots import (  # noqa: E402
-    plot_fit_comparison as _viz_plot_fit_comparison,
-)
-from homodyne.viz.nlsq_plots import (  # noqa: E402
-    generate_and_plot_fitted_simulations as _viz_generate_and_plot_fitted_simulations,
-)
-from homodyne.viz.nlsq_plots import (  # noqa: E402
-    generate_nlsq_plots as _viz_generate_nlsq_plots,
-)
-from homodyne.viz.nlsq_plots import (  # noqa: E402
-    plot_simulated_data as _viz_plot_simulated_data,
-)
 
 logger = get_logger(__name__)
 
-# Common XPCS experimental angles (in degrees) for validation
-COMMON_XPCS_ANGLES = [0, 30, 45, 60, 90, 120, 135, 150, 180]
-
-
-def normalize_angle_to_symmetric_range(
-    angle: float | NDArray[np.floating[Any]],
-) -> float | NDArray[np.floating[Any]]:
-    """Normalize angle(s) to [-180°, 180°] range.
-
-    This is a wrapper that delegates to homodyne.data.angle_filtering.
-    """
-    return _data_normalize_angle_to_symmetric_range(angle)
-
-
-def _angle_in_range(angle: float, min_angle: float, max_angle: float) -> bool:
-    """Check if angle is in range, accounting for wrap-around at ±180°.
-
-    This is a wrapper that delegates to homodyne.data.angle_filtering.
-    """
-    return _data_angle_in_range(angle, min_angle, max_angle)
-
-
-# Import core modules with fallback
+# Import core modules with fallback.
+# These module-level names are also used as mock patch targets by tests
+# (e.g. @patch("homodyne.cli.commands.XPCSDataLoader")), so they must
+# remain importable from this module.
 try:
     from homodyne.config.manager import ConfigManager
     from homodyne.data.xpcs_loader import XPCSDataLoader
-    from homodyne.device import configure_optimal_device
-    from homodyne.optimization import fit_mcmc_jax, fit_nlsq_jax
+    from homodyne.optimization import fit_mcmc_jax
 
     HAS_CORE_MODULES = True
     HAS_XPCS_LOADER = True
@@ -134,6 +115,24 @@ except ImportError as e:
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             raise ImportError("XPCSDataLoader not available")
+
+
+def normalize_angle_to_symmetric_range(
+    angle: float | NDArray[np.floating[Any]],
+) -> float | NDArray[np.floating[Any]]:
+    """Normalize angle(s) to [-180, 180] range.
+
+    This is a wrapper that delegates to homodyne.data.angle_filtering.
+    """
+    return _data_normalize_angle_to_symmetric_range(angle)
+
+
+def _angle_in_range(angle: float, min_angle: float, max_angle: float) -> bool:
+    """Check if angle is in range, accounting for wrap-around at +/-180.
+
+    This is a wrapper that delegates to homodyne.data.angle_filtering.
+    """
+    return _data_angle_in_range(angle, min_angle, max_angle)
 
 
 def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
@@ -167,7 +166,6 @@ def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
         }
 
     # Initialize analysis summary logger (T024)
-    # Use CLI args for initial mode, will be updated from config after loading
     cli_mode = "laminar_flow" if getattr(args, "laminar_flow", False) else "static"
     if getattr(args, "static_mode", False):
         cli_mode = "static_isotropic"
@@ -201,9 +199,7 @@ def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
                 summary.add_output_file(log_file)
         summary.end_phase("config_loading")
 
-        # Update analysis mode from loaded config (T055 - fix mode mismatch bug)
-        # Config file may specify analysis_mode, and CLI overrides are already applied
-        # in _load_configuration via _apply_cli_overrides()
+        # Update analysis mode from loaded config (T055)
         config_dict = config.get_config() if hasattr(config, "get_config") else config
         if isinstance(config_dict, dict):
             config_analysis_mode = config_dict.get("analysis_mode", cli_mode)
@@ -217,7 +213,7 @@ def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
         # Configure device (CPU/GPU)
         device_config = _configure_device(args)
 
-        # Check if only simulated data plotting is requested (no experimental data needed)
+        # Check if only simulated data plotting is requested
         plot_exp = getattr(args, "plot_experimental_data", False)
         plot_sim = getattr(args, "plot_simulated_data", False)
         save_plots = getattr(args, "save_plots", False)
@@ -227,8 +223,6 @@ def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
             logger.info(
                 "[CLI] Plotting simulated data only (skipping data loading and optimization)",
             )
-            # Skip data loading for pure simulated data mode
-            # Extract config dictionary from ConfigManager
             config_dict_plot: dict[str, Any] = (
                 config.get_config()
                 if hasattr(config, "get_config")
@@ -254,7 +248,6 @@ def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
         plot_only = plot_exp and not save_plots and not plot_sim
 
         if plot_only:
-            # Skip optimization, just plot experimental data
             logger.info("[CLI] Plotting experimental data only (skipping optimization)")
             result = None
             summary.set_convergence_status("skipped_plot_only")
@@ -267,7 +260,6 @@ def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
 
             # Record optimization metrics
             if result is not None:
-                # CMCResult.chi_squared is a placeholder (always 0.0) — skip it
                 is_cmc = (
                     callable(getattr(result, "is_cmc_result", None))
                     and result.is_cmc_result()
@@ -276,17 +268,13 @@ def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
                     summary.record_metric("chi_squared", float(result.chi_squared))
                 if hasattr(result, "n_iterations"):
                     summary.record_metric("n_iterations", float(result.n_iterations))
-                # Handle convergence status from different result types
                 if hasattr(result, "convergence_status"):
-                    # NLSQ result - use convergence_status directly
                     summary.set_convergence_status(result.convergence_status)
                 elif hasattr(result, "converged"):
-                    # CMC result - use converged boolean
                     summary.set_convergence_status(
                         "converged" if result.converged else "not_converged"
                     )
                 elif hasattr(result, "success"):
-                    # Fallback to success property
                     summary.set_convergence_status(
                         "converged" if result.success else "failed"
                     )
@@ -298,7 +286,6 @@ def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
             summary.end_phase("result_saving")
 
         # Handle plotting options
-        # Extract config dictionary from ConfigManager
         config_dict2: dict[str, Any] = (
             config.get_config()
             if hasattr(config, "get_config")
@@ -329,304 +316,10 @@ def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
         }
 
     except Exception as e:
-        # Use structured exception logging
         log_exception(logger, e, context={"run_id": run_id, "phase": "dispatch"})
         summary.set_convergence_status("failed")
         summary.increment_error_count()
         return {"success": False, "error": str(e)}
-
-
-def _configure_device(args: argparse.Namespace) -> dict[str, Any]:
-    """Configure optimal device based on CLI arguments."""
-
-    logger.info("Configuring computational device...")
-
-    # Configure CPU-only device (GPU support removed in v2.3.0)
-    device_config = configure_optimal_device()
-
-    if device_config.get("configuration_successful"):
-        device_type = device_config.get("device_type", "")
-        logger.info(f"OK: Device configured: {str(device_type).upper()}")
-    else:
-        logger.warning("Device configuration failed, using defaults")
-
-    return device_config
-
-
-def _load_configuration(args: argparse.Namespace) -> ConfigManager:
-    """Load configuration from file or create default."""
-    logger.info(f"Loading configuration from: {args.config}")
-
-    try:
-        # Try to load from file
-        if args.config.exists():
-            config = ConfigManager(str(args.config))
-            logger.info(f"OK: Configuration loaded: {args.config}")
-        else:
-            # Create default configuration
-            logger.info("Configuration file not found, using defaults")
-            config = ConfigManager(config_override=_get_default_config(args))
-
-        # Apply CLI overrides
-        _apply_cli_overrides(config, args)
-
-        return config
-
-    except (ValueError, KeyError, OSError, yaml.YAMLError) as e:
-        logger.warning(f"Configuration loading failed: {e}, using defaults")
-        return ConfigManager(config_override=_get_default_config(args))
-
-
-def _get_default_config(args: argparse.Namespace) -> dict[str, Any]:
-    """Create default configuration from CLI arguments."""
-    # Determine analysis mode
-    if args.static_mode:
-        analysis_mode = "static_isotropic"
-    elif args.laminar_flow:
-        analysis_mode = "laminar_flow"
-    else:
-        analysis_mode = "auto_detect"
-
-    config = {
-        "metadata": {
-            "config_version": _pkg_version,
-            "description": "CLI-generated configuration",
-        },
-        "analysis_mode": analysis_mode,
-        "experimental_data": {
-            "file_path": str(args.data_file) if args.data_file else None,
-        },
-        "optimization": {
-            "method": args.method,
-            "lsq": {
-                "max_iterations": args.max_iterations,
-                "tolerance": args.tolerance,
-            },
-            "mcmc": {
-                "n_samples": args.n_samples,
-                "n_warmup": args.n_warmup,
-                "n_chains": args.n_chains,
-            },
-        },
-        "hardware": {},
-        "output": {
-            "formats": [args.output_format],
-            "save_plots": args.save_plots,
-            "output_dir": str(args.output_dir),
-        },
-    }
-
-    return config
-
-
-def _apply_cli_overrides(config: ConfigManager, args: argparse.Namespace) -> None:
-    """Apply CLI argument overrides to configuration.
-
-    Implements precedence: CLI args > Config file > Code defaults
-    For MCMC parameters, config uses 'num_*' prefix, args use 'n_*' prefix
-
-    Supports overriding:
-    - Data file path
-    - Analysis mode
-    - MCMC sampling parameters (n_samples, n_warmup, n_chains)
-    - CMC sharding/backend parameters
-    - Initial parameter values (D0, alpha, D_offset, gamma_dot_t0, beta, gamma_dot_t_offset, phi0)
-    - Mass matrix type (dense_mass_matrix flag)
-    """
-    if not hasattr(config, "config") or not config.config:
-        return
-
-    # Override data file if provided
-    if args.data_file:
-        config.config.setdefault("experimental_data", {})
-        config.config["experimental_data"]["file_path"] = str(args.data_file)
-
-    # Override analysis mode if specified
-    if args.static_mode:
-        config.config["analysis_mode"] = "static_isotropic"
-    elif args.laminar_flow:
-        config.config["analysis_mode"] = "laminar_flow"
-
-    # Override optimization parameters
-    if "optimization" not in config.config:
-        config.config["optimization"] = {}
-
-    config.config["optimization"]["method"] = args.method
-
-    # Load MCMC parameters from config if not provided via CLI
-    # Config uses 'num_samples' etc., args use 'n_samples' etc.
-    mcmc_config = config.config.get("optimization", {}).get("mcmc", {})
-
-    # Code defaults from homodyne/optimization/mcmc.py:_get_mcmc_config
-    if args.n_samples is None:
-        args.n_samples = mcmc_config.get("num_samples", 1000)
-    if args.n_warmup is None:
-        args.n_warmup = mcmc_config.get("num_warmup", 500)
-    if args.n_chains is None:
-        args.n_chains = mcmc_config.get("num_chains", 4)
-
-    # CMC-only: ensure sections exist and CLI overrides take precedence
-    optimization_section = config.config.setdefault("optimization", {})
-    optimization_section.setdefault("mcmc", {})
-    cmc_section = optimization_section.setdefault("cmc", {})
-    sharding_section = cmc_section.setdefault("sharding", {})
-    per_shard = cmc_section.setdefault("per_shard_mcmc", {})
-
-    if args.cmc_num_shards is not None:
-        sharding_section["num_shards"] = args.cmc_num_shards
-
-    per_shard["num_samples"] = args.n_samples
-    per_shard["num_warmup"] = args.n_warmup
-    per_shard["num_chains"] = args.n_chains
-
-    # Override dense mass matrix flag
-    if args.dense_mass_matrix:
-        old_value = config.config["optimization"]["mcmc"].get("dense_mass", False)
-        config.config["optimization"]["mcmc"]["dense_mass"] = True
-        logger.info(
-            f"Overriding config dense_mass={old_value} with CLI flag dense_mass=True"
-        )
-
-    # Override initial parameter values
-    # Map CLI argument names to canonical parameter names
-    param_overrides = {
-        "initial_d0": "D0",
-        "initial_alpha": "alpha",
-        "initial_d_offset": "D_offset",
-        "initial_gamma_dot_t0": "gamma_dot_t0",
-        "initial_beta": "beta",
-        "initial_gamma_dot_offset": "gamma_dot_t_offset",
-        "initial_phi0": "phi0",
-    }
-
-    # Collect CLI overrides
-    cli_param_values = {}
-    for arg_name, param_name in param_overrides.items():
-        arg_value = getattr(args, arg_name, None)
-        if arg_value is not None:
-            cli_param_values[param_name] = arg_value
-
-    # Apply parameter overrides to config if any provided
-    if cli_param_values:
-        # Ensure initial_parameters section exists
-        if "initial_parameters" not in config.config:
-            config.config["initial_parameters"] = {}
-
-        # Get or create parameter_names list and values list
-        param_names = config.config["initial_parameters"].get("parameter_names", [])
-        param_values = config.config["initial_parameters"].get("values", [])
-
-        # Handle case where values is None (null in YAML)
-        if param_values is None:
-            param_values = []
-
-        # Convert to dict for easier manipulation
-        if param_names and param_values and len(param_names) == len(param_values):
-            # Use ParameterManager for name mapping (config → canonical)
-            from homodyne.config.parameter_manager import ParameterManager
-
-            pm = ParameterManager(
-                config.config, config.config.get("analysis_mode", "laminar_flow")
-            )
-
-            # Build current param dict with name mapping
-            current_params = {}
-            for pname, pval in zip(param_names, param_values, strict=False):
-                # Map config name to canonical name
-                canonical_name = pm._param_name_mapping.get(pname, pname)
-                current_params[canonical_name] = pval
-        else:
-            # No existing values or mismatch - start fresh
-            current_params = {}
-
-        # Apply CLI overrides and log
-        for param_name, new_value in cli_param_values.items():
-            old_value = current_params.get(param_name, None)
-            current_params[param_name] = new_value
-
-            if old_value is not None:
-                logger.info(
-                    f"Overriding config {param_name}={old_value:.6g} with CLI value {param_name}={new_value:.6g}"
-                )
-            else:
-                logger.info(
-                    f"Setting {param_name}={new_value:.6g} from CLI (not in config)"
-                )
-
-        # Update config with new parameter values
-        # Build parameter_names and values lists in canonical order
-        analysis_mode = config.config.get("analysis_mode", "laminar_flow")
-        if "static" in analysis_mode.lower():
-            expected_params = ["D0", "alpha", "D_offset"]
-        else:
-            expected_params = [
-                "D0",
-                "alpha",
-                "D_offset",
-                "gamma_dot_t0",
-                "beta",
-                "gamma_dot_t_offset",
-                "phi0",
-            ]
-
-        # Only include parameters that have values (either from config or CLI)
-        final_param_names = []
-        final_param_values = []
-        for param in expected_params:
-            if param in current_params:
-                final_param_names.append(param)
-                final_param_values.append(current_params[param])
-
-        config.config["initial_parameters"]["parameter_names"] = final_param_names
-        config.config["initial_parameters"]["values"] = final_param_values
-
-    # Override hardware settings
-    if "hardware" not in config.config:
-        config.config["hardware"] = {}
-
-    # Hardware configuration (CPU-only in v2.3.0+)
-    # No hardware overrides needed
-
-
-def _build_mcmc_runtime_kwargs(
-    args: argparse.Namespace, config: ConfigManager
-) -> dict[str, Any]:
-    """Collect runtime kwargs for fit_mcmc_jax from CLI args and YAML config."""
-
-    cfg_dict = config.config if hasattr(config, "config") else {}
-    optimization_cfg = cfg_dict.get("optimization", {}) if cfg_dict else {}
-    mcmc_cfg = optimization_cfg.get("mcmc", {}) if optimization_cfg else {}
-
-    runtime_kwargs: dict[str, Any] = {
-        "n_samples": args.n_samples,
-        "n_warmup": args.n_warmup,
-        "n_chains": args.n_chains,
-        "run_id": getattr(args, "run_id", None),
-    }
-
-    if cfg_dict:
-        runtime_kwargs["config"] = cfg_dict
-
-    def _set_runtime_value(dest: str, *aliases: str) -> None:
-        for key in (dest, *aliases):
-            if key in mcmc_cfg and mcmc_cfg[key] is not None:
-                runtime_kwargs[dest] = mcmc_cfg[key]
-                return
-
-    _set_runtime_value("target_accept_prob")
-    _set_runtime_value("max_tree_depth")
-    _set_runtime_value("dense_mass_matrix", "dense_mass")
-    _set_runtime_value("rng_key")
-    _set_runtime_value("stable_prior_fallback")
-    _set_runtime_value("min_ess")
-    _set_runtime_value("max_rhat")
-    _set_runtime_value("n_retries")
-    _set_runtime_value("check_hmc_diagnostics")
-
-    if args.dense_mass_matrix:
-        runtime_kwargs["dense_mass_matrix"] = True
-
-    return runtime_kwargs
 
 
 def _load_data(args: argparse.Namespace, config: ConfigManager) -> dict[str, Any]:
@@ -637,7 +330,6 @@ def _load_data(args: argparse.Namespace, config: ConfigManager) -> dict[str, Any
     """
     logger.info("Loading experimental data...")
 
-    # Check if XPCSDataLoader is available
     if not HAS_XPCS_LOADER:
         raise RuntimeError(
             "XPCSDataLoader not available. "
@@ -645,16 +337,11 @@ def _load_data(args: argparse.Namespace, config: ConfigManager) -> dict[str, Any
         )
 
     try:
-        # Determine loading strategy
         if args.data_file:
-            # CLI override: Create minimal config for XPCSDataLoader
-            # Convert to absolute path to handle relative paths properly
             data_file_path = Path(args.data_file).resolve()
 
-            # Handle edge case: if only filename provided (no directory)
             parent_dir = data_file_path.parent
             if parent_dir == Path.cwd():
-                # File in current directory - be explicit
                 logger.debug(
                     f"Using current directory for data file: {data_file_path.name}",
                 )
@@ -673,7 +360,6 @@ def _load_data(args: argparse.Namespace, config: ConfigManager) -> dict[str, Any
             logger.info(f"Loading data from CLI override: {data_file_path}")
             loader = XPCSDataLoader(config_dict=temp_config)
         else:
-            # Use full config - XPCSDataLoader handles data_folder_path + data_file_name
             if not hasattr(config, "config") or not config.config:
                 raise ValueError("No configuration loaded")
 
@@ -694,10 +380,8 @@ def _load_data(args: argparse.Namespace, config: ConfigManager) -> dict[str, Any
             logger.info("Loading data from configuration")
             loader = XPCSDataLoader(config_dict=config.config)
 
-        # Load data using the configured loader
         data = loader.load_experimental_data()
 
-        # Get data size for reporting
         data_size = 0
         if "c2_exp" in data:
             c2_exp = data["c2_exp"]
@@ -714,714 +398,6 @@ def _load_data(args: argparse.Namespace, config: ConfigManager) -> dict[str, Any
         raise RuntimeError(f"Failed to load experimental data: {e}") from e
 
 
-def _exclude_t0_from_analysis(data: dict[str, Any]) -> dict[str, Any]:
-    """Exclude t=0 (index 0) from time arrays and C2 data for analysis.
-
-    With anomalous diffusion D(t) = D0 * t^alpha where alpha < 0,
-    D(t=0) approaches infinity. This singularity corrupts the cumulative
-    integral in g1 computation, causing:
-    - CMC: 0% acceptance rate due to constant likelihood
-    - NLSQ: Potential numerical instability
-
-    The fix: exclude index 0 from analysis arrays. The physics at t=0 is
-    known analytically (g1(t,t) = 1 by definition), not computed numerically.
-
-    Parameters
-    ----------
-    data : dict[str, Any]
-        Data dictionary containing 't1', 't2', and 'c2_exp' arrays.
-
-    Returns
-    -------
-    dict[str, Any]
-        Modified data dictionary with t=0 excluded from arrays.
-        Returns input unchanged if arrays are missing or too small.
-    """
-    # Extract arrays
-    t1_raw = data.get("t1")
-    t2_raw = data.get("t2")
-    c2_raw = data.get("c2_exp")
-
-    # Validate arrays exist
-    if t1_raw is None or t2_raw is None or c2_raw is None:
-        logger.debug("Skipping t=0 exclusion: missing t1, t2, or c2_exp arrays")
-        return data
-
-    # Convert to numpy arrays if needed
-    t1_raw = np.asarray(t1_raw)
-    t2_raw = np.asarray(t2_raw)
-    c2_raw = np.asarray(c2_raw)
-
-    # Validate minimum size (need at least 2 points to slice)
-    min_size = min(
-        t1_raw.shape[0] if t1_raw.ndim >= 1 else 1,
-        t2_raw.shape[0] if t2_raw.ndim >= 1 else 1,
-        c2_raw.shape[-1] if c2_raw.ndim >= 2 else 1,
-    )
-    if min_size < 2:
-        logger.debug("Skipping t=0 exclusion: arrays too small to slice")
-        return data
-
-    # Create modified copy of data
-    result = data.copy()
-
-    # Slice based on array dimensions
-    if t1_raw.ndim == 2 and t2_raw.ndim == 2:
-        # 2D meshgrids: slice both axes [1:, 1:]
-        result["t1"] = t1_raw[1:, 1:]
-        result["t2"] = t2_raw[1:, 1:]
-        old_shape = c2_raw.shape
-        result["c2_exp"] = c2_raw[:, 1:, 1:]  # All phi angles, slice time axes
-        logger.info(
-            f"Excluded t=0 for analysis (2D meshgrid): "
-            f"c2_exp {old_shape} -> {result['c2_exp'].shape}, "
-            f"t1 {t1_raw.shape} -> {result['t1'].shape}"
-        )
-    elif t1_raw.ndim == 1 and t2_raw.ndim == 1:
-        # 1D arrays: slice directly [1:]
-        result["t1"] = t1_raw[1:]
-        result["t2"] = t2_raw[1:]
-        old_shape = c2_raw.shape
-        result["c2_exp"] = c2_raw[:, 1:, 1:]  # All phi angles, slice time axes
-        logger.info(
-            f"Excluded t=0 for analysis (1D arrays): "
-            f"c2_exp {old_shape} -> {result['c2_exp'].shape}, "
-            f"t1 {t1_raw.shape} -> {result['t1'].shape}"
-        )
-    else:
-        logger.warning(
-            f"Unexpected array dimensions: t1.ndim={t1_raw.ndim}, t2.ndim={t2_raw.ndim}. "
-            f"Skipping t=0 exclusion."
-        )
-        return data
-
-    return result
-
-
-def _apply_angle_filtering_for_optimization(
-    data: dict[str, Any],
-    config: ConfigManager,
-) -> dict[str, Any]:
-    """Apply angle filtering to data before optimization.
-
-    This function filters phi angles and corresponding C2 data based on the
-    phi_filtering configuration before passing data to optimization methods
-    (NLSQ or MCMC). It creates a filtered copy of the data dictionary while
-    preserving all other keys unchanged.
-
-    Parameters
-    ----------
-    data : dict
-        Full data dictionary with all angles, containing keys:
-        - phi_angles_list: np.ndarray of phi angles (n_phi,)
-        - c2_exp: np.ndarray of correlation data (n_phi, n_t1, n_t2)
-        - wavevector_q_list: np.ndarray (preserved unchanged)
-        - t1: np.ndarray (preserved unchanged)
-        - t2: np.ndarray (preserved unchanged)
-    config : ConfigManager
-        Configuration manager with phi_filtering settings
-
-    Returns
-    -------
-    dict
-        Filtered data dictionary with same structure as input but with:
-        - phi_angles_list: Filtered to selected angles only
-        - c2_exp: First dimension sliced to match selected angles
-        - All other keys: Unchanged from input
-
-    Notes
-    -----
-    Edge Case Handling:
-    - If phi_filtering.enabled is False: Returns unfiltered data (DEBUG log)
-    - If target_ranges is empty: Returns unfiltered data (WARNING log)
-    - If no angles match: Returns unfiltered data (WARNING log: "No angles matched phi_filtering criteria, using all angles")
-
-    Logging:
-    - DEBUG: "Phi filtering not enabled, using all angles for optimization"
-    - DEBUG: "Angle filtering completed in X.XXXms" (performance monitoring)
-    - INFO: "Angle filtering for optimization: X angles selected from Y total angles"
-    - INFO: "Selected angles: [angle_list]"
-    - WARNING: "Phi filtering enabled but no target_ranges specified, using all angles"
-    - WARNING: "No angles matched phi_filtering criteria, using all angles"
-    - WARNING: "Configured angle ranges do not overlap with common XPCS angles" (config validation)
-
-    Examples
-    --------
-    >>> # With filtering enabled
-    >>> filtered_data = _apply_angle_filtering_for_optimization(data, config)
-    >>> len(filtered_data["phi_angles_list"])  # e.g., 3 angles selected
-    3
-    >>> filtered_data["c2_exp"].shape[0]  # First dimension matches
-    3
-    """
-    import numpy as np
-
-    # Extract required arrays
-    phi_angles = np.asarray(data.get("phi_angles_list", []))
-    c2_exp = np.asarray(data.get("c2_exp", []))
-
-    if len(phi_angles) == 0 or len(c2_exp) == 0:
-        logger.warning("No phi angles or C2 data available, cannot apply filtering")
-        return data
-
-    # Validate angles are in reasonable range (data quality check)
-    angles_too_large = phi_angles[np.abs(phi_angles) > 360]
-    if len(angles_too_large) > 0:
-        logger.warning(
-            f"Found {len(angles_too_large)} angle(s) with |phi| > 360 deg: {angles_too_large}. "
-            f"This may indicate data loading issues, unit confusion (radians vs degrees), "
-            f"or instrument malfunction. Angles will be normalized to [-180 deg, 180 deg] range.",
-        )
-
-    # Normalize phi angles to [-180°, 180°] range (flow direction at 0°)
-    original_phi_angles = np.asarray(phi_angles).copy()
-    phi_angles_normalized = normalize_angle_to_symmetric_range(np.asarray(phi_angles))
-    phi_angles = np.asarray(phi_angles_normalized)
-    logger.info(
-        "Normalized phi angles to [-180, 180] deg range (flow direction at 0 deg)"
-    )
-    logger.debug(f"Original angles: {original_phi_angles}")
-    logger.debug(f"Normalized angles: {phi_angles}")
-
-    # Get config dict (handle both ConfigManager and dict types)
-    config_dict: dict[str, Any] = (
-        config.get_config()
-        if hasattr(config, "get_config")
-        else cast(dict[str, Any], config)
-    )
-
-    # Check if filtering is enabled
-    phi_filtering_config = config_dict.get("phi_filtering", {})
-    if not phi_filtering_config.get("enabled", False):
-        logger.debug("Phi filtering not enabled, using all angles for optimization")
-        # Return data with normalized angles even when filtering disabled
-        normalized_data = data.copy()
-        normalized_data["phi_angles_list"] = phi_angles
-        return normalized_data
-
-    # Check for target_ranges
-    target_ranges = phi_filtering_config.get("target_ranges", [])
-    if not target_ranges:
-        logger.warning(
-            "Phi filtering enabled but no target_ranges specified, using all angles",
-        )
-        # Return data with normalized angles
-        normalized_data = data.copy()
-        normalized_data["phi_angles_list"] = phi_angles
-        return normalized_data
-
-    # Normalize target_ranges to [-180°, 180°] for consistency
-    normalized_ranges = []
-    for range_spec in target_ranges:
-        min_angle = range_spec.get("min_angle", -180)
-        max_angle = range_spec.get("max_angle", 180)
-        normalized_min = normalize_angle_to_symmetric_range(min_angle)
-        normalized_max = normalize_angle_to_symmetric_range(max_angle)
-        normalized_ranges.append(
-            {
-                "min_angle": normalized_min,
-                "max_angle": normalized_max,
-                "description": range_spec.get("description", ""),
-            },
-        )
-        logger.debug(
-            f"Normalized range [{min_angle:.1f} deg, {max_angle:.1f} deg] -> "
-            f"[{normalized_min:.1f} deg, {normalized_max:.1f} deg]",
-        )
-    target_ranges = normalized_ranges
-
-    # Validate that target_ranges overlap with common XPCS angles
-    # This helps catch configuration errors (e.g., typos in angle values)
-    common_angles_matched = False
-    for common_angle in COMMON_XPCS_ANGLES:
-        for range_spec in target_ranges:
-            min_angle = range_spec.get("min_angle", -np.inf)
-            max_angle = range_spec.get("max_angle", np.inf)
-            if min_angle <= common_angle <= max_angle:
-                common_angles_matched = True
-                break
-        if common_angles_matched:
-            break
-
-    if not common_angles_matched:
-        logger.warning(
-            f"Configured angle ranges {target_ranges} do not overlap with "
-            f"common XPCS angles {COMMON_XPCS_ANGLES}. Verify your configuration "
-            f"is correct (check for typos in min_angle/max_angle values).",
-        )
-
-    # Create modified config with normalized target_ranges
-    modified_config = config_dict.copy()
-    modified_phi_filtering = phi_filtering_config.copy()
-    modified_phi_filtering["target_ranges"] = target_ranges
-    modified_config["phi_filtering"] = modified_phi_filtering
-
-    # Call shared filtering function with performance timing
-    start_time = time.perf_counter()
-    filtered_indices, filtered_phi_angles, filtered_c2_exp = _apply_angle_filtering(
-        phi_angles,
-        c2_exp,
-        modified_config,
-    )
-    elapsed_ms = (time.perf_counter() - start_time) * 1000
-    logger.debug(f"Angle filtering completed in {elapsed_ms:.3f}ms")
-
-    # Check if any angles were filtered
-    if not filtered_indices:
-        logger.warning("No angles matched phi_filtering criteria, using all angles")
-        # Return data with normalized angles
-        normalized_data = data.copy()
-        normalized_data["phi_angles_list"] = phi_angles
-        return normalized_data
-
-    # Check if all angles matched (no actual filtering)
-    if len(filtered_indices) == len(phi_angles):
-        logger.debug(
-            f"All {len(phi_angles)} angles matched filter criteria, no reduction",
-        )
-        # Return data with normalized angles
-        normalized_data = data.copy()
-        normalized_data["phi_angles_list"] = phi_angles
-        return normalized_data
-
-    # Create filtered data dictionary
-    filtered_data = {
-        "phi_angles_list": filtered_phi_angles,
-        "c2_exp": filtered_c2_exp,
-        # Preserve other keys unchanged
-        "wavevector_q_list": data.get("wavevector_q_list"),
-        "t1": data.get("t1"),
-        "t2": data.get("t2"),
-    }
-
-    # Copy any additional keys that might be present
-    for key in data:
-        if key not in filtered_data:
-            filtered_data[key] = data[key]
-
-    # Log filtering results
-    logger.info(
-        f"Angle filtering for optimization: {len(filtered_indices)} angles selected "
-        f"from {len(phi_angles)} total angles",
-    )
-    logger.info(f"Selected angles: {filtered_phi_angles}")
-
-    return filtered_data
-
-
-def _prepare_cmc_config(
-    args: argparse.Namespace, config: ConfigManager
-) -> dict[str, Any]:
-    """Prepare CMC configuration with CLI overrides applied.
-
-    Extracts CMC config from ConfigManager and applies CLI argument overrides
-    for num_shards and backend.
-
-    Args:
-        args: Parsed CLI arguments
-        config: Configuration manager
-
-    Returns:
-        CMC configuration dictionary with CLI overrides applied
-    """
-    cmc_config = config.get_cmc_config()
-
-    # Normalize backend config to dict form for mutation
-    backend_cfg = cmc_config.get("backend", {})
-    if isinstance(backend_cfg, str):
-        backend_cfg = {"name": backend_cfg}
-    elif backend_cfg is None:
-        backend_cfg = {}
-    cmc_config["backend"] = backend_cfg
-
-    # Apply CLI overrides
-    if args.cmc_num_shards is not None:
-        logger.info(f"Overriding CMC num_shards from CLI: {args.cmc_num_shards}")
-        cmc_config.setdefault("sharding", {})["num_shards"] = args.cmc_num_shards
-
-    if args.cmc_backend is not None:
-        logger.info(f"Overriding CMC backend from CLI: {args.cmc_backend}")
-        backend_cfg["name"] = args.cmc_backend
-
-    # Auto-select multiprocessing for multiple shards with auto/jax backend
-    num_shards_override = cmc_config.get("sharding", {}).get("num_shards", "auto")
-    try:
-        num_shards_int = int(num_shards_override)
-    except (TypeError, ValueError):
-        num_shards_int = None
-
-    backend_name_current = backend_cfg.get("name", "auto")
-    if (
-        num_shards_int
-        and num_shards_int > 1
-        and backend_name_current in ("auto", "jax")
-    ):
-        logger.warning(
-            "Multiple shards requested but backend is 'auto/jax'; defaulting to multiprocessing. "
-            "Use --cmc-backend to override explicitly."
-        )
-        backend_cfg["name"] = "multiprocessing"
-
-    return cmc_config
-
-
-def _pool_mcmc_data(filtered_data: dict[str, Any]) -> dict[str, Any]:
-    """Pool and flatten 3D correlation data for MCMC.
-
-    MCMC expects 1D pooled/flattened data with matching array lengths.
-    This function transforms 3D c2_exp (n_phi, n_t, n_t) into 1D arrays
-    and creates corresponding t1, t2, phi arrays of the same length.
-
-    Args:
-        filtered_data: Dictionary with c2_exp (3D), t1, t2, and phi_angles_list
-
-    Returns:
-        Dictionary with pooled data:
-        - mcmc_data: flattened c2 data (n_phi * n_t * n_t,)
-        - t1_pooled: tiled t1 values (n_phi * n_t * n_t,)
-        - t2_pooled: tiled t2 values (n_phi * n_t * n_t,)
-        - phi_pooled: repeated phi values (n_phi * n_t * n_t,)
-        - n_phi, n_t, n_total: dimension info
-    """
-    c2_3d = filtered_data["c2_exp"]  # Shape: (n_phi, n_t, n_t)
-    t1_raw = filtered_data.get("t1")
-    t2_raw = filtered_data.get("t2")
-    phi_angles = filtered_data.get("phi_angles_list")
-
-    n_phi = c2_3d.shape[0]
-    n_t = c2_3d.shape[1]
-    n_total = n_phi * n_t * n_t
-
-    # Flatten correlation data
-    mcmc_data = c2_3d.ravel()
-
-    # Handle both 1D and 2D time arrays
-    if t1_raw is None or t2_raw is None:
-        raise ValueError("Missing t1 or t2 arrays in filtered_data")
-
-    t1_arr = np.asarray(t1_raw)
-    t2_arr = np.asarray(t2_raw)
-
-    if t1_arr.ndim == 1 and t2_arr.ndim == 1:
-        t1_2d, t2_2d = np.meshgrid(t1_arr, t2_arr, indexing="ij")
-        logger.debug(
-            f"Created 2D meshgrids from 1D arrays: t1={t1_arr.shape} -> {t1_2d.shape}"
-        )
-    elif t1_arr.ndim == 2 and t2_arr.ndim == 2:
-        t1_2d = t1_arr
-        t2_2d = t2_arr
-        logger.debug(f"Using existing 2D meshgrids: t1={t1_2d.shape}, t2={t2_2d.shape}")
-    else:
-        raise ValueError(
-            f"Inconsistent t1/t2 dimensions: t1.ndim={t1_arr.ndim}, t2.ndim={t2_arr.ndim}. "
-            f"Expected both 1D or both 2D."
-        )
-
-    # Tile time arrays for each phi angle
-    t1_pooled = np.tile(t1_2d.ravel(), n_phi)
-    t2_pooled = np.tile(t2_2d.ravel(), n_phi)
-
-    if phi_angles is not None:
-        phi_pooled = np.repeat(np.asarray(phi_angles), n_t * n_t)
-    else:
-        raise ValueError("Missing phi_angles_list in filtered_data")
-
-    # Verify all arrays have matching lengths
-    for name, arr in [
-        ("mcmc_data", mcmc_data),
-        ("t1", t1_pooled),
-        ("t2", t2_pooled),
-        ("phi", phi_pooled),
-    ]:
-        if arr.shape[0] != n_total:
-            raise ValueError(
-                f"Data pooling failed: {name}={arr.shape[0]}, expected={n_total}"
-            )
-
-    logger.debug(
-        f"Pooled MCMC data: {n_phi} angles x {n_t}x{n_t} = {n_total:,} data points"
-    )
-
-    return {
-        "mcmc_data": mcmc_data,
-        "t1_pooled": t1_pooled,
-        "t2_pooled": t2_pooled,
-        "phi_pooled": phi_pooled,
-        "n_phi": n_phi,
-        "n_t": n_t,
-        "n_total": n_total,
-    }
-
-
-# Reduced χ² threshold for accepting NLSQ results as CMC warm-start.
-# Generous threshold (100.0) catches catastrophic failures (e.g. CMA-ES not
-# converging, χ² = 1e8+) while accepting reasonable fits (e.g. χ² ~ 33).
-_CMC_WARMSTART_CHI2_THRESHOLD = 100.0
-
-
-def load_nlsq_result_from_file(nlsq_result_path: Path) -> dict[str, Any] | None:
-    """Load pre-computed NLSQ results from a previous hm-nlsq run.
-
-    This allows CMC to use warm-start values from a previous NLSQ analysis
-    without re-running NLSQ inline. The recommended workflow is:
-
-    1. Run: homodyne --method nlsq --config config.yaml --output-dir results/
-    2. Run: homodyne --method cmc --config config.yaml --nlsq-result results/
-
-    Parameters
-    ----------
-    nlsq_result_path : Path
-        Path to NLSQ results directory (should contain nlsq/parameters.json)
-        or directly to a parameters.json file.
-
-    Returns
-    -------
-    dict or None
-        Dict with 'params' and 'uncertainties' keys containing parameter values,
-        or None if loading failed.
-    """
-    # Resolve path to parameters.json
-    if nlsq_result_path.is_dir():
-        # Check for nlsq/parameters.json (standard output structure)
-        params_file = nlsq_result_path / "nlsq" / "parameters.json"
-        if not params_file.exists():
-            # Fall back to parameters.json directly in the directory
-            params_file = nlsq_result_path / "parameters.json"
-    else:
-        params_file = nlsq_result_path
-
-    if not params_file.exists():
-        logger.warning(
-            f"NLSQ result file not found: {params_file}. "
-            "Expected nlsq/parameters.json in the specified directory."
-        )
-        return None
-
-    try:
-        import json
-
-        with open(params_file, encoding="utf-8") as f:
-            data = json.load(f)
-
-        # Extract parameter values and uncertainties from the nested structure
-        # parameters.json format: {"parameters": {"D0": {"value": ..., "uncertainty": ...}, ...}}
-        raw_params = data.get("parameters", {})
-
-        params = {}
-        uncertainties = {}
-
-        for name, param_data in raw_params.items():
-            if isinstance(param_data, dict) and "value" in param_data:
-                params[name] = float(param_data["value"])
-                if "uncertainty" in param_data:
-                    uncertainties[name] = float(param_data["uncertainty"])
-            elif isinstance(param_data, (int, float)):
-                # Handle flat structure if present
-                params[name] = float(param_data)
-
-        if not params:
-            logger.warning(f"No parameters found in {params_file}")
-            return None
-
-        # Build result dict compatible with extract_nlsq_values_for_cmc
-        result = {
-            "params": params,
-            "uncertainties": uncertainties if uncertainties else None,
-            "chi_squared": data.get("chi_squared"),
-            "reduced_chi_squared": data.get("reduced_chi_squared"),
-            "convergence_status": data.get("convergence_status"),
-            "analysis_mode": data.get("analysis_mode"),
-            "source_file": str(params_file),
-        }
-
-        logger.info(f"Loaded NLSQ results from {params_file}")
-        _rchi2 = result["reduced_chi_squared"]
-        _rchi2_str = f"{_rchi2:.2f}" if _rchi2 is not None else "N/A"
-        logger.info(
-            f"  Convergence: {result['convergence_status']}, reduced chi2 = {_rchi2_str}"
-        )
-
-        # Log physical parameters for diagnostics
-        _log_warmstart_physical_params(params)
-
-        return result
-
-    except (OSError, json.JSONDecodeError, ValueError, KeyError) as e:
-        logger.warning(f"Failed to load NLSQ results from {params_file}: {e}")
-        return None
-
-
-def _get_warmstart_reduced_chi2(nlsq_result: Any) -> float:
-    """Extract reduced χ² from an NLSQ result (dict or object)."""
-    if isinstance(nlsq_result, dict):
-        return float(nlsq_result.get("reduced_chi_squared", float("inf")))
-    return float(getattr(nlsq_result, "reduced_chi_squared", float("inf")))
-
-
-def _log_warmstart_physical_params(params: Any) -> None:
-    """Log physical parameter values from an NLSQ warm-start result.
-
-    Accepts either a dict of {name: value} or a parameter array (ndarray).
-    """
-    if isinstance(params, dict):
-        # Dict from load_nlsq_result_from_file
-        all_physical = list(LAMINAR_FLOW_PARAM_NAMES)
-        physical_vals = [
-            f"{name}={params[name]:.4g}" for name in all_physical if name in params
-        ]
-        if physical_vals:
-            logger.info(f"  Physical params: {', '.join(physical_vals)}")
-    elif hasattr(params, "__len__"):
-        # Array from inline NLSQ OptimizationResult
-        n_params = len(params)
-        n_laminar = len(LAMINAR_FLOW_PARAM_NAMES)
-        n_static = len(STATIC_PARAM_NAMES)
-
-        if n_params >= n_laminar + 2:
-            physical_names = list(LAMINAR_FLOW_PARAM_NAMES)
-            physical_start = n_params - n_laminar
-        else:
-            physical_names = list(STATIC_PARAM_NAMES)
-            physical_start = n_params - n_static
-
-        physical_vals = params[physical_start:]
-        param_str = ", ".join(
-            f"{name}={val:.4g}"
-            for name, val in zip(physical_names, physical_vals, strict=False)
-        )
-        logger.info(f"  Physical params: {param_str}")
-
-
-def _validate_warmstart_quality(nlsq_result: Any, source: str) -> bool:
-    """Validate NLSQ result quality for CMC warm-start.
-
-    Parameters
-    ----------
-    nlsq_result : dict or OptimizationResult
-        The NLSQ result to validate.
-    source : str
-        Human-readable label for log messages (e.g. "pre-computed", "inline").
-
-    Returns
-    -------
-    bool
-        True if result passes quality threshold, False otherwise.
-    """
-    reduced_chi2 = _get_warmstart_reduced_chi2(nlsq_result)
-
-    if reduced_chi2 > _CMC_WARMSTART_CHI2_THRESHOLD:
-        logger.warning(
-            f"NLSQ warm-start ({source}) has poor fit quality "
-            f"(reduced chi2 = {reduced_chi2:.2f} > threshold {_CMC_WARMSTART_CHI2_THRESHOLD}). "
-            "Falling back to config initial values."
-        )
-        return False
-
-    logger.info(
-        f"NLSQ warm-start ({source}) accepted (reduced chi2 = {reduced_chi2:.2f}). "
-        "Using NLSQ estimates as CMC initial values."
-    )
-    return True
-
-
-def _resolve_nlsq_warmstart(
-    args: argparse.Namespace,
-    filtered_data: dict[str, Any],
-    config: ConfigManager,
-) -> Any | None:
-    """Resolve NLSQ warm-start for CMC from all possible sources.
-
-    Priority order:
-    1. --nlsq-result <path>: Load from pre-computed hm-nlsq pipeline output
-    2. Inline NLSQ: Run local trust-region optimization
-    3. None: Fall back to config initial values
-
-    Returns
-    -------
-    dict, OptimizationResult, or None
-        The NLSQ result for warm-start, or None if unavailable.
-    """
-    skip_warmstart = getattr(args, "no_nlsq_warmstart", False)
-    nlsq_result_path = getattr(args, "nlsq_result", None)
-
-    if skip_warmstart:
-        logger.warning(
-            "NLSQ warm-start disabled (--no-nlsq-warmstart). "
-            "CMC may have higher divergence rates without warm-start."
-        )
-        return None
-
-    # Priority 1: Load from pre-computed NLSQ results (RECOMMENDED)
-    if nlsq_result_path is not None:
-        logger.info(f"Loading NLSQ warm-start from: {nlsq_result_path}")
-        nlsq_result = load_nlsq_result_from_file(nlsq_result_path)
-
-        if nlsq_result is not None:
-            if _validate_warmstart_quality(nlsq_result, "pre-computed"):
-                return nlsq_result
-            return None  # Quality check failed
-
-        logger.warning(
-            f"Failed to load NLSQ results from {nlsq_result_path}. "
-            "Falling back to inline NLSQ optimization."
-        )
-
-    # Priority 2: Run inline NLSQ
-    logger.info("Running NLSQ optimization for CMC warm-start...")
-    try:
-        nlsq_result = _run_nlsq_optimization(
-            filtered_data, config, args, force_local=True
-        )
-        if _validate_warmstart_quality(nlsq_result, "inline"):
-            # Log physical parameters from inline result
-            if (
-                hasattr(nlsq_result, "parameters")
-                and nlsq_result.parameters is not None
-            ):
-                _log_warmstart_physical_params(nlsq_result.parameters)
-            return nlsq_result
-        return None
-    except Exception as e:
-        logger.warning(
-            f"NLSQ warm-start failed: {e}. Proceeding with CMC without warm-start."
-        )
-        return None
-
-
-def _run_nlsq_optimization(
-    filtered_data: dict[str, Any],
-    config: ConfigManager,
-    args: argparse.Namespace,
-    force_local: bool = False,
-) -> Any:
-    """Run NLSQ optimization via unified entry point.
-
-    This function always calls fit_nlsq_jax, which handles global optimization
-    selection internally with the following priority:
-      1. CMA-ES (if enabled and available) - for multi-scale problems
-      2. Multi-start (if enabled) - for exploring parameter space
-      3. Local optimization - standard trust-region method
-
-    Args:
-        filtered_data: Preprocessed experimental data
-        config: Configuration manager
-        args: CLI arguments
-        force_local: If True, bypass CMA-ES/multi-start and use local optimization.
-            This is used for CMC warm-start where a reliable point estimate is
-            needed quickly, rather than global exploration.
-
-    Returns:
-        Optimization result
-    """
-    # Always use fit_nlsq_jax as the unified entry point
-    # It handles global optimization selection: CMA-ES → Multi-start → Local
-    # For CMC warm-start, we bypass global optimization to get a reliable
-    # local optimum quickly (force_local=True skips CMA-ES/multi-start)
-    result = fit_nlsq_jax(filtered_data, config, _skip_global_selection=force_local)
-
-    return result
-
-
 def _run_optimization(
     args: argparse.Namespace, config: ConfigManager, data: dict[str, Any]
 ) -> Any:
@@ -1435,34 +411,20 @@ def _run_optimization(
     # Apply angle filtering before optimization (if configured)
     filtered_data = _apply_angle_filtering_for_optimization(data, config)
 
-    # =========================================================================
     # CRITICAL FIX: Exclude t=0 from analysis to prevent D(t) singularity
-    # =========================================================================
-    # With anomalous diffusion D(t) = D0 * t^alpha where alpha < 0,
-    # D(t=0) → infinity, which corrupts cumulative integrals and causes:
-    # - CMC: 0% acceptance rate, constant C2 output
-    # - NLSQ: Potential numerical instability
-    #
-    # Analysis uses indices [1:, 1:] corresponding to t ∈ [dt, 2dt, ...]
-    # Boundary g1(0,0) = 1 is exact by physics definition, not computed.
-    # =========================================================================
     filtered_data = _exclude_t0_from_analysis(filtered_data)
 
-    # NLSQ will handle large datasets natively via streaming optimization
     logger.debug("Using NLSQ native large dataset handling")
 
     try:
         if method == "nlsq":
             result = _run_nlsq_optimization(filtered_data, config, args)
         elif method == "cmc":
-            # Consensus Monte Carlo - use helper for config preparation
             cmc_config = _prepare_cmc_config(args, config)
             _backend_cfg = cmc_config["backend"]  # noqa: F841
 
-            # NLSQ warm-start: load from --nlsq-result, run inline, or skip
             nlsq_result = _resolve_nlsq_warmstart(args, filtered_data, config)
 
-            # Check if laminar_flow strictly requires warm-start (validation setting)
             config_config_early = (
                 config.config
                 if hasattr(config, "config") and config.config is not None
@@ -1486,16 +448,12 @@ def _run_optimization(
                     "validation.require_nlsq_warmstart=false in CMC config."
                 )
 
-            # Log CMC configuration being used
             logger.info(f"Method: {method.upper()} (Consensus Monte Carlo)")
 
-            # Log key CMC parameters
             sharding = cmc_config.get("sharding", {})
             backend = cmc_config.get("backend", {})
 
-            # Handle both old dict schema (backend={name: ...}) and new string schema (backend="jax")
             if isinstance(backend, str):
-                # New schema: backend is computational backend string
                 backend_str = backend
                 backend_config = cmc_config.get("backend_config", {})
                 parallel_backend = (
@@ -1503,7 +461,6 @@ def _run_optimization(
                 )
                 backend_display = f"{backend_str}/{parallel_backend}"
             else:
-                # Old schema: backend is dict with name for parallel execution
                 backend_display = backend.get("name", "auto")
 
             logger.debug(
@@ -1512,7 +469,6 @@ def _run_optimization(
                 f"backend={backend_display}",
             )
 
-            # Pool MCMC data (flatten 3D → 1D with matching t1/t2/phi arrays)
             pooled = _pool_mcmc_data(filtered_data)
             mcmc_data = pooled["mcmc_data"]
             t1_pooled = pooled["t1_pooled"]
@@ -1521,9 +477,6 @@ def _run_optimization(
             _n_phi = pooled["n_phi"]  # noqa: F841
             _n_t = pooled["n_t"]  # noqa: F841
 
-            # [OK] v2.1.0 BREAKING CHANGE: Removed automatic NLSQ/SVI initialization
-            # Manual workflow required: Run NLSQ separately, copy results to YAML, then run MCMC
-            # Load initial values from config YAML (initial_parameters.values section)
             initial_values = (
                 config.get_initial_parameters()
                 if hasattr(config, "get_initial_parameters")
@@ -1539,7 +492,6 @@ def _run_optimization(
                     "MCMC will use mid-point defaults (no initial_parameters.values in config)"
                 )
 
-            # Determine analysis mode (needed for ParameterSpace creation)
             config_config = (
                 config.config
                 if hasattr(config, "config") and config.config is not None
@@ -1549,9 +501,6 @@ def _run_optimization(
                 str, config_config.get("analysis_mode", "static_isotropic")
             )
 
-            # Create ParameterSpace from config to ensure NumPyro uses config bounds
-            # This is CRITICAL: ParameterSpace loads bounds/priors from configuration
-            # instead of hardcoded default bounds from fitting.py
             parameter_space = ParameterSpace.from_config(
                 config_dict=config_config,
                 analysis_mode=analysis_mode_str,
@@ -1560,10 +509,6 @@ def _run_optimization(
                 f"Created ParameterSpace with config for {analysis_mode_str} mode"
             )
 
-            # Run MCMC with pooled 1D arrays (all same length)
-            # Pass the flattened phi array (same length as data). The MCMC runner
-            # extracts the unique angles internally but also needs the per-point
-            # mapping to apply contrast/offset scaling correctly.
             mcmc_runtime_kwargs = _build_mcmc_runtime_kwargs(args, config)
 
             result = fit_mcmc_jax(
@@ -1587,17 +532,15 @@ def _run_optimization(
                 analysis_mode=cast(
                     str, config_config.get("analysis_mode", "static_isotropic")
                 ),
-                method=method,  # Pass "mcmc" for CMC-only path
-                cmc_config=cmc_config,  # Pass CMC configuration
-                initial_values=initial_values,  # [OK] FIXED: Load from config initial_parameters.values
-                parameter_space=parameter_space,  # [OK] Pass config-aware ParameterSpace
+                method=method,
+                cmc_config=cmc_config,
+                initial_values=initial_values,
+                parameter_space=parameter_space,
                 dt=config_config.get("analyzer_parameters", {}).get("dt"),
-                nlsq_result=nlsq_result,  # [OK] Pass NLSQ warm-start result (Jan 2026)
+                nlsq_result=nlsq_result,
                 **mcmc_runtime_kwargs,
             )
 
-            # Always generate ArviZ diagnostic plots for MCMC/CMC methods
-            # These are essential for validating MCMC convergence
             if hasattr(result, "inference_data") and result.inference_data is not None:
                 analysis_mode_for_plot = cast(
                     str, config_config.get("analysis_mode", "static_isotropic")
@@ -1652,7 +595,6 @@ def _generate_cmc_diagnostic_plots(
     analysis_mode : str
         Analysis mode (static_isotropic or laminar_flow)
     """
-    # Check if result has inference_data for ArviZ plots
     if not hasattr(result, "inference_data") or result.inference_data is None:
         logger.warning(
             "No inference_data available in result - skipping ArviZ diagnostic plots"
@@ -1662,11 +604,9 @@ def _generate_cmc_diagnostic_plots(
     try:
         from homodyne.optimization.cmc.plotting import generate_diagnostic_plots
 
-        # Create diagnostics subdirectory
         diag_dir = output_dir / "diagnostics"
         diag_dir.mkdir(parents=True, exist_ok=True)
 
-        # Generate ArviZ diagnostic plots
         logger.info("Generating ArviZ diagnostic plots...")
         saved_plots = generate_diagnostic_plots(
             result=result,
@@ -1680,10 +620,7 @@ def _generate_cmc_diagnostic_plots(
         else:
             logger.warning("No diagnostic plots were generated")
 
-        # Also save CMC-specific diagnostics as JSON if available
         if hasattr(result, "cmc_diagnostics") and result.cmc_diagnostics is not None:
-            import json
-
             diag_data = {
                 "per_shard_diagnostics": result.cmc_diagnostics.get(
                     "per_shard_diagnostics", []
@@ -1697,9 +634,6 @@ def _generate_cmc_diagnostic_plots(
 
             diag_file = diag_dir / "cmc_diagnostics.json"
             with open(diag_file, "w", encoding="utf-8") as f:
-                # Use _json_serializer (not default=str) so NaN/Inf values in
-                # KL matrices and per-shard diagnostics are sanitized to null/"Infinity"
-                # rather than written as the string "nan"/"inf".
                 json.dump(diag_data, f, indent=2, default=_json_serializer)
             logger.debug(f"CMC diagnostic data saved to: {diag_file}")
 
@@ -1708,1677 +642,3 @@ def _generate_cmc_diagnostic_plots(
     except Exception as e:
         logger.warning(f"Failed to generate diagnostic plots: {e}")
         logger.debug(f"Diagnostic plot error details: {e}", exc_info=True)
-
-
-def _save_results(
-    args: argparse.Namespace,
-    result: Any,
-    device_config: dict[str, Any],
-    data: dict[str, Any],
-    config: Any,
-) -> None:
-    """Save optimization results to output directory.
-
-    Breaking Change (October 2025)
-    -------------------------------
-    Added `data` and `config` parameters to support NLSQ comprehensive saving.
-
-    Parameters
-    ----------
-    args : argparse.Namespace
-        Command-line arguments
-    result : Any
-        Optimization result (OptimizationResult or MCMC result)
-    device_config : dict
-        Device configuration
-    data : dict
-        Experimental data dictionary
-    config : ConfigManager
-        Configuration manager
-    """
-    logger.info(f"Saving results to: {args.output_dir}")
-
-    import json
-
-    import numpy as np
-    import yaml
-
-    from homodyne.utils.async_io import AsyncWriter
-
-    writer = AsyncWriter(max_workers=2)
-
-    # Route to appropriate saving method based on optimization method.
-    # Submit save functions to background writer so they overlap with
-    # results_summary construction and legacy save below.
-    if args.method == "nlsq":
-        logger.info("Using comprehensive NLSQ result saving (async)")
-        writer.submit_task(save_nlsq_results, result, data, config, args.output_dir)
-        if args.output_format != "json":
-            logger.info("Saving legacy results summary for backward compatibility")
-    elif args.method == "cmc":
-        logger.info("Using comprehensive CMC result saving (async)")
-        writer.submit_task(save_mcmc_results, result, data, config, args.output_dir)
-        if args.output_format != "json":
-            logger.info("Saving legacy results summary for backward compatibility")
-    # For other methods, continue with legacy saving format below
-
-    # Create results summary
-    results_summary = {
-        "method": args.method,
-        "analysis_mode": getattr(result, "analysis_mode", "unknown"),
-        "success": getattr(result, "success", True),
-        "optimization_time": getattr(result, "optimization_time", 0.0),
-        "device_config": device_config,
-        "parameters": {},
-        "diagnostics": {},
-    }
-
-    # Extract parameters based on result type
-    if hasattr(result, "parameters"):
-        results_summary["parameters"] = (
-            result.parameters.tolist()
-            if hasattr(result.parameters, "tolist")
-            else result.parameters
-        )
-    elif hasattr(result, "mean_params"):
-        # MCMC result format
-        results_summary["parameters"] = {
-            "contrast": result.mean_contrast,
-            "offset": result.mean_offset,
-            "physical_params": (
-                result.mean_params.tolist()
-                if hasattr(result.mean_params, "tolist")
-                else result.mean_params
-            ),
-        }
-
-    # Extract diagnostics
-    if hasattr(result, "chi_squared"):
-        results_summary["diagnostics"]["chi_squared"] = result.chi_squared
-    if hasattr(result, "converged"):
-        results_summary["diagnostics"]["converged"] = result.converged
-
-    # Save in requested format
-    output_file = args.output_dir / f"homodyne_results.{args.output_format}"
-
-    try:
-        if args.output_format == "yaml":
-            with open(output_file, "w", encoding="utf-8") as f:
-                # Apply json_safe before yaml.dump so NaN/Inf floats (e.g.,
-                # chi_squared) are converted to None/"Infinity" rather than
-                # PyYAML's .nan/.inf tokens, which surprise downstream consumers.
-                yaml.dump(_json_safe(results_summary), f, default_flow_style=False)
-        elif args.output_format == "json":
-            with open(output_file, "w", encoding="utf-8") as f:
-                json.dump(results_summary, f, indent=2, default=_json_serializer)
-        elif args.output_format == "npz":
-            # Save numpy arrays
-            arrays_to_save: dict[str, Any] = {
-                "results_summary": np.array([results_summary], dtype=object),
-            }
-            if hasattr(result, "samples_params") and result.samples_params is not None:
-                arrays_to_save["samples_params"] = result.samples_params
-            np.savez_compressed(output_file, **arrays_to_save)
-
-        logger.info(f"OK: Results saved: {output_file}")
-
-    except Exception as e:
-        logger.warning(f"Failed to save results: {e}")
-
-    # Wait for background writes to complete
-    logger.debug("Waiting for background result writes to complete...")
-    errors = writer.wait_all(timeout=60.0)
-    if errors:
-        logger.warning(
-            "Background save errors (%d): %s",
-            len(errors),
-            [f"{type(e).__name__}: {e}" for e in errors],
-        )
-    writer.shutdown()
-
-
-def _handle_plotting(
-    args: argparse.Namespace,
-    result: Any,
-    data: dict[str, Any],
-    config: dict[str, Any] | None = None,
-) -> None:
-    """Handle plotting options for experimental and simulated data.
-
-    Parameters
-    ----------
-    args : argparse.Namespace
-        Parsed command-line arguments
-    result : Any
-        Optimization result
-    data : dict
-        Experimental data dictionary
-    config : dict, optional
-        Configuration dictionary (required for simulated data plotting)
-    """
-    # Check if any plotting was requested
-    plot_exp = getattr(args, "plot_experimental_data", False)
-    plot_sim = getattr(args, "plot_simulated_data", False)
-    save_plots = getattr(args, "save_plots", False)
-
-    if not (save_plots or plot_exp or plot_sim):
-        return
-
-    # Check for plotting dependencies
-    try:
-        import matplotlib.pyplot  # noqa: F401 - Import check only
-    except ImportError:
-        logger.warning(
-            "Plotting requested but matplotlib not installed. "
-            "Install with: pip install matplotlib",
-        )
-        return
-
-    logger.info("Generating plots...")
-
-    # Create plots directory
-    plots_dir = args.output_dir / "plots"
-    plots_dir.mkdir(parents=True, exist_ok=True)
-
-    # Plot experimental data if requested
-    if plot_exp:
-        try:
-            # Add config to data dict for angle filtering (if available)
-            data_with_config = data.copy()
-            if config:
-                data_with_config["config"] = config
-            _plot_experimental_data(data_with_config, plots_dir)
-            logger.info(f"OK: Experimental data plots saved to: {plots_dir}")
-        except Exception as e:
-            logger.warning(f"Failed to generate experimental data plots: {e}")
-
-    # Plot simulated data if requested
-    if plot_sim:
-        try:
-            if config is None:
-                logger.error("Configuration required for simulated data plotting")
-                return
-
-            # Get contrast, offset, and phi_angles from args
-            contrast = getattr(args, "contrast", 0.5)  # Match working version default
-            offset = getattr(args, "offset", 1.0)
-            phi_angles_str = getattr(args, "phi_angles", None)
-
-            _plot_simulated_data(
-                config,
-                contrast,
-                offset,
-                phi_angles_str,
-                plots_dir,
-                data,
-            )
-            logger.info(f"OK: Simulated data plots saved to: {plots_dir}")
-        except Exception as e:
-            logger.warning(f"Failed to generate simulated data plots: {e}")
-            logger.debug("Simulated data plotting error:", exc_info=True)
-
-    # Plot fit comparison if save_plots is enabled
-    if save_plots:
-        try:
-            _plot_fit_comparison(result, data, plots_dir)
-            logger.info(f"OK: Fit comparison plots saved to: {plots_dir}")
-        except Exception as e:
-            logger.warning(f"Failed to generate fit comparison plots: {e}")
-
-        # Generate and plot fitted simulations
-        if result is not None and config is not None:
-            try:
-                _generate_and_plot_fitted_simulations(
-                    result,
-                    data,
-                    config,
-                    args.output_dir,
-                )
-            except Exception as e:
-                logger.warning(f"Failed to generate fitted simulations: {e}")
-                logger.debug("Fitted simulation error:", exc_info=True)
-
-
-def _apply_angle_filtering(
-    phi_angles: np.ndarray,
-    c2_exp: np.ndarray,
-    config: dict[str, Any],
-) -> tuple[list[int], np.ndarray, np.ndarray]:
-    """Core angle filtering logic shared by optimization and plotting.
-
-    This is a wrapper that delegates to homodyne.data.angle_filtering.
-    """
-    return _data_apply_angle_filtering(phi_angles, c2_exp, config)
-
-
-def _apply_angle_filtering_for_plot(
-    phi_angles: np.ndarray,
-    c2_exp: np.ndarray,
-    data: dict[str, Any],
-) -> tuple[list[int], np.ndarray, np.ndarray]:
-    """Apply angle filtering to select specific angles for plotting.
-
-    This is a wrapper that delegates to homodyne.data.angle_filtering.
-    """
-    return _data_apply_angle_filtering_for_plot(phi_angles, c2_exp, data)
-
-
-def _plot_experimental_data(data: dict[str, Any], plots_dir: Path) -> None:
-    """Generate validation plots of experimental data.
-
-    This is a wrapper that delegates to homodyne.viz.experimental_plots.
-    """
-    _viz_plot_experimental_data(
-        data,
-        plots_dir,
-        angle_filter_func=_apply_angle_filtering_for_plot,
-    )
-
-
-def _plot_simulated_data(
-    config: dict[str, Any],
-    contrast: float,
-    offset: float,
-    phi_angles_str: str | None,
-    plots_dir: Path,
-    data: dict[str, Any] | None = None,
-) -> None:
-    """Generate plots of simulated/theoretical data.
-
-    This is a wrapper that delegates to homodyne.viz.nlsq_plots.
-    """
-    _viz_plot_simulated_data(config, contrast, offset, phi_angles_str, plots_dir, data)
-
-
-def _generate_and_plot_fitted_simulations(
-    result: Any,
-    data: dict[str, Any],
-    config: dict[str, Any],
-    output_dir: Path,
-) -> None:
-    """Generate and plot C2 simulations using fitted parameters from optimization.
-
-    This is a wrapper that delegates to homodyne.viz.nlsq_plots.
-    """
-    _viz_generate_and_plot_fitted_simulations(
-        result,
-        data,
-        config,
-        output_dir,
-        angle_filter_func=_apply_angle_filtering_for_optimization,
-    )
-
-
-def _plot_fit_comparison(result: Any, data: dict[str, Any], plots_dir: Path) -> None:
-    """Generate comparison plots between fit and experimental data.
-
-    This is a wrapper that delegates to homodyne.viz.experimental_plots.
-    """
-    _viz_plot_fit_comparison(result, data, plots_dir)
-
-
-# ==============================================================================
-# NLSQ Result Saving Helper Functions
-# ==============================================================================
-
-
-def _extract_nlsq_metadata(config: Any, data: dict[str, Any]) -> dict[str, Any]:
-    """Extract required metadata for NLSQ theoretical fit computation.
-
-    Implements multi-level fallback hierarchy for robust metadata extraction:
-    - L (characteristic length): stator_rotor_gap → sample_detector_distance → default
-    - dt (time step): analyzer_parameters.dt → experimental_data.dt → None
-    - q (wavevector): from data['wavevector_q_list'][0]
-
-    Parameters
-    ----------
-    config : ConfigManager
-        Configuration manager with analyzer_parameters and experimental_data
-    data : dict[str, Any]
-        Experimental data dictionary with wavevector_q_list
-
-    Returns
-    -------
-    dict[str, Any]
-        Dictionary with keys 'L', 'dt', 'q' (may be None if not found)
-
-    Notes
-    -----
-    Default L = 2000000.0 Å (200 µm, typical rheology-XPCS stator-rotor gap).
-    Missing dt or q will log warnings but not crash - downstream functions
-    must handle None values appropriately.
-
-    Examples
-    --------
-    >>> metadata = _extract_nlsq_metadata(config, data)
-    >>> metadata['L']  # Should be float in Angstroms
-    2000000.0
-    >>> metadata['q']  # Should be float in Å⁻¹
-    0.0123
-    """
-    metadata: dict[str, Any] = {}
-
-    # Normalize config access: support dict, ConfigManager, or object with .config
-    if isinstance(config, dict):
-        config_dict = config
-    elif hasattr(config, "config") and isinstance(config.config, dict):
-        config_dict = config.config
-    elif hasattr(config, "get_config"):
-        config_dict = config.get_config()
-    else:
-        config_dict = getattr(config, "config", {})
-
-    # L (characteristic length) extraction with fallback hierarchy
-    try:
-        analyzer_params = config_dict.get("analyzer_parameters", {})
-        geometry = analyzer_params.get("geometry", {})
-
-        if "stator_rotor_gap" in geometry:
-            metadata["L"] = float(geometry["stator_rotor_gap"])
-            logger.debug(f"Using stator_rotor_gap L = {metadata['L']:.1f} A")
-        else:
-            exp_config = config_dict.get("experimental_data", {})
-            exp_geometry = exp_config.get("geometry", {})
-
-            if "stator_rotor_gap" in exp_geometry:
-                metadata["L"] = float(exp_geometry["stator_rotor_gap"])
-                logger.debug("Using L from experimental_data.geometry")
-            elif "sample_detector_distance" in exp_config:
-                metadata["L"] = float(exp_config["sample_detector_distance"])
-                logger.debug(
-                    f"Using sample_detector_distance L = {metadata['L']:.1f} A",
-                )
-            else:
-                metadata["L"] = 2000000.0  # Default: 200 um
-                logger.warning(
-                    f"No L parameter found, using default L = {metadata['L']:.1f} A",
-                )
-    except (AttributeError, TypeError, ValueError) as e:
-        metadata["L"] = 2000000.0
-        logger.warning(f"Error reading L: {e}, using default L = 2000000.0 A")
-
-    # dt (time step) extraction (optional)
-    try:
-        analyzer_params = config_dict.get("analyzer_parameters", {})
-        dt_value = analyzer_params.get("dt")
-
-        if dt_value is None:
-            exp_config = config_dict.get("experimental_data", {})
-            dt_value = exp_config.get("dt")
-
-        if dt_value is not None:
-            metadata["dt"] = float(dt_value)
-            logger.debug(f"Using dt = {metadata['dt']:.6f} s")
-        else:
-            metadata["dt"] = None
-            logger.warning("dt not found in config - may need manual specification")
-    except (AttributeError, TypeError, ValueError) as e:
-        metadata["dt"] = None
-        logger.warning(f"Error reading dt: {e}")
-
-    # q (wavevector magnitude) extraction from data
-    try:
-        q_list = np.asarray(data["wavevector_q_list"])
-        if q_list.size > 0:
-            metadata["q"] = float(q_list[0])
-            logger.debug(f"Using q = {metadata['q']:.6f} A^-1")
-        else:
-            metadata["q"] = None
-            logger.warning("Empty wavevector_q_list")
-    except (KeyError, IndexError, TypeError) as e:
-        metadata["q"] = None
-        logger.error(f"Error extracting q: {e}")
-
-    return metadata
-
-
-def _prepare_parameter_data(
-    result: Any,
-    analysis_mode: str,
-    n_angles: int | None = None,
-) -> dict[str, Any]:
-    """Prepare parameter data dictionary for JSON saving.
-
-    Extracts parameter values and uncertainties from OptimizationResult and
-    organizes them by name according to the analysis mode.
-
-    Handles both legacy scalar scaling (9 params) and per-angle scaling (13+ params).
-
-    Parameters
-    ----------
-    result : OptimizationResult
-        NLSQ optimization result
-    analysis_mode : str
-        Analysis mode ("static_isotropic"/"static" or "laminar_flow")
-    n_angles : int, optional
-        Number of angles in the data (used to detect per-angle scaling).
-        If omitted, it is inferred from the parameter vector assuming the
-        canonical 2*n_angles + n_physical layout.
-
-    Returns
-    -------
-    dict[str, Any]
-        Dictionary mapping parameter names to {value, uncertainty} dicts
-
-    Notes
-    -----
-    Parameter order in result.parameters:
-
-    **Legacy scalar scaling (deprecated):**
-    - Static isotropic: [contrast, offset, D0, alpha, D_offset]
-    - Laminar flow: [contrast, offset, D0, alpha, D_offset,
-                     gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
-
-    **Per-angle scaling (current default, v2.4.0+):**
-    - Static isotropic: [c0, c1, ..., cN, o0, o1, ..., oN, D0, alpha, D_offset]
-    - Laminar flow: [c0, c1, ..., cN, o0, o1, ..., oN, D0, alpha, D_offset,
-                     gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
-    where N = number of phi angles
-
-    For per-angle scaling, contrast/offset in JSON are set to mean of per-angle values.
-
-    Examples
-    --------
-    >>> param_dict = _prepare_parameter_data(result, "laminar_flow", n_angles=3)
-    >>> param_dict["D0"]
-    {'value': 1234.5, 'uncertainty': 45.6}
-    >>> param_dict["gamma_dot_t0"]
-    {'value': 0.000123, 'uncertainty': 0.000012}
-    """
-    # Get parameter names for analysis mode
-    normalized_mode = analysis_mode.lower()
-
-    if normalized_mode in {"static", "static_isotropic"}:
-        param_names = SCALING_PARAM_NAMES + STATIC_PARAM_NAMES
-        n_physical = len(STATIC_PARAM_NAMES)
-        mode_key = "static"
-    elif normalized_mode == "laminar_flow":
-        param_names = SCALING_PARAM_NAMES + LAMINAR_FLOW_PARAM_NAMES
-        n_physical = len(LAMINAR_FLOW_PARAM_NAMES)
-        mode_key = "laminar_flow"
-    else:
-        raise ValueError(f"Unknown analysis_mode: {analysis_mode}")
-
-    # Detect if per-angle scaling was used
-    n_params_expected_legacy = len(param_names)  # 9 for laminar_flow, 5 for static
-
-    if n_angles is None:
-        remainder = max(0, len(result.parameters) - n_physical)
-        if remainder % 2 != 0 and remainder > 0:
-            logger.warning(
-                "Cannot cleanly infer n_angles: parameter count %d - n_physical %d = %d (odd). "
-                "Falling back to n_angles=1.",
-                len(result.parameters),
-                n_physical,
-                remainder,
-            )
-        inferred = remainder // 2 if remainder % 2 == 0 and remainder else 1
-        n_angles = max(1, inferred)
-        logger.debug(
-            "Inferred n_angles=%s for _prepare_parameter_data (mode=%s, params=%s)",
-            n_angles,
-            mode_key,
-            len(result.parameters),
-        )
-
-    n_params_expected_per_angle = 2 * n_angles + n_physical  # Per-angle scaling format
-    n_params_actual = len(result.parameters)
-
-    # Check if per-angle scaling was used
-    # Note: When n_angles=1, per-angle (5 params) equals legacy (5 params),
-    # so we explicitly check for the per-angle count first (v2.4.0 mandates per-angle)
-    if n_params_actual == n_params_expected_per_angle:
-        # Per-angle scaling detected
-        # Structure: [c0, c1, ..., cN, o0, o1, ..., oN, physical_params...]
-        # where N = n_angles
-
-        logger.info(
-            f"Detected per-angle scaling: {n_params_actual} parameters for {n_angles} angles"
-        )
-        logger.debug(
-            f"Parameter structure: [{n_angles} contrast] + [{n_angles} offset] + [{n_physical} physical]"
-        )
-
-        # Extract per-angle contrast and offset
-        contrast_per_angle = result.parameters[:n_angles]
-        offset_per_angle = result.parameters[n_angles : 2 * n_angles]
-
-        # Extract physical parameters (start after 2*n_angles)
-        physical_params = result.parameters[2 * n_angles :]
-        physical_uncertainties = (
-            result.uncertainties[2 * n_angles :]
-            if result.uncertainties is not None
-            else None
-        )
-
-        logger.debug(
-            f"Physical params array (indices {2 * n_angles}-{len(result.parameters) - 1}): {physical_params[:7]}"
-        )
-
-        # Use mean contrast/offset for JSON (representative value; NaN-safe for failed angles)
-        contrast_mean = float(np.nanmean(contrast_per_angle))
-        offset_mean = float(np.nanmean(offset_per_angle))
-
-        # Compute uncertainties for contrast/offset (RMS of per-angle uncertainties)
-        if result.uncertainties is not None:
-            contrast_unc_per_angle = result.uncertainties[:n_angles]
-            offset_unc_per_angle = result.uncertainties[n_angles : 2 * n_angles]
-            contrast_unc = float(np.sqrt(np.nanmean(contrast_unc_per_angle**2)))
-            offset_unc = float(np.sqrt(np.nanmean(offset_unc_per_angle**2)))
-        else:
-            contrast_unc = None
-            offset_unc = None
-
-        # Build parameter dictionary
-        param_dict = {
-            "contrast": {"value": contrast_mean, "uncertainty": contrast_unc},
-            "offset": {"value": offset_mean, "uncertainty": offset_unc},
-        }
-
-        # Add physical parameters
-        physical_param_names = (
-            STATIC_PARAM_NAMES if mode_key == "static" else LAMINAR_FLOW_PARAM_NAMES
-        )
-        for i, name in enumerate(physical_param_names):
-            param_dict[name] = {
-                "value": float(physical_params[i]),
-                "uncertainty": (
-                    float(physical_uncertainties[i])
-                    if physical_uncertainties is not None
-                    else None
-                ),
-            }
-
-        logger.debug(
-            f"Extracted parameters - contrast_mean={contrast_mean:.4f}, "
-            f"offset_mean={offset_mean:.4f}, "
-            f"D0={param_dict.get('D0', {}).get('value', 'N/A')}, "
-            f"alpha={param_dict.get('alpha', {}).get('value', 'N/A')}, "
-            f"D_offset={param_dict.get('D_offset', {}).get('value', 'N/A')}, "
-            f"gamma_dot_t0={param_dict.get('gamma_dot_t0', {}).get('value', 'N/A')}, "
-            f"beta={param_dict.get('beta', {}).get('value', 'N/A')}, "
-            f"gamma_dot_t_offset={param_dict.get('gamma_dot_t_offset', {}).get('value', 'N/A')}, "
-            f"phi0={param_dict.get('phi0', {}).get('value', 'N/A')}"
-        )
-
-    elif n_params_actual == n_params_expected_legacy:
-        # Legacy scalar scaling format (used when optimization fails before expansion)
-        # This can happen when multi-start optimization fails - the result contains
-        # the unexpanded input parameters
-        logger.warning(
-            f"Legacy format detected: {n_params_actual} parameters (expected {n_params_expected_per_angle} for per-angle). "
-            f"This typically indicates a failed optimization."
-        )
-
-        # For laminar_flow legacy format: [contrast, offset, D0, alpha, D_offset,
-        #                                  gamma_dot_t0, beta, gamma_dot_t_offset, phi0]
-        # For static legacy format: [contrast, offset, D0, alpha, D_offset]
-        param_dict = {}
-        for i, name in enumerate(param_names):
-            param_dict[name] = {
-                "value": float(result.parameters[i]),
-                "uncertainty": (
-                    float(result.uncertainties[i])
-                    if result.uncertainties is not None
-                    and i < len(result.uncertainties)
-                    else None
-                ),
-            }
-
-        logger.debug(f"Extracted legacy parameters: {list(param_dict.keys())}")
-
-    else:
-        # Unexpected parameter count
-        raise ValueError(
-            f"Unexpected parameter count: got {n_params_actual}, expected {n_params_expected_per_angle} "
-            f"for per-angle scaling with {n_angles} angles, or {n_params_expected_legacy} for legacy format."
-        )
-
-    return param_dict
-
-
-def _json_safe(value: Any) -> Any:
-    """Convert nested objects to JSON-serializable primitives.
-
-    This is a wrapper that delegates to homodyne.io.json_utils.
-    """
-    return _io_json_safe(value)
-
-
-def _save_nlsq_json_files(
-    param_dict: dict[str, Any],
-    analysis_dict: dict[str, Any],
-    convergence_dict: dict[str, Any],
-    output_dir: Path,
-) -> None:
-    """Save 3 JSON files: parameters, analysis results, convergence metrics.
-
-    This is a wrapper that delegates to homodyne.io.nlsq_writers.
-    """
-    _io_save_nlsq_json_files(param_dict, analysis_dict, convergence_dict, output_dir)
-
-
-def _save_nlsq_npz_file(
-    phi_angles: np.ndarray,
-    c2_exp: np.ndarray,
-    c2_raw: np.ndarray,
-    c2_scaled: np.ndarray,
-    c2_solver: np.ndarray | None,
-    per_angle_scaling: np.ndarray,
-    per_angle_scaling_solver: np.ndarray,
-    residuals: np.ndarray,
-    residuals_norm: np.ndarray,
-    t1: np.ndarray,
-    t2: np.ndarray,
-    q: float,
-    output_dir: Path,
-) -> None:
-    """Save NPZ file with experimental/theoretical data and metadata.
-
-    This is a wrapper that delegates to homodyne.io.nlsq_writers.
-    """
-    _io_save_nlsq_npz_file(
-        phi_angles,
-        c2_exp,
-        c2_raw,
-        c2_scaled,
-        c2_solver,
-        per_angle_scaling,
-        per_angle_scaling_solver,
-        residuals,
-        residuals_norm,
-        t1,
-        t2,
-        q,
-        output_dir,
-    )
-
-
-def save_nlsq_results(
-    result: Any,
-    data: dict[str, Any],
-    config: Any,
-    output_dir: Path,
-) -> None:
-    """Save complete NLSQ optimization results to structured directory.
-
-    Main orchestrator function that coordinates all helper functions to save:
-    - parameters.json: Parameter values and uncertainties
-    - fitted_data.npz: Experimental + theoretical + residuals
-    - analysis_results_nlsq.json: Analysis summary
-    - convergence_metrics.json: Convergence diagnostics
-
-    Parameters
-    ----------
-    result : OptimizationResult
-        NLSQ optimization result with parameters, uncertainties, chi-squared, etc.
-    data : dict[str, Any]
-        Experimental data with phi_angles_list, c2_exp, t1, t2, wavevector_q_list
-    config : ConfigManager
-        Configuration with analysis_mode and metadata
-    output_dir : Path
-        Output directory (nlsq/ subdirectory will be created)
-
-    Returns
-    -------
-    None
-        All files saved to output_dir/nlsq/
-
-    Raises
-    ------
-    ValueError
-        If required metadata (q) cannot be extracted
-
-    Notes
-    -----
-    Creates nlsq/ subdirectory matching classical/ structure for method comparison.
-    Performs sequential per-angle theoretical fit computation.
-    """
-    # Create nlsq subdirectory
-    nlsq_dir = output_dir / "nlsq"
-    nlsq_dir.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Saving NLSQ results to {nlsq_dir}")
-
-    # Get analysis mode
-    analysis_mode = config.config.get("analysis_mode", "static_isotropic")
-
-    # Apply phi filtering to data (if enabled in config)
-    # This ensures saved data and plots respect phi_filtering configuration
-    filtered_data = _apply_angle_filtering_for_optimization(data, config)
-    logger.debug(
-        f"Applied phi filtering for NLSQ saving: "
-        f"{len(filtered_data['phi_angles_list'])} angles selected"
-    )
-
-    # Step 1: Extract metadata
-    logger.debug("Extracting metadata (L, dt, q)")
-    metadata = _extract_nlsq_metadata(config, filtered_data)
-
-    # Step 2: Prepare parameter data
-    n_angles = len(filtered_data["phi_angles_list"])
-    logger.debug(
-        f"Preparing parameter data for {analysis_mode} mode with {n_angles} angles"
-    )
-    param_dict = _prepare_parameter_data(result, analysis_mode, n_angles)
-
-    # Add timestamp and convergence info to parameters
-    param_dict_complete = {
-        "timestamp": datetime.now().isoformat(),
-        "analysis_mode": analysis_mode,
-        "chi_squared": float(result.chi_squared),
-        "reduced_chi_squared": float(result.reduced_chi_squared),
-        "convergence_status": result.convergence_status,
-        "parameters": param_dict,
-    }
-
-    # Step 3: Compute theoretical fits with per-angle scaling
-    logger.info("Computing theoretical fits with per-angle scaling")
-    try:
-        fits_dict = compute_theoretical_fits(
-            result,
-            filtered_data,
-            metadata,
-            analysis_mode=analysis_mode,  # Pass analysis_mode to fix parameter count detection
-            include_solver_surface=True,
-        )
-    except ValueError as exc:
-        logger.warning(
-            f"Could not compute theoretical fits (skipping NPZ and plots): {exc}"
-        )
-        fits_dict = None
-
-    if fits_dict is not None:
-        scalar_expanded = fits_dict.pop("scalar_per_angle_expansion", False)
-        if scalar_expanded:
-            logger.warning(
-                "Recorded scalar_per_angle_expansion=true in diagnostics (scalar contrast/offset replicated per angle)."
-            )
-            if getattr(result, "nlsq_diagnostics", None) is None:
-                result.nlsq_diagnostics = {"scalar_per_angle_expansion": True}
-            elif isinstance(result.nlsq_diagnostics, dict):
-                result.nlsq_diagnostics["scalar_per_angle_expansion"] = True
-
-    # Step 4: Prepare analysis results dictionary
-    phi_angles = np.asarray(filtered_data["phi_angles_list"])
-    c2_exp = np.asarray(filtered_data["c2_exp"])
-    n_angles = len(phi_angles)
-    n_data_points = c2_exp.size
-    n_params = len(result.parameters)
-    degrees_of_freedom = n_data_points - n_params
-
-    analysis_dict = {
-        "method": "nlsq",
-        "timestamp": datetime.now().isoformat(),
-        "analysis_mode": analysis_mode,
-        "fit_quality": {
-            "chi_squared": float(result.chi_squared),
-            "reduced_chi_squared": float(result.reduced_chi_squared),
-            "degrees_of_freedom": degrees_of_freedom,
-            "quality_flag": result.quality_flag,
-        },
-        "dataset_info": {
-            "n_angles": n_angles,
-            "n_time_points": c2_exp.shape[1] * c2_exp.shape[2],
-            "total_data_points": n_data_points,
-            "q_value": float(metadata["q"]) if metadata.get("q") is not None else None,
-        },
-        "optimization_summary": {
-            "convergence_status": result.convergence_status,
-            "iterations": result.iterations,
-            "execution_time": float(result.execution_time),
-        },
-    }
-
-    # Step 5: Prepare convergence metrics dictionary
-    convergence_dict = {
-        "convergence": {
-            "status": result.convergence_status,
-            "iterations": result.iterations,
-            "execution_time": float(result.execution_time),
-            "final_chi_squared": float(result.chi_squared),
-            "chi_squared_reduction": (
-                1.0 - result.reduced_chi_squared
-                if result.reduced_chi_squared < 1.0
-                else 0.0
-            ),
-        },
-        "recovery_actions": result.recovery_actions,
-        "quality_flag": result.quality_flag,
-        "device_info": result.device_info,
-    }
-
-    # Step 5.5: Validate fit quality (T056)
-    # Get parameter labels for bounds checking
-    param_labels = getattr(result, "param_labels", None)
-    if param_labels is None:
-        # Construct param labels from analysis mode
-        if analysis_mode == "laminar_flow":
-            physical_labels = list(LAMINAR_FLOW_PARAM_NAMES)
-        else:
-            physical_labels = list(STATIC_PARAM_NAMES)
-        # Add per-angle scaling labels
-        scaling_labels = []
-        for i in range(n_angles):
-            scaling_labels.append(f"contrast[{i}]")
-        for i in range(n_angles):
-            scaling_labels.append(f"offset[{i}]")
-        param_labels = scaling_labels + physical_labels
-
-    # Get bounds from config if available
-    bounds = None
-    try:
-        if hasattr(config, "get_parameter_bounds"):
-            bounds_list = config.get_parameter_bounds(param_labels)
-            if bounds_list:
-                # bounds_list is a list of dicts with 'min', 'max' keys
-                lower = np.array([b["min"] for b in bounds_list])
-                upper = np.array([b["max"] for b in bounds_list])
-                bounds = (lower, upper)
-    except Exception as e:
-        logger.debug(f"Could not get bounds for quality validation: {e}")
-
-    # Create quality config from nlsq settings
-    nlsq_config = config.config.get("optimization", {}).get("nlsq", {})
-    quality_config = FitQualityConfig(
-        enable=nlsq_config.get("enable_quality_validation", True),
-        reduced_chi_squared_threshold=nlsq_config.get(
-            "quality_reduced_chi_squared_threshold", 10.0
-        ),
-        warn_on_max_restarts=nlsq_config.get("quality_warn_on_max_restarts", True),
-        warn_on_bounds_hit=nlsq_config.get("quality_warn_on_bounds_hit", True),
-        warn_on_convergence_failure=nlsq_config.get(
-            "quality_warn_on_convergence_failure", True
-        ),
-        bounds_tolerance=nlsq_config.get("quality_bounds_tolerance", 1e-9),
-    )
-
-    # Run validation
-    quality_report = validate_fit_quality(
-        result, bounds=bounds, config=quality_config, param_labels=param_labels
-    )
-
-    # Add quality report to convergence dict
-    convergence_dict.update(quality_report.to_dict())
-
-    # Step 6: Save JSON files
-    logger.info("Saving JSON files (parameters, analysis, convergence)")
-    _save_nlsq_json_files(
-        param_dict_complete,
-        analysis_dict,
-        convergence_dict,
-        nlsq_dir,
-    )
-
-    # Step 8b: Persist diagnostics payload if available
-    diagnostics_payload = getattr(result, "nlsq_diagnostics", None)
-    if diagnostics_payload:
-        diagnostics_file = nlsq_dir / "diagnostics.json"
-        try:
-            with open(diagnostics_file, "w", encoding="utf-8") as f:
-                json.dump(_json_safe(diagnostics_payload), f, indent=2)
-            logger.info(f"Saved diagnostics to {diagnostics_file}")
-        except (TypeError, OSError) as exc:
-            logger.warning(
-                "Failed to save diagnostics.json (%s). Payload keys: %s",
-                exc,
-                list(diagnostics_payload.keys()),
-            )
-
-    if fits_dict is None:
-        logger.info(f"OK: NLSQ results saved successfully to {nlsq_dir}")
-        logger.info(
-            "  - 3 JSON files (parameters, analysis results, convergence metrics)"
-        )
-        logger.info("  - NPZ and plots skipped (theoretical fits unavailable)")
-        return
-
-    # Step 7: Compute normalized residuals
-    # For now, assume uniform uncertainty of 5% (would need sigma from data for real normalization)
-    # Use safe division to avoid divide-by-zero warnings where c2_exp == 0
-    residuals_norm = np.divide(
-        fits_dict["residuals"],
-        0.05 * c2_exp,
-        out=np.zeros_like(fits_dict["residuals"]),
-        where=(c2_exp != 0),
-    )
-
-    # Convert time arrays to 1D
-    # Note: t1 and t2 are already in SECONDS from the data loader (_calculate_time_arrays)
-    # Do NOT multiply by dt again - that would give seconds²
-    # Use filtered_data for consistency (t1/t2 are angle-independent, but filtered_data
-    # is the authoritative data dict used throughout this function)
-    t1 = np.asarray(filtered_data["t1"])
-    t2 = np.asarray(filtered_data["t2"])
-    if t1.ndim == 2:
-        t1 = t1[:, 0]
-    if t2.ndim == 2:
-        t2 = t2[0, :]
-
-    logger.debug("Using time arrays in seconds (already converted by data loader)")
-
-    # Step 8: Save NPZ file
-    logger.info("Saving NPZ file with all arrays")
-    _save_nlsq_npz_file(
-        phi_angles=phi_angles,
-        c2_exp=c2_exp,
-        c2_raw=fits_dict["c2_theoretical_raw"],
-        c2_scaled=fits_dict["c2_theoretical_scaled"],
-        c2_solver=fits_dict["c2_solver_scaled"],
-        per_angle_scaling=fits_dict["per_angle_scaling"],
-        per_angle_scaling_solver=fits_dict["per_angle_scaling_solver"],
-        residuals=fits_dict["residuals"],
-        residuals_norm=residuals_norm,
-        t1=t1,
-        t2=t2,
-        q=metadata["q"],
-        output_dir=nlsq_dir,
-    )
-
-    logger.info(f"OK: NLSQ results saved successfully to {nlsq_dir}")
-    logger.info("  - 3 JSON files (parameters, analysis results, convergence metrics)")
-    n_arrays = 10 + (1 if fits_dict.get("c2_solver_scaled") is not None else 0)
-    logger.info(
-        f"  - 1 NPZ file ({n_arrays} arrays: experimental + theoretical + residuals)"
-    )
-
-    # Step 9: Generate plots with graceful degradation
-    try:
-        logger.info("Generating heatmap plots")
-        generate_nlsq_plots(
-            phi_angles=phi_angles,
-            c2_exp=c2_exp,
-            c2_theoretical_scaled=fits_dict["c2_theoretical_scaled"],
-            residuals=fits_dict["residuals"],
-            t1=t1,
-            t2=t2,
-            output_dir=nlsq_dir,
-            config=config,  # Pass config for preview_mode setting
-            c2_solver_scaled=fits_dict["c2_solver_scaled"],  # Use FITTED solver surface
-        )
-        logger.info(f"  - {len(phi_angles)} PNG plots")
-    except Exception as e:
-        logger.warning(f"Plot generation failed (data files still saved): {e}")
-        logger.debug("Plot error details:", exc_info=True)
-
-
-def generate_nlsq_plots(
-    phi_angles: np.ndarray,
-    c2_exp: np.ndarray,
-    c2_theoretical_scaled: np.ndarray,
-    residuals: np.ndarray,
-    t1: np.ndarray,
-    t2: np.ndarray,
-    output_dir: Path,
-    config: Any = None,
-    use_datashader: bool = True,
-    parallel: bool = True,
-    *,
-    c2_solver_scaled: np.ndarray | None = None,
-) -> None:
-    """Generate 3-panel heatmap plots for NLSQ fit visualization.
-
-    This is a wrapper that delegates to homodyne.viz.nlsq_plots.
-    """
-    _viz_generate_nlsq_plots(
-        phi_angles=phi_angles,
-        c2_exp=c2_exp,
-        c2_theoretical_scaled=c2_theoretical_scaled,
-        residuals=residuals,
-        t1=t1,
-        t2=t2,
-        output_dir=output_dir,
-        config=config,
-        use_datashader=use_datashader,
-        parallel=parallel,
-        c2_solver_scaled=c2_solver_scaled,
-    )
-
-
-# ============================================================================
-# MCMC/CMC Result Saving Functions
-# ============================================================================
-
-
-def save_mcmc_results(
-    result: Any,
-    data: dict[str, Any],
-    config: Any,
-    output_dir: Path,
-) -> None:
-    """Save CMC results with comprehensive diagnostics.
-
-    Creates cmc/ directory and saves:
-    1. parameters.json: Posterior mean ± std for each parameter
-    2. analysis_results_cmc.json: Sampling summary and diagnostics
-    3. samples.npz: Full posterior samples, r_hat, ess
-    4. diagnostics.json: Convergence metrics
-    5. fitted_data.npz: Experimental + theoretical data (optional)
-    6. c2_heatmaps_phi_*.png: Comparison plots using posterior mean
-    7. ArviZ diagnostic plots: pair, forest, energy, autocorr, rank, ess
-
-    Parameters
-    ----------
-    result : CMCResult
-        CMC optimization result with posterior samples and diagnostics
-    data : dict
-        Experimental data dictionary containing c2_exp, phi_angles_list, t1, t2, q
-    config : ConfigManager
-        Configuration manager with analysis settings
-    output_dir : Path
-        Base output directory (cmc/ subdirectory will be created)
-
-    Notes
-    -----
-    This function follows the same structure as save_nlsq_results() for consistency.
-    It reuses plotting functions from NLSQ for heatmap generation.
-
-    Examples
-    --------
-    >>> from pathlib import Path
-    >>> result = fit_cmc_jax(data, ...)
-    >>> save_mcmc_results(result, data, config, Path("homodyne_results"))
-    # Creates: homodyne_results/cmc/parameters.json, samples.npz, etc.
-    """
-    import json
-
-    import numpy as np
-
-    # CMC-only - always use "cmc" directory
-    method_name = "cmc"
-
-    # Create method-specific directory
-    method_dir = output_dir / method_name
-    method_dir.mkdir(parents=True, exist_ok=True)
-
-    logger.info(f"Saving {method_name.upper()} results to: {method_dir}")
-
-    # Step 1: Save parameters.json with posterior statistics
-    try:
-        param_dict = _create_mcmc_parameters_dict(result)
-        param_file = method_dir / "parameters.json"
-        with open(param_file, "w", encoding="utf-8") as f:
-            json.dump(param_dict, f, indent=2, default=_json_serializer)
-        logger.debug(f"Saved parameters to {param_file}")
-    except Exception as e:
-        logger.warning(f"Failed to save parameters.json: {e}")
-        logger.debug("Parameter saving error:", exc_info=True)
-
-    # Step 2: Save samples.npz with full posterior
-    try:
-        samples_file = method_dir / "samples.npz"
-        save_dict: dict[str, Any] = {}
-
-        # Combine samples from separate attributes (samples_params, samples_contrast, samples_offset)
-        if hasattr(result, "samples_params") and result.samples_params is not None:
-            samples_list = [result.samples_params]
-            contrast_inserted = False
-
-            if (
-                hasattr(result, "samples_contrast")
-                and result.samples_contrast is not None
-            ):
-                # Reshape to (n_samples, 1) if needed
-                contrast_samples = result.samples_contrast
-                if contrast_samples.ndim == 1:
-                    contrast_samples = contrast_samples[:, np.newaxis]
-                samples_list.insert(0, contrast_samples)
-                contrast_inserted = True
-
-            if hasattr(result, "samples_offset") and result.samples_offset is not None:
-                # Reshape to (n_samples, 1) if needed
-                offset_samples = result.samples_offset
-                if offset_samples.ndim == 1:
-                    offset_samples = offset_samples[:, np.newaxis]
-                samples_list.insert(1 if contrast_inserted else 0, offset_samples)
-
-            # Concatenate all samples
-            save_dict["samples"] = np.concatenate(samples_list, axis=1)
-
-        elif (
-            hasattr(result, "samples")
-            and isinstance(result.samples, dict)
-            and result.samples
-        ):
-            # CMCResult stores samples as dict[str, np.ndarray] with shape (n_chains, n_samples)
-            param_names = getattr(result, "param_names", list(result.samples.keys()))
-            arrays = []
-            for name in param_names:
-                if name in result.samples:
-                    arr = result.samples[name].flatten()
-                    arrays.append(arr[:, np.newaxis])
-            if arrays:
-                save_dict["samples"] = np.concatenate(arrays, axis=1)
-                save_dict["param_names"] = np.array(param_names)
-
-        # Add optional diagnostics if available
-        if hasattr(result, "log_prob") and result.log_prob is not None:
-            save_dict["log_prob"] = result.log_prob
-        if hasattr(result, "r_hat") and result.r_hat is not None:
-            # Convert dict to array if needed
-            if isinstance(result.r_hat, dict):
-                save_dict["r_hat"] = np.array(list(result.r_hat.values()))
-            else:
-                save_dict["r_hat"] = result.r_hat
-
-        # ESS: try ess_bulk (CMCResult) then effective_sample_size (legacy)
-        ess_source = None
-        if hasattr(result, "ess_bulk") and result.ess_bulk is not None:
-            ess_source = result.ess_bulk
-        elif (
-            hasattr(result, "effective_sample_size")
-            and result.effective_sample_size is not None
-        ):
-            ess_source = result.effective_sample_size
-        if ess_source is not None:
-            if isinstance(ess_source, dict):
-                save_dict["ess"] = np.array(list(ess_source.values()))
-            else:
-                save_dict["ess"] = ess_source
-
-        if hasattr(result, "acceptance_rate") and result.acceptance_rate is not None:
-            save_dict["acceptance_rate"] = np.array([result.acceptance_rate])
-
-        if save_dict:  # Only save if we have data
-            np.savez_compressed(str(samples_file), **save_dict)
-            # T058b: Log file size after write completion
-            try:
-                samples_size_mb = samples_file.stat().st_size / (1024 * 1024)
-            except OSError:
-                samples_size_mb = 0
-                logger.debug("Could not stat samples file")
-            logger.debug(
-                f"Saved posterior samples to {samples_file} ({samples_size_mb:.2f} MB)"
-            )
-    except Exception as e:
-        logger.warning(f"Failed to save samples.npz: {e}")
-        logger.debug("Samples saving error:", exc_info=True)
-
-    # Step 3: Save analysis_results_mcmc.json
-    try:
-        analysis_dict = _create_mcmc_analysis_dict(result, data, method_name)
-        analysis_file = method_dir / f"analysis_results_{method_name}.json"
-        with open(analysis_file, "w", encoding="utf-8") as f:
-            json.dump(analysis_dict, f, indent=2, default=_json_serializer)
-        logger.debug(f"Saved analysis results to {analysis_file}")
-    except Exception as e:
-        logger.warning(f"Failed to save analysis_results_{method_name}.json: {e}")
-        logger.debug("Analysis results saving error:", exc_info=True)
-
-    # Step 4: Save diagnostics.json
-    try:
-        diagnostics_dict = _create_mcmc_diagnostics_dict(result)
-        diagnostics_file = method_dir / "diagnostics.json"
-        with open(diagnostics_file, "w", encoding="utf-8") as f:
-            json.dump(diagnostics_dict, f, indent=2, default=_json_serializer)
-        logger.debug(f"Saved diagnostics to {diagnostics_file}")
-    except Exception as e:
-        logger.warning(f"Failed to save diagnostics.json: {e}")
-        logger.debug("Diagnostics saving error:", exc_info=True)
-
-    # Step 4b: Save shard_diagnostics.json for CMC results
-    if (
-        method_name == "cmc"
-        and hasattr(result, "per_shard_diagnostics")
-        and result.per_shard_diagnostics
-    ):
-        try:
-            shard_diag_file = method_dir / "shard_diagnostics.json"
-            with open(shard_diag_file, "w", encoding="utf-8") as f:
-                # Use _json_serializer (not default=str) so NaN/Inf values in
-                # per-shard diagnostics are written as null/"Infinity" rather
-                # than the string "nan"/"inf".
-                json.dump(
-                    result.per_shard_diagnostics, f, indent=2, default=_json_serializer
-                )
-            logger.debug(f"Saved per-shard diagnostics to {shard_diag_file}")
-        except Exception as e:
-            logger.warning(f"Failed to save shard_diagnostics.json: {e}")
-            logger.debug("Shard diagnostics saving error:", exc_info=True)
-
-    # Step 5: Generate heatmap plots (reuse NLSQ plotting)
-    try:
-        logger.info("Generating comparison heatmap plots")
-
-        # Apply phi filtering to data (if enabled in config)
-        # This ensures plots respect phi_filtering configuration
-        filtered_data = _apply_angle_filtering_for_optimization(data, config)
-        logger.debug(
-            f"Applied phi filtering for MCMC plotting: "
-            f"{len(filtered_data['phi_angles_list'])} angles selected"
-        )
-
-        # Compute theoretical C2 using posterior mean parameters
-        c2_result = _compute_theoretical_c2_from_mcmc(result, filtered_data, config)
-        c2_theoretical_scaled = c2_result["c2_theoretical_scaled"]
-        c2_theoretical_raw = c2_result["c2_theoretical_raw"]
-        per_angle_scaling = c2_result["per_angle_scaling"]
-
-        # Calculate residuals
-        c2_exp = filtered_data["c2_exp"]
-        residuals = c2_exp - c2_theoretical_scaled
-
-        # Convert time arrays
-        t1 = np.asarray(filtered_data["t1"])
-        t2 = np.asarray(filtered_data["t2"])
-        if t1.ndim == 2:
-            t1 = t1[:, 0]
-        if t2.ndim == 2:
-            t2 = t2[0, :]
-
-        # Save fitted_data.npz (before plotting so data is saved even if plots fail)
-        phi_angles = np.asarray(filtered_data["phi_angles_list"])
-        q_val = filtered_data.get("wavevector_q_list", [1.0])[0]
-        residuals_normalized = residuals / (0.05 * np.where(c2_exp != 0, c2_exp, 1.0))
-        npz_file = method_dir / "fitted_data.npz"
-        np.savez_compressed(
-            npz_file,
-            phi_angles=phi_angles,
-            c2_exp=np.asarray(c2_exp),
-            c2_theoretical_raw=c2_theoretical_raw,
-            c2_theoretical_scaled=c2_theoretical_scaled,
-            per_angle_scaling=per_angle_scaling,
-            residuals=residuals,
-            residuals_normalized=residuals_normalized,
-            t1=t1,
-            t2=t2,
-            q=np.array([q_val]),
-        )
-        try:
-            fitted_size_mb = npz_file.stat().st_size / (1024 * 1024)
-        except OSError:
-            fitted_size_mb = 0
-            logger.debug("Could not stat fitted data file")
-        logger.info(f"Saved fitted_data.npz ({fitted_size_mb:.2f} MB)")
-
-        # Generate plots using NLSQ plotting function
-        generate_nlsq_plots(
-            phi_angles=filtered_data["phi_angles_list"],
-            c2_exp=c2_exp,
-            c2_theoretical_scaled=c2_theoretical_scaled,
-            residuals=residuals,
-            t1=t1,
-            t2=t2,
-            output_dir=method_dir,
-            config=config,
-            c2_solver_scaled=None,
-        )
-        logger.info(f"  - {len(filtered_data['phi_angles_list'])} PNG heatmap plots")
-    except Exception as e:
-        logger.warning(f"Heatmap plot generation failed (data files still saved): {e}")
-        logger.debug("Plot error details:", exc_info=True)
-
-    # T057: Calculate and log total file sizes
-    json_files = list(method_dir.glob("*.json"))
-    npz_files = list(method_dir.glob("*.npz"))
-    try:
-        total_json_kb = sum(f.stat().st_size for f in json_files) / 1024
-    except OSError:
-        total_json_kb = 0
-    try:
-        total_npz_mb = sum(f.stat().st_size for f in npz_files) / (1024 * 1024)
-    except OSError:
-        total_npz_mb = 0
-
-    logger.info(f"OK: {method_name.upper()} results saved successfully to {method_dir}")
-    if (
-        method_name == "cmc"
-        and hasattr(result, "per_shard_diagnostics")
-        and result.per_shard_diagnostics
-    ):
-        logger.info(
-            f"  - 4 JSON files (parameters, analysis results, diagnostics, shard diagnostics) "
-            f"({total_json_kb:.1f} KB total)"
-        )
-    else:
-        logger.info(
-            f"  - 3 JSON files (parameters, analysis results, diagnostics) "
-            f"({total_json_kb:.1f} KB total)"
-        )
-    logger.info(
-        f"  - {len(npz_files)} NPZ file(s) (posterior samples) ({total_npz_mb:.2f} MB)"
-    )
-
-
-def _create_mcmc_parameters_dict(result: Any) -> dict:
-    """Create parameters dictionary with posterior statistics.
-
-    This is a wrapper that delegates to homodyne.io.mcmc_writers.
-    """
-    return _io_create_mcmc_parameters_dict(result)
-
-
-def _create_mcmc_analysis_dict(
-    result: Any,
-    data: dict[str, Any],
-    method_name: str,
-) -> dict:
-    """Create analysis results dictionary for MCMC/CMC.
-
-    This is a wrapper that delegates to homodyne.io.mcmc_writers.
-    """
-    return _io_create_mcmc_analysis_dict(result, data, method_name)
-
-
-def _create_mcmc_diagnostics_dict(result: Any) -> dict:
-    """Create diagnostics dictionary for MCMC/CMC.
-
-    This is a wrapper that delegates to homodyne.io.mcmc_writers.
-    """
-    return _io_create_mcmc_diagnostics_dict(result)
-
-
-def _get_parameter_names(analysis_mode: str) -> list[str]:
-    """Get physical parameter names for given analysis mode.
-
-    This is a thin wrapper around get_physical_param_names() that handles
-    unknown modes gracefully with a warning instead of raising an exception.
-
-    Parameters
-    ----------
-    analysis_mode : str
-        Analysis mode ("static", "static_isotropic", or "laminar_flow")
-
-    Returns
-    -------
-    list[str]
-        List of physical parameter names (without scaling params)
-    """
-    # Normalize "static" to "static_isotropic" for compatibility
-    normalized_mode = "static_isotropic" if analysis_mode == "static" else analysis_mode
-
-    try:
-        # Type cast to handle literal type requirement
-        if normalized_mode in ("static_isotropic", "laminar_flow"):
-            return get_physical_param_names(cast(Any, normalized_mode))
-        else:
-            logger.warning(
-                f"Unknown analysis mode: {analysis_mode}, assuming static_isotropic"
-            )
-            return get_physical_param_names("static_isotropic")
-    except ValueError:
-        logger.warning(
-            f"Unknown analysis mode: {analysis_mode}, assuming static_isotropic"
-        )
-        return get_physical_param_names("static_isotropic")
-
-
-def _compute_theoretical_c2_from_mcmc(
-    result: Any,
-    data: dict[str, Any],
-    config: Any,
-) -> dict[str, np.ndarray]:
-    """Compute theoretical C2 using MCMC posterior mean parameters.
-
-    Parameters
-    ----------
-    result : MCMCResult
-        MCMC result with posterior mean parameters
-    data : dict
-        Experimental data dictionary
-    config : ConfigManager
-        Configuration manager
-
-    Returns
-    -------
-    dict[str, np.ndarray]
-        Dictionary with keys:
-        - "c2_theoretical_scaled": shape (n_angles, n_t1, n_t2), contrast * g1² + offset
-        - "c2_theoretical_raw": shape (n_angles, n_t1, n_t2), unscaled g1²
-        - "per_angle_scaling": shape (n_angles, 2), [contrast, offset] per angle
-    """
-    import numpy as np
-
-    # Extract parameters from MCMC result
-    contrast = getattr(result, "mean_contrast", 0.5)
-    offset = getattr(result, "mean_offset", 1.0)
-
-    mean_params_obj = getattr(result, "mean_params", None)
-    analysis_mode = getattr(result, "analysis_mode", "static")
-    ordered_names = _get_parameter_names(analysis_mode)
-
-    # mean_params may be a ParameterStats (hybrid), dict, or array-like
-    # Always use named access to avoid ordering bugs
-    if mean_params_obj is not None and hasattr(mean_params_obj, "get"):
-        # ParameterStats or dict - use named access for correctness
-        mean_params = np.array(
-            [mean_params_obj.get(name, np.nan) for name in ordered_names]
-        )
-    elif mean_params_obj is not None and hasattr(mean_params_obj, "as_array"):
-        # Fallback to array (legacy)
-        mean_params_array = mean_params_obj.as_array
-        mean_params = (
-            np.asarray(mean_params_array)
-            if mean_params_array is not None
-            else np.array([])
-        )
-    elif mean_params_obj is not None:
-        mean_params = np.asarray(mean_params_obj)
-    else:
-        mean_params = np.array([])
-
-    # Log parameter values for debugging using named access for correctness
-    logger.info("Computing theoretical C2 with posterior means:")
-    logger.info(f"  Contrast: {contrast:.6f}")
-    logger.info(f"  Offset: {offset:.6f}")
-    if mean_params_obj is not None and hasattr(mean_params_obj, "get"):
-        # Use named access for accurate logging
-        D0_val = mean_params_obj.get("D0", np.nan)
-        alpha_val = mean_params_obj.get("alpha", np.nan)
-        D_offset_val = mean_params_obj.get("D_offset", np.nan)
-        logger.info(
-            f"  Physical params: D0={D0_val:.2f}, alpha={alpha_val:.4f}, D_offset={D_offset_val:.4f}"
-        )
-    else:
-        # Fallback to positional (may be incorrect order)
-        logger.info(
-            f"  Physical params (positional): [{', '.join(f'{v:.4f}' for v in mean_params[:3])}]"
-        )
-
-    # Validate parameters for reasonable theoretical prediction
-    if contrast < 0.05:
-        logger.warning(
-            f"Very small contrast ({contrast:.4f} < 0.05) may produce nearly constant c2_theory. "
-            "This suggests poor MCMC convergence or inappropriate initial values."
-        )
-    # Use named access for D0 validation
-    D0_for_validation = (
-        mean_params_obj.get("D0", 0.0)
-        if mean_params_obj is not None and hasattr(mean_params_obj, "get")
-        else mean_params[0]
-    )
-    if D0_for_validation >= 99990:  # Near D0 upper bound
-        logger.warning(
-            f"D0 ({D0_for_validation:.1f}) near upper bound (100000). "
-            "Consider increasing max D0 bound or improving initial values."
-        )
-
-    # Get data arrays
-    phi_angles = np.asarray(data["phi_angles_list"])
-    t1 = np.asarray(data["t1"])
-    t2 = np.asarray(data["t2"])
-    q_val = data.get("wavevector_q_list", [1.0])[0]
-
-    # Convert to 1D if needed
-    if t1.ndim == 2:
-        t1 = t1[:, 0]
-    if t2.ndim == 2:
-        t2 = t2[0, :]
-
-    # Get analysis mode
-    config_dict_mcmc: dict[str, Any] = (
-        config.get_config()
-        if hasattr(config, "get_config")
-        else cast(dict[str, Any], config)
-    )
-    _analysis_mode = config_dict_mcmc.get("analysis_mode", "static_isotropic")  # noqa: F841
-
-    # Get L parameter (stator-rotor gap) from correct config path
-    analyzer_params = config_dict_mcmc.get("analyzer_parameters", {})
-    L = analyzer_params.get("geometry", {}).get("stator_rotor_gap", 2000000.0)
-
-    # Get dt parameter (required for correct physics) from correct config path
-    # BUG FIX: Was using wrong path "acquisition.dt" with default 1e-8 (10 ns)
-    # Correct path is "analyzer_parameters.dt" with default 0.001 (1 ms, APS-U standard)
-    # Config file can override this (e.g., dt: 0.1 for 100ms frame rate)
-    dt = analyzer_params.get("dt", 0.001)
-
-    # Compute theoretical C2 for all angles with per-angle scaling estimation
-    c2_theoretical_list: list[np.ndarray] = []
-    c2_raw_list: list[np.ndarray] = []
-    scaling_list: list[list[float]] = []
-
-    # Get experimental data for per-angle lstsq fitting
-    c2_exp = data.get("c2_exp", None)
-    use_per_angle_lstsq = c2_exp is not None and len(c2_exp) == len(phi_angles)
-
-    if use_per_angle_lstsq:
-        logger.info(
-            "Using per-angle least squares estimation for contrast/offset "
-            "(fixes CMC sharding aggregation issue)"
-        )
-
-    # Pre-compute angle-independent factors outside the loop
-    from homodyne.core.jax_backend import _compute_g1_total_core
-
-    params_jax = jnp.array(mean_params)
-    wavevector_q_squared_half_dt = 0.5 * (q_val**2) * dt
-    sinc_prefactor = 0.5 / jnp.pi * q_val * L * dt
-    t1_jax = jnp.array(t1)
-    t2_jax = jnp.array(t2)
-
-    for i, phi in enumerate(phi_angles):
-        # Compute g1 directly (no clipping) — avoids jnp.clip(g2, 0.5, 2.5) in
-        # _compute_g2_scaled_core which destroys off-diagonal structure when
-        # g1² < 0.5 (i.e., most of the heatmap away from the diagonal).
-        # Create 2D grid for single angle
-        t1_grid, t2_grid = jnp.meshgrid(t1_jax, t2_jax, indexing="ij")
-        t1_flat = t1_grid.ravel()
-        t2_flat = t2_grid.ravel()
-        phi_flat = jnp.full_like(t1_flat, phi)
-
-        g1_flat = _compute_g1_total_core(
-            params=params_jax,
-            t1=t1_flat,
-            t2=t2_flat,
-            phi=phi_flat,
-            wavevector_q_squared_half_dt=wavevector_q_squared_half_dt,
-            sinc_prefactor=sinc_prefactor,
-            dt=dt,
-        )
-        # g2 = g1^2, no clipping applied
-        g2_theory_np = np.array(g1_flat**2).reshape(len(t1), len(t2))
-
-        if use_per_angle_lstsq and c2_exp is not None:
-            # Per-angle least squares: c2_exp[i] = contrast_i * g2_theory + offset_i
-            # Solve: [g2_theory, 1] @ [contrast, offset]^T = c2_exp
-            c2_exp_angle = np.array(c2_exp[i])
-
-            # Flatten for lstsq
-            g2_flat = g2_theory_np.flatten()
-            c2_flat = c2_exp_angle.flatten()
-
-            # Build design matrix [g2_theory, 1]
-            A = np.vstack([g2_flat, np.ones_like(g2_flat)]).T
-
-            # Solve least squares
-            try:
-                lstsq_result = np.linalg.lstsq(A, c2_flat, rcond=None)
-                contrast_raw, offset_raw = lstsq_result[0]
-
-                # Physical bounds for contrast: (0, 1] - must be positive and ≤ 1
-                # Physical bounds for offset: [0.5, 1.5] - baseline around 1.0
-                # Log warning if lstsq produces unphysical values (indicates model mismatch)
-                if contrast_raw > 1.0:
-                    logger.warning(
-                        f"Angle {i} (phi={phi:.2f} deg): lstsq contrast={contrast_raw:.4f} > 1.0 "
-                        "(unphysical). This indicates the physics model underestimates "
-                        "the C2 variation. Clipping to 1.0."
-                    )
-                elif contrast_raw <= 0:
-                    logger.warning(
-                        f"Angle {i} (phi={phi:.2f} deg): lstsq contrast={contrast_raw:.4f} <= 0 "
-                        "(unphysical). Clipping to 0.01."
-                    )
-
-                # Enforce physical bounds
-                contrast_i = float(
-                    np.clip(np.asarray(contrast_raw), 0.01, 1.0)
-                )  # Physical: (0, 1]
-                offset_i = float(
-                    np.clip(np.asarray(offset_raw), 0.5, 1.5)
-                )  # Physical: around 1.0
-
-                if i == 0:  # Log first angle details
-                    logger.debug(
-                        f"  Angle {i} (phi={phi:.2f} deg): fitted contrast={contrast_i:.4f}, "
-                        f"offset={offset_i:.4f}"
-                    )
-            except Exception as e:
-                logger.warning(f"lstsq failed for angle {i}, using global values: {e}")
-                contrast_i = contrast
-                offset_i = offset
-        else:
-            # Fallback to global averaged values (original behavior)
-            contrast_i = contrast
-            offset_i = offset
-
-        # Collect raw g2 and per-angle scaling for fitted_data.npz
-        c2_raw_list.append(g2_theory_np)
-        scaling_list.append([contrast_i, offset_i])
-
-        # Apply fitted scaling: c2_fitted = contrast_i * g2_theory + offset_i
-        c2_theoretical_np = contrast_i * g2_theory_np + offset_i
-        c2_theoretical_list.append(c2_theoretical_np)
-
-    # Stack all angles
-    c2_theoretical_scaled = np.array(c2_theoretical_list)
-
-    # Validate theoretical prediction quality (NaN-safe: per-angle fits can fail)
-    c2_min = float(np.nanmin(c2_theoretical_scaled))
-    c2_max = float(np.nanmax(c2_theoretical_scaled))
-    c2_range = c2_max - c2_min
-    logger.info(
-        f"Theoretical C2 range: [{c2_min:.6f}, {c2_max:.6f}], variation: {c2_range:.6f}"
-    )
-
-    # Check if per-angle scaling produced reasonable variation
-    if use_per_angle_lstsq and c2_exp is not None:
-        c2_exp_arr = np.asarray(c2_exp)
-        exp_min = float(np.nanmin(c2_exp_arr))
-        exp_max = float(np.nanmax(c2_exp_arr))
-        exp_range = exp_max - exp_min
-        coverage = c2_range / exp_range if exp_range > 0.01 else 0
-        logger.info(
-            f"Per-angle lstsq scaling: fitted range covers {coverage:.1%} of "
-            f"experimental range [{exp_min:.4f}, {exp_max:.4f}]"
-        )
-
-    if c2_range < 0.01:
-        logger.warning(
-            f"Theoretical C2 has very low variation ({c2_range:.6f} < 0.01). "
-            f"The model prediction is nearly constant (c2 ~ {c2_min:.4f}). "
-            "This indicates:\n"
-            "  1. Poor MCMC convergence to local minimum\n"
-            "  2. Inappropriate initial parameter values\n"
-            "  3. Physical parameters may have hit bounds\n"
-            "Recommendations:\n"
-            "  - Run NLSQ first to get better initial values\n"
-            "  - Check parameter bounds (especially D0 upper limit)\n"
-            "  - Verify initial_parameters.values in config are reasonable"
-        )
-
-    return {
-        "c2_theoretical_scaled": c2_theoretical_scaled,
-        "c2_theoretical_raw": np.array(c2_raw_list),
-        "per_angle_scaling": np.array(scaling_list),
-    }
-
-
-def _json_serializer(obj: Any) -> Any:
-    """JSON serializer for numpy arrays and other objects.
-
-    Delegates to homodyne.io.json_utils.json_serializer for NaN/Inf sanitization.
-    """
-    from homodyne.io.json_utils import json_serializer
-
-    return json_serializer(obj)

@@ -1172,7 +1172,7 @@ def test_threshold_override_dense_mass_matrix(mock_config):
 # ============================================================================
 
 
-@patch("homodyne.cli.commands.logger")
+@patch("homodyne.cli.config_handling.logger")
 def test_logging_parameter_override(mock_logger, mock_config):
     """Test that parameter overrides are logged clearly."""
     args = argparse.Namespace(

@@ -783,7 +783,7 @@ class TestNLSQErrorRecovery:
 
             # Patch generate_nlsq_plots to raise an exception
             with patch(
-                "homodyne.cli.commands.generate_nlsq_plots",
+                "homodyne.cli.plot_dispatch.generate_nlsq_plots",
                 side_effect=RuntimeError("Matplotlib not available"),
             ):
                 # Call save_nlsq_results - should succeed despite plotting failure
