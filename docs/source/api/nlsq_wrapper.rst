@@ -211,3 +211,64 @@ conservative settings per retry:
    :undoc-members:
    :show-inheritance:
    :exclude-members: NLSQWrapper
+
+----
+
+Extracted Strategy Modules
+---------------------------
+
+The following modules were extracted from ``wrapper.py`` to improve
+maintainability. ``NLSQWrapper`` delegates to these internally; they are not
+part of the public API.
+
+Fallback Chain
+~~~~~~~~~~~~~~
+
+Strategy selection and fallback logic when the primary solver fails.
+
+.. automodule:: homodyne.optimization.nlsq.fallback_chain
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Error Recovery
+~~~~~~~~~~~~~~
+
+3-attempt error recovery with progressive conservative settings and
+5-category error diagnosis.
+
+.. automodule:: homodyne.optimization.nlsq.recovery
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Stratified Least Squares
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Primary fitting strategy using stratified JTJ accumulation via NLSQ
+``least_squares()``.
+
+.. automodule:: homodyne.optimization.nlsq.strategies.stratified_ls
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Hybrid Streaming
+~~~~~~~~~~~~~~~~
+
+4-phase adaptive hybrid streaming optimizer for large datasets.
+
+.. automodule:: homodyne.optimization.nlsq.strategies.hybrid_streaming
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Out-of-Core Accumulation
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Global JTJ accumulation solver for datasets exceeding the memory threshold.
+
+.. automodule:: homodyne.optimization.nlsq.strategies.out_of_core
+   :members:
+   :undoc-members:
+   :show-inheritance:

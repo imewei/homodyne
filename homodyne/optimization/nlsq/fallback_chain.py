@@ -304,7 +304,7 @@ def execute_optimization_with_fallback(
                         stability="auto",
                         rescale_data=False,
                     )
-                    popt, pcov, info = result_tuple  # type: ignore[misc]
+                    popt, pcov, info = result_tuple
                 else:
                     popt, pcov = curve_fit_fn(
                         wrapped_residual_fn,

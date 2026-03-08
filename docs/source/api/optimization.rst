@@ -121,11 +121,21 @@ Package Structure
    ├── nlsq/
    │   ├── core.py              # fit_nlsq_jax() — primary entry point
    │   ├── adapter.py           # NLSQAdapter (recommended, JIT caching)
-   │   ├── wrapper.py           # NLSQWrapper (streaming, full anti-degeneracy)
+   │   ├── wrapper.py           # NLSQWrapper orchestrator (delegates below)
+   │   ├── fallback_chain.py    # OptimizationStrategy enum, fallback logic
+   │   ├── recovery.py          # 3-attempt error recovery, error diagnosis
    │   ├── config.py            # NLSQConfig dataclass
    │   ├── cmaes_wrapper.py     # CMA-ES global optimizer
    │   ├── anti_degeneracy_controller.py  # Per-angle scaling defense
-   │   ├── strategies/          # Fitting strategy implementations
+   │   ├── strategies/
+   │   │   ├── stratified_ls.py     # Primary: stratified least-squares
+   │   │   ├── hybrid_streaming.py  # Hybrid streaming for large datasets
+   │   │   ├── out_of_core.py       # Out-of-core JTJ accumulation
+   │   │   ├── executors.py         # Strategy selection and dispatch
+   │   │   ├── residual.py          # Residual function (NumPy path)
+   │   │   ├── residual_jit.py      # Residual function (JIT path)
+   │   │   ├── sequential.py        # Sequential per-angle optimization
+   │   │   └── chunking.py          # Out-of-core data chunking
    │   └── validation/          # Input and result validation
    └── cmc/
        ├── core.py              # fit_mcmc_jax() — primary entry point

@@ -46,7 +46,7 @@ def execute_with_recovery(
     strategy: OptimizationStrategy,
     log: logging.Logger | logging.LoggerAdapter[logging.Logger],
     loss_name: str,
-    x_scale_value: float | str,
+    x_scale_value: float | str | np.ndarray,
     handle_nlsq_result_fn: Callable,
     curve_fit_fn: Callable,
     curve_fit_large_fn: Callable,
@@ -311,6 +311,9 @@ def execute_with_recovery(
 
                 log.error(error_msg)
                 raise RuntimeError(error_msg) from e
+
+    # Unreachable: loop always returns or raises, but mypy needs this
+    raise RuntimeError("Optimization failed: exhausted all retry attempts")
 
 
 def diagnose_error(

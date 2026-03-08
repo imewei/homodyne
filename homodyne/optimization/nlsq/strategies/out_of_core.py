@@ -82,7 +82,7 @@ def fit_with_out_of_core_accumulation(
     # We need to flatten them carefully (using ravel/reshape to avoid copies if possible)
 
     # Helper to flatten dimensions
-    def _get_flat_arrays(d):
+    def _get_flat_arrays(d: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
         # Same logic as _prepare_data but trying to be lazy/view-based
         phi_arr = np.asarray(d.phi)
         t1_arr = np.asarray(d.t1)
@@ -299,7 +299,7 @@ def fit_with_out_of_core_accumulation(
                 ooc_shared = None
             ooc_pool = None
 
-    def evaluate_total_chi2(params_eval):
+    def evaluate_total_chi2(params_eval: Any) -> float:
         stride = 10 if fast_chi2_mode else 1
 
         # Use parallel pool for chi2 evaluation when available
@@ -423,7 +423,7 @@ def fit_with_out_of_core_accumulation(
                         solver_matrix, -total_Jtr, rcond=1e-5
                     )
                 except (ValueError, RuntimeError, FloatingPointError):
-                    step = jnp.nan  # Signal fail
+                    step = jnp.full_like(total_Jtr, jnp.nan)  # Signal fail
 
                 # Check step validity
                 if jnp.any(jnp.isnan(step)):

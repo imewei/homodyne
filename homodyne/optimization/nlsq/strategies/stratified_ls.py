@@ -244,6 +244,7 @@ def fit_with_stratified_least_squares(
                 if bounds is not None:
                     # Transform bounds for Fourier mode
                     lower, upper = bounds
+                    assert ad_controller.fourier is not None
                     n_coeffs = ad_controller.fourier.n_coeffs_per_param
                     # Use the mean of bounds for Fourier coefficients
                     lower_fourier = np.concatenate(
@@ -456,7 +457,7 @@ def fit_with_stratified_least_squares(
         stratified_data=chunked_data,  # Use chunked_data with .chunks attribute
         per_angle_scaling=effective_per_angle_scaling,
         physical_param_names=physical_param_names,
-        logger=log,
+        logger=log,  # type: ignore[arg-type]
         fixed_contrast_per_angle=fixed_contrast,
         fixed_offset_per_angle=fixed_offset,
     )
@@ -576,7 +577,7 @@ def fit_with_stratified_least_squares(
         fun=residual_fn,
         x0=initial_params,
         jac=None,  # Use JAX autodiff for Jacobian
-        bounds=bounds,
+        bounds=bounds,  # type: ignore[arg-type]
         method="trf",  # Trust Region Reflective
         ftol=opt_ftol,
         xtol=opt_xtol,
@@ -759,11 +760,12 @@ def fit_with_stratified_least_squares(
     # =====================================================================
     # Anti-Degeneracy: Inverse Transformation (v2.14.0+, v2.18.0 update)
     # =====================================================================
-    anti_degeneracy_info = {}
+    anti_degeneracy_info: dict[str, Any] = {}
     if ad_controller is not None and ad_controller.is_enabled:
         if ad_controller.use_fixed_scaling:
             if ad_controller.has_fixed_per_angle_scaling():
                 fixed_scaling = ad_controller.get_fixed_per_angle_scaling()
+                assert fixed_scaling is not None
                 fixed_contrast, fixed_offset = fixed_scaling
 
                 log.info(
@@ -842,6 +844,7 @@ def fit_with_stratified_least_squares(
             )
             popt_expanded = ad_controller.transform_params_from_fourier(popt)
 
+            assert ad_controller.fourier is not None
             n_coeffs = ad_controller.fourier.n_coeffs_per_param
             B_contrast = ad_controller.fourier.get_basis_matrix()  # (n_phi, n_coeffs)
             B_offset = ad_controller.fourier.get_basis_matrix()

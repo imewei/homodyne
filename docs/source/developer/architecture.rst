@@ -21,13 +21,19 @@ responsibility:
    ├── core/           # Physics kernel -- JIT-compiled JAX functions
    ├── optimization/
    │   ├── nlsq/       # Primary optimizer: Trust-region Levenberg-Marquardt
+   │   │               #   wrapper.py orchestrator, fallback_chain.py, recovery.py
+   │   │               #   strategies/: stratified_ls, hybrid_streaming, out_of_core
    │   └── cmc/        # Secondary: Consensus Monte Carlo (NumPyro NUTS)
    ├── data/           # HDF5 loading and I/O boundary validation
    ├── config/         # YAML configuration: parsing, validation, defaults
-   ├── cli/            # Entry points and shell completion
+   ├── cli/            # Entry points: commands.py orchestrator delegates to
+   │                   #   config_handling, data_pipeline, optimization_runner,
+   │                   #   result_saving, plot_dispatch
    ├── device/         # CPU/NUMA topology detection
    ├── io/             # Result serialization (JSON + NPZ writers)
-   ├── viz/            # Visualization (Matplotlib, datashader backend)
+   ├── viz/            # Visualization: mcmc_plots.py re-exports from
+   │                   #   mcmc_diagnostics, mcmc_comparison, mcmc_dashboard,
+   │                   #   mcmc_arviz, mcmc_report
    ├── runtime/        # Shell completion, system validation, post-install
    └── utils/          # Logging, exceptions, shared utilities
 
@@ -138,8 +144,14 @@ NLSQ Module Map
    ├── adapter.py            # NLSQAdapter: recommended entry point
    │                         #   fit_nlsq_jax() delegates here
    │                         #   Auto-selects strategy, wraps NLSQWrapper
-   ├── wrapper.py            # NLSQWrapper: full-featured interface
-   │                         #   Direct access to all LM options
+   ├── wrapper.py            # NLSQWrapper: thin orchestrator
+   │                         #   Delegates to fallback_chain, recovery, strategies/
+   ├── fallback_chain.py     # OptimizationStrategy enum + fallback logic
+   │                         #   execute_optimization_with_fallback()
+   │                         #   handle_nlsq_result(), get_fallback_strategy()
+   ├── recovery.py           # 3-attempt error recovery
+   │                         #   execute_with_recovery(), diagnose_error()
+   │                         #   safe_uncertainties_from_pcov()
    ├── anti_degeneracy_controller.py  # 5-layer anti-degeneracy orchestrator
    ├── fourier_reparam.py    # Layer 1: Fourier/constant reparameterization
    ├── hierarchical.py       # Layer 2: Hierarchical optimization stages
@@ -159,7 +171,10 @@ NLSQ Module Map
    ├── parameter_utils.py    # Parameter transformation utilities
    ├── transforms.py         # Parameter bound transforms
    ├── progress.py           # Progress reporting
-   ├── strategies/           # Memory strategy implementations
+   ├── strategies/           # Fitting strategy implementations
+   │   ├── stratified_ls.py  #   Primary: stratified least-squares (JTJ via NLSQ)
+   │   ├── hybrid_streaming.py  # Hybrid streaming for large datasets
+   │   ├── out_of_core.py    #   Out-of-core JTJ accumulation
    │   ├── executors.py      #   Strategy selection and dispatch
    │   ├── residual.py       #   Residual function (NumPy path)
    │   ├── residual_jit.py   #   Residual function (JIT path)
@@ -200,6 +215,57 @@ CMC Module Map
    │                         #   compute_t_ref(), transform_nlsq_to_reparam_space()
    ├── results.py            # CMCResult dataclass
    └── scaling.py            # Per-angle scaling for CMC
+
+
+CLI Module Map
+--------------
+
+.. code-block:: text
+
+   homodyne/cli/
+   ├── main.py               # Entry point: main()
+   ├── args_parser.py        # Argument parser and validation
+   ├── commands.py           # dispatch_command() orchestrator + re-exports
+   ├── config_handling.py    # Device config, YAML loading, CLI overrides
+   │                         #   _configure_device(), _load_configuration()
+   │                         #   _apply_cli_overrides(), _build_mcmc_runtime_kwargs()
+   ├── data_pipeline.py      # Data loading and preprocessing
+   │                         #   _load_data(), _exclude_t0_from_analysis()
+   │                         #   _apply_angle_filtering_for_optimization()
+   │                         #   _prepare_cmc_config(), _pool_mcmc_data()
+   ├── optimization_runner.py  # NLSQ/CMC execution and warm-start
+   │                         #   _run_nlsq_optimization(), _run_optimization()
+   │                         #   _resolve_nlsq_warmstart()
+   ├── result_saving.py      # JSON/NPZ result serialization
+   │                         #   save_nlsq_results(), save_mcmc_results()
+   │                         #   _extract_nlsq_metadata(), _prepare_parameter_data()
+   ├── plot_dispatch.py      # Plotting dispatch
+   │                         #   _handle_plotting(), generate_nlsq_plots()
+   ├── config_generator.py   # homodyne-config entry point
+   └── xla_config.py         # homodyne-config-xla entry point
+
+``commands.py`` acts as a re-export hub: all internal functions are importable
+from ``homodyne.cli.commands`` for backward compatibility, even though the
+implementations live in the submodules above.
+
+
+Visualization Module Map
+------------------------
+
+.. code-block:: text
+
+   homodyne/viz/
+   ├── mcmc_plots.py         # Re-export hub for all MCMC visualization
+   ├── mcmc_diagnostics.py   # plot_trace_plots(), plot_kl_divergence_matrix()
+   │                         #   plot_convergence_diagnostics()
+   ├── mcmc_comparison.py    # plot_posterior_comparison()
+   ├── mcmc_dashboard.py     # plot_cmc_summary_dashboard()
+   ├── mcmc_arviz.py         # ArviZ wrappers: plot_arviz_trace/posterior/pair
+   ├── mcmc_report.py        # generate_mcmc_diagnostic_report(), print_mcmc_summary()
+   ├── nlsq_plots.py         # NLSQ result visualization
+   ├── experimental_plots.py # Experimental data C2 heatmaps
+   ├── datashader_backend.py # High-performance rendering (optional)
+   └── diagnostics.py        # Quantitative viz diagnostics
 
 
 Key Design Decisions

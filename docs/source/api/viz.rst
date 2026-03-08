@@ -129,9 +129,35 @@ Usage Example
 MCMC Diagnostic Plots
 ----------------------
 
-Comprehensive MCMC convergence and posterior diagnostics.
+Comprehensive MCMC convergence and posterior diagnostics. The implementation is
+split across focused submodules; ``mcmc_plots`` re-exports all public names.
 
 .. automodule:: homodyne.viz.mcmc_plots
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: homodyne.viz.mcmc_diagnostics
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: homodyne.viz.mcmc_comparison
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: homodyne.viz.mcmc_dashboard
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: homodyne.viz.mcmc_arviz
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: homodyne.viz.mcmc_report
    :members:
    :undoc-members:
    :show-inheritance:

@@ -14,7 +14,7 @@ import numpy as np
 from homodyne.data.angle_filtering import (
     apply_angle_filtering_for_plot as _data_apply_angle_filtering_for_plot,
 )
-from homodyne.utils.logging import get_logger, log_exception
+from homodyne.utils.logging import get_logger
 from homodyne.viz.experimental_plots import (
     plot_experimental_data as _viz_plot_experimental_data,
 )
@@ -87,7 +87,7 @@ def _handle_plotting(
             _plot_experimental_data(data_with_config, plots_dir)
             logger.info(f"OK: Experimental data plots saved to: {plots_dir}")
         except Exception as e:
-            log_exception(logger, e, "Failed to generate experimental data plots")
+            logger.warning(f"Failed to generate experimental data plots: {e}")
 
     # Plot simulated data if requested
     if plot_sim:
@@ -111,7 +111,7 @@ def _handle_plotting(
             )
             logger.info(f"OK: Simulated data plots saved to: {plots_dir}")
         except Exception as e:
-            log_exception(logger, e, "Failed to generate simulated data plots")
+            logger.warning(f"Failed to generate simulated data plots: {e}")
 
     # Plot fit comparison if save_plots is enabled
     if save_plots:
@@ -119,7 +119,7 @@ def _handle_plotting(
             _plot_fit_comparison(result, data, plots_dir)
             logger.info(f"OK: Fit comparison plots saved to: {plots_dir}")
         except Exception as e:
-            log_exception(logger, e, "Failed to generate fit comparison plots")
+            logger.warning(f"Failed to generate fit comparison plots: {e}")
 
         # Generate and plot fitted simulations
         if result is not None and config is not None:
@@ -131,7 +131,7 @@ def _handle_plotting(
                     args.output_dir,
                 )
             except Exception as e:
-                log_exception(logger, e, "Failed to generate fitted simulations")
+                logger.warning(f"Failed to generate fitted simulations: {e}")
 
 
 def _apply_angle_filtering_for_plot(

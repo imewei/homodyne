@@ -115,7 +115,7 @@ def plot_arviz_trace(
     elif save_path is not None:
         plt.close(fig)
 
-    return fig  # type: ignore[return-value]
+    return fig  # type: ignore[no-any-return]
 
 
 def plot_arviz_posterior(
@@ -212,7 +212,7 @@ def plot_arviz_posterior(
     elif save_path is not None:
         plt.close(fig)
 
-    return fig
+    return fig  # type: ignore[no-any-return]
 
 
 def plot_arviz_pair(
@@ -328,4 +328,4 @@ def plot_arviz_pair(
     elif save_path is not None:
         plt.close(fig)
 
-    return fig  # type: ignore[return-value]
+    return fig  # type: ignore[no-any-return]

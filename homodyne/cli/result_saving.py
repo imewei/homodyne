@@ -42,7 +42,7 @@ from homodyne.optimization.nlsq.validation.fit_quality import (
     FitQualityConfig,
     validate_fit_quality,
 )
-from homodyne.utils.logging import get_logger, log_exception
+from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -486,7 +486,7 @@ def _save_results(
         logger.info(f"OK: Results saved: {output_file}")
 
     except (OSError, ValueError, TypeError) as e:
-        log_exception(logger, e, "Failed to save results")
+        logger.warning(f"Failed to save results: {e}")
 
     # Wait for background writes to complete
     logger.debug("Waiting for background result writes to complete...")
@@ -780,7 +780,8 @@ def save_nlsq_results(
         )
         logger.info(f"  - {len(phi_angles)} PNG plots")
     except Exception as e:
-        log_exception(logger, e, "Plot generation failed (data files still saved)")
+        logger.warning(f"Plot generation failed (data files still saved): {e}")
+        logger.debug("Plot error details:", exc_info=True)
 
 
 def save_mcmc_results(
@@ -831,7 +832,8 @@ def save_mcmc_results(
             json.dump(param_dict, f, indent=2, default=_json_serializer)
         logger.debug(f"Saved parameters to {param_file}")
     except (OSError, ValueError, TypeError) as e:
-        log_exception(logger, e, "Failed to save parameters.json")
+        logger.warning(f"Failed to save parameters.json: {e}")
+        logger.debug("Parameter saving error:", exc_info=True)
 
     # Step 2: Save samples.npz with full posterior
     try:
@@ -914,7 +916,8 @@ def save_mcmc_results(
                 f"Saved posterior samples to {samples_file} ({samples_size_mb:.2f} MB)"
             )
     except (OSError, ValueError, TypeError) as e:
-        log_exception(logger, e, "Failed to save samples.npz")
+        logger.warning(f"Failed to save samples.npz: {e}")
+        logger.debug("Samples saving error:", exc_info=True)
 
     # Step 3: Save analysis_results_mcmc.json
     try:
@@ -924,7 +927,8 @@ def save_mcmc_results(
             json.dump(analysis_dict, f, indent=2, default=_json_serializer)
         logger.debug(f"Saved analysis results to {analysis_file}")
     except (OSError, ValueError, TypeError) as e:
-        log_exception(logger, e, f"Failed to save analysis_results_{method_name}.json")
+        logger.warning(f"Failed to save analysis_results_{method_name}.json: {e}")
+        logger.debug("Analysis results saving error:", exc_info=True)
 
     # Step 4: Save diagnostics.json
     try:
@@ -934,7 +938,8 @@ def save_mcmc_results(
             json.dump(diagnostics_dict, f, indent=2, default=_json_serializer)
         logger.debug(f"Saved diagnostics to {diagnostics_file}")
     except (OSError, ValueError, TypeError) as e:
-        log_exception(logger, e, "Failed to save diagnostics.json")
+        logger.warning(f"Failed to save diagnostics.json: {e}")
+        logger.debug("Diagnostics saving error:", exc_info=True)
 
     # Step 4b: Save shard_diagnostics.json for CMC results
     if (
@@ -950,7 +955,8 @@ def save_mcmc_results(
                 )
             logger.debug(f"Saved per-shard diagnostics to {shard_diag_file}")
         except (OSError, ValueError, TypeError) as e:
-            log_exception(logger, e, "Failed to save shard_diagnostics.json")
+            logger.warning(f"Failed to save shard_diagnostics.json: {e}")
+            logger.debug("Shard diagnostics saving error:", exc_info=True)
 
     # Step 5: Generate heatmap plots (reuse NLSQ plotting)
     try:
@@ -1020,9 +1026,8 @@ def save_mcmc_results(
         )
         logger.info(f"  - {len(filtered_data['phi_angles_list'])} PNG heatmap plots")
     except Exception as e:
-        log_exception(
-            logger, e, "Heatmap plot generation failed (data files still saved)"
-        )
+        logger.warning(f"Heatmap plot generation failed (data files still saved): {e}")
+        logger.debug("Plot error details:", exc_info=True)
 
     # T057: Calculate and log total file sizes
     json_files = list(method_dir.glob("*.json"))

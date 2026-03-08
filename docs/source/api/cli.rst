@@ -443,3 +443,42 @@ Key source files:
    :members:
    :undoc-members:
    :show-inheritance:
+
+----
+
+Internal CLI Modules
+--------------------
+
+The main ``homodyne`` command is orchestrated by ``dispatch_command()`` in
+``commands.py``, which delegates to focused submodules. These modules are not
+part of the public API but are documented here for contributors.
+
+.. automodule:: homodyne.cli.commands
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: homodyne.cli.config_handling
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: homodyne.cli.data_pipeline
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: homodyne.cli.optimization_runner
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: homodyne.cli.result_saving
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: homodyne.cli.plot_dispatch
+   :members:
+   :undoc-members:
+   :show-inheritance:
