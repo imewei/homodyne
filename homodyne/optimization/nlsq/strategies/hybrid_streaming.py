@@ -12,7 +12,7 @@ This module provides:
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, cast
 
 import jax
 import jax.numpy as jnp
@@ -770,8 +770,8 @@ def fit_with_stratified_hybrid_streaming(
 
                     # Do NOT set use_fixed_scaling = True for auto_averaged
                     # The averaged values are just initial guesses for optimization
-            else:
-                logger.warning(
+            else:  # pragma: no cover – defensive; function always returns arrays
+                logger.warning(  # type: ignore[unreachable]
                     "Failed to compute quantile-based scaling, "
                     "falling back to standard constant mode (optimizing 2 params)"
                 )
@@ -1129,6 +1129,7 @@ def fit_with_stratified_hybrid_streaming(
     residual_weights_list = None
     if enable_residual_weighting:
         # Compute shear-sensitivity weights in homodyne, pass to NLSQ as generic weights
+        assert shear_weighter is not None  # guarded by enable_residual_weighting
         residual_weights_list = shear_weighter.get_weights().tolist()
         logger.info("  Residual Weighting (Shear-Sensitivity):")
         logger.info(f"    Enabled: {enable_residual_weighting}")
@@ -1252,7 +1253,9 @@ def fit_with_stratified_hybrid_streaming(
         n_per_angle = 2 * n_phi
 
     @jax.jit
-    def model_fn_pointwise(x_batch: jnp.ndarray, *params_tuple) -> jnp.ndarray:
+    def model_fn_pointwise(
+        x_batch: jnp.ndarray, *params_tuple: jnp.ndarray
+    ) -> jnp.ndarray:
         """Point-wise model function for hybrid streaming optimizer."""
         # Handle both single points (1D) and batches (2D)
         # The optimizer may call with single points during Jacobian computation
@@ -1337,6 +1340,8 @@ def fit_with_stratified_hybrid_streaming(
             g1 = jnp.where(g1_diffusion > epsilon, g1_diffusion, epsilon)
 
         # Compute g2 with per-angle scaling
+        assert contrast_all is not None  # set in all branches above
+        assert offset_all is not None  # set in all branches above
         contrast = contrast_all[phi_idx]
         offset = offset_all[phi_idx]
         g2_theory = offset + contrast * g1**2
@@ -1346,7 +1351,7 @@ def fit_with_stratified_hybrid_streaming(
 
         # Squeeze output to match input dimensionality
         # Returns 0D scalar for single point, 1D array for batch
-        return g2.squeeze()
+        return jnp.asarray(g2.squeeze())
 
     # Prepare data
     logger.info("Preparing hybrid streaming data...")
@@ -1511,6 +1516,7 @@ def fit_with_stratified_hybrid_streaming(
 
     # Layer 1: Fourier reparameterization of initial parameters
     elif use_fourier:
+        assert fourier_reparameterizer is not None  # guarded by use_fourier
         logger.info("=" * 60)
         logger.info("ANTI-DEGENERACY EXECUTION: Fourier Reparameterization")
         # Transform per-angle params to Fourier coefficients
@@ -1584,10 +1590,14 @@ def fit_with_stratified_hybrid_streaming(
     # =====================================================================
     # When using Fourier mode, wrap model_fn to convert Fourier coeffs -> per-angle
     if use_fourier:
+        assert fourier_reparameterizer is not None  # guarded by use_fourier
         n_coeffs_per_param = fourier_reparameterizer.n_coeffs_per_param
+        _fourier_basis_matrix = fourier_reparameterizer._basis_matrix
 
         @jax.jit
-        def model_fn_fourier(x_batch: jnp.ndarray, *params_tuple) -> jnp.ndarray:
+        def model_fn_fourier(
+            x_batch: jnp.ndarray, *params_tuple: jnp.ndarray
+        ) -> jnp.ndarray:
             """Model function with Fourier coefficient inputs."""
             # Handle both single points (1D) and batches (2D)
             x_batch_2d = jnp.atleast_2d(x_batch)
@@ -1595,14 +1605,14 @@ def fit_with_stratified_hybrid_streaming(
 
             # Extract Fourier coefficients and physical params
             # Layout: [contrast_coeffs, offset_coeffs, physical_params]
-            n_coeffs = fourier_reparameterizer.n_coeffs_per_param
+            n_coeffs = n_coeffs_per_param  # captured from outer scope
             contrast_coeffs = params_all[:n_coeffs]
             offset_coeffs = params_all[n_coeffs : 2 * n_coeffs]
             physical_params = params_all[2 * n_coeffs :]
 
             # Convert Fourier coefficients to per-angle values
             # Uses precomputed basis matrix: values = B @ coeffs
-            basis_matrix = jnp.asarray(fourier_reparameterizer._basis_matrix)
+            basis_matrix = jnp.asarray(_fourier_basis_matrix)
             contrast_all = basis_matrix @ contrast_coeffs
             offset_all = basis_matrix @ offset_coeffs
 
@@ -1669,7 +1679,7 @@ def fit_with_stratified_hybrid_streaming(
             # Bounds enforced via parameter bounds in optimizer, not g2 clipping.
             g2 = g2_theory
 
-            return g2.squeeze()
+            return jnp.asarray(g2.squeeze())
 
         # Use Fourier model function for optimization
         active_model_fn = model_fn_fourier
@@ -1684,6 +1694,7 @@ def fit_with_stratified_hybrid_streaming(
 
     # Layer 2: Hierarchical optimization path
     # Can be combined with Fourier mode (hierarchical operates on Fourier params)
+    result: dict[str, Any]
     if use_hierarchical:
         # Use hierarchical two-stage optimization
         logger.info("=" * 60)
@@ -1691,9 +1702,12 @@ def fit_with_stratified_hybrid_streaming(
 
         # Pre-extract phi indices for shear weighting (x_data[:, 0] contains phi indices)
         phi_indices_jax = jnp.asarray(x_data[:, 0], dtype=jnp.int32)
-        shear_weighter_local = anti_degeneracy_components.get("shear_weighter")
+        shear_weighter_local = cast(
+            ShearSensitivityWeighting | None,
+            anti_degeneracy_components.get("shear_weighter"),
+        )
 
-        def loss_fn(params):
+        def loss_fn(params: Any) -> Any:
             """Loss function for hierarchical optimizer.
 
             CRITICAL: Must use jnp (JAX) operations, NOT np (NumPy).
@@ -1735,7 +1749,7 @@ def fit_with_stratified_hybrid_streaming(
                 return weighted_loss + reg_term
             return weighted_loss
 
-        def grad_fn(params):
+        def grad_fn(params: Any) -> Any:
             """Gradient function with optional monitoring."""
             # Use JAX autodiff for gradient computation
             grad = jax.grad(lambda p: loss_fn(p))(params)
@@ -1758,6 +1772,8 @@ def fit_with_stratified_hybrid_streaming(
             if shear_weighter_local is not None:
                 shear_weighter_local.update_phi0(params, outer_iter)
 
+        assert hierarchical_optimizer is not None  # guarded by use_hierarchical
+        assert fit_bounds is not None  # hierarchical requires bounds
         hier_result = hierarchical_optimizer.fit(
             loss_fn=loss_fn,
             grad_fn=grad_fn,
@@ -1863,6 +1879,7 @@ def fit_with_stratified_hybrid_streaming(
     # =====================================================================
     # Transform Fourier coefficients back to per-angle parameters
     if use_fourier:
+        assert fourier_reparameterizer is not None  # guarded by use_fourier
         logger.info("=" * 60)
         logger.info("ANTI-DEGENERACY EXECUTION: Inverse Fourier Transform")
         # Use n_coeffs_per_param (e.g., 5 for order=2), NOT n_coeffs (total=10)
@@ -1945,6 +1962,10 @@ def fit_with_stratified_hybrid_streaming(
     # v2.17.0: Fixed scaling mode inverse transformation
     # Expand physical-only params back to per-angle format using fixed scaling arrays
     elif use_fixed_scaling:
+        assert (
+            fixed_contrast_per_angle is not None
+        )  # set when use_fixed_scaling is True
+        assert fixed_offset_per_angle is not None  # set when use_fixed_scaling is True
         logger.info("=" * 60)
         logger.info(
             "ANTI-DEGENERACY EXECUTION: Inverse Fixed Scaling Transform (v2.17.0)"
@@ -2136,7 +2157,7 @@ def fit_with_stratified_hybrid_streaming(
 
         # Map indices to physical parameter names for laminar_flow mode
         # Layout: [n_phi contrasts] + [n_phi offsets] + [7 physical params]
-        physical_indices = list(range(2 * n_phi, len(popt)))
+        physical_indices_list = list(range(2 * n_phi, len(popt)))
         physical_param_names_local = [
             "D0",
             "alpha",
@@ -2148,7 +2169,7 @@ def fit_with_stratified_hybrid_streaming(
         ]
 
         bound_stuck_params = []
-        for i, idx in enumerate(physical_indices):
+        for i, idx in enumerate(physical_indices_list):
             if idx < len(param_statuses) and idx < len(popt):
                 status = param_statuses[idx]
                 uncertainty = perr[idx] if idx < len(perr) else 0.0
@@ -2208,7 +2229,7 @@ def fit_with_stratified_hybrid_streaming(
             }
 
     # Build info dict
-    info = {
+    info: dict[str, Any] = {
         "success": result.get("success", False),
         "message": result.get("message", "Hybrid streaming optimization completed"),
         "nfev": result.get("function_evaluations", 0),
@@ -2225,7 +2246,6 @@ def fit_with_stratified_hybrid_streaming(
     }
 
     # Add anti-degeneracy defense diagnostics
-    shear_weighter = anti_degeneracy_components.get("shear_weighter")
     info["anti_degeneracy"] = {
         "version": "2.18.0",
         "per_angle_mode": anti_degeneracy_components["per_angle_mode"],
@@ -2246,6 +2266,10 @@ def fit_with_stratified_hybrid_streaming(
     # T048: Add constant mode diagnostics
     if use_fixed_scaling:
         # v2.18.0: Fixed scaling mode - per-angle values are fixed, not optimized
+        assert (
+            fixed_contrast_per_angle is not None
+        )  # set when use_fixed_scaling is True
+        assert fixed_offset_per_angle is not None  # set when use_fixed_scaling is True
         info["anti_degeneracy"]["fixed_scaling"] = {
             "param_reduction": f"{2 * n_phi} -> 0 (physical only)",
             "method": "quantile_estimation",

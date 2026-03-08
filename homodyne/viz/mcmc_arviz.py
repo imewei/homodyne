@@ -328,4 +328,4 @@ def plot_arviz_pair(
     elif save_path is not None:
         plt.close(fig)
 
-    return fig  # type: ignore[no-any-return]
+    return fig

@@ -848,6 +848,7 @@ def fit_with_stratified_least_squares(
             n_coeffs = ad_controller.fourier.n_coeffs_per_param
             B_contrast = ad_controller.fourier.get_basis_matrix()  # (n_phi, n_coeffs)
             B_offset = ad_controller.fourier.get_basis_matrix()
+            assert B_contrast is not None and B_offset is not None
 
             pcov_expanded = np.zeros((len(popt_expanded), len(popt_expanded)))
             pcov_contrast = pcov[:n_coeffs, :n_coeffs]

@@ -82,7 +82,9 @@ def fit_with_out_of_core_accumulation(
     # We need to flatten them carefully (using ravel/reshape to avoid copies if possible)
 
     # Helper to flatten dimensions
-    def _get_flat_arrays(d: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
+    def _get_flat_arrays(
+        d: Any,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
         # Same logic as _prepare_data but trying to be lazy/view-based
         phi_arr = np.asarray(d.phi)
         t1_arr = np.asarray(d.t1)

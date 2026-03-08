@@ -34,7 +34,7 @@ def safe_uncertainties_from_pcov(pcov: np.ndarray, n_params: int) -> np.ndarray:
             "Applying regularization."
         )
         diag = np.diag(pcov + np.eye(n_params) * 1e-10)
-    return np.sqrt(np.maximum(diag, 0.0))
+    return np.asarray(np.sqrt(np.maximum(diag, 0.0)))
 
 
 def execute_with_recovery(
