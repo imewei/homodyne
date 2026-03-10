@@ -339,7 +339,7 @@ class NLSQConfig:
     cmaes_preset: str = (
         "cmaes"  # "cmaes-fast" (50 gen), "cmaes" (100 gen), "cmaes-global" (200 gen)
     )
-    cmaes_max_generations: int = 100  # Maximum CMA-ES generations
+    cmaes_max_generations: int | None = None  # None = use preset + adaptive scaling
     cmaes_popsize: int | None = None  # Population size (None = auto from 4+3*ln(n))
     cmaes_sigma: float = 0.5  # Initial step size (fraction of search range)
     cmaes_tol_fun: float = 1e-8  # Function value tolerance for convergence
@@ -579,7 +579,7 @@ class NLSQConfig:
             # CMA-ES Global Optimization (v2.15.0 / NLSQ 0.6.4+)
             enable_cmaes=cmaes.get("enable", False),
             cmaes_preset=cmaes.get("preset", "cmaes"),
-            cmaes_max_generations=cmaes.get("max_generations", 100),
+            cmaes_max_generations=cmaes.get("max_generations"),  # None = adaptive
             cmaes_popsize=cmaes.get("popsize"),  # None = auto
             cmaes_sigma=float(cmaes.get("sigma", 0.5)),
             cmaes_tol_fun=float(cmaes.get("tol_fun", 1e-8)),
@@ -935,9 +935,9 @@ class NLSQConfig:
                 f"cmaes_preset must be one of {valid_cmaes_presets}, "
                 f"got: {self.cmaes_preset}"
             )
-        if self.cmaes_max_generations <= 0:
+        if self.cmaes_max_generations is not None and self.cmaes_max_generations <= 0:
             errors.append(
-                f"cmaes_max_generations must be positive, "
+                f"cmaes_max_generations must be positive or null, "
                 f"got: {self.cmaes_max_generations}"
             )
         if self.cmaes_popsize is not None and self.cmaes_popsize <= 0:

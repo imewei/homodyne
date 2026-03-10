@@ -340,13 +340,13 @@ optimization:
     cmaes:
       enable: false # Static mode typically doesn't need CMA-ES
       preset: "cmaes-global" # 200 generations for better global convergence
-      max_generations: 200 # Increased from 100
+      max_generations: null # null = adaptive scaling based on scale_ratio
       sigma: 0.3 # Smaller initial step for refined search
-      popsize: 30 # Larger population for robust optimization
+      popsize: null # null = adaptive scaling (e.g. 200+ for scale_ratio>1e6)
       tol_fun: 1.0e-8
       tol_x: 1.0e-8
       restart_strategy: "bipop"
-      max_restarts: 15 # More restarts to escape local minima
+      max_restarts: 10 # Fewer restarts to limit wasted compute if stuck
       population_batch_size: null
       data_chunk_size: null
       memory_limit_gb: 8.0

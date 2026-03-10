@@ -217,6 +217,10 @@ def _is_cmaes_available() -> bool:
 
 CMAES_AVAILABLE = _is_cmaes_available()
 
+# Skip L-M refinement when CMA-ES chi2 exceeds this multiple of the
+# warm-start chi2 — the comparison in core.py will discard it anyway.
+_REFINEMENT_SKIP_CHI2_RATIO = 10.0
+
 
 @dataclass
 class CMAESWrapperConfig:
@@ -226,8 +230,8 @@ class CMAESWrapperConfig:
     ----------
     preset : str
         CMA-ES preset: "cmaes-fast" (50 gen), "cmaes" (100 gen), "cmaes-global" (200 gen).
-    max_generations : int
-        Maximum number of CMA-ES generations.
+    max_generations : int | None
+        Maximum CMA-ES generations. None = use preset default + adaptive scaling.
     sigma : float
         Initial step size as fraction of search range (0, 1].
     tol_fun : float
@@ -264,7 +268,7 @@ class CMAESWrapperConfig:
 
     # CMA-ES global search settings
     preset: str = "cmaes"
-    max_generations: int = 100
+    max_generations: int | None = None  # None = use preset + adaptive scaling
     popsize: int | None = None  # None = auto from 4+3*ln(n)
     sigma: float = 0.5
     tol_fun: float = 1e-8
@@ -311,7 +315,7 @@ class CMAESWrapperConfig:
         return cls(
             # CMA-ES global search settings
             preset=getattr(config, "cmaes_preset", "cmaes"),
-            max_generations=getattr(config, "cmaes_max_generations", 100),
+            max_generations=getattr(config, "cmaes_max_generations", None),
             popsize=getattr(config, "cmaes_popsize", None),
             sigma=getattr(config, "cmaes_sigma", 0.5),
             tol_fun=getattr(config, "cmaes_tol_fun", 1e-8),
@@ -373,7 +377,9 @@ class CMAESWrapperConfig:
             "cmaes": 100,
             "cmaes-global": 200,
         }
-        max_gen = preset_generations.get(self.preset, self.max_generations)
+        max_gen = preset_generations.get(
+            self.preset, self.max_generations or 100
+        )
 
         return CMAESConfig(
             popsize=popsize,
@@ -754,6 +760,7 @@ class CMAESWrapper:
         p0: np.ndarray,
         bounds: tuple[np.ndarray, np.ndarray],
         sigma: np.ndarray | None = None,
+        warmstart_chi2: float | None = None,
     ) -> CMAESResult:
         """Run CMA-ES global optimization.
 
@@ -771,6 +778,10 @@ class CMAESWrapper:
             Parameter bounds as (lower, upper).
         sigma : np.ndarray | None
             Data uncertainties (optional).
+        warmstart_chi2 : float | None
+            Chi-squared from NLSQ warm-start. If provided and CMA-ES chi2 exceeds
+            10x this value, refinement is skipped (the comparison in core.py will
+            discard the CMA-ES result anyway).
 
         Returns
         -------
@@ -817,28 +828,45 @@ class CMAESWrapper:
         # Default popsize (4+3*ln(9) ~ 11) is too small for multi-scale problems.
         # Scale up popsize and generations when scale ratio is large, unless
         # the user explicitly configured a popsize.
-        if self.config.popsize is None and scale_ratio > 1e3:
+        if scale_ratio > 1e3:
             from nlsq.global_optimization import compute_default_popsize
 
             default_pop = compute_default_popsize(n_params)
-            if scale_ratio > 1e6:
-                # Very high scale ratio (D0 ~ 1e4 vs gamma_dot ~ 1e-3)
-                adaptive_pop = max(200, default_pop * 10)
-                adaptive_gen = max(500, cmaes_config.max_generations * 3)
-            elif scale_ratio > 1e4:
-                adaptive_pop = max(100, default_pop * 5)
-                adaptive_gen = max(300, cmaes_config.max_generations * 2)
-            else:
-                adaptive_pop = max(50, default_pop * 3)
-                adaptive_gen = max(200, cmaes_config.max_generations)
 
-            logger.info(
-                f"[CMA-ES] Adaptive scaling: scale_ratio={scale_ratio:.2e} -> "
-                f"popsize {cmaes_config.popsize}->{adaptive_pop}, "
-                f"max_gen {cmaes_config.max_generations}->{adaptive_gen}"
-            )
-            cmaes_config.popsize = adaptive_pop
-            cmaes_config.max_generations = adaptive_gen
+            if self.config.popsize is not None:
+                # Warn when explicit popsize may be too small for the scale ratio
+                if scale_ratio > 1e6:
+                    recommended = max(200, default_pop * 10)
+                elif scale_ratio > 1e4:
+                    recommended = max(100, default_pop * 5)
+                else:
+                    recommended = max(50, default_pop * 3)
+                if self.config.popsize < recommended:
+                    logger.warning(
+                        f"[CMA-ES] Explicit popsize={self.config.popsize} may be too small "
+                        f"for scale_ratio={scale_ratio:.2e}. Adaptive scaling recommends "
+                        f"popsize={recommended}. Set popsize: null in config to enable "
+                        f"adaptive sizing."
+                    )
+            else:
+                # Auto-scale popsize and generations
+                if scale_ratio > 1e6:
+                    adaptive_pop = max(200, default_pop * 10)
+                    adaptive_gen = max(500, cmaes_config.max_generations * 3)
+                elif scale_ratio > 1e4:
+                    adaptive_pop = max(100, default_pop * 5)
+                    adaptive_gen = max(300, cmaes_config.max_generations * 2)
+                else:
+                    adaptive_pop = max(50, default_pop * 3)
+                    adaptive_gen = max(200, cmaes_config.max_generations)
+
+                logger.info(
+                    f"[CMA-ES] Adaptive scaling: scale_ratio={scale_ratio:.2e} -> "
+                    f"popsize {cmaes_config.popsize}->{adaptive_pop}, "
+                    f"max_gen {cmaes_config.max_generations}->{adaptive_gen}"
+                )
+                cmaes_config.popsize = adaptive_pop
+                cmaes_config.max_generations = adaptive_gen
 
         # Override with auto-configured memory settings
         if pop_batch is not None:
@@ -989,8 +1017,23 @@ class CMAESWrapper:
             f"({evals_per_sec:.0f} evals/s), reason={convergence_reason}"
         )
 
+        # Early-exit: skip refinement if CMA-ES chi2 is much worse than warm-start
+        # The comparison in core.py will discard this result anyway, so refinement
+        # from a bad starting point wastes compute (can take 400+ seconds).
+        skip_refinement = False
+        if (
+            warmstart_chi2 is not None
+            and cmaes_chi_squared > _REFINEMENT_SKIP_CHI2_RATIO * warmstart_chi2
+        ):
+            skip_refinement = True
+            logger.warning(
+                f"[CMA-ES] Skipping refinement: CMA-ES chi2={cmaes_chi_squared:.4e} "
+                f"is >{_REFINEMENT_SKIP_CHI2_RATIO:.0f}x worse than warm-start chi2={warmstart_chi2:.4e}. "
+                f"Warm-start result will be selected in comparison phase."
+            )
+
         # Run explicit NLSQ TRF refinement if enabled
-        if self.config.refine_with_nlsq:
+        if self.config.refine_with_nlsq and not skip_refinement:
             refinement_result = self._run_nlsq_refinement(
                 model_func=model_func,
                 xdata=xdata,

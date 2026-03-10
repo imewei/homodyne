@@ -2112,11 +2112,10 @@ def fit_nlsq_cmaes(
             and ad_controller.shear_weighter is not None
         ):
             # Get phi0 from current x0 (may be NLSQ warm-started)
-            # phi0 is stored in radians in the parameter array; convert to degrees
-            # since ShearSensitivityWeighting.get_weights expects degrees
+            # phi0 is stored in degrees in the parameter array (same as config/bounds)
             physical_params = x0[2:] if len(x0) > n_physical else x0
             phi0_idx = _get_physical_param_names(analysis_mode).index("phi0")
-            phi0_current_deg = float(np.degrees(physical_params[phi0_idx]))
+            phi0_current_deg = float(physical_params[phi0_idx])
 
             # Compute per-angle shear weights
             shear_weights = ad_controller.shear_weighter.get_weights(phi0_current_deg)
@@ -2267,6 +2266,7 @@ def fit_nlsq_cmaes(
             p0=x0,
             bounds=bounds,
             sigma=sigma_flat,
+            warmstart_chi2=nlsq_warmstart_chi2,
         )
 
         # ======================================================================

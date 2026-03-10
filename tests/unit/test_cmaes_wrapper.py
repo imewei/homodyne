@@ -37,7 +37,7 @@ class TestCMAESWrapperConfig:
         config = CMAESWrapperConfig()
 
         assert config.preset == "cmaes"
-        assert config.max_generations == 100
+        assert config.max_generations is None  # None = use preset + adaptive scaling
         assert config.sigma == 0.5
         assert config.tol_fun == 1e-8
         assert config.tol_x == 1e-8
@@ -310,7 +310,7 @@ class TestNLSQConfigCMAES:
         # CMA-ES global search defaults
         assert config.enable_cmaes is False
         assert config.cmaes_preset == "cmaes"
-        assert config.cmaes_max_generations == 100
+        assert config.cmaes_max_generations is None  # None = adaptive
         assert config.cmaes_sigma == 0.5
         assert config.cmaes_tol_fun == 1e-8
         assert config.cmaes_tol_x == 1e-8

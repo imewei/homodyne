@@ -433,13 +433,13 @@ optimization:
     cmaes:
       enable: false # RECOMMENDED for laminar_flow
       preset: "cmaes-global" # "cmaes-fast" (50) | "cmaes" (100) | "cmaes-global" (200+)
-      max_generations: 300 # 300 for 13-param space convergence
+      max_generations: null # null = adaptive scaling based on scale_ratio
       sigma: 0.5 # Broader initial search, refined by CMA-ES
-      popsize: 40 # Larger population for 13-param (default ~11)
+      popsize: null # null = adaptive scaling (e.g. 200+ for scale_ratio>1e6)
       tol_fun: 1.0e-8
       tol_x: 1.0e-8
       restart_strategy: "bipop"
-      max_restarts: 20 # More restarts to escape local minima
+      max_restarts: 10 # Fewer restarts to limit wasted compute if stuck
       population_batch_size: null
       data_chunk_size: null
       memory_limit_gb: 8.0

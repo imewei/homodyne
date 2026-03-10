@@ -836,14 +836,14 @@ optimization:
 
       # CMA-ES global search settings
       max_generations:
-        300 # Maximum CMA-ES generations
-        # CONSTRAINT: > 0
+        null # null = adaptive scaling based on scale_ratio; or integer > 0
+        # CONSTRAINT: null or > 0
       sigma:
         0.5 # Initial step size (fraction of range)
         # CONSTRAINT: (0, 1]
       popsize:
-        40 # Population size (default ~4+3*ln(n_params))
-        # 40 recommended for 13-param laminar_flow
+        null # null = adaptive scaling (e.g. 200+ for scale_ratio>1e6)
+        # Set null to enable adaptive population sizing based on scale_ratio
       tol_fun:
         1.0e-8 # Function value tolerance
         # CONSTRAINT: > 0
@@ -856,7 +856,7 @@ optimization:
         "bipop" # "none" | "bipop"
         # bipop: alternates large/small populations
       max_restarts:
-        20 # Maximum BIPOP restarts
+        10 # Maximum BIPOP restarts (fewer = less wasted compute if stuck)
         # CONSTRAINT: >= 0
 
       # Memory management (null = auto-configure)

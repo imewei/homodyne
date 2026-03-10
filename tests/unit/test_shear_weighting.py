@@ -388,3 +388,62 @@ class TestShearWeightingPhysics:
 
         # 0 should get maximum weight (1.0)
         np.testing.assert_allclose(weights[2], 1.0, rtol=1e-8)  # 0
+
+    def test_phi0_degrees_not_radians_regression(self):
+        """Regression test: phi0 must be in degrees, not radians.
+
+        Bug: core.py applied np.degrees() to phi0 already in degrees,
+        producing phi0=-319.1 deg from phi0=-5.57 deg. This made weights
+        nearly flat [0.994, 1.010] instead of differentiating parallel vs
+        perpendicular angles. Weights should differ by at least 2x.
+
+        See: homodyne_laminar_flow_20260310_134835.log, line 143.
+        """
+        # Exact angles from the production run log
+        phi_angles = np.array([-5.79308414, 4.87834978, 90.00930023])
+        phi0_deg = -5.57  # phi0 in degrees (from config, NOT radians)
+
+        config = ShearWeightingConfig(
+            enable=True,
+            min_weight=0.30,
+            alpha=1.0,
+            initial_phi0=phi0_deg,
+            normalize=True,
+        )
+        weighter = ShearSensitivityWeighting(
+            phi_angles=phi_angles, n_physical=7, phi0_index=6, config=config
+        )
+
+        weights = weighter.get_weights(phi0_current=phi0_deg)
+
+        # Parallel angles (phi ~ 0) should have much higher weight than
+        # perpendicular (phi ~ 90). With correct phi0, the ratio should be >= 2x.
+        w_parallel_0 = weights[0]  # phi = -5.79 deg (near parallel)
+        w_parallel_1 = weights[1]  # phi = 4.88 deg (near parallel)
+        w_perp = weights[2]  # phi = 90.0 deg (perpendicular)
+
+        assert w_parallel_0 / w_perp >= 2.0, (
+            f"Parallel/perpendicular weight ratio too low: "
+            f"{w_parallel_0:.4f}/{w_perp:.4f} = {w_parallel_0/w_perp:.2f}. "
+            f"phi0 may be treated as radians instead of degrees."
+        )
+        assert w_parallel_1 / w_perp >= 2.0, (
+            f"Parallel/perpendicular weight ratio too low: "
+            f"{w_parallel_1:.4f}/{w_perp:.4f} = {w_parallel_1/w_perp:.2f}. "
+            f"phi0 may be treated as radians instead of degrees."
+        )
+
+        # Verify the bug scenario: if phi0 were wrongly converted via
+        # np.degrees(), weights would be nearly flat (ratio < 1.1)
+        wrong_phi0 = float(np.degrees(phi0_deg))  # -319.1 (the bug)
+        wrong_weights = weighter.get_weights(phi0_current=wrong_phi0)
+        wrong_ratio = wrong_weights.max() / wrong_weights.min()
+        correct_ratio = w_parallel_0 / w_perp
+        assert wrong_ratio < 1.2, (
+            f"Sanity check: wrong phi0 should produce near-flat weights, "
+            f"but ratio={wrong_ratio:.3f}"
+        )
+        assert wrong_ratio < correct_ratio, (
+            f"Correct phi0 must produce stronger differentiation than wrong phi0: "
+            f"correct_ratio={correct_ratio:.3f} vs wrong_ratio={wrong_ratio:.3f}"
+        )
