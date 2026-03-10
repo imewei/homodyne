@@ -64,7 +64,7 @@ dependencies = [
     "jaxlib>=0.8.2",
     "jaxopt>=0.8.3",
     "interpax>=0.3.12",
-    "nlsq>=0.6.4",
+    "nlsq>=0.6.10",
     "evosax>=0.2.0",
     # Bayesian inference
     "numpyro>=0.19.0",
