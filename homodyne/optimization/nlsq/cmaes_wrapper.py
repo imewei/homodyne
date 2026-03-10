@@ -622,6 +622,7 @@ class CMAESWrapper:
                     sigma=sigma,
                     bounds=bounds,
                     workflow=self.config.refinement_workflow,
+                    tr_solver="exact",  # Model uses closure data, not xdata
                     **refinement_kwargs,
                 )
 

@@ -164,6 +164,7 @@ class StandardExecutor(OptimizationExecutor):
                 verbose=0,
                 stability="auto",  # Enable memory management and stability
                 rescale_data=False,  # xdata is indices, not physical data
+                tr_solver="exact",  # Model uses closure data, not xdata
             )
 
             _duration = time.perf_counter() - _start_time
@@ -249,6 +250,7 @@ class LargeDatasetExecutor(OptimizationExecutor):
                 verbose=0,
                 show_progress=True,
                 stability="auto",  # Enable memory management and stability
+                tr_solver="exact",  # Model uses closure data, not xdata
             )
 
             # Handle different return formats from curve_fit_large
