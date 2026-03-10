@@ -2033,24 +2033,36 @@ def fit_nlsq_cmaes(
         # Use JAX operations throughout to avoid TracerArrayConversionError
         t1_mesh, t2_mesh = np.meshgrid(t1, t2, indexing="ij")
 
-        # Filter diagonal points (t1==t2) from CMA-ES optimization data.
-        # Experimental data has diagonal correction applied at load time, but CMA-ES
-        # theory values are NOT corrected — creating systematic residual mismatch.
-        # Other paths handle this (stratified LS corrects theory, hybrid streaming
-        # filters diagonal out). Compute mask in numpy before JAX conversion.
-        idx1, idx2 = np.meshgrid(np.arange(len(t1)), np.arange(len(t2)), indexing="ij")
-        non_diag_single = (idx1 != idx2).flatten()
-        non_diag_all = np.tile(non_diag_single, n_phi)
+        # Diagonal filtering for CMA-ES (v2.19.0: configurable)
+        # At t1==t2, the experimental g2 has a diagonal correction applied at load
+        # time but the CMA-ES theory function does not apply this correction,
+        # creating systematic residual mismatch. Two approaches:
+        # - "remove" (default): Filter diagonal points from data (clean, ~0.1% data loss)
+        # - "none": Keep all points (matches stratified LS point count, but residual
+        #   mismatch at diagonal persists for theory values)
+        diagonal_mode = cmaes_dict.get("diagonal_filtering", "remove")
 
-        n_before_diag = len(ydata)
-        ydata = ydata[non_diag_all]
-        sigma_flat = sigma_flat[non_diag_all]
-        n_data = len(ydata)
-        n_diag_removed = n_before_diag - n_data
-        logger.info(
-            f"Diagonal filtering: removed {n_diag_removed:,} points "
-            f"({100 * n_diag_removed / n_before_diag:.1f}%)"
-        )
+        idx1, idx2 = np.meshgrid(np.arange(len(t1)), np.arange(len(t2)), indexing="ij")
+        if diagonal_mode == "remove":
+            non_diag_single = (idx1 != idx2).flatten()
+            non_diag_all = np.tile(non_diag_single, n_phi)
+
+            n_before_diag = len(ydata)
+            ydata = ydata[non_diag_all]
+            sigma_flat = sigma_flat[non_diag_all]
+            n_data = len(ydata)
+            n_diag_removed = n_before_diag - n_data
+            logger.info(
+                f"Diagonal filtering: removed {n_diag_removed:,} points "
+                f"({100 * n_diag_removed / n_before_diag:.1f}%)"
+            )
+        else:
+            non_diag_single = np.ones(idx1.size, dtype=bool)
+            non_diag_all = np.ones(len(ydata), dtype=bool)
+            logger.info(
+                f"Diagonal filtering: disabled (mode={diagonal_mode!r}), "
+                f"keeping all {len(ydata):,} points"
+            )
 
         # Pre-compute data arrays as JAX arrays for efficiency (post diagonal filter)
         t1_flat_np = t1_mesh.flatten()[non_diag_single]
@@ -2082,6 +2094,47 @@ def fit_nlsq_cmaes(
         # Pre-compute physics factors (outside the traced function for efficiency)
         wavevector_q_squared_half_dt = 0.5 * (q**2) * dt_val
         sinc_prefactor = 0.5 / np.pi * q * L_val * dt_val
+
+        # ======================================================================
+        # SHEAR-SENSITIVITY WEIGHTING FOR CMA-ES (v2.19.0, Fix #6)
+        # ======================================================================
+        # Apply angle-dependent weighting to sigma to emphasize shear-sensitive
+        # angles (parallel/antiparallel to flow). Unlike stratified LS, CMA-ES
+        # is derivative-free so gradient cancellation is not the concern.
+        # Instead, weighting helps CMA-ES prioritize fit quality at angles
+        # that are most informative for shear parameters.
+        # ======================================================================
+        if (
+            is_laminar_flow
+            and ad_controller is not None
+            and ad_controller.is_enabled
+            and hasattr(ad_controller, "shear_weighter")
+            and ad_controller.shear_weighter is not None
+        ):
+            # Get phi0 from current x0 (may be NLSQ warm-started)
+            # phi0 is stored in radians in the parameter array; convert to degrees
+            # since ShearSensitivityWeighting.get_weights expects degrees
+            physical_params = x0[2:] if len(x0) > n_physical else x0
+            phi0_idx = _get_physical_param_names(analysis_mode).index("phi0")
+            phi0_current_deg = float(np.degrees(physical_params[phi0_idx]))
+
+            # Compute per-angle shear weights
+            shear_weights = ad_controller.shear_weighter.get_weights(phi0_current_deg)
+            shear_weights_np = np.asarray(shear_weights)
+
+            # Broadcast per-angle weights to per-point weights
+            # Each angle's weight applies to all its time points
+            per_point_weights = np.repeat(shear_weights_np, n_time_points)
+
+            # Apply weighting: divide sigma by sqrt(weight) so that
+            # higher-weighted angles have smaller effective sigma
+            # (larger contribution to chi-squared)
+            sigma_flat = sigma_flat / np.sqrt(np.maximum(per_point_weights, 0.01))
+
+            logger.info(
+                f"[CMA-ES] Shear weighting applied: phi0={phi0_current_deg:.1f} deg, "
+                f"weight range=[{np.min(shear_weights_np):.3f}, {np.max(shear_weights_np):.3f}]"
+            )
 
         # Import the core JAX computation function that supports element-wise mode
         from homodyne.core.jax_backend import _compute_g1_total_core
@@ -2162,7 +2215,51 @@ def fit_nlsq_cmaes(
         # Use 1D array to match NLSQ curve_fit's expected shape for refinement
         xdata = np.zeros(n_data)
 
-        # Run CMA-ES optimization
+        # ======================================================================
+        # PHASE 1: NLSQ WARM-START (v2.19.0)
+        # ======================================================================
+        # Run a quick NLSQ fit first to provide CMA-ES with an informed
+        # starting point. This prevents CMA-ES from wasting generations
+        # in poor regions of parameter space.
+        # ======================================================================
+        nlsq_warmstart_chi2 = float("inf")
+        nlsq_warmstart_params = None
+        nlsq_warmstart_cov = None
+
+        warmstart_enabled = cmaes_dict.get("nlsq_warmstart", True)
+        if warmstart_enabled:
+            logger.info("[CMA-ES] Phase 1: Running NLSQ warm-start...")
+            try:
+                warmstart_result = wrapper._run_nlsq_refinement(
+                    model_func=model_for_cmaes,
+                    xdata=xdata,
+                    ydata=ydata,
+                    p0=x0,
+                    bounds=bounds,
+                    sigma=sigma_flat,
+                )
+                if warmstart_result["success"] and warmstart_result["chi_squared"] is not None:
+                    nlsq_warmstart_chi2 = warmstart_result["chi_squared"]
+                    nlsq_warmstart_params = warmstart_result["popt"]
+                    nlsq_warmstart_cov = warmstart_result["pcov"]
+                    # Use NLSQ solution as CMA-ES starting point
+                    x0 = np.asarray(nlsq_warmstart_params)
+                    logger.info(
+                        f"[CMA-ES] NLSQ warm-start succeeded: chi2={nlsq_warmstart_chi2:.4e}, "
+                        f"using as CMA-ES starting point"
+                    )
+                else:
+                    logger.info(
+                        "[CMA-ES] NLSQ warm-start did not improve fit, "
+                        "using original starting point"
+                    )
+            except (ValueError, RuntimeError, TypeError, OSError, MemoryError) as e:
+                logger.warning(f"[CMA-ES] NLSQ warm-start failed: {e}")
+
+        # ======================================================================
+        # PHASE 2: CMA-ES GLOBAL SEARCH
+        # ======================================================================
+        logger.info("[CMA-ES] Phase 2: Running CMA-ES global optimization...")
         cmaes_result = wrapper.fit(
             model_func=model_for_cmaes,
             xdata=xdata,
@@ -2171,6 +2268,44 @@ def fit_nlsq_cmaes(
             bounds=bounds,
             sigma=sigma_flat,
         )
+
+        # ======================================================================
+        # PHASE 3: COMPARE AND SELECT BEST RESULT (v2.19.0)
+        # ======================================================================
+        # If NLSQ warm-start produced a better result than CMA-ES + refinement,
+        # use the NLSQ result instead. This ensures CMA-ES never degrades
+        # the solution quality compared to direct NLSQ.
+        # ======================================================================
+        if nlsq_warmstart_params is not None and nlsq_warmstart_chi2 < cmaes_result.chi_squared:
+            logger.info(
+                f"[CMA-ES] NLSQ warm-start result is better: "
+                f"NLSQ chi2={nlsq_warmstart_chi2:.4e} < "
+                f"CMA-ES chi2={cmaes_result.chi_squared:.4e}. "
+                f"Using NLSQ solution."
+            )
+            # Replace CMA-ES result with NLSQ warm-start result
+            cmaes_result = CMAESResult(
+                parameters=nlsq_warmstart_params,
+                covariance=nlsq_warmstart_cov,
+                chi_squared=nlsq_warmstart_chi2,
+                success=True,
+                diagnostics={
+                    **cmaes_result.diagnostics,
+                    "selected": "nlsq_warmstart",
+                    "cmaes_chi_squared": cmaes_result.chi_squared,
+                    "nlsq_warmstart_chi_squared": nlsq_warmstart_chi2,
+                },
+                method_used="cmaes",
+                nlsq_refined=True,
+                message="NLSQ warm-start selected over CMA-ES (lower chi-squared)",
+            )
+        else:
+            if nlsq_warmstart_params is not None:
+                logger.info(
+                    f"[CMA-ES] CMA-ES result is better: "
+                    f"CMA-ES chi2={cmaes_result.chi_squared:.4e} <= "
+                    f"NLSQ chi2={nlsq_warmstart_chi2:.4e}"
+                )
 
         execution_time = time.time() - start_time
 
@@ -2251,6 +2386,16 @@ def fit_nlsq_cmaes(
         # Convert CMAESResult to OptimizationResult
         n_params = len(final_params)
         dof = max(1, n_data - n_params)
+        reduced_chi_squared = cmaes_result.chi_squared / dof
+
+        # Determine quality flag using reduced chi-squared thresholds
+        # consistent with NLSQWrapper's 3-level system (wrapper.py:3577-3583)
+        if reduced_chi_squared < 1.5:
+            quality_flag = "good"
+        elif reduced_chi_squared < 3.0:
+            quality_flag = "marginal"
+        else:
+            quality_flag = "poor"
 
         result = OptimizationResult(
             parameters=final_params,
@@ -2263,7 +2408,7 @@ def fit_nlsq_cmaes(
                 final_covariance if final_covariance is not None else np.eye(n_params)
             ),
             chi_squared=cmaes_result.chi_squared,
-            reduced_chi_squared=cmaes_result.chi_squared / dof,
+            reduced_chi_squared=reduced_chi_squared,
             convergence_status="converged" if cmaes_result.success else "failed",
             iterations=cmaes_result.diagnostics.get("generations", 0),
             execution_time=execution_time,
@@ -2281,7 +2426,7 @@ def fit_nlsq_cmaes(
                 "final_params": n_params,
             },
             recovery_actions=[],
-            quality_flag="good" if cmaes_result.success else "poor",
+            quality_flag=quality_flag,
         )
 
         logger.info("=" * 60)

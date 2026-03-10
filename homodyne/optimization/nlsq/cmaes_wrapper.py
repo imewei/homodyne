@@ -812,6 +812,33 @@ class CMAESWrapper:
         # Build CMAESConfig with memory settings
         cmaes_config = self.config.to_cmaes_config(n_params)
 
+        # Adaptive population sizing for high scale-ratio problems (v2.19.0)
+        # Default popsize (4+3*ln(9) ~ 11) is too small for multi-scale problems.
+        # Scale up popsize and generations when scale ratio is large, unless
+        # the user explicitly configured a popsize.
+        if self.config.popsize is None and scale_ratio > 1e3:
+            from nlsq.global_optimization import compute_default_popsize
+
+            default_pop = compute_default_popsize(n_params)
+            if scale_ratio > 1e6:
+                # Very high scale ratio (D0 ~ 1e4 vs gamma_dot ~ 1e-3)
+                adaptive_pop = max(200, default_pop * 10)
+                adaptive_gen = max(500, cmaes_config.max_generations * 3)
+            elif scale_ratio > 1e4:
+                adaptive_pop = max(100, default_pop * 5)
+                adaptive_gen = max(300, cmaes_config.max_generations * 2)
+            else:
+                adaptive_pop = max(50, default_pop * 3)
+                adaptive_gen = max(200, cmaes_config.max_generations)
+
+            logger.info(
+                f"[CMA-ES] Adaptive scaling: scale_ratio={scale_ratio:.2e} -> "
+                f"popsize {cmaes_config.popsize}->{adaptive_pop}, "
+                f"max_gen {cmaes_config.max_generations}->{adaptive_gen}"
+            )
+            cmaes_config.popsize = adaptive_pop
+            cmaes_config.max_generations = adaptive_gen
+
         # Override with auto-configured memory settings
         if pop_batch is not None:
             cmaes_config.population_batch_size = pop_batch
