@@ -36,7 +36,7 @@ function rather than NLSQ's MemoryBudgetSelector.
 """
 
 # =============================================================================
-# NLSQ Package Imports (v0.6.4+)
+# NLSQ Package Imports (v0.6.10+)
 # Core curve fitting API with CurveFit class for JIT caching
 # =============================================================================
 

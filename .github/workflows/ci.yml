@@ -18,6 +18,9 @@ env:
   JAX_ENABLE_X64: "1"
   PYTHONDONTWRITEBYTECODE: 1
   PYTHONUNBUFFERED: 1
+  # pytest-qt (transitive dep via nlsq) needs a Qt platform plugin;
+  # offscreen avoids requiring a display server on headless CI runners.
+  QT_QPA_PLATFORM: offscreen
 
 jobs:
   lint:
@@ -86,6 +89,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: Install Qt runtime dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1
 
       - name: Install dependencies
         run: uv sync
