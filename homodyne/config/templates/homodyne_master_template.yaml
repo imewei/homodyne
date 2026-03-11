@@ -844,8 +844,7 @@ optimization:
       sigma_warmstart:
         0.05 # Reduced sigma when NLSQ warm-start is active (local refinement)
         # CONSTRAINT: (0, 1]
-      warmstart_auto_skip:
-        true # Skip CMA-ES global search if warm-start reduced chi2 is below threshold
+      warmstart_auto_skip: true # Skip CMA-ES global search if warm-start reduced chi2 is below threshold
       warmstart_skip_threshold:
         5.0 # Skip CMA-ES if warm-start reduced chi2 < this value
         # CONSTRAINT: > 0
