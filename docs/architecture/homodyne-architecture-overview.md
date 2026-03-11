@@ -42,7 +42,7 @@ ______________________________________________________________________
 │           + per-angle scaling: auto(+2), constant(+0), individual(+2*n_phi),   │
 │                                fourier(+2*(1+2K) coefficients)                   │
 │                                                                                 │
-│   Stack:  Python 3.12+ | JAX >= 0.8.2 (CPU-only) | NumPy >= 2.3 | NLSQ >= 0.6.4│
+│   Stack:  Python 3.12+ | JAX >= 0.8.3 (CPU-only) | NumPy >= 2.3 | NLSQ >= 0.6.10│
 │           NumPyro (MCMC) | h5py (HDF5) | ArviZ (diagnostics)                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
@@ -93,7 +93,7 @@ ______________________________________________________________________
 │  NLSQ OPTIMIZATION               │  │  CMC BAYESIAN INFERENCE                  │
 │  optimization/nlsq/              │  │  optimization/cmc/                       │
 │                                  │  │                                          │
-│  Trust-Region L-M (NLSQ 0.6.4)  │  │  Consensus Monte Carlo (NumPyro NUTS)   │
+│  Trust-Region L-M (NLSQ 0.6.10)  │  │  Consensus Monte Carlo (NumPyro NUTS)   │
 │  NLSQAdapter / NLSQWrapper       │  │  Sharding + Multiprocessing Backend     │
 │  Anti-Degeneracy Controller      │  │  Adaptive Sampling + Reparameterization │
 │  CMA-ES Global Optimization      │  │  Quality Filtering + Diagnostics        │
@@ -163,7 +163,6 @@ homodyne/                              # Root package (358 lines)
 │   ├── physics_factors.py    369 L    #   Pre-computed factor matrices
 │   ├── physics_utils.py      369 L    #   Shared: safe_sinc, safe_exp, D(q)
 │   ├── scaling_utils.py      335 L    #   Per-angle scaling transforms
-│   ├── backend_api.py        192 L    #   Backend selection API
 │   └── __init__.py            80 L
 │
 ├── data/                  12,302 L    # HDF5 loading & preprocessing
@@ -225,10 +224,16 @@ homodyne/                              # Root package (358 lines)
 │   │   ├── results.py        245 L    #     Result dataclass
 │   │   ├── parameter_index_mapper.py 255 L
 │   │   ├── jacobian.py       250 L    #     Jacobian inspection
-│   │   └── strategies/      4,054 L   #     Execution strategies
+│   │   ├── fallback_chain.py 406 L    #     OptimizationStrategy enum, fallback logic
+│   │   ├── recovery.py       473 L    #     3-attempt error recovery, diagnosis
+│   │   ├── parallel_accumulator.py 747 L  #  Parallel JTJ/JTr accumulation
+│   │   └── strategies/               #     Execution strategies
+│   │       ├── stratified_ls.py 934 L #       Primary: stratified LS + anti-degeneracy
+│   │       ├── hybrid_streaming.py 2,494 L #  Hybrid streaming for large datasets
 │   │       ├── residual.py     786 L  #       Standard residual function
 │   │       ├── residual_jit.py 545 L  #       JIT-compiled variant
-│   │       ├── chunking.py   1,205 L  #       Out-of-core streaming
+│   │       ├── out_of_core.py  545 L  #       Out-of-core JTJ accumulation
+│   │       ├── chunking.py   1,205 L  #       Angle-stratified chunking
 │   │       ├── sequential.py 1,020 L  #       Per-angle sequential fitting
 │   │       └── executors.py    428 L  #       Strategy executor dispatch
 │   │   ├── config_utils.py    132 L    #     Config utility helpers
@@ -248,10 +253,11 @@ homodyne/                              # Root package (358 lines)
 │       ├── io.py             430 L    #     Shard I/O + shared memory
 │       ├── scaling.py        344 L    #     Per-angle scaling for CMC
 │       ├── reparameterization.py 336 L #    Log-space transforms
-│       ├── backends/       3,625 L    #     Execution backends
+│       ├── backends/                  #     Execution backends
 │       │   ├── multiprocessing.py 1,953 L  # Primary: process pool
 │       │   ├── base.py       887 L    #       ABC + scheduling
 │       │   ├── pbs.py        494 L    #       PBS/Torque cluster
+│       │   ├── worker_pool.py 354 L   #       Worker pool management
 │       │   └── pjit.py       269 L    #       pjit single-process
 │       └── __init__.py        37 L
 │
@@ -635,7 +641,7 @@ fit_nlsq_jax(data, config)                    # core.py (2,327 L)
     │   ├── Standard: residual.py (786 L) → JIT-compiled: residual_jit.py (545 L)
     │   └── Out-of-core: chunking.py (1,205 L) → sequential.py (1,020 L)
     │
-    ├── 6. NLSQ 0.6.4 curve_fit() Execution
+    ├── 6. NLSQ 0.6.10 curve_fit() Execution
     │   ├── Trust-region Levenberg-Marquardt
     │   ├── Jacobian via JAX autodiff (or finite-difference fallback)
     │   └── executors.py dispatches strategy
@@ -901,7 +907,7 @@ Comprehensive pre-flight checks:
 |-------|---------|
 | Python version | >= 3.12 required |
 | JAX availability | Import + Float64 mode |
-| NLSQ version | >= 0.6.4 |
+| NLSQ version | >= 0.6.10 |
 | NumPyro availability | For CMC method |
 | h5py availability | For HDF5 loading |
 | Memory | Sufficient RAM for dataset |
@@ -1129,7 +1135,7 @@ optimization/nlsq/core.py:fit_nlsq_jax(data, config)
     │   └── ShearWeighting → balance angular contributions
     ├── Residual function: JIT-compiled g2(params) - c2_exp
     │   └── physics_nlsq.py → meshgrid-optimized g1/g2
-    ├── NLSQ 0.6.4 curve_fit() → Trust-region L-M
+    ├── NLSQ 0.6.10 curve_fit() → Trust-region L-M
     │   ├── JAX autodiff Jacobian (or finite-difference fallback)
     │   ├── DOF = n_points - effective_params (9, not 53)
     │   └── Convergence: xtol + ftol (both required for OOC)
@@ -1223,7 +1229,7 @@ ______________________________________________________________________
 |---------|---------|---------|---------|
 | JAX | >= 0.8.2 | core, optimization | JIT, vmap, grad, hessian |
 | NumPy | >= 2.3 | data, io | Array I/O boundaries |
-| NLSQ | >= 0.6.4 | optimization/nlsq | Trust-region L-M solver |
+| NLSQ | >= 0.6.10 | optimization/nlsq | Trust-region L-M solver |
 | NumPyro | >= 0.19 | optimization/cmc | NUTS sampling |
 | h5py | * | data | HDF5 loading |
 | ArviZ | * | optimization/cmc, viz | MCMC diagnostics |

@@ -25,13 +25,13 @@ Requirements
      - 3.12
      - Required for modern type-hint syntax
    * - JAX
-     - 0.8.2
+     - 0.8.3
      - CPU-only build; GPU not supported
    * - NumPy
      - 2.3
      - Array operations and I/O boundaries
    * - NLSQ
-     - 0.6.4
+     - 0.6.10
      - Trust-region LM optimizer (Homodyne's ``curve_fit``)
    * - NumPyro
      - 0.19
@@ -158,8 +158,8 @@ Expected output:
 
 .. code-block:: text
 
-   Homodyne:  2.22.6
-   JAX:       0.8.x
+   Homodyne:  2.22.7
+   JAX:       0.8.3
    Devices:   [CpuDevice(id=0)]
    JAX dot:   (100, 100)
 

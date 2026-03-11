@@ -118,7 +118,7 @@ def fit_mcmc_jax(
     method: str = "mcmc",
     cmc_config: dict | None = None,
     initial_values: dict | None = None,
-    parameter_space: ParameterSpace = None,
+    parameter_space: ParameterSpace | None = None,
     dt: float | None = None,
     output_dir: Path | str | None = None,
     progress_bar: bool = True,
@@ -999,9 +999,9 @@ class CMCResult:
     recovery_actions: list[str] | None = None
     quality_flag: str | None = None          # "good", "warning", "poor"
 
-    # Legacy per-angle stats
-    mean_params: np.ndarray | None = None
-    std_params: np.ndarray | None = None
+    # Per-angle parameter statistics
+    mean_params: ParameterStats = field(default_factory=lambda: ParameterStats([], []))
+    std_params: ParameterStats = field(default_factory=lambda: ParameterStats([], []))
     mean_contrast: np.ndarray | None = None
     std_contrast: np.ndarray | None = None
     mean_offset: np.ndarray | None = None

@@ -168,8 +168,8 @@ initial_parameters:
 │    D_offset:           [-1e5, 1e5]                                       │
 │    gamma_dot_t0:       [1e-6, 1e4]                                       │
 │    beta:               [-2.0, 2.0]                                       │
-│    gamma_dot_t_offset: [0.01, 100.0]                                     │
-│    phi0:               [-pi, pi]                                         │
+│    gamma_dot_t_offset: [-0.1, 0.1]                                       │
+│    phi0:               [-10, 10] degrees                                 │
 │    contrast:           [0.0, 1.0]  (Note: parameter_registry.py uses    │
 │                                    [0.01, 1.5] — inconsistency exists)  │
 │    offset:             [0.5, 1.5]                                        │

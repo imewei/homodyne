@@ -431,6 +431,83 @@ Example for laminar flow:
       gamma_dot_t_offset: 0.01
       phi0: 0.1
 
+CMA-ES Configuration
+^^^^^^^^^^^^^^^^^^^^^^
+
+Global optimization using CMA-ES for multi-scale problems where gradient-based
+NLSQ may converge to local minima:
+
+.. code-block:: yaml
+
+    cmaes:
+      enable: false                       # Enable CMA-ES global optimization
+      preset: "cmaes-global"              # Preset: "cmaes-global" (200 gen) | "cmaes-local" (50 gen)
+      refine_with_nlsq: true              # Refine CMA-ES result with NLSQ
+      nlsq_warmstart: true                # Run NLSQ first, use as CMA-ES starting point
+      sigma: 0.5                          # Initial step size (global search)
+      sigma_warmstart: 0.05               # Reduced step size when warm-start is active
+      diagonal_filtering: "remove"        # "remove" (default) | "none"
+      warmstart_auto_skip: true           # Skip CMA-ES if warm-start is good enough
+      warmstart_skip_threshold: 5.0       # Skip if warm-start reduced chi2 < threshold
+
+**enable**: Enable CMA-ES global optimization
+
+- Default: false
+- Set true when D0 ~ 1e4 and gamma_dot_t0 ~ 1e-3 (scale ratio > 1e6)
+
+**nlsq_warmstart**: Run NLSQ first as Phase 1
+
+- Default: true
+- NLSQ result becomes CMA-ES starting point
+- Reduces search space from global to local refinement
+
+**sigma** / **sigma_warmstart**: CMA-ES step size
+
+- ``sigma`` (0.5): Used without warm-start for global exploration
+- ``sigma_warmstart`` (0.05): Used with warm-start for local refinement
+- Smaller sigma prevents CMA-ES from wandering far from the NLSQ solution
+
+**warmstart_auto_skip**: Skip CMA-ES when NLSQ is sufficient
+
+- Default: true
+- If NLSQ warm-start achieves reduced chi-squared below ``warmstart_skip_threshold``,
+  Phase 2 (CMA-ES) is skipped entirely
+- Prevents wasted computation when the warm-start already found a near-optimal solution
+
+**warmstart_skip_threshold**: Chi-squared threshold for auto-skip
+
+- Default: 5.0
+- Lower = more aggressive skipping (skip more often)
+- Higher = always run CMA-ES even when warm-start is good
+
+**diagonal_filtering**: How to handle diagonal elements
+
+- "remove": Remove diagonal from the cost function (default, recommended)
+- "none": Include diagonal elements
+
+**Adaptive popsize**: When ``popsize`` is not explicitly set, CMA-ES scales
+population size based on the parameter scale ratio:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 30 40
+
+   * - Scale Ratio
+     - Popsize
+     - Max Generations
+   * - > 1e6
+     - 200+
+     - 500+
+   * - > 1e4
+     - 100+
+     - 300+
+   * - > 1e3
+     - 50+
+     - 200+
+   * - <= 1e3
+     - default (4+3*ln(n))
+     - preset default
+
 Stratification Configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

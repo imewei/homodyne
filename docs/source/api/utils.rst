@@ -178,3 +178,17 @@ boundaries to provide clear diagnostics.
    :members:
    :undoc-members:
    :show-inheritance:
+
+----
+
+homodyne.utils.async\_io
+--------------------------
+
+Asynchronous I/O utilities for overlapping data loading and processing.
+Used internally by the CMC multiprocessing backend to prefetch shards
+while the current shard is being sampled.
+
+.. automodule:: homodyne.utils.async_io
+   :members:
+   :undoc-members:
+   :show-inheritance:

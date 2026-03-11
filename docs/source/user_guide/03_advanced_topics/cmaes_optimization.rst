@@ -135,6 +135,48 @@ The recommended pipeline:
 
 ---
 
+Warm-Start Optimization
+-------------------------
+
+By default, CMA-ES uses **NLSQ warm-start** (``nlsq_warmstart: true``).
+This runs a quick NLSQ fit first, then uses the result as CMA-ES's starting
+point with a reduced step size:
+
+.. code-block:: yaml
+
+   optimization:
+     nlsq:
+       cmaes:
+         enable: true
+         nlsq_warmstart: true           # Phase 1: run NLSQ first (default)
+         sigma_warmstart: 0.05          # Reduced step size for local refinement
+         warmstart_auto_skip: true      # Skip CMA-ES if NLSQ is good enough
+         warmstart_skip_threshold: 5.0  # Skip if reduced chi2 < 5.0
+
+**How it works:**
+
+1. **Phase 1 (NLSQ)**: A quick NLSQ fit runs with the standard configuration.
+2. **Auto-skip check**: If the NLSQ reduced chi-squared is below
+   ``warmstart_skip_threshold`` (default 5.0), CMA-ES is skipped entirely.
+   This avoids wasted computation when NLSQ already found a good solution.
+3. **Phase 2 (CMA-ES)**: If not skipped, CMA-ES runs with ``sigma_warmstart``
+   (0.05) instead of ``sigma`` (0.5), restricting the search to a local
+   neighborhood around the NLSQ solution.
+4. **Comparison**: The best result by chi-squared (NLSQ or CMA-ES) is kept.
+
+**When to tune these settings:**
+
+- **Increase** ``warmstart_skip_threshold`` (e.g., 10.0) if CMA-ES is
+  rarely improving on NLSQ — saves computation time.
+- **Decrease** ``warmstart_skip_threshold`` (e.g., 2.0) if you want CMA-ES
+  to run more aggressively even when NLSQ is decent.
+- **Increase** ``sigma_warmstart`` (e.g., 0.1) if CMA-ES needs a wider
+  search around the NLSQ solution.
+- Set ``nlsq_warmstart: false`` to skip Phase 1 and run CMA-ES as a
+  pure global search (uses ``sigma: 0.5``).
+
+---
+
 Performance Considerations
 ----------------------------
 

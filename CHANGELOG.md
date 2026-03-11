@@ -7,14 +7,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
-## [2.22.7] - 2026-03-10
+## [2.22.7] - 2026-03-11
 
 ### CMA-ES Warm-Start Performance Optimization
 
 Performance fix for CMA-ES global optimization with NLSQ warm-start, preventing wasted
-computation when warm-start provides a near-optimal solution.
+computation when warm-start provides a near-optimal solution. Also fixes flaky CI
+performance tests and updates pre-commit/RTD configuration.
 
-5 files changed across 4 commits.
+7 files changed across 9 commits.
 
 **Fixes:**
 
@@ -35,6 +36,9 @@ computation when warm-start provides a near-optimal solution.
   - New config: `cmaes.warmstart_auto_skip` (default true),
     `cmaes.warmstart_skip_threshold` (default 5.0)
 
+- **fix(nlsq)**: Disable BIPOP for warm-start and normalize auto-skip chi-squared
+  threshold using base default sigma (`cmaes_wrapper.py`, `core.py`)
+
 - **fix(nlsq)**: Add DEBUG-level bounds logging in CMA-ES `fit()` method for faster
   debugging of parameter bound issues (`cmaes_wrapper.py`)
 
@@ -44,6 +48,22 @@ computation when warm-start provides a near-optimal solution.
   defaults, YAML parsing, roundtrip serialization, validation, sigma override, and
   integration tests verifying warm-start vs default sigma selection
   (`test_cmaes_wrapper.py`)
+
+- **test(ci)**: Fix flaky performance tests for CI stability
+  (`test_nlsq_core.py`, `test_diagonal_correction.py`, `test_jax_backend.py`,
+  `test_shear_weighting.py`, `test_logging_integration.py`)
+
+  - Add JIT warmup before timing in NLSQ scaling test
+  - Relax timing thresholds to accommodate CI runner variance
+  - Replace relative JIT cache comparison with absolute threshold
+
+**Build:**
+
+- **build**: Update pre-commit hook versions: ruff 0.15.2 -> 0.15.5, bandit 1.9.3 ->
+  1.9.4, nlsq >= 0.6.10, jax >= 0.8.3, arviz >= 1.0
+
+- **build**: Fix `.readthedocs.yaml` to remove obsolete `[docs]` extras reference
+  (extras were consolidated into standard dependencies in v2.22.6)
 
 **Documentation:**
 

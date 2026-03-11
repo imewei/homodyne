@@ -332,7 +332,11 @@ optimization:
       enable: true                      # Enable CMA-ES global optimization
       preset: "cmaes"                   # "cmaes-fast", "cmaes", "cmaes-global"
       max_generations: 100              # Maximum CMA-ES generations
-      sigma: 0.5                        # Initial step size (fraction of bounds)
+      sigma: 0.5                        # Initial step size (global search)
+      sigma_warmstart: 0.05             # Reduced step size when warm-start is active
+      nlsq_warmstart: true              # Run NLSQ first, use as CMA-ES starting point
+      warmstart_auto_skip: true         # Skip CMA-ES if warm-start is good enough
+      warmstart_skip_threshold: 5.0     # Skip if warm-start reduced chi2 < threshold
       tol_fun: 1.0e-8                   # Function tolerance
       tol_x: 1.0e-8                     # Parameter tolerance
       restart_strategy: "bipop"         # "none" or "bipop"
