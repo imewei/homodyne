@@ -377,9 +377,7 @@ class CMAESWrapperConfig:
             "cmaes": 100,
             "cmaes-global": 200,
         }
-        max_gen = preset_generations.get(
-            self.preset, self.max_generations or 100
-        )
+        max_gen = preset_generations.get(self.preset, self.max_generations or 100)
 
         return CMAESConfig(
             popsize=popsize,

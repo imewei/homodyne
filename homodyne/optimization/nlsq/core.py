@@ -2237,7 +2237,10 @@ def fit_nlsq_cmaes(
                     bounds=bounds,
                     sigma=sigma_flat,
                 )
-                if warmstart_result["success"] and warmstart_result["chi_squared"] is not None:
+                if (
+                    warmstart_result["success"]
+                    and warmstart_result["chi_squared"] is not None
+                ):
                     nlsq_warmstart_chi2 = warmstart_result["chi_squared"]
                     nlsq_warmstart_params = warmstart_result["popt"]
                     nlsq_warmstart_cov = warmstart_result["pcov"]
@@ -2276,7 +2279,10 @@ def fit_nlsq_cmaes(
         # use the NLSQ result instead. This ensures CMA-ES never degrades
         # the solution quality compared to direct NLSQ.
         # ======================================================================
-        if nlsq_warmstart_params is not None and nlsq_warmstart_chi2 < cmaes_result.chi_squared:
+        if (
+            nlsq_warmstart_params is not None
+            and nlsq_warmstart_chi2 < cmaes_result.chi_squared
+        ):
             logger.info(
                 f"[CMA-ES] NLSQ warm-start result is better: "
                 f"NLSQ chi2={nlsq_warmstart_chi2:.4e} < "

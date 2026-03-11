@@ -424,12 +424,12 @@ class TestShearWeightingPhysics:
 
         assert w_parallel_0 / w_perp >= 2.0, (
             f"Parallel/perpendicular weight ratio too low: "
-            f"{w_parallel_0:.4f}/{w_perp:.4f} = {w_parallel_0/w_perp:.2f}. "
+            f"{w_parallel_0:.4f}/{w_perp:.4f} = {w_parallel_0 / w_perp:.2f}. "
             f"phi0 may be treated as radians instead of degrees."
         )
         assert w_parallel_1 / w_perp >= 2.0, (
             f"Parallel/perpendicular weight ratio too low: "
-            f"{w_parallel_1:.4f}/{w_perp:.4f} = {w_parallel_1/w_perp:.2f}. "
+            f"{w_parallel_1:.4f}/{w_perp:.4f} = {w_parallel_1 / w_perp:.2f}. "
             f"phi0 may be treated as radians instead of degrees."
         )
 
