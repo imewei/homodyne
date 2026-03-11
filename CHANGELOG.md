@@ -11,8 +11,8 @@ ______________________________________________________________________
 
 ### CMA-ES Warm-Start Performance Optimization
 
-Performance fix for CMA-ES global optimization with NLSQ warm-start, preventing
-wasted computation when warm-start provides a near-optimal solution.
+Performance fix for CMA-ES global optimization with NLSQ warm-start, preventing wasted
+computation when warm-start provides a near-optimal solution.
 
 5 files changed across 4 commits.
 
@@ -20,6 +20,7 @@ wasted computation when warm-start provides a near-optimal solution.
 
 - **fix(nlsq)**: Add warm-start-aware sigma for CMA-ES global search
   (`cmaes_wrapper.py`, `config.py`)
+
   - When NLSQ warm-start is active, CMA-ES now uses `sigma_warmstart` (default 0.05)
     instead of `sigma` (default 0.5). Prevents CMA-ES from exploring far from the
     near-optimal warm-start solution, which caused BIPOP stagnation and 10 premature
@@ -27,6 +28,7 @@ wasted computation when warm-start provides a near-optimal solution.
   - New config: `cmaes.sigma_warmstart` (default 0.05)
 
 - **fix(nlsq)**: Add auto-skip for CMA-ES when warm-start is sufficient (`core.py`)
+
   - When `warmstart_auto_skip: true` (default), CMA-ES global search is skipped entirely
     if the NLSQ warm-start achieves a reduced chi-squared below the configurable
     `warmstart_skip_threshold` (default 5.0).
