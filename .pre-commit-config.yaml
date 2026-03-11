@@ -24,7 +24,7 @@ repos:
 
   # Python linting and formatting (ruff replaces flake8, isort, black)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.2
+    rev: v0.15.5
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -32,7 +32,7 @@ repos:
 
   # Security scanning
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.9.3
+    rev: 1.9.4
     hooks:
       - id: bandit
         args: [-c, pyproject.toml]
@@ -55,10 +55,10 @@ repos:
           - types-decorator>=5.1
           - types-setuptools>=68.0
           - types-pyyaml>=6.0
-          - jax>=0.8.2
-          - nlsq>=0.6.4
+          - jax>=0.8.3
+          - nlsq>=0.6.10
           - scikit-learn>=1.6
-          - arviz>=0.21
+          - arviz>=1.0
         exclude: ^(tests/|docs/)
 
   # Markdown formatting
@@ -83,7 +83,7 @@ repos:
     hooks:
       - id: nbqa-ruff
         args: [--ignore=E402, --ignore=B905]
-        additional_dependencies: [ruff>=0.15.2]
+        additional_dependencies: [ruff>=0.15.5]
 
 default_language_version:
   python: python3.13
