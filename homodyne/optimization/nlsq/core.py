@@ -204,6 +204,11 @@ NLSQ_AVAILABLE = HAS_NLSQ_WRAPPER and JAX_AVAILABLE
 
 logger = get_logger(__name__)
 
+# Default sigma used when experimental uncertainties are not provided.
+# Applied at lines ~715 and ~1775 when creating placeholder sigma arrays.
+# Used in auto-skip normalization to undo the 1/sigma^2 chi2 inflation.
+_DEFAULT_SIGMA = 0.01
+
 
 class NLSQResult:
     """Result container for NLSQ optimization compatible with FitResult."""
@@ -712,7 +717,7 @@ def _normalize_data_to_object(data: Any, config: Any, logger: Any) -> Any:
         # Generate default sigma (uncertainty) if missing
         if not hasattr(data_obj, "sigma") and hasattr(data_obj, "g2"):
             g2_array = np.asarray(data_obj.g2)  # type: ignore[attr-defined]
-            data_obj.sigma = 0.01 * np.ones_like(g2_array)  # type: ignore[attr-defined]
+            data_obj.sigma = _DEFAULT_SIGMA * np.ones_like(g2_array)  # type: ignore[attr-defined]
             data_obj.sigma_is_default = True  # type: ignore[attr-defined]
             logger.debug(f"Generated default sigma: shape {data_obj.sigma.shape}")  # type: ignore[attr-defined]
         else:
@@ -1772,7 +1777,7 @@ def fit_nlsq_cmaes(
         if not _sigma_is_default:
             sigma = np.asarray(data["sigma"])
         else:
-            sigma = 0.01 * np.ones_like(g2)
+            sigma = _DEFAULT_SIGMA * np.ones_like(g2)
 
         # Flatten data for CMA-ES
         # Flatten g2 and sigma
@@ -2286,24 +2291,23 @@ def fit_nlsq_cmaes(
             if n_data_eff <= 0:
                 warmstart_reduced_chi2 = float("inf")
             else:
-                # When sigma is a default placeholder (0.01), chi2 is inflated
-                # by 1/sigma^2 = 10,000x relative to unweighted residuals.
-                # Undo this inflation so the threshold comparison uses
-                # physically meaningful units. Use mean(sigma^2) to handle
-                # non-uniform sigma (e.g., after shear weighting).
+                # When sigma is a default placeholder, chi2 is inflated by
+                # 1/sigma^2 relative to unweighted residuals. Undo this
+                # inflation using the known base sigma value directly, not the
+                # post-shear-weighted sigma_flat. Shear weighting is intentional
+                # physics that should remain in chi2 — only the arbitrary
+                # default inflation needs to be removed.
                 effective_chi2 = nlsq_warmstart_chi2
                 if _sigma_is_default:
-                    sigma_scale_sq = float(np.mean(sigma_flat**2))
-                    effective_chi2 = nlsq_warmstart_chi2 * sigma_scale_sq
+                    effective_chi2 = nlsq_warmstart_chi2 * _DEFAULT_SIGMA**2
                 warmstart_reduced_chi2 = effective_chi2 / n_data_eff
             if warmstart_reduced_chi2 < warmstart_skip_threshold:
                 skip_cmaes = True
                 logger.info(
                     f"[CMA-ES] Auto-skip: NLSQ warm-start reduced chi2="
                     f"{warmstart_reduced_chi2:.4f} < threshold="
-                    f"{warmstart_skip_threshold:.1f}. "
-                    f"{'(sigma-normalized) ' if _sigma_is_default else ''}"
-                    f"Skipping CMA-ES global search."
+                    f"{warmstart_skip_threshold:.1f}. Skipping CMA-ES global search."
+                    f"{' (chi2 sigma-normalized for default sigma)' if _sigma_is_default else ''}"
                 )
 
         if skip_cmaes:
