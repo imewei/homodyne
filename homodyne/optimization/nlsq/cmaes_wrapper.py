@@ -827,9 +827,12 @@ class CMAESWrapper:
         )
 
         # Log bounds for debugging (v2.20.0)
+        # Bounds order follows _bounds_to_arrays canonical order:
+        # [contrast, offset, D0, alpha, D_offset, gamma_dot_t0, beta,
+        #  gamma_dot_t_offset, phi0] (may differ from config parameter order)
         lower, upper = bounds
         logger.debug(
-            "[CMA-ES] Parameter bounds: lower=%s, upper=%s",
+            "[CMA-ES] Parameter bounds (canonical order): lower=%s, upper=%s",
             np.array2string(lower, precision=4, separator=", "),
             np.array2string(upper, precision=4, separator=", "),
         )
@@ -854,6 +857,20 @@ class CMAESWrapper:
         cmaes_config = self.config.to_cmaes_config(
             n_params, sigma_override=effective_sigma
         )
+
+        # When warm-start is active, override BIPOP -> none (v2.21.0)
+        # BIPOP large-population restarts are designed for global exploration,
+        # but with sigma_warmstart (small sigma), the large populations sample
+        # densely in a small neighborhood without actually exploring broadly.
+        # A single focused run with the full generation budget is more coherent
+        # for local refinement around the warm-start solution.
+        if warmstart_active and cmaes_config.restart_strategy == "bipop":
+            cmaes_config.restart_strategy = "none"
+            cmaes_config.max_restarts = 0
+            logger.info(
+                "[CMA-ES] Warm-start: overriding restart_strategy='bipop' -> 'none' "
+                "(BIPOP large-population restarts are incoherent with small sigma_warmstart)"
+            )
 
         # Adaptive population sizing for high scale-ratio problems (v2.19.0)
         # Default popsize (4+3*ln(9) ~ 11) is too small for multi-scale problems.

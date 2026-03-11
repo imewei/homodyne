@@ -1768,7 +1768,8 @@ def fit_nlsq_cmaes(
             t2 = t2[0, :]
 
         # Get sigma (uncertainty)
-        if "sigma" in data:
+        _sigma_is_default = "sigma" not in data
+        if not _sigma_is_default:
             sigma = np.asarray(data["sigma"])
         else:
             sigma = 0.01 * np.ones_like(g2)
@@ -2285,13 +2286,24 @@ def fit_nlsq_cmaes(
             if n_data_eff <= 0:
                 warmstart_reduced_chi2 = float("inf")
             else:
-                warmstart_reduced_chi2 = nlsq_warmstart_chi2 / n_data_eff
+                # When sigma is a default placeholder (0.01), chi2 is inflated
+                # by 1/sigma^2 = 10,000x relative to unweighted residuals.
+                # Undo this inflation so the threshold comparison uses
+                # physically meaningful units. Use mean(sigma^2) to handle
+                # non-uniform sigma (e.g., after shear weighting).
+                effective_chi2 = nlsq_warmstart_chi2
+                if _sigma_is_default:
+                    sigma_scale_sq = float(np.mean(sigma_flat**2))
+                    effective_chi2 = nlsq_warmstart_chi2 * sigma_scale_sq
+                warmstart_reduced_chi2 = effective_chi2 / n_data_eff
             if warmstart_reduced_chi2 < warmstart_skip_threshold:
                 skip_cmaes = True
                 logger.info(
                     f"[CMA-ES] Auto-skip: NLSQ warm-start reduced chi2="
                     f"{warmstart_reduced_chi2:.4f} < threshold="
-                    f"{warmstart_skip_threshold:.1f}. Skipping CMA-ES global search."
+                    f"{warmstart_skip_threshold:.1f}. "
+                    f"{'(sigma-normalized) ' if _sigma_is_default else ''}"
+                    f"Skipping CMA-ES global search."
                 )
 
         if skip_cmaes:
@@ -2304,7 +2316,9 @@ def fit_nlsq_cmaes(
                 diagnostics={
                     "selected": "nlsq_warmstart_auto_skip",
                     "warmstart_reduced_chi2": warmstart_reduced_chi2,
+                    "warmstart_raw_chi2": nlsq_warmstart_chi2,
                     "warmstart_skip_threshold": warmstart_skip_threshold,
+                    "sigma_is_default": _sigma_is_default,
                     "cmaes_skipped": True,
                 },
                 method_used="nlsq_warmstart",
