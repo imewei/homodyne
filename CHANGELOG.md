@@ -7,6 +7,50 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
+## [2.22.7] - 2026-03-10
+
+### CMA-ES Warm-Start Performance Optimization
+
+Performance fix for CMA-ES global optimization with NLSQ warm-start, preventing
+wasted computation when warm-start provides a near-optimal solution.
+
+5 files changed across 4 commits.
+
+**Fixes:**
+
+- **fix(nlsq)**: Add warm-start-aware sigma for CMA-ES global search
+  (`cmaes_wrapper.py`, `config.py`)
+  - When NLSQ warm-start is active, CMA-ES now uses `sigma_warmstart` (default 0.05)
+    instead of `sigma` (default 0.5). Prevents CMA-ES from exploring far from the
+    near-optimal warm-start solution, which caused BIPOP stagnation and 10 premature
+    restarts in production (100x worse chi-squared, 91% wasted optimization time).
+  - New config: `cmaes.sigma_warmstart` (default 0.05)
+
+- **fix(nlsq)**: Add auto-skip for CMA-ES when warm-start is sufficient (`core.py`)
+  - When `warmstart_auto_skip: true` (default), CMA-ES global search is skipped entirely
+    if the NLSQ warm-start achieves a reduced chi-squared below the configurable
+    `warmstart_skip_threshold` (default 5.0).
+  - New config: `cmaes.warmstart_auto_skip` (default true),
+    `cmaes.warmstart_skip_threshold` (default 5.0)
+
+- **fix(nlsq)**: Add DEBUG-level bounds logging in CMA-ES `fit()` method for faster
+  debugging of parameter bound issues (`cmaes_wrapper.py`)
+
+**Tests:**
+
+- **test(nlsq)**: Add `TestWarmStartSigma` class with 9 regression tests covering config
+  defaults, YAML parsing, roundtrip serialization, validation, sigma override, and
+  integration tests verifying warm-start vs default sigma selection
+  (`test_cmaes_wrapper.py`)
+
+**Documentation:**
+
+- **docs**: Optimize CLAUDE.md for conciseness: consolidate CMA-ES warm-start
+  documentation, remove verbose production RCA narrative, strip historical version tags,
+  condense CMC implementation details
+
+______________________________________________________________________
+
 ## [2.22.6] - 2026-03-03
 
 ### Parameter Bounds, Dependency Consolidation, and Runtime Fixes
