@@ -342,8 +342,10 @@ class ParameterManager:
                 "beta", params["beta"], "time exponent outside range", "warning"
             )
 
-        if "phi0" in params and abs(params["phi0"]) > np.pi:
-            add_violation("phi0", params["phi0"], "flow angle outside [-π, π]", "info")
+        if "phi0" in params and abs(params["phi0"]) > 10.0:
+            add_violation(
+                "phi0", params["phi0"], "flow angle outside [-10, 10] deg", "info"
+            )
 
         # Scaling parameters
         if "contrast" in params:
