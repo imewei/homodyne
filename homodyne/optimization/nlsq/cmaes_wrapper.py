@@ -271,6 +271,7 @@ class CMAESWrapperConfig:
     max_generations: int | None = None  # None = use preset + adaptive scaling
     popsize: int | None = None  # None = auto from 4+3*ln(n)
     sigma: float = 0.5
+    sigma_warmstart: float = 0.05  # Reduced sigma for warm-start (local refinement)
     tol_fun: float = 1e-8
     tol_x: float = 1e-8
     restart_strategy: str = "bipop"
@@ -318,6 +319,7 @@ class CMAESWrapperConfig:
             max_generations=getattr(config, "cmaes_max_generations", None),
             popsize=getattr(config, "cmaes_popsize", None),
             sigma=getattr(config, "cmaes_sigma", 0.5),
+            sigma_warmstart=getattr(config, "cmaes_sigma_warmstart", 0.05),
             tol_fun=getattr(config, "cmaes_tol_fun", 1e-8),
             tol_x=getattr(config, "cmaes_tol_x", 1e-8),
             restart_strategy=getattr(config, "cmaes_restart_strategy", "bipop"),
@@ -339,13 +341,18 @@ class CMAESWrapperConfig:
             normalization_epsilon=getattr(config, "cmaes_normalization_epsilon", 1e-12),
         )
 
-    def to_cmaes_config(self, n_params: int) -> Any:
+    def to_cmaes_config(
+        self, n_params: int, *, sigma_override: float | None = None
+    ) -> Any:
         """Convert to NLSQ CMAESConfig.
 
         Parameters
         ----------
         n_params : int
             Number of parameters for popsize calculation.
+        sigma_override : float or None
+            If provided, override the default sigma value. Used to apply
+            warm-start sigma when NLSQ warm-start is active.
 
         Returns
         -------
@@ -379,10 +386,12 @@ class CMAESWrapperConfig:
         }
         max_gen = preset_generations.get(self.preset, self.max_generations or 100)
 
+        effective_sigma = sigma_override if sigma_override is not None else self.sigma
+
         return CMAESConfig(
             popsize=popsize,
             max_generations=max_gen,
-            sigma=self.sigma,
+            sigma=effective_sigma,
             tol_fun=self.tol_fun,
             tol_x=self.tol_x,
             restart_strategy=self.restart_strategy,
@@ -779,7 +788,8 @@ class CMAESWrapper:
         warmstart_chi2 : float | None
             Chi-squared from NLSQ warm-start. If provided and CMA-ES chi2 exceeds
             10x this value, refinement is skipped (the comparison in core.py will
-            discard the CMA-ES result anyway).
+            discard the CMA-ES result anyway). Also triggers use of
+            ``sigma_warmstart`` instead of ``sigma`` for the CMA-ES search.
 
         Returns
         -------
@@ -816,11 +826,34 @@ class CMAESWrapper:
             f"{bounds_summary}"
         )
 
+        # Log bounds for debugging (v2.20.0)
+        lower, upper = bounds
+        logger.debug(
+            "[CMA-ES] Parameter bounds: lower=%s, upper=%s",
+            np.array2string(lower, precision=4, separator=", "),
+            np.array2string(upper, precision=4, separator=", "),
+        )
+
+        # Select sigma based on warm-start state (v2.20.0)
+        # When warm-start provides a near-optimal starting point, use a smaller
+        # sigma for local refinement instead of global exploration.
+        warmstart_active = warmstart_chi2 is not None and warmstart_chi2 < float("inf")
+        if warmstart_active:
+            effective_sigma = self.config.sigma_warmstart
+            logger.info(
+                f"[CMA-ES] Warm-start active: using sigma_warmstart="
+                f"{effective_sigma:.3f} (default sigma={self.config.sigma:.3f})"
+            )
+        else:
+            effective_sigma = None  # Use config default
+
         # Configure memory batching
         pop_batch, data_chunk = self._configure_memory(n_data, n_params)
 
         # Build CMAESConfig with memory settings
-        cmaes_config = self.config.to_cmaes_config(n_params)
+        cmaes_config = self.config.to_cmaes_config(
+            n_params, sigma_override=effective_sigma
+        )
 
         # Adaptive population sizing for high scale-ratio problems (v2.19.0)
         # Default popsize (4+3*ln(9) ~ 11) is too small for multi-scale problems.
@@ -875,7 +908,8 @@ class CMAESWrapper:
         # Log algorithm configuration
         logger.info(
             f"[CMA-ES] Algorithm settings: max_generations={cmaes_config.max_generations}, "
-            f"popsize={cmaes_config.popsize}, sigma={self.config.sigma:.2f}, "
+            f"popsize={cmaes_config.popsize}, sigma={cmaes_config.sigma:.3f}"
+            f"{' (warm-start)' if warmstart_active else ''}, "
             f"restart={self.config.restart_strategy}"
         )
         if self.config.refine_with_nlsq:

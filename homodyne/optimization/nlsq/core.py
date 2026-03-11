@@ -2259,18 +2259,72 @@ def fit_nlsq_cmaes(
                 logger.warning(f"[CMA-ES] NLSQ warm-start failed: {e}")
 
         # ======================================================================
-        # PHASE 2: CMA-ES GLOBAL SEARCH
+        # PHASE 2: CMA-ES GLOBAL SEARCH (with auto-skip, v2.20.0)
         # ======================================================================
-        logger.info("[CMA-ES] Phase 2: Running CMA-ES global optimization...")
-        cmaes_result = wrapper.fit(
-            model_func=model_for_cmaes,
-            xdata=xdata,
-            ydata=ydata,
-            p0=x0,
-            bounds=bounds,
-            sigma=sigma_flat,
-            warmstart_chi2=nlsq_warmstart_chi2,
+        # When warm-start achieves a good fit (reduced chi2 < threshold), skip
+        # the expensive CMA-ES global search. CMA-ES with warm-start sigma is
+        # a local refinement that rarely improves on a good NLSQ solution.
+        skip_cmaes = False
+        warmstart_skip_threshold = cmaes_dict.get(
+            "warmstart_skip_threshold",
+            getattr(nlsq_config, "cmaes_warmstart_skip_threshold", 5.0),
         )
+        warmstart_auto_skip = cmaes_dict.get(
+            "warmstart_auto_skip",
+            getattr(nlsq_config, "cmaes_warmstart_auto_skip", True),
+        )
+
+        if (
+            warmstart_auto_skip
+            and nlsq_warmstart_params is not None
+            and nlsq_warmstart_chi2 < float("inf")
+        ):
+            # Compute reduced chi-squared for auto-skip decision
+            # Guard: if DOF <= 0 (more params than data), never skip CMA-ES
+            n_data_eff = len(ydata) - len(x0)
+            if n_data_eff <= 0:
+                warmstart_reduced_chi2 = float("inf")
+            else:
+                warmstart_reduced_chi2 = nlsq_warmstart_chi2 / n_data_eff
+            if warmstart_reduced_chi2 < warmstart_skip_threshold:
+                skip_cmaes = True
+                logger.info(
+                    f"[CMA-ES] Auto-skip: NLSQ warm-start reduced chi2="
+                    f"{warmstart_reduced_chi2:.4f} < threshold="
+                    f"{warmstart_skip_threshold:.1f}. Skipping CMA-ES global search."
+                )
+
+        if skip_cmaes:
+            # Build a CMAESResult directly from warm-start
+            cmaes_result = CMAESResult(
+                parameters=nlsq_warmstart_params,
+                covariance=nlsq_warmstart_cov,
+                chi_squared=nlsq_warmstart_chi2,
+                success=True,
+                diagnostics={
+                    "selected": "nlsq_warmstart_auto_skip",
+                    "warmstart_reduced_chi2": warmstart_reduced_chi2,
+                    "warmstart_skip_threshold": warmstart_skip_threshold,
+                    "cmaes_skipped": True,
+                },
+                method_used="nlsq_warmstart",
+                nlsq_refined=True,
+                message=(
+                    f"CMA-ES skipped: warm-start reduced chi2="
+                    f"{warmstart_reduced_chi2:.4f} < {warmstart_skip_threshold:.1f}"
+                ),
+            )
+        else:
+            logger.info("[CMA-ES] Phase 2: Running CMA-ES global optimization...")
+            cmaes_result = wrapper.fit(
+                model_func=model_for_cmaes,
+                xdata=xdata,
+                ydata=ydata,
+                p0=x0,
+                bounds=bounds,
+                sigma=sigma_flat,
+                warmstart_chi2=nlsq_warmstart_chi2,
+            )
 
         # ======================================================================
         # PHASE 3: COMPARE AND SELECT BEST RESULT (v2.19.0)

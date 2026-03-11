@@ -342,6 +342,15 @@ class NLSQConfig:
     cmaes_max_generations: int | None = None  # None = use preset + adaptive scaling
     cmaes_popsize: int | None = None  # Population size (None = auto from 4+3*ln(n))
     cmaes_sigma: float = 0.5  # Initial step size (fraction of search range)
+    cmaes_sigma_warmstart: float = (
+        0.05  # Reduced sigma for warm-start mode (local refinement)
+    )
+    cmaes_warmstart_auto_skip: bool = (
+        True  # Auto-skip CMA-ES when warm-start chi2 is good
+    )
+    cmaes_warmstart_skip_threshold: float = (
+        5.0  # Skip CMA-ES if warm-start reduced_chi2 < threshold
+    )
     cmaes_tol_fun: float = 1e-8  # Function value tolerance for convergence
     cmaes_tol_x: float = 1e-8  # Parameter tolerance for convergence
     cmaes_restart_strategy: str = "bipop"  # "none" or "bipop" (alternating populations)
@@ -582,6 +591,11 @@ class NLSQConfig:
             cmaes_max_generations=cmaes.get("max_generations"),  # None = adaptive
             cmaes_popsize=cmaes.get("popsize"),  # None = auto
             cmaes_sigma=float(cmaes.get("sigma", 0.5)),
+            cmaes_sigma_warmstart=float(cmaes.get("sigma_warmstart", 0.05)),
+            cmaes_warmstart_auto_skip=cmaes.get("warmstart_auto_skip", True),
+            cmaes_warmstart_skip_threshold=float(
+                cmaes.get("warmstart_skip_threshold", 5.0)
+            ),
             cmaes_tol_fun=float(cmaes.get("tol_fun", 1e-8)),
             cmaes_tol_x=float(cmaes.get("tol_x", 1e-8)),
             cmaes_restart_strategy=cmaes.get("restart_strategy", "bipop"),
@@ -946,6 +960,15 @@ class NLSQConfig:
             )
         if not 0 < self.cmaes_sigma <= 1:
             errors.append(f"cmaes_sigma must be in (0, 1], got: {self.cmaes_sigma}")
+        if not 0 < self.cmaes_sigma_warmstart <= 1:
+            errors.append(
+                f"cmaes_sigma_warmstart must be in (0, 1], got: {self.cmaes_sigma_warmstart}"
+            )
+        if self.cmaes_warmstart_skip_threshold <= 0:
+            errors.append(
+                f"cmaes_warmstart_skip_threshold must be positive, "
+                f"got: {self.cmaes_warmstart_skip_threshold}"
+            )
         if self.cmaes_tol_fun <= 0:
             errors.append(f"cmaes_tol_fun must be positive, got: {self.cmaes_tol_fun}")
         if self.cmaes_tol_x <= 0:
@@ -1144,6 +1167,9 @@ class NLSQConfig:
                 "max_generations": self.cmaes_max_generations,
                 "popsize": self.cmaes_popsize,
                 "sigma": self.cmaes_sigma,
+                "sigma_warmstart": self.cmaes_sigma_warmstart,
+                "warmstart_auto_skip": self.cmaes_warmstart_auto_skip,
+                "warmstart_skip_threshold": self.cmaes_warmstart_skip_threshold,
                 "tol_fun": self.cmaes_tol_fun,
                 "tol_x": self.cmaes_tol_x,
                 "restart_strategy": self.cmaes_restart_strategy,

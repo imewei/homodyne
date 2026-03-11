@@ -435,6 +435,9 @@ optimization:
       preset: "cmaes-global" # "cmaes-fast" (50) | "cmaes" (100) | "cmaes-global" (200+)
       max_generations: null # null = adaptive scaling based on scale_ratio
       sigma: 0.5 # Broader initial search, refined by CMA-ES
+      sigma_warmstart: 0.05 # Reduced sigma when warm-start is active (local refinement)
+      warmstart_auto_skip: true # Skip CMA-ES if warm-start reduced chi2 is good
+      warmstart_skip_threshold: 5.0 # Skip CMA-ES if warm-start reduced chi2 < threshold
       popsize: null # null = adaptive scaling (e.g. 200+ for scale_ratio>1e6)
       tol_fun: 1.0e-8
       tol_x: 1.0e-8
