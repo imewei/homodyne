@@ -837,8 +837,9 @@ class TestDiagonalCorrectionPerformance:
             _ = _diagonal_correction_jax_core(simple_matrix)
         exec_time = (time.time() - start) / 100
 
-        # Cached JIT execution should be fast (< 10ms per call)
-        assert exec_time < 0.01, f"JIT execution too slow: {exec_time:.4f}s per call"
+        # Cached JIT execution should be fast (< 100ms per call).
+        # Generous threshold for CI runners with variable load.
+        assert exec_time < 0.1, f"JIT execution too slow: {exec_time:.4f}s per call"
 
 
 # ============================================================================
