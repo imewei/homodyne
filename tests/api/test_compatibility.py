@@ -212,10 +212,13 @@ class TestReturnTypes:
 
         Runs the optimizer in a subprocess to isolate JAX JIT segfaults
         that occur intermittently on ubuntu Python 3.12 CI runners.
+        Uses subprocess.run instead of multiprocessing.Process to avoid
+        unpicklable local-function errors on Windows/macOS spawn-mode.
         """
-        import multiprocessing
-
-        import numpy as np
+        import json
+        import subprocess
+        import sys
+        import tempfile
 
         try:
             from homodyne.optimization.nlsq import NLSQ_AVAILABLE
@@ -225,60 +228,86 @@ class TestReturnTypes:
         if not NLSQ_AVAILABLE:
             pytest.skip("NLSQ not available")
 
-        def _run_optimization(data, config, result_pipe):
-            """Run optimization in subprocess to isolate potential crashes."""
-            try:
-                from homodyne.optimization.nlsq import fit_nlsq_jax
+        import pathlib
 
-                result = fit_nlsq_jax(data, config)
-                result_pipe.send(
-                    {
-                        "has_parameters": hasattr(result, "parameters"),
-                        "has_chi_squared": hasattr(result, "chi_squared"),
-                        "has_success": hasattr(result, "success"),
-                        "has_message": hasattr(result, "message"),
-                        "parameters_is_ndarray": isinstance(
-                            getattr(result, "parameters", None), np.ndarray
-                        ),
-                        "success_is_bool": isinstance(
-                            getattr(result, "success", None), bool
-                        ),
-                        "message_is_str": isinstance(
-                            getattr(result, "message", None), str
-                        ),
-                    }
-                )
-            except Exception as e:
-                result_pipe.send({"error": str(e)})
-            finally:
-                result_pipe.close()
+        import numpy as np
 
-        recv_end, send_end = multiprocessing.Pipe(duplex=False)
-        proc = multiprocessing.Process(
-            target=_run_optimization,
-            args=(synthetic_xpcs_data, test_config, send_end),
-        )
-        proc.start()
-        send_end.close()
+        # Serialize data/config to temp files for the subprocess
+        with tempfile.NamedTemporaryFile(suffix=".npz", delete=False, mode="wb") as f:
+            data_path = f.name
+            np.savez(
+                f,
+                t1=synthetic_xpcs_data["t1"],
+                t2=synthetic_xpcs_data["t2"],
+                phi_angles_list=synthetic_xpcs_data["phi_angles_list"],
+                c2_exp=synthetic_xpcs_data["c2_exp"],
+                wavevector_q_list=synthetic_xpcs_data["wavevector_q_list"],
+                sigma=synthetic_xpcs_data["sigma"],
+                dt=np.array(synthetic_xpcs_data["dt"]),
+            )
 
-        # Wait up to 45s for the subprocess
-        proc.join(timeout=45)
-        if proc.is_alive():
-            proc.kill()
-            proc.join()
+        config_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                suffix=".json", delete=False, mode="w", encoding="utf-8"
+            ) as f:
+                config_path = f.name
+                json.dump(test_config, f)
+
+            script = (
+                "import os\n"
+                'os.environ.setdefault("JAX_ENABLE_X64", "1")\n'
+                "import json, sys\n"
+                "import numpy as np\n"
+                f"with open({config_path!r}, encoding='utf-8') as f:\n"
+                "    config = json.load(f)\n"
+                f"d = np.load({data_path!r})\n"
+                "data = {k: d[k] for k in d.files}\n"
+                'data["dt"] = float(data["dt"])\n'
+                "from homodyne.optimization.nlsq import fit_nlsq_jax\n"
+                "result = fit_nlsq_jax(data, config)\n"
+                "attrs = {\n"
+                '    "has_parameters": hasattr(result, "parameters"),\n'
+                '    "has_chi_squared": hasattr(result, "chi_squared"),\n'
+                '    "has_success": hasattr(result, "success"),\n'
+                '    "has_message": hasattr(result, "message"),\n'
+                '    "parameters_is_ndarray": isinstance(\n'
+                '        getattr(result, "parameters", None), np.ndarray\n'
+                "    ),\n"
+                '    "success_is_bool": isinstance(\n'
+                '        getattr(result, "success", None), bool\n'
+                "    ),\n"
+                '    "message_is_str": isinstance(\n'
+                '        getattr(result, "message", None), str\n'
+                "    ),\n"
+                "}\n"
+                "print(json.dumps(attrs))\n"
+            )
+            proc = subprocess.run(
+                [sys.executable, "-c", script],
+                capture_output=True,
+                text=True,
+                timeout=45,
+            )
+        except subprocess.TimeoutExpired:
             pytest.skip("Optimization subprocess timed out")
+        finally:
+            pathlib.Path(data_path).unlink(missing_ok=True)
+            if config_path:
+                pathlib.Path(config_path).unlink(missing_ok=True)
 
-        if proc.exitcode != 0:
-            pytest.skip(f"Optimization subprocess crashed (exit code {proc.exitcode})")
+        if proc.returncode != 0:
+            pytest.skip(
+                f"Optimization subprocess crashed (exit code {proc.returncode}): "
+                f"{proc.stderr[:200]}"
+            )
 
-        if not recv_end.poll():
-            pytest.skip("Optimization subprocess produced no result")
-
-        attrs = recv_end.recv()
-        recv_end.close()
-
-        if "error" in attrs:
-            pytest.skip(f"Optimization test failed: {attrs['error']}")
+        try:
+            attrs = json.loads(proc.stdout.strip().splitlines()[-1])
+        except (json.JSONDecodeError, IndexError):
+            pytest.skip(
+                f"Optimization subprocess produced no valid result: {proc.stdout[:200]}"
+            )
 
         # Validate return type structure
         assert attrs["has_parameters"], "Result missing parameters attribute"
