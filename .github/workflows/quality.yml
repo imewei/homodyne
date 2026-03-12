@@ -13,6 +13,11 @@ permissions:
 
 env:
   JAX_ENABLE_X64: "1"
+  PYTHONDONTWRITEBYTECODE: 1
+  PYTHONUNBUFFERED: 1
+  # pytest-qt (transitive dep via nlsq) needs a Qt platform plugin;
+  # offscreen avoids requiring a display server on headless CI runners.
+  QT_QPA_PLATFORM: offscreen
 
 jobs:
   security:
@@ -39,8 +44,18 @@ jobs:
             -c pyproject.toml \
             -f json \
             -o bandit-report.json \
-            -ll || true
-          uvx bandit -r homodyne/ -c pyproject.toml -ll
+            -ll; BANDIT_EXIT=$?
+          # Display human-readable output from the saved report
+          python3 -c "
+          import json, sys
+          with open('bandit-report.json') as f:
+              data = json.load(f)
+          for r in data.get('results', []):
+              print(f\"{r['filename']}:{r['line_number']}: {r['issue_severity']}/{r['issue_confidence']} {r['issue_text']}\")
+          metrics = data.get('metrics', {}).get('_totals', {})
+          print(f\"Issues: {metrics.get('SEVERITY.HIGH', 0)} high, {metrics.get('SEVERITY.MEDIUM', 0)} medium, {metrics.get('SEVERITY.LOW', 0)} low\")
+          "
+          exit $BANDIT_EXIT
 
       - name: Check dependency vulnerabilities
         run: |
@@ -65,12 +80,11 @@ jobs:
 
       - name: Run shellcheck
         run: |
-          if command -v shellcheck >/dev/null 2>&1; then
-            shellcheck -S warning homodyne/runtime/shell/completion.sh
-          else
+          if ! command -v shellcheck >/dev/null 2>&1; then
             sudo apt-get install -y shellcheck
-            shellcheck -S warning homodyne/runtime/shell/completion.sh
           fi
+          shellcheck -S warning homodyne/runtime/shell/completion.sh
+          shellcheck -S warning homodyne/runtime/shell/activation/xla_config.bash
 
   type-check:
     name: Type Checking
@@ -112,12 +126,16 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Install Qt runtime dependencies
+        run: sudo apt-get update && sudo apt-get install -y libegl1
+
       - name: Install dependencies
         run: uv sync
 
       - name: Run tests with coverage
         run: |
           uv run pytest tests/unit/ tests/regression/ tests/api/ \
+            -o "addopts=-ra --strict-markers --strict-config --durations=10" \
             --cov=homodyne \
             --cov-report=xml \
             --cov-report=html \

@@ -20,6 +20,11 @@ on:
 permissions:
   contents: read
 
+env:
+  JAX_ENABLE_X64: "1"
+  PYTHONDONTWRITEBYTECODE: 1
+  PYTHONUNBUFFERED: 1
+
 concurrency:
   group: docs-${{ github.ref }}
   cancel-in-progress: true
@@ -100,7 +105,7 @@ jobs:
             const status = '${{ needs.build.result }}' === 'success' ? 'pass' : 'fail';
             const message = `**Documentation Build** - ${status}`;
 
-            github.rest.issues.createComment({
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
