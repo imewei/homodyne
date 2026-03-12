@@ -264,11 +264,9 @@ class TestJITShearWeights:
         alpha = 1.0
 
         # First call triggers JIT compilation
-        start = time.perf_counter()
         weights_first = _compute_weights_jax(
             jnp.array(phi_angles), phi0, min_weight, alpha, True
         )
-        first_call_time = time.perf_counter() - start
 
         # Subsequent calls should be faster (use cached compiled function)
         start = time.perf_counter()

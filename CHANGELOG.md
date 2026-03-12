@@ -49,9 +49,9 @@ performance tests and updates pre-commit/RTD configuration.
   integration tests verifying warm-start vs default sigma selection
   (`test_cmaes_wrapper.py`)
 
-- **test(ci)**: Fix flaky performance tests for CI stability
-  (`test_nlsq_core.py`, `test_diagonal_correction.py`, `test_jax_backend.py`,
-  `test_shear_weighting.py`, `test_logging_integration.py`)
+- **test(ci)**: Fix flaky performance tests for CI stability (`test_nlsq_core.py`,
+  `test_diagonal_correction.py`, `test_jax_backend.py`, `test_shear_weighting.py`,
+  `test_logging_integration.py`)
 
   - Add JIT warmup before timing in NLSQ scaling test
   - Relax timing thresholds to accommodate CI runner variance

@@ -1426,9 +1426,7 @@ class TestNLSQPerformance:
         import time
 
         # Warmup run to trigger JIT compilation before timing
-        warmup_t1, warmup_t2 = jnp.meshgrid(
-            jnp.arange(5), jnp.arange(5), indexing="ij"
-        )
+        warmup_t1, warmup_t2 = jnp.meshgrid(jnp.arange(5), jnp.arange(5), indexing="ij")
         warmup_phi = jnp.linspace(0, 2 * jnp.pi, 12)
         warmup_tau = jnp.abs(warmup_t1 - warmup_t2) + 1e-6
         warmup_c2 = 1 + 0.3 * jnp.exp(-warmup_tau / 8.0)
