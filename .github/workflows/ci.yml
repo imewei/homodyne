@@ -128,6 +128,7 @@ jobs:
           uv run pytest tests/api/ \
             -v \
             -o "addopts=$PYTEST_ADDOPTS" \
+            --timeout=60 \
             --tb=short \
           || {
             echo "::warning::API compatibility tests failed on first attempt, retrying..."
@@ -135,6 +136,7 @@ jobs:
             uv run pytest tests/api/ \
               -v \
               -o "addopts=$PYTEST_ADDOPTS" \
+              --timeout=60 \
               --tb=short
           }
 
