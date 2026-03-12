@@ -397,9 +397,7 @@ class TestErrorHandling:
                     timeout=30,
                 )
             except subprocess.TimeoutExpired:
-                pytest.skip(
-                    f"Error handling subprocess timed out for case '{label}'"
-                )
+                pytest.skip(f"Error handling subprocess timed out for case '{label}'")
                 continue
 
             if proc.returncode != 0:
