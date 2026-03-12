@@ -1,31 +1,11 @@
 """API test fixtures — lightweight overrides for interface contract tests.
 
 API compatibility tests verify return types, attribute names, and function
-signatures, not numerical accuracy. These minimal fixtures reduce JAX JIT
-compilation and memory pressure on CI runners where the preceding unit test
-stage (2700+ tests) leaves limited headroom.
+signatures, not numerical accuracy.
 """
 
 import numpy as np
 import pytest
-
-
-@pytest.fixture(scope="module")
-def test_config():
-    """Minimal config for API contract tests.
-
-    Uses fewer iterations so the optimizer finishes quickly
-    even without cached JIT artifacts.
-    """
-    return {
-        "analysis_mode": "static",
-        "optimization": {
-            "method": "nlsq",
-            "lsq": {"max_iterations": 10, "tolerance": 1e-4},
-        },
-        "hardware": {"force_cpu": True},
-        "output": {"save_plots": False, "verbose": False},
-    }
 
 
 @pytest.fixture(scope="module")
