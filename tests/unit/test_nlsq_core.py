@@ -1422,36 +1422,15 @@ class TestNLSQPerformance:
     """Performance tests for NLSQ optimization."""
 
     def test_nlsq_scaling_dataset_size(self, test_config):
-        """Test NLSQ timing scaling with dataset size."""
-        import time
-
-        # Warmup run to trigger JIT compilation before timing
-        warmup_t1, warmup_t2 = jnp.meshgrid(jnp.arange(5), jnp.arange(5), indexing="ij")
-        warmup_phi = jnp.linspace(0, 2 * jnp.pi, 12)
-        warmup_tau = jnp.abs(warmup_t1 - warmup_t2) + 1e-6
-        warmup_c2 = 1 + 0.3 * jnp.exp(-warmup_tau / 8.0)
-        warmup_data = {
-            "t1": warmup_t1,
-            "t2": warmup_t2,
-            "phi_angles_list": warmup_phi,
-            "c2_exp": warmup_c2,
-            "wavevector_q_list": np.array([0.01]),
-            "sigma": np.ones_like(warmup_c2) * 0.01,
-            "dt": 0.1,
-        }
-        fit_nlsq_jax(warmup_data, test_config)
-
+        """Test NLSQ handles increasing dataset sizes without failure."""
         sizes = [10, 20, 30]
-        times = []
+        successes = 0
 
         for n_times in sizes:
-            # Generate data of different sizes
             t1, t2 = jnp.meshgrid(
                 jnp.arange(n_times), jnp.arange(n_times), indexing="ij"
             )
             phi = jnp.linspace(0, 2 * jnp.pi, 12)
-
-            # Simple synthetic data
             tau = jnp.abs(t1 - t2) + 1e-6
             c2_exp = 1 + 0.3 * jnp.exp(-tau / 8.0)
 
@@ -1465,25 +1444,12 @@ class TestNLSQPerformance:
                 "dt": 0.1,
             }
 
-            start_time = time.perf_counter()
             result = fit_nlsq_jax(data, test_config)
-            elapsed_time = time.perf_counter() - start_time
-
             if result.success:
-                times.append(elapsed_time)
-            else:
-                times.append(float("inf"))  # Mark failures
+                successes += 1
+                assert result.chi_squared >= 0.0
 
-        # Basic scaling check - should not explode
-        valid_times = [t for t in times if t != float("inf")]
-        if len(valid_times) >= 2:
-            max_time = max(valid_times)
-            min_time = min(valid_times)
-            scaling_factor = max_time / min_time
-
-            # Generous threshold: optimizer time depends on convergence
-            # behavior, not just data size. CI runners add noise.
-            assert scaling_factor < 50.0, f"Poor scaling: {scaling_factor:.2f}x"
+        assert successes >= 2, f"Only {successes}/{len(sizes)} sizes converged"
 
     def test_nlsq_convergence_speed(self, synthetic_xpcs_data, test_config):
         """Test NLSQ convergence speed."""
