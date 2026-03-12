@@ -55,7 +55,7 @@ repos:
           - types-decorator>=5.1
           - types-setuptools>=68.0
           - types-pyyaml>=6.0
-          - jax>=0.8.3
+          - jax>=0.8.2
           - nlsq>=0.6.10
           - scikit-learn>=1.6
           - arviz>=1.0
