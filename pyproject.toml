@@ -115,6 +115,9 @@ homodyne-config = "homodyne.cli.config_generator:main"
 homodyne-config-xla = "homodyne.cli.xla_config:main"
 homodyne-post-install = "homodyne.post_install:main"
 homodyne-cleanup = "homodyne.uninstall_scripts:main"
+# Plotting shortcuts
+hexp = "homodyne.cli.main:main_hexp"
+hsim = "homodyne.cli.main:main_hsim"
 
 [tool.setuptools_scm]
 write_to = "homodyne/_version.py"

@@ -113,5 +113,17 @@ def main() -> None:
         sys.exit(1)
 
 
+def main_hexp() -> None:
+    """Entry point for ``hexp`` — plot experimental data."""
+    sys.argv[1:] = ["--plot-experimental-data"] + sys.argv[1:]
+    main()
+
+
+def main_hsim() -> None:
+    """Entry point for ``hsim`` — plot simulated data."""
+    sys.argv[1:] = ["--plot-simulated-data"] + sys.argv[1:]
+    main()
+
+
 if __name__ == "__main__":
     main()
