@@ -1,100 +1,227 @@
-#!/usr/bin/env python3
-"""Homodyne Cleanup - Remove Shell Completion System
-====================================================
+"""Cleanup utilities for homodyne package.
 
-This script removes homodyne-related files from virtual environments
-that were installed by homodyne-post-install but are not automatically
-tracked by pip uninstall.
+This module provides utilities to remove:
+- Shell completion files
+- XLA configuration files
+- Activation script modifications
 
-Removes:
-- Shell completion scripts (bash, zsh, fish)
-- Activation scripts (homodyne-activate)
-- GPU acceleration setup files (JAX with CUDA support)
-- Conda activation hooks
-- Environment aliases and shortcuts
-
-Supports: conda, mamba, uv, venv, virtualenv
-Architecture: JAX-first with automatic GPU detection
-
-Usage:
-    homodyne-cleanup
-    homodyne-cleanup --interactive
-    homodyne-cleanup --dry-run
+CLI Entry Point: homodyne-cleanup
 """
+
+from __future__ import annotations
 
 import argparse
 import os
-import platform
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 
-def _resolve_venv_path() -> Path:
-    """Resolve the virtual environment path.
+class CleanupTarget(NamedTuple):
+    """A file or directory to clean up."""
 
-    Prefers $VIRTUAL_ENV (set by venv activation) over sys.prefix,
-    because sys.prefix follows the script's shebang interpreter and
-    may point to the system Python even when a venv is activated.
+    path: Path
+    description: str
+    exists: bool
 
-    NOTE: Duplicated in post_install.py (this file is kept standalone for uninstall reliability).
+
+def get_venv_path() -> Path | None:
+    """Get the virtual environment path if in one.
+
+    Returns:
+        Path to venv or None if not in a virtual environment.
     """
-    virtual_env = os.environ.get("VIRTUAL_ENV")
-    if virtual_env:
-        return Path(virtual_env)
-    return Path(sys.prefix)
+    if sys.prefix != sys.base_prefix:
+        return Path(sys.prefix)
+
+    venv = os.environ.get("VIRTUAL_ENV")
+    if venv:
+        return Path(venv)
+
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        return Path(conda_prefix)
+
+    return None
 
 
-def is_virtual_environment() -> bool:
-    """Check if running in a virtual environment."""
-    return (
-        hasattr(sys, "real_prefix")
-        or (hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix)
-        or os.environ.get("CONDA_DEFAULT_ENV") is not None
-        or os.environ.get("MAMBA_ROOT_PREFIX") is not None
-        or os.environ.get("VIRTUAL_ENV") is not None
+def find_cleanup_targets() -> list[CleanupTarget]:
+    """Find all homodyne-related files that can be cleaned up.
+
+    Returns:
+        List of CleanupTarget objects.
+    """
+    targets: list[CleanupTarget] = []
+
+    # XLA mode configuration -- check all possible locations
+    home = Path.home()
+
+    # New location: per-env or XDG
+    from homodyne.post_install import get_xla_mode_path
+
+    xla_mode_file = get_xla_mode_path()
+    targets.append(
+        CleanupTarget(
+            path=xla_mode_file,
+            description="XLA mode configuration",
+            exists=xla_mode_file.exists(),
+        )
     )
 
+    # Legacy location
+    legacy_xla = home / ".homodyne_xla_mode"
+    if legacy_xla.exists():
+        targets.append(
+            CleanupTarget(
+                path=legacy_xla,
+                description="XLA mode configuration (legacy)",
+                exists=True,
+            )
+        )
 
-def cleanup_completion_files() -> list[tuple[str, str]]:
-    """Remove shell completion files from virtual environment."""
-    venv_path = _resolve_venv_path()
-    removed_files = []
+    # Virtual environment files
+    venv_path = get_venv_path()
+    if venv_path:
+        # Bash completion
+        bash_completion = venv_path / "etc" / "bash_completion.d" / "homodyne"
+        targets.append(
+            CleanupTarget(
+                path=bash_completion,
+                description="Bash completion script",
+                exists=bash_completion.exists(),
+            )
+        )
 
-    # Bash completion
-    bash_files = [
-        venv_path / "etc" / "bash_completion.d" / "homodyne-completion.bash",
-        venv_path / "etc" / "conda" / "activate.d" / "homodyne-completion.sh",
-        venv_path / "etc" / "conda" / "activate.d" / "homodyne-advanced-completion.sh",
-    ]
+        # Zsh completion
+        zsh_completion = venv_path / "etc" / "zsh" / "homodyne-completion.zsh"
+        targets.append(
+            CleanupTarget(
+                path=zsh_completion,
+                description="Zsh completion script",
+                exists=zsh_completion.exists(),
+            )
+        )
 
-    # Zsh completion
-    zsh_files = [
-        venv_path / "etc" / "zsh" / "homodyne-completion.zsh",
-        venv_path / "etc" / "conda" / "activate.d" / "homodyne-completion.sh",
-    ]
+        # Fish completion
+        fish_completion = (
+            venv_path / "share" / "fish" / "vendor_completions.d" / "homodyne.fish"
+        )
+        targets.append(
+            CleanupTarget(
+                path=fish_completion,
+                description="Fish completion script",
+                exists=fish_completion.exists(),
+            )
+        )
 
-    # Fish completion
-    fish_files = [
-        venv_path / "share" / "fish" / "vendor_completions.d" / "homodyne.fish",
-        venv_path / "etc" / "homodyne" / "shell" / "completion.fish",
-    ]
+        # Check for empty parent directories
+        for completion in [bash_completion, zsh_completion, fish_completion]:
+            if completion.parent.exists() and not any(completion.parent.iterdir()):
+                targets.append(
+                    CleanupTarget(
+                        path=completion.parent,
+                        description=f"Empty directory: {completion.parent.name}",
+                        exists=True,
+                    )
+                )
 
-    # Full completion script (copied by post-install)
-    full_completion_files = [
-        venv_path / "etc" / "homodyne" / "shell" / "completion.sh",
-    ]
+    # User-level completion directories
+    local_bash = (
+        home / ".local" / "share" / "bash-completion" / "completions" / "homodyne"
+    )
+    targets.append(
+        CleanupTarget(
+            path=local_bash,
+            description="User bash completion",
+            exists=local_bash.exists(),
+        )
+    )
 
-    all_completion_files = bash_files + zsh_files + fish_files + full_completion_files
+    return targets
 
-    for file_path in all_completion_files:
-        if file_path.exists():
+
+def cleanup_completion_files(
+    dry_run: bool = False,
+    verbose: bool = False,
+) -> list[Path]:
+    """Remove shell completion files.
+
+    Args:
+        dry_run: If True, don't actually delete files.
+        verbose: Print detailed output.
+
+    Returns:
+        List of paths that were (or would be) removed.
+    """
+    removed: list[Path] = []
+    targets = find_cleanup_targets()
+
+    for target in targets:
+        if not target.exists:
+            continue
+
+        if "completion" not in target.description.lower():
+            continue
+
+        if verbose:
+            action = "Would remove" if dry_run else "Removing"
+            print(f"{action}: {target.path} ({target.description})")
+
+        if not dry_run:
             try:
-                file_path.unlink()
-                removed_files.append(("Shell completion", file_path.name))
-            except Exception as e:
-                print(f"   [WARN] Failed to remove {file_path.name}: {e}")
+                if target.path.is_dir():
+                    target.path.rmdir()
+                else:
+                    target.path.unlink()
+                removed.append(target.path)
+            except OSError as e:
+                if verbose:
+                    print(f"  Failed: {e}")
+        else:
+            removed.append(target.path)
 
-    return removed_files
+    return removed
+
+
+def cleanup_xla_config(
+    dry_run: bool = False,
+    verbose: bool = False,
+) -> list[Path]:
+    """Remove XLA configuration files.
+
+    Args:
+        dry_run: If True, don't actually delete files.
+        verbose: Print detailed output.
+
+    Returns:
+        List of paths that were (or would be) removed.
+    """
+    removed: list[Path] = []
+
+    # XLA mode file -- remove from all locations
+    from homodyne.post_install import get_xla_mode_path
+
+    for xla_mode_file in [get_xla_mode_path(), Path.home() / ".homodyne_xla_mode"]:
+        if xla_mode_file.exists():
+            if verbose:
+                action = "Would remove" if dry_run else "Removing"
+                print(f"{action}: {xla_mode_file} (XLA mode configuration)")
+
+            if not dry_run:
+                try:
+                    xla_mode_file.unlink()
+                    removed.append(xla_mode_file)
+                    # Clean up empty parent dir
+                    parent = xla_mode_file.parent
+                    if parent.exists() and not any(parent.iterdir()):
+                        parent.rmdir()
+                except OSError as e:
+                    if verbose:
+                        print(f"  Failed: {e}")
+            else:
+                removed.append(xla_mode_file)
+
+    return removed
 
 
 def _remove_homodyne_blocks(content: str, end_marker: str) -> str:
@@ -103,27 +230,22 @@ def _remove_homodyne_blocks(content: str, end_marker: str) -> str:
     Uses a line-by-line state machine instead of regex to correctly handle
     nested if/fi or if/end structures within injected blocks.
 
-    Parameters
-    ----------
-    content : str
-        Full text of the activate script.
-    end_marker : str
-        Block terminator: ``"fi"`` for bash/zsh, ``"end"`` for fish.
+    Args:
+        content: Full text of the activate script.
+        end_marker: Block terminator: "fi" for bash/zsh, "end" for fish.
 
-    Returns
-    -------
-    str
+    Returns:
         Content with all homodyne blocks removed.
     """
     _HOMODYNE_HEADERS = (
         "# Homodyne shell completion (auto-added by homodyne-post-install)",
         "# Homodyne XLA configuration (auto-added by homodyne-post-install)",
+        "# homodyne XLA configuration",
     )
 
     lines = content.split("\n")
     result: list[str] = []
     skipping = False
-    # Track nesting depth so nested if/fi blocks don't prematurely end skip
     depth = 0
 
     for line in lines:
@@ -136,10 +258,6 @@ def _remove_homodyne_blocks(content: str, end_marker: str) -> str:
                 continue
             result.append(line)
         else:
-            # Track nesting depth: the block starts with the header comment,
-            # then has its own if/fi (or if/end) structure. Each opener
-            # increments depth; each closer decrements. When the closer
-            # brings depth back to 0, the block is finished.
             if end_marker == "fi":
                 if stripped.startswith("if ") or stripped.startswith("if\t"):
                     depth += 1
@@ -153,7 +271,6 @@ def _remove_homodyne_blocks(content: str, end_marker: str) -> str:
                         skipping = False
                         continue
             else:
-                # fish: end marker
                 if stripped in ("if", "for", "while") or any(
                     stripped.startswith(kw) for kw in ("if ", "for ", "while ")
                 ):
@@ -167,19 +284,24 @@ def _remove_homodyne_blocks(content: str, end_marker: str) -> str:
     return "\n".join(result)
 
 
-def cleanup_activate_script_hooks() -> list[tuple[str, str]]:
-    """Remove homodyne-injected sourcing blocks from venv activate scripts.
+def cleanup_xla_activation_scripts(
+    dry_run: bool = False,
+    verbose: bool = False,
+) -> bool:
+    """Remove XLA configuration from venv activation scripts.
 
-    The post-install script appends blocks delimited by:
-        # Homodyne shell completion (auto-added by homodyne-post-install)
-        # Homodyne XLA configuration (auto-added by homodyne-post-install)
-    This function strips those blocks to keep activate scripts clean.
+    Args:
+        dry_run: If True, don't actually modify files.
+        verbose: Print detailed output.
 
-    Creates a ``.bak`` backup of each modified script before writing changes.
+    Returns:
+        True if any modifications were made.
     """
-    venv_path = _resolve_venv_path()
-    bin_dir = venv_path / "bin"
-    cleaned = []
+    modified = False
+    venv_path = get_venv_path()
+
+    if not venv_path:
+        return False
 
     # (script_name, end_marker) pairs
     scripts = [
@@ -188,577 +310,178 @@ def cleanup_activate_script_hooks() -> list[tuple[str, str]]:
     ]
 
     for script_name, end_marker in scripts:
-        script_path = bin_dir / script_name
+        script_path = venv_path / "bin" / script_name
         if not script_path.exists():
             continue
 
-        try:
-            original = script_path.read_text(encoding="utf-8")
-            modified = _remove_homodyne_blocks(original, end_marker)
+        content = script_path.read_text(encoding="utf-8")
+        if "homodyne XLA" not in content and "Homodyne" not in content:
+            continue
 
-            if modified != original:
-                # Create .bak backup before modifying
-                backup_path = script_path.with_suffix(script_path.suffix + ".bak")
-                backup_path.write_text(original, encoding="utf-8")
-                script_path.write_text(modified, encoding="utf-8")
-                cleaned.append(("Activate hook", script_name))
+        if verbose:
+            action = "Would modify" if dry_run else "Modifying"
+            print(f"{action}: {script_path} (removing homodyne config)")
 
-        except OSError as e:
-            print(f"   [WARN] Failed to clean {script_name}: {e}")
-
-    return cleaned
-
-
-def cleanup_gpu_files() -> list[tuple[str, str]]:
-    """Remove GPU acceleration files from virtual environment."""
-    venv_path = _resolve_venv_path()
-    removed_files = []
-
-    gpu_files = [
-        venv_path / "etc" / "homodyne" / "gpu" / "gpu_activation.sh",
-        venv_path / "etc" / "conda" / "activate.d" / "homodyne-gpu.sh",
-    ]
-
-    for file_path in gpu_files:
-        if file_path.exists():
-            try:
-                file_path.unlink()
-                removed_files.append(("GPU setup", file_path.name))
-            except Exception as e:
-                print(f"   [WARN] Failed to remove {file_path.name}: {e}")
-
-    return removed_files
-
-
-def cleanup_advanced_features() -> list[tuple[str, str]]:
-    """Remove advanced features CLI commands and activation scripts."""
-    venv_path = _resolve_venv_path()
-    removed_files = []
-
-    # Advanced features CLI commands and activation scripts
-    cli_commands = [
-        venv_path / "bin" / "homodyne-gpu-optimize",
-        venv_path / "bin" / "homodyne-validate",
-        venv_path / "bin" / "homodyne-activate",  # Bash/Zsh activation
-        venv_path / "bin" / "homodyne-activate.fish",  # Fish activation
-    ]
-
-    for file_path in cli_commands:
-        if file_path.exists():
-            try:
-                file_path.unlink()
-                removed_files.append(("Activation/CLI", file_path.name))
-            except Exception as e:
-                print(f"   [WARN] Failed to remove {file_path.name}: {e}")
-
-    return removed_files
-
-
-def cleanup_xla_config() -> list[tuple[str, str]]:
-    """Remove XLA configuration file from user's home directory."""
-    removed_files = []
-
-    xla_config_file = Path.home() / ".homodyne_xla_mode"
-    if xla_config_file.exists():
-        try:
-            xla_config_file.unlink()
-            removed_files.append(("XLA config", xla_config_file.name))
-        except Exception as e:
-            print(f"   [WARN] Failed to remove {xla_config_file.name}: {e}")
-
-    return removed_files
-
-
-def cleanup_xla_activation_scripts() -> list[tuple[str, str]]:
-    """Remove XLA activation scripts from virtual environment."""
-    venv_path = _resolve_venv_path()
-    removed_files = []
-
-    xla_activation_files = [
-        venv_path / "etc" / "homodyne" / "activation" / "xla_config.bash",
-        venv_path / "etc" / "homodyne" / "activation" / "xla_config.fish",
-    ]
-
-    for file_path in xla_activation_files:
-        if file_path.exists():
-            try:
-                file_path.unlink()
-                removed_files.append(("XLA activation", file_path.name))
-            except Exception as e:
-                print(f"   [WARN] Failed to remove {file_path.name}: {e}")
-
-    return removed_files
-
-
-def cleanup_old_system_files() -> list[tuple[str, str]]:
-    """Remove old modular system files if they exist."""
-    venv_path = _resolve_venv_path()
-    removed_files = []
-
-    # Old system files to remove
-    old_files = [
-        venv_path / "etc" / "conda" / "activate.d" / "homodyne-gpu-activate.sh",
-        venv_path / "etc" / "conda" / "deactivate.d" / "homodyne-gpu-deactivate.sh",
-        venv_path / "etc" / "homodyne" / "gpu_activation.sh",
-        venv_path / "etc" / "homodyne" / "homodyne_aliases.sh",
-        venv_path / "etc" / "homodyne" / "homodyne_completion.zsh",
-        venv_path / "etc" / "homodyne" / "homodyne_config.sh",
-        # Windows batch files
-        venv_path / "Scripts" / "hm.bat",
-        venv_path / "Scripts" / "hc.bat",
-        venv_path / "Scripts" / "hr.bat",
-        venv_path / "Scripts" / "ha.bat",
-    ]
-
-    for file_path in old_files:
-        if file_path.exists():
-            try:
-                file_path.unlink()
-                removed_files.append(("Old system file", file_path.name))
-            except Exception as e:
-                print(f"   [WARN] Failed to remove {file_path.name}: {e}")
-
-    return removed_files
-
-
-def interactive_cleanup() -> list[tuple[str, str]]:
-    """Interactive cleanup allowing user to choose what to remove."""
-    try:
-        print("\nHomodyne Interactive Cleanup")
-        print("Choose what to remove:")
-        print()
-
-        # Shell completion
-        print("1. Shell Completion")
-        print("   - Removes bash/zsh/fish completion scripts")
-        print("   - Removes completion activation scripts")
-
-        remove_completion = (
-            input("   Remove shell completion? [y/N]: ").lower().startswith("y")
-        )
-
-        # GPU setup (Linux only)
-        remove_gpu = False
-        if platform.system() == "Linux":
-            print("\n2. GPU Acceleration Setup (JAX with CUDA)")
-            print("   - Removes GPU activation scripts")
-            print("   - Removes CUDA environment configuration")
-            print("   - GPU works automatically via JAX device detection")
-
-            remove_gpu = (
-                input("   Remove GPU setup files? [y/N]: ").lower().startswith("y")
-            )
-
-        # Advanced features
-        print("\n3. Advanced Features & Activation Scripts")
-        print("   - Removes homodyne-gpu-optimize CLI command")
-        print("   - Removes homodyne-validate CLI command")
-        print("   - Removes homodyne-activate scripts (for uv/venv/virtualenv)")
-
-        remove_advanced = (
-            input("   Remove advanced features & activation scripts? [y/N]: ")
-            .lower()
-            .startswith("y")
-        )
-
-        # Old system files
-        print("\n4. Old System Files")
-        print("   - Removes legacy completion system files")
-        print("   - Recommended for clean upgrade")
-
-        remove_old = input("   Remove old system files? [Y/n]: ").lower() != "n"
-
-        # XLA configuration
-        print("\n5. XLA Configuration")
-        print("   - Removes ~/.homodyne_xla_mode config file")
-        print("   - Removes $VIRTUAL_ENV/etc/homodyne/activation/ scripts")
-        print("   - Can be regenerated with: homodyne-post-install --interactive")
-
-        remove_xla = (
-            input("   Remove XLA configuration? [y/N]: ").lower().startswith("y")
-        )
-
-        # Perform cleanup
-        all_removed = []
-
-        if remove_completion:
-            all_removed.extend(cleanup_completion_files())
-            all_removed.extend(cleanup_activate_script_hooks())
-
-        if remove_gpu:
-            all_removed.extend(cleanup_gpu_files())
-
-        if remove_advanced:
-            all_removed.extend(cleanup_advanced_features())
-
-        if remove_old:
-            all_removed.extend(cleanup_old_system_files())
-
-        if remove_xla:
-            all_removed.extend(cleanup_xla_config())
-            all_removed.extend(cleanup_xla_activation_scripts())
-
-        return all_removed
-
-    except (KeyboardInterrupt, EOFError):
-        print("\n[WARN] Interactive cleanup cancelled by user")
-        return []
-
-
-def cleanup_all_files() -> bool:
-    """Remove all homodyne files from virtual environment."""
-    system = platform.system()
-    is_venv = is_virtual_environment()
-
-    print("=" * 70)
-    print("Homodyne Cleanup - Shell Completion System")
-    print("=" * 70)
-    print(f"Platform: {system}")
-    print(f"[ENV] Environment: {'Virtual Environment' if is_venv else 'System Python'}")
-
-    if not is_venv:
-        print("\n[WARN] Not running in a virtual environment")
-        print("   Cleanup only works in virtual environments")
-        print("   System installations don't create extra files")
-        return False
-
-    print(f"\n[SCAN] Scanning for homodyne files in: {_resolve_venv_path()}")
-
-    try:
-        # Clean up all types of files
-        all_removed = []
-        all_removed.extend(cleanup_completion_files())
-        all_removed.extend(cleanup_activate_script_hooks())
-        all_removed.extend(cleanup_gpu_files())
-        all_removed.extend(cleanup_advanced_features())
-        all_removed.extend(cleanup_old_system_files())
-        all_removed.extend(cleanup_xla_config())
-        all_removed.extend(cleanup_xla_activation_scripts())
-
-        # Clean up empty directories
-        venv_path = _resolve_venv_path()
-        directories_to_clean = [
-            venv_path / "etc" / "homodyne" / "gpu",
-            venv_path / "etc" / "homodyne" / "shell",
-            venv_path / "etc" / "homodyne" / "activation",
-            venv_path / "etc" / "homodyne",
-            venv_path / "etc" / "zsh",
-            venv_path / "share" / "fish" / "vendor_completions.d",
-            venv_path / "etc" / "bash_completion.d",
-        ]
-
-        for dir_path in directories_to_clean:
-            if dir_path.exists() and dir_path.is_dir():
+        if not dry_run:
+            new_content = _remove_homodyne_blocks(content, end_marker)
+            if new_content != content:
                 try:
-                    # Only remove if empty
-                    if not any(dir_path.iterdir()):
-                        dir_path.rmdir()
-                        all_removed.append(("Empty directory", dir_path.name))
-                except Exception as exc:
-                    print(f"   [WARN] Could not remove {dir_path}: {exc}")
-
-        print("\nCleanup Summary:")
-        if all_removed:
-            print(f"   [OK] Successfully removed {len(all_removed)} items:")
-            for file_type, name in all_removed:
-                print(f"      - {file_type}: {name}")
-            print("   Restart shell or reactivate environment to complete cleanup")
+                    script_path.write_text(new_content, encoding="utf-8")
+                    modified = True
+                except OSError as e:
+                    if verbose:
+                        print(f"  Failed: {e}")
         else:
-            print("   No homodyne files found to remove")
-            print("   Environment is already clean")
+            modified = True
 
-        return True
-
-    except Exception as e:
-        print(f"[FAIL] Failed to clean up files: {e}")
-        return False
+    return modified
 
 
-def show_dry_run() -> bool:
-    """Show what would be removed without actually removing anything."""
-    system = platform.system()
-    is_venv = is_virtual_environment()
+def show_dry_run(verbose: bool = True) -> None:
+    """Show what would be removed without actually removing anything.
 
-    print("=" * 70)
-    print("Homodyne Cleanup - DRY RUN")
-    print("=" * 70)
-    print(f"Platform: {system}")
-    print(f"[ENV] Environment: {'Virtual Environment' if is_venv else 'System Python'}")
+    Args:
+        verbose: Print detailed output.
+    """
+    print("Dry run - showing what would be removed:")
+    print("-" * 50)
 
-    if not is_venv:
-        print("\n[WARN] Not running in a virtual environment")
-        print("   Cleanup only works in virtual environments")
-        print("   System installations don't create extra files")
-        return False
+    targets = find_cleanup_targets()
+    existing = [t for t in targets if t.exists]
 
-    print(f"\n[SCAN] Would scan for homodyne files in: {_resolve_venv_path()}")
+    if not existing:
+        print("No homodyne files found to clean up.")
+        return
 
-    # Simulate finding files without removing them
-    venv_path = _resolve_venv_path()
-    files_to_remove = []
+    for target in existing:
+        print(f"  {target.path}")
+        if verbose:
+            print(f"    ({target.description})")
 
-    # Check for completion files
-    completion_files = [
-        (
-            venv_path / "etc" / "bash_completion.d" / "homodyne-completion.bash",
-            "Shell completion",
-            "homodyne-completion.bash",
-        ),
-        (
-            venv_path / "etc" / "conda" / "activate.d" / "homodyne-completion.sh",
-            "Shell completion",
-            "homodyne-completion.sh",
-        ),
-        (
-            venv_path
-            / "etc"
-            / "conda"
-            / "activate.d"
-            / "homodyne-advanced-completion.sh",
-            "Shell completion",
-            "homodyne-advanced-completion.sh",
-        ),
-        (
-            venv_path / "etc" / "zsh" / "homodyne-completion.zsh",
-            "Shell completion",
-            "homodyne-completion.zsh",
-        ),
-        (
-            venv_path / "share" / "fish" / "vendor_completions.d" / "homodyne.fish",
-            "Shell completion",
-            "homodyne.fish",
-        ),
-        (
-            venv_path / "etc" / "homodyne" / "shell" / "completion.sh",
-            "Shell completion",
-            "completion.sh (full)",
-        ),
-        (
-            venv_path / "etc" / "homodyne" / "shell" / "completion.fish",
-            "Shell completion",
-            "completion.fish",
-        ),
-    ]
+    # Check activation scripts
+    venv_path = get_venv_path()
+    if venv_path:
+        activate = venv_path / "bin" / "activate"
+        if activate.exists() and "homodyne XLA" in activate.read_text(encoding="utf-8"):
+            print(f"  {activate} (would modify)")
+            if verbose:
+                print("    (remove XLA configuration block)")
 
-    # Check for GPU files
-    gpu_files = [
-        (
-            venv_path / "etc" / "homodyne" / "gpu" / "gpu_activation.sh",
-            "GPU setup",
-            "gpu_activation.sh",
-        ),
-        (
-            venv_path / "etc" / "conda" / "activate.d" / "homodyne-gpu.sh",
-            "GPU setup",
-            "homodyne-gpu.sh",
-        ),
-    ]
+        fish_activate = venv_path / "bin" / "activate.fish"
+        if fish_activate.exists() and "homodyne XLA" in fish_activate.read_text(
+            encoding="utf-8"
+        ):
+            print(f"  {fish_activate} (would modify)")
+            if verbose:
+                print("    (remove XLA configuration block)")
 
-    # Check for advanced features
-    advanced_files = [
-        (
-            venv_path / "bin" / "homodyne-gpu-optimize",
-            "Advanced features",
-            "homodyne-gpu-optimize",
-        ),
-        (
-            venv_path / "bin" / "homodyne-validate",
-            "Advanced features",
-            "homodyne-validate",
-        ),
-    ]
 
-    # XLA config file and activation scripts
-    xla_files = [
-        (Path.home() / ".homodyne_xla_mode", "XLA config", ".homodyne_xla_mode"),
-        (
-            venv_path / "etc" / "homodyne" / "activation" / "xla_config.bash",
-            "XLA activation",
-            "xla_config.bash",
-        ),
-        (
-            venv_path / "etc" / "homodyne" / "activation" / "xla_config.fish",
-            "XLA activation",
-            "xla_config.fish",
-        ),
-    ]
+def interactive_cleanup() -> None:
+    """Run interactive cleanup process."""
+    print("=" * 60)
+    print("Homodyne Cleanup")
+    print("=" * 60)
+    print()
 
-    all_files = completion_files + gpu_files + advanced_files + xla_files
+    targets = find_cleanup_targets()
+    existing = [t for t in targets if t.exists]
 
-    for file_path, file_type, name in all_files:
-        if file_path.exists():
-            files_to_remove.append((file_type, name))
+    if not existing:
+        print("No homodyne files found to clean up.")
+        return
 
-    print("\nDry Run Results:")
-    if files_to_remove:
-        print(f"   [LIST] Would remove {len(files_to_remove)} items:")
-        for file_type, name in files_to_remove:
-            print(f"      - {file_type}: {name}")
-        print("   Would clean up empty directories")
-        print("\n[TIP] To actually remove these files, run without --dry-run")
-    else:
-        print("   No homodyne files found to remove")
-        print("   Environment is already clean")
+    print("The following files were found:")
+    for target in existing:
+        print(f"  - {target.path}")
+        print(f"    ({target.description})")
+    print()
 
-    return True
+    # Check activation scripts
+    venv_path = get_venv_path()
+    has_activation_mods = False
+    if venv_path:
+        activate = venv_path / "bin" / "activate"
+        if activate.exists() and "homodyne XLA" in activate.read_text(encoding="utf-8"):
+            print(f"  - {activate} contains XLA configuration")
+            has_activation_mods = True
+
+    print()
+    response = input("Remove all homodyne files? [y/N]: ").strip().lower()
+
+    if response != "y":
+        print("Cleanup cancelled.")
+        return
+
+    # Perform cleanup
+    print("\nCleaning up...")
+
+    removed = cleanup_completion_files(verbose=True)
+    removed.extend(cleanup_xla_config(verbose=True))
+
+    if has_activation_mods:
+        cleanup_xla_activation_scripts(verbose=True)
+
+    print()
+    print(f"Removed {len(removed)} file(s).")
+    print("Cleanup complete!")
 
 
 def main() -> int:
-    """Main cleanup routine for shell completion and GPU setup."""
-    args = parse_args()
-
-    try:
-        if args.dry_run:
-            success = show_dry_run()
-        elif args.interactive:
-            print("=" * 70)
-            print("Homodyne Interactive Cleanup")
-            print("=" * 70)
-
-            if not is_virtual_environment():
-                print("\n[WARN] Not in a virtual environment - nothing to clean")
-                return 0
-
-            removed_files = interactive_cleanup()
-
-            print("\nCleanup Results:")
-            if removed_files:
-                print(f"   [OK] Removed {len(removed_files)} items:")
-                for file_type, name in removed_files:
-                    print(f"      - {file_type}: {name}")
-            else:
-                print("   No files were removed")
-
-            success = True
-        else:
-            # Add confirmation prompt for non-interactive cleanup
-            if not args.force:
-                print(
-                    "\n[WARN] This will remove all homodyne shell completion and setup files:",
-                )
-                print(
-                    "   - Shell completion scripts and aliases (hm, hconfig, hm-nlsq, etc.)",
-                )
-                print("   - Activation scripts (homodyne-activate)")
-                print("   - GPU acceleration setup files")
-                print("   - Advanced features CLI commands")
-                print("   - All conda activation hooks")
-                print("   - XLA configuration (~/.homodyne_xla_mode)")
-                print(
-                    "   - XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)"
-                )
-                print("\n[TIP] To restore these files later, run:")
-                print("   homodyne-post-install --interactive")
-                print()
-
-                try:
-                    confirm = (
-                        input("Are you sure you want to proceed? [y/N]: ")
-                        .strip()
-                        .lower()
-                    )
-                    if not confirm.startswith("y"):
-                        print("[SKIP] Cleanup cancelled by user")
-                        return 0
-                except (KeyboardInterrupt, EOFError):
-                    print("\n[SKIP] Cleanup cancelled by user")
-                    return 0
-
-            success = cleanup_all_files()
-
-        print("\n" + "=" * 70)
-        if success:
-            print("[OK] Homodyne cleanup completed!")
-            if not args.interactive:
-                print("\n[TIP] What was cleaned:")
-                print("   |- Shell completion scripts (bash/zsh/fish)")
-                print("   |- Activation scripts (homodyne-activate)")
-                print("   |- GPU acceleration setup (JAX with CUDA)")
-                print("   |- Conda activation hooks")
-                print("   |- XLA configuration (~/.homodyne_xla_mode)")
-                print(
-                    "   |- XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)"
-                )
-                print("   `- Legacy system files")
-            print("\nNext steps:")
-            print("   - Restart your shell session")
-            print("   - Or reactivate your virtual environment")
-            print("   - Run 'pip uninstall homodyne' to complete removal")
-            print("\n[FIX] To restore shell completion and setup files:")
-            print("   homodyne-post-install --interactive")
-        else:
-            print("[WARN] Cleanup had some issues")
-            print("\n[TIP] Troubleshooting:")
-            print("   - Make sure you're in a virtual environment")
-            print("   - Try: homodyne-cleanup --interactive")
-            print("   - Check file permissions if needed")
-        print("=" * 70)
-
-        return 0 if success else 1
-
-    except KeyboardInterrupt:
-        print("\n[WARN] Cleanup cancelled by user")
-        return 1
-    except Exception as e:
-        print(f"\n[FAIL] Unexpected error during cleanup: {e}")
-        print("[TIP] Please report this issue if it persists")
-        return 1
-
-
-def parse_args() -> argparse.Namespace:
-    """Parse command line arguments."""
+    """CLI entry point for homodyne-cleanup."""
     parser = argparse.ArgumentParser(
-        prog="homodyne-cleanup",
-        description="Remove Homodyne shell completion system files",
+        description="Clean up homodyne installation files",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  homodyne-cleanup                   # Remove all homodyne files (with confirmation)
-  homodyne-cleanup --force           # Remove all homodyne files (no confirmation)
-  homodyne-cleanup --interactive     # Choose what to remove
-  homodyne-cleanup --dry-run         # Show what would be removed
-
-This script removes homodyne-related files that were installed by
-homodyne-post-install. Run this BEFORE 'pip uninstall homodyne'.
-
-IMPORTANT: To restore files after cleanup, run:
-  homodyne-post-install --interactive
-
-Files removed:
-  - Shell completion scripts (bash/zsh/fish)
-  - Activation scripts (homodyne-activate)
-  - GPU acceleration setup (JAX with CUDA)
-  - Conda activation hooks
-  - XLA configuration (~/.homodyne_xla_mode)
-  - XLA activation scripts ($VIRTUAL_ENV/etc/homodyne/activation/)
-  - Legacy system files
-
-Supports: conda, mamba, uv, venv, virtualenv
-        """,
+  homodyne-cleanup                  # Interactive cleanup
+  homodyne-cleanup --dry-run        # Show what would be removed
+  homodyne-cleanup --force          # Remove without confirmation
+""",
     )
-
-    parser.add_argument(
-        "--interactive",
-        "-i",
-        action="store_true",
-        help="Interactive cleanup - choose what to remove",
-    )
-
     parser.add_argument(
         "--dry-run",
         "-n",
         action="store_true",
-        help="Show what would be removed without actually removing",
+        help="Show what would be removed without removing",
     )
-
     parser.add_argument(
         "--force",
         "-f",
         action="store_true",
-        help="Skip confirmation prompt and force cleanup",
+        help="Remove without confirmation",
+    )
+    parser.add_argument(
+        "--interactive",
+        "-i",
+        action="store_true",
+        help="Interactive cleanup (default)",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Verbose output",
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if args.dry_run:
+        show_dry_run(args.verbose)
+        return 0
+
+    if args.force:
+        # Non-interactive removal
+        removed = cleanup_completion_files(verbose=args.verbose)
+        removed.extend(cleanup_xla_config(verbose=args.verbose))
+        cleanup_xla_activation_scripts(verbose=args.verbose)
+
+        if args.verbose:
+            print(f"\nRemoved {len(removed)} file(s).")
+        return 0
+
+    # Default: interactive mode
+    interactive_cleanup()
+    return 0
 
 
 if __name__ == "__main__":

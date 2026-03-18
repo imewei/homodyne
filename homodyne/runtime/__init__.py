@@ -1,15 +1,31 @@
-"""Homodyne Runtime Support
-==========================
-
-Runtime support modules for hardware optimization and system utilities.
+"""Runtime utilities for homodyne package.
 
 This module provides:
-- System resource management
-- Hardware-aware configuration
-- Performance monitoring
-- Shell completion support
+- System validation utilities
+- Shell completion scripts
+- XLA activation scripts
 
-Note: GPU support removed in v2.3.0 - CPU-only focus for reliability
+Example:
+    >>> from homodyne.runtime import run_validation
+    >>> run_validation()
 """
 
-__all__ = []
+from homodyne.runtime.shell import (
+    get_completion_script,
+    get_xla_config_script,
+)
+from homodyne.runtime.utils import (
+    SystemValidator,
+    ValidationResult,
+    run_validation,
+)
+
+__all__ = [
+    # Validation
+    "SystemValidator",
+    "ValidationResult",
+    "run_validation",
+    # Shell
+    "get_completion_script",
+    "get_xla_config_script",
+]

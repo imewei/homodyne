@@ -694,14 +694,16 @@ class TestParameterOverrideValidation:
 
 
 class TestShellAliasDefinitions:
-    """Test shell alias definitions in post_install.py."""
+    """Test shell alias definitions in completion.sh."""
 
     def test_shell_aliases_defined(self):
-        """Test that shell aliases are defined in post_install.py."""
-        post_install_file = _PROJECT_ROOT / "homodyne" / "post_install.py"
-        assert post_install_file.exists()
+        """Test that shell aliases are defined in completion.sh."""
+        completion_file = (
+            _PROJECT_ROOT / "homodyne" / "runtime" / "shell" / "completion.sh"
+        )
+        assert completion_file.exists()
 
-        content = post_install_file.read_text(encoding="utf-8")
+        content = completion_file.read_text(encoding="utf-8")
 
         # Check that correct aliases are defined
         assert "alias hm-nlsq='homodyne --method nlsq'" in content
@@ -709,21 +711,23 @@ class TestShellAliasDefinitions:
 
     def test_deprecated_aliases_not_defined(self):
         """Test that deprecated aliases are not defined."""
-        post_install_file = _PROJECT_ROOT / "homodyne" / "post_install.py"
-        assert post_install_file.exists()
+        completion_file = (
+            _PROJECT_ROOT / "homodyne" / "runtime" / "shell" / "completion.sh"
+        )
+        assert completion_file.exists()
 
-        content = post_install_file.read_text(encoding="utf-8")
+        content = completion_file.read_text(encoding="utf-8")
 
         # Deprecated aliases should not be defined
-        # (they would show up as "alias hm-nuts=" or "alias hm-auto=")
         assert "alias hm-nuts=" not in content
         assert "alias hm-auto=" not in content
-        # Note: hm-mcmc was renamed to hm-cmc
 
-    def test_alias_descriptions_in_post_install(self):
+    def test_alias_descriptions_in_completion(self):
         """Test that alias descriptions properly document the changes."""
-        post_install_file = _PROJECT_ROOT / "homodyne" / "post_install.py"
-        content = post_install_file.read_text(encoding="utf-8")
+        completion_file = (
+            _PROJECT_ROOT / "homodyne" / "runtime" / "shell" / "completion.sh"
+        )
+        content = completion_file.read_text(encoding="utf-8")
 
         # Check that aliases are defined for nlsq and cmc
         assert "hm-nlsq" in content
