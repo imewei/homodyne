@@ -24,7 +24,7 @@ $$c_2(\vec{q}, t_1, t_2) = 1 + \beta \times [c_1(\vec{q}, t_1, t_2)]^2$$
 
 where $\beta$ the optical contrast and the intermediate scattering function combines diffusion and shear:
 
-$$c_1(\vec{q}, t_1, t_2) = \exp\left(-q^2 \int_{t_1}^{t_2} J(t')\ dt'\right) \times \mathrm{sinc}\left(\frac{qL\cos(\phi)}{2\pi} \int_{t_1}^{t_2} \dot{\gamma}(t')\ dt'\right)$$
+$$c_1(\vec{q}, t_1, t_2) = \exp\left(-q^2 \int_{t_1}^{t_2} J(t')\ dt'\right) \times \mathrm{sinc}\left(\frac{qL\cos(\phi)}{2} \int_{t_1}^{t_2} \dot{\gamma}(t')\ dt'\right)$$
 
 where $\phi$ is the angle between the scattering vector and the flow direction.
 
