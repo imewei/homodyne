@@ -14,7 +14,7 @@ ______________________________________________________________________
 Register `hexp` and `hsim` as proper entry point commands and restructure README
 with detailed model documentation.
 
-3 files changed across 4 commits.
+3 files changed across 7 commits.
 
 **Features:**
 
@@ -30,6 +30,14 @@ with detailed model documentation.
   - Align with heterodyne README format: subsection headers for two-time correlation,
     rate functions, and parameters. Grouped parameter tables with units and defaults
     for diffusion, shear, and scaling parameters.
+
+- **docs**: Use `c1` notation with q-vector in README equations (`README.md`)
+
+- **docs**: Fix inline LaTeX rendering for shear rate (`README.md`)
+
+  - Remove braces from `\dot{\gamma}` to avoid GitHub inline math parser issue.
+
+- **docs**: Fix unit notation in shear rate parameter table (`README.md`)
 
 **Chores:**
 
