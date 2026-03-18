@@ -7,6 +7,28 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
+## [2.22.8] - 2026-03-17
+
+### CLI Entry Point Commands
+
+Register `hexp` and `hsim` as proper entry point commands so they work in any shell
+when the venv is active, without requiring completion scripts to be sourced.
+
+2 files changed across 2 commits.
+
+**Features:**
+
+- **feat(cli)**: Register `hexp`/`hsim` as entry point commands (`main.py`, `pyproject.toml`)
+
+  - Shell aliases require sourcing completion scripts, making them invisible to `which`
+    and unavailable in unsourced shells. Proper entry points resolve both issues.
+
+**Chores:**
+
+- **chore(deps)**: Update lockfile
+
+______________________________________________________________________
+
 ## [2.22.7] - 2026-03-11
 
 ### CMA-ES Warm-Start Performance Optimization

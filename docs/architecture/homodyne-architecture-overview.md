@@ -2,7 +2,7 @@
 
 Comprehensive system-level architecture documentation for the homodyne XPCS analysis package.
 
-**Version:** 2.22.7 **Last Updated:** March 2026 **Codebase:** ~89,000 lines Python + ~780 lines shell
+**Version:** 2.22.8 **Last Updated:** March 2026 **Codebase:** ~89,000 lines Python + ~780 lines shell
 
 ## Table of Contents
 
@@ -33,7 +33,7 @@ ______________________________________________________________________
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                          HOMODYNE v2.22.7                                       │
+│                          HOMODYNE v2.22.8                                       │
 │            CPU-Optimized JAX Package for XPCS Analysis                         │
 │                                                                                 │
 │   Core Equation:  c2(phi, t1, t2) = 1 + contrast * [g1(phi, t1, t2)]^2        │
@@ -146,7 +146,7 @@ ______________________________________________________________________
 ```
 homodyne/                              # Root package (358 lines)
 ├── __init__.py                        # Lazy imports, XLA/Float64 env setup
-├── _version.py                        # Auto-generated: "2.22.7"
+├── _version.py                        # Auto-generated: "2.22.8"
 │
 ├── core/                   9,399 L    # Physics models & JAX primitives
 │   ├── jax_backend.py      1,556 L    #   JIT dispatcher (meshgrid/element-wise)
@@ -336,7 +336,7 @@ import homodyne
     ├── logging.getLogger("jax._src.xla_bridge").setLevel(ERROR)
     ├── logging.getLogger("jax._src.compiler").setLevel(ERROR)
     │
-    ├── __version__ = "2.22.7"                       # From _version.py (setuptools_scm)
+    ├── __version__ = "2.22.8"                       # From _version.py (setuptools_scm)
     │
     └── __getattr__(name) ──► Lazy import on first access
          homodyne.fit_nlsq_jax  → from homodyne.optimization import fit_nlsq_jax
