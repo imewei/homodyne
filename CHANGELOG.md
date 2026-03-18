@@ -9,12 +9,13 @@ ______________________________________________________________________
 
 ## [2.22.8] - 2026-03-17
 
-### CLI Entry Point Commands & Documentation
+### CLI Entry Point Commands, Documentation & Shell Completion
 
-Register `hexp` and `hsim` as proper entry point commands and restructure README
-with detailed model documentation.
+Register `hexp` and `hsim` as proper entry point commands, restructure README
+with detailed model documentation, and rewrite shell completion system to align
+with heterodyne's cleaner architecture (-847 net lines).
 
-3 files changed across 7 commits.
+10 files changed across 8 commits.
 
 **Features:**
 
@@ -38,6 +39,17 @@ with detailed model documentation.
   - Remove braces from `\dot{\gamma}` to avoid GitHub inline math parser issue.
 
 - **docs**: Fix unit notation in shear rate parameter table (`README.md`)
+
+**Refactoring:**
+
+- **refactor(shell)**: Rewrite shell completion system (`completion.sh`, `post_install.py`,
+  `uninstall_scripts.py`, `runtime/__init__.py`, `runtime/shell/__init__.py`,
+  `runtime/utils/__init__.py`)
+
+  - Align with heterodyne's cleaner architecture: `_init_completion` with fallback,
+    bashcompinit wrapper for zsh, inline fish completions. Remove over-engineered zsh
+    `_arguments` completions, interactive command builder, and help function. Add proper
+    module exports for runtime/shell and runtime/utils subpackages.
 
 **Chores:**
 
