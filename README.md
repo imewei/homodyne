@@ -47,15 +47,15 @@ scaling parameters:
 
 | Parameter | Description | Default | Units |
 |-----------|-------------|---------|-------|
-| `D0` | Diffusion prefactor | 1e4 | A^2/s^alpha |
+| `D0` | Diffusion prefactor | 1e4 | Å²/s |
 | `alpha` | Transport exponent (0 = Wiener, 1 = ballistic) | 0.0 | -- |
-| `D_offset` | Transport rate offset | 0.0 | A^2/s |
+| `D_offset` | Transport rate offset | 0.0 | Å²/s |
 
-**Shear rate** (laminar_flow only) -- $\dot{\gamma}(t) = \dot{\gamma}_0 t^\beta + \dot{\gamma}_{\text{offset}}$
+**Shear rate** (laminar_flow only) -- $\dot\gamma(t) = \dot\gamma_0 t^\beta + \dot\gamma_{\text{offset}}$
 
 | Parameter | Description | Default | Units |
 |-----------|-------------|---------|-------|
-| `gamma_dot_0` | Shear rate prefactor | 1e-3 | s^(-1-beta) |
+| `gamma_dot_0` | Shear rate prefactor | 1e-3 | s^-1 |
 | `beta` | Shear rate exponent (0 = constant shear) | 0.0 | -- |
 | `gamma_dot_offset` | Shear rate offset | 0.0 | s^-1 |
 
