@@ -14,11 +14,63 @@ transport properties in flowing soft matter systems.
 
 ## Homodyne Model
 
-$$c_2(\phi, t_1, t_2) = \text{offset} + \text{contrast} \times \exp\left(-q^2 \int_{t_1}^{t_2} J(t')\ dt'\right) \times \mathrm{sinc}^2\left(\frac{qL\cos(\phi_0 - \phi)}{2\pi} \int_{t_1}^{t_2} \dot{\gamma}(t')\ dt'\right)$$
+The package implements a single-component scattering model where correlation decay
+encodes diffusion and shear dynamics. The scattered intensity auto-correlates to
+produce a two-time correlation function whose shape reveals transport coefficients.
+
+### Two-Time Correlation
+
+$$c_2(\phi, t_1, t_2) = 1 + \beta \times [g_1(\phi, t_1, t_2)]^2$$
+
+where $\beta$ the optical contrast and the intermediate scattering function combines diffusion and shear:
+
+$$g_1(\phi, t_1, t_2) = \exp\left(-q^2 \int_{t_1}^{t_2} J(t')\ dt'\right) \times \mathrm{sinc}\left(\frac{qL\cos(\phi)}{2\pi} \int_{t_1}^{t_2} \dot{\gamma}(t')\ dt'\right)$$
+
+where $\phi$ is the angle between the scattering vector and the flow direction.
+
+### Rate Functions
+
+Transport coefficients follow power-law forms:
 
 $$J(t) = D_0 \cdot t^{\alpha} + D_{\text{offset}} \qquad \dot{\gamma}(t) = \dot{\gamma}_0 \cdot t^{\beta} + \dot{\gamma}_{\text{offset}}$$
 
-All time integrals are evaluated numerically via cumulative trapezoid on the discrete time grid.
+All time integrals are evaluated **numerically** via cumulative trapezoid on the discrete
+time grid -- no analytical antiderivatives are ever used, ensuring correctness for the
+general power-law form.
+
+### Parameters
+
+The model has up to 7 physics parameters organized into three groups, plus 2 per-angle
+scaling parameters:
+
+**Diffusion transport** -- $J(t) = D_0 t^\alpha + D_{\text{offset}}$
+
+| Parameter | Description | Default | Units |
+|-----------|-------------|---------|-------|
+| `D0` | Diffusion prefactor | 1e4 | A^2/s^alpha |
+| `alpha` | Transport exponent (0 = Wiener, 1 = ballistic) | 0.0 | -- |
+| `D_offset` | Transport rate offset | 0.0 | A^2/s |
+
+**Shear rate** (laminar_flow only) -- $\dot{\gamma}(t) = \dot{\gamma}_0 t^\beta + \dot{\gamma}_{\text{offset}}$
+
+| Parameter | Description | Default | Units |
+|-----------|-------------|---------|-------|
+| `gamma_dot_0` | Shear rate prefactor | 1e-3 | s^(-1-beta) |
+| `beta` | Shear rate exponent (0 = constant shear) | 0.0 | -- |
+| `gamma_dot_offset` | Shear rate offset | 0.0 | s^-1 |
+
+**Flow angle**
+
+| Parameter | Description | Default | Units |
+|-----------|-------------|---------|-------|
+| `phi0` | Flow angle offset relative to q-vector | 0.0 | degrees |
+
+**Per-angle scaling** (2 parameters per detector angle)
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `contrast` | Optical contrast (speckle contrast) | 0.5 |
+| `offset` | Baseline offset | 1.0 |
 
 | Mode | Parameters | Count |
 |------|------------|-------|
@@ -61,10 +113,12 @@ homodyne --method cmc --config config.yaml
 ### Python API
 
 ```python
-from homodyne.optimization import fit_nlsq_jax, fit_mcmc_jax
 from homodyne.data import load_xpcs_data
 from homodyne.config import ConfigManager
+from homodyne.optimization import fit_nlsq_jax
+from homodyne.optimization.cmc import fit_mcmc_jax
 
+# Load data and config
 data = load_xpcs_data("config.yaml")
 config = ConfigManager("config.yaml")
 
