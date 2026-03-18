@@ -55,9 +55,9 @@ scaling parameters:
 
 | Parameter | Description | Default | Units |
 |-----------|-------------|---------|-------|
-| `gamma_dot_0` | Shear rate prefactor | 1e-3 | s^{-1} |
+| `gamma_dot_0` | Shear rate prefactor | 1e-3 | s⁻¹ |
 | `beta` | Shear rate exponent (0 = constant shear) | 0.0 | -- |
-| `gamma_dot_offset` | Shear rate offset | 0.0 | s^{-1} |
+| `gamma_dot_offset` | Shear rate offset | 0.0 | s⁻¹ |
 
 **Flow angle**
 
