@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2034  # words/cword set by _init_completion convention
 # Bash completion for homodyne CLI
 #
 # Installation:

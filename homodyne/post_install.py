@@ -525,14 +525,21 @@ def _migrate_legacy_xla_mode(new_path: Path) -> None:
             pass  # Best-effort migration
 
 
-def configure_xla_mode(mode: str = "auto", verbose: bool = False) -> bool:
+def configure_xla_mode(
+    mode: str = "auto", verbose: bool = False, force: bool = False
+) -> bool:
     """Configure the XLA mode.
 
     Stores in the virtual environment (if active) or XDG config directory.
+    Preserves existing configuration unless ``force=True``, matching the
+    shell-side behavior in ``xla_config.bash`` where the mode file is only
+    written when an explicit argument is provided.
 
     Args:
         mode: XLA mode (auto, nlsq, cmc, cmc-hpc, or a number).
         verbose: Print verbose output.
+        force: Overwrite existing config. Set to True only when the user
+            explicitly passes ``--xla-mode``.
 
     Returns:
         True if configuration succeeded.
@@ -541,6 +548,16 @@ def configure_xla_mode(mode: str = "auto", verbose: bool = False) -> bool:
 
     try:
         config_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Migrate legacy file if new file doesn't exist yet
+        _migrate_legacy_xla_mode(config_file)
+
+        if config_file.exists() and not force:
+            if verbose:
+                existing = config_file.read_text(encoding="utf-8").strip()
+                print(f"Preserving existing XLA mode '{existing}' in {config_file}")
+            return True
+
         config_file.write_text(mode, encoding="utf-8")
         if verbose:
             print(f"Set XLA mode to '{mode}' in {config_file}")
@@ -626,7 +643,7 @@ def interactive_setup() -> None:
             print(f"Invalid mode: {mode}, using 'auto'")
             mode = "auto"
 
-    success = configure_xla_mode(mode, verbose=True)
+    success = configure_xla_mode(mode, verbose=True, force=True)
     if success:
         print(f"XLA mode set to '{mode}'")
 
@@ -686,8 +703,8 @@ Examples:
     parser.add_argument(
         "--xla-mode",
         choices=["auto", "nlsq", "cmc", "cmc-hpc"],
-        default="auto",
-        help="XLA configuration mode (default: auto)",
+        default=None,
+        help="XLA configuration mode (default: preserve existing, or auto)",
     )
     parser.add_argument(
         "-v",
@@ -715,12 +732,14 @@ Examples:
             success = False
 
     if not args.no_xla:
-        result = configure_xla_mode(args.xla_mode, args.verbose)
+        xla_mode = args.xla_mode or "auto"
+        xla_explicit = args.xla_mode is not None
+        result = configure_xla_mode(xla_mode, args.verbose, force=xla_explicit)
         if not result:
             print("XLA mode configuration failed")
             success = False
 
-        result = install_xla_activation(args.shell, args.xla_mode, args.verbose)
+        result = install_xla_activation(args.shell, xla_mode, args.verbose)
         if not result:
             print("XLA activation installation failed")
             success = False
