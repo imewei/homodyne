@@ -9,12 +9,12 @@ ______________________________________________________________________
 
 ## [2.22.8] - 2026-03-17
 
-### CLI Entry Point Commands
+### CLI Entry Point Commands & Documentation
 
-Register `hexp` and `hsim` as proper entry point commands so they work in any shell
-when the venv is active, without requiring completion scripts to be sourced.
+Register `hexp` and `hsim` as proper entry point commands and restructure README
+with detailed model documentation.
 
-2 files changed across 2 commits.
+3 files changed across 4 commits.
 
 **Features:**
 
@@ -22,6 +22,14 @@ when the venv is active, without requiring completion scripts to be sourced.
 
   - Shell aliases require sourcing completion scripts, making them invisible to `which`
     and unavailable in unsourced shells. Proper entry points resolve both issues.
+
+**Documentation:**
+
+- **docs**: Restructure README model section with parameter tables (`README.md`)
+
+  - Align with heterodyne README format: subsection headers for two-time correlation,
+    rate functions, and parameters. Grouped parameter tables with units and defaults
+    for diffusion, shear, and scaling parameters.
 
 **Chores:**
 
