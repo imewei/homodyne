@@ -372,6 +372,118 @@ def install_shell_completion(
         return install_bash_completion(venv_path, verbose)
 
 
+def install_completion_activation(
+    shell: str | None = None,
+    verbose: bool = False,
+) -> bool:
+    """Add completion sourcing to venv activation script.
+
+    Ensures aliases and tab completion are available immediately on
+    ``source activate`` without requiring manual shell init changes.
+
+    Args:
+        shell: Shell type or None for auto-detection.
+        verbose: Print verbose output.
+
+    Returns:
+        True if installation succeeded.
+    """
+    if not is_virtual_environment():
+        if verbose:
+            print("Not in a virtual environment, skipping completion activation")
+        return False
+
+    venv_path = get_venv_path()
+    detected_shell = shell or detect_shell_type()
+
+    if detected_shell in ("bash", "zsh", "unknown"):
+        return _install_completion_bash_activation(venv_path, verbose)
+    elif detected_shell == "fish":
+        return _install_completion_fish_activation(venv_path, verbose)
+    else:
+        return False
+
+
+def _install_completion_bash_activation(
+    venv_path: Path,
+    verbose: bool,
+) -> bool:
+    """Add completion sourcing to bash/zsh activate script."""
+    activate_script = venv_path / "bin" / "activate"
+    if not activate_script.exists():
+        if verbose:
+            print(f"Activate script not found: {activate_script}")
+        return False
+
+    content = activate_script.read_text(encoding="utf-8")
+    marker = "# Homodyne shell completion (auto-added by homodyne-post-install)"
+
+    if marker in content:
+        if verbose:
+            print("Completion activation already installed in activate script")
+        return True
+
+    # Use $VIRTUAL_ENV so paths resolve correctly at activation time.
+    # Zsh needs bashcompinit wrapper; bash sources completion directly.
+    addition = f"""
+{marker}
+if [ -n "$ZSH_VERSION" ] && [ -f "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh" ]; then
+    source "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh"
+elif [ -f "$VIRTUAL_ENV/etc/bash_completion.d/homodyne" ]; then
+    source "$VIRTUAL_ENV/etc/bash_completion.d/homodyne"
+fi
+"""
+
+    try:
+        with open(activate_script, "a", encoding="utf-8") as f:
+            f.write(addition)
+        if verbose:
+            print(f"Added completion activation to: {activate_script}")
+        return True
+    except OSError as e:
+        if verbose:
+            print(f"Failed to modify activate script: {e}")
+        return False
+
+
+def _install_completion_fish_activation(
+    venv_path: Path,
+    verbose: bool,
+) -> bool:
+    """Add completion sourcing to fish activate script."""
+    activate_script = venv_path / "bin" / "activate.fish"
+    if not activate_script.exists():
+        if verbose:
+            print(f"Fish activate script not found: {activate_script}")
+        return False
+
+    content = activate_script.read_text(encoding="utf-8")
+    marker = "# Homodyne shell completion (auto-added by homodyne-post-install)"
+
+    if marker in content:
+        if verbose:
+            print("Completion activation already installed in fish activate script")
+        return True
+
+    addition = f"""
+{marker}
+if test -f "$VIRTUAL_ENV/share/fish/vendor_completions.d/homodyne.fish"
+    source "$VIRTUAL_ENV/share/fish/vendor_completions.d/homodyne.fish"
+end
+"""
+
+    try:
+        with open(activate_script, "a", encoding="utf-8") as f:
+            f.write(addition)
+        if verbose:
+            print(f"Added completion activation to: {activate_script}")
+        return True
+    except OSError as e:
+        if verbose:
+            print(f"Failed to modify fish activate script: {e}")
+        return False
+
+
 def install_xla_activation(
     shell: str | None = None,
     mode: str = "auto",
@@ -611,16 +723,21 @@ def interactive_setup() -> None:
     if response != "n":
         success = install_shell_completion(shell, verbose=True)
         if success:
-            print("Shell completion installed successfully!")
-            env_var = "$CONDA_PREFIX" if is_conda else "$VIRTUAL_ENV"
-            if shell == "zsh":
-                print(
-                    f"Add to ~/.zshrc: source {env_var}/etc/zsh/homodyne-completion.zsh"
-                )
-            elif shell == "bash":
-                print(
-                    f"Add to ~/.bashrc: source {env_var}/etc/bash_completion.d/homodyne"
-                )
+            act_success = install_completion_activation(shell, verbose=True)
+            if act_success:
+                print("Shell completion installed and activated!")
+                print("Deactivate and reactivate your venv to load aliases.")
+            else:
+                print("Shell completion installed (activate hook failed).")
+                env_var = "$CONDA_PREFIX" if is_conda else "$VIRTUAL_ENV"
+                if shell == "zsh":
+                    print(
+                        f"Add to ~/.zshrc: source {env_var}/etc/zsh/homodyne-completion.zsh"
+                    )
+                elif shell == "bash":
+                    print(
+                        f"Add to ~/.bashrc: source {env_var}/etc/bash_completion.d/homodyne"
+                    )
         else:
             print("Shell completion installation failed.")
     print()
@@ -733,6 +850,11 @@ Examples:
         if not result:
             print("Shell completion installation failed")
             success = False
+        else:
+            result = install_completion_activation(args.shell, args.verbose)
+            if not result:
+                print("Completion activation hook failed")
+                success = False
 
     if not args.no_xla:
         xla_mode = args.xla_mode or "auto"
