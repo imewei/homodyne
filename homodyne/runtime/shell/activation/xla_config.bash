@@ -51,9 +51,22 @@ _homodyne_detect_xla_devices() {
 # ============================================================================
 HOMODYNE_XLA_MODE="${HOMODYNE_XLA_MODE:-}"
 
-# If not set via environment, read from config file
-if [ -z "$HOMODYNE_XLA_MODE" ] && [ -f "$HOME/.homodyne_xla_mode" ]; then
-    HOMODYNE_XLA_MODE=$(cat "$HOME/.homodyne_xla_mode" 2>/dev/null | tr -d '[:space:]')
+# If not set via environment, read from config file (per-venv > XDG > legacy)
+if [ -z "$HOMODYNE_XLA_MODE" ]; then
+    _hm_xla_mode_file=""
+    if [ -n "$VIRTUAL_ENV" ] && [ -f "$VIRTUAL_ENV/etc/homodyne/xla_mode" ]; then
+        _hm_xla_mode_file="$VIRTUAL_ENV/etc/homodyne/xla_mode"
+    elif [ -n "$CONDA_PREFIX" ] && [ -f "$CONDA_PREFIX/etc/homodyne/xla_mode" ]; then
+        _hm_xla_mode_file="$CONDA_PREFIX/etc/homodyne/xla_mode"
+    elif [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/homodyne/xla_mode" ]; then
+        _hm_xla_mode_file="${XDG_CONFIG_HOME:-$HOME/.config}/homodyne/xla_mode"
+    elif [ -f "$HOME/.homodyne_xla_mode" ]; then
+        _hm_xla_mode_file="$HOME/.homodyne_xla_mode"
+    fi
+    if [ -n "$_hm_xla_mode_file" ]; then
+        HOMODYNE_XLA_MODE=$(tr -d '[:space:]' < "$_hm_xla_mode_file" 2>/dev/null)
+    fi
+    unset _hm_xla_mode_file
 fi
 
 # Validate mode from config file

@@ -9,7 +9,7 @@ if set -q XLA_FLAGS
     if set -q HOMODYNE_VERBOSE
         echo "[homodyne] Using existing XLA_FLAGS: $XLA_FLAGS" >&2
     end
-    exit 0
+    return 0
 end
 
 # ============================================================================
@@ -42,9 +42,21 @@ end
 # ============================================================================
 set -l mode $HOMODYNE_XLA_MODE
 
-# If not set, read from config file
-if test -z "$mode"; and test -f $HOME/.homodyne_xla_mode
-    set mode (cat $HOME/.homodyne_xla_mode 2>/dev/null | tr -d '[:space:]'; or echo "cmc")
+# If not set, read from config file (per-venv > XDG > legacy)
+if test -z "$mode"
+    set -l mode_file ""
+    if set -q VIRTUAL_ENV; and test -f "$VIRTUAL_ENV/etc/homodyne/xla_mode"
+        set mode_file "$VIRTUAL_ENV/etc/homodyne/xla_mode"
+    else if set -q CONDA_PREFIX; and test -f "$CONDA_PREFIX/etc/homodyne/xla_mode"
+        set mode_file "$CONDA_PREFIX/etc/homodyne/xla_mode"
+    else if test -f (set -q XDG_CONFIG_HOME; and echo $XDG_CONFIG_HOME; or echo $HOME/.config)/homodyne/xla_mode
+        set mode_file (set -q XDG_CONFIG_HOME; and echo $XDG_CONFIG_HOME; or echo $HOME/.config)/homodyne/xla_mode
+    else if test -f $HOME/.homodyne_xla_mode
+        set mode_file $HOME/.homodyne_xla_mode
+    end
+    if test -n "$mode_file"
+        set mode (cat $mode_file 2>/dev/null | tr -d '[:space:]'; or echo "cmc")
+    end
 end
 
 # Validate and default

@@ -431,7 +431,7 @@ def _install_xla_bash_activation(
     addition = f"""
 {marker}
 if [ -f "{xla_script}" ]; then
-    source "{xla_script}" {mode}
+    source "{xla_script}"
 fi
 """
 
@@ -475,7 +475,7 @@ def _install_xla_fish_activation(
     addition = f"""
 {marker}
 if test -f "{xla_script}"
-    source "{xla_script}" {mode}
+    source "{xla_script}"
 end
 """
 
@@ -717,7 +717,10 @@ Examples:
 
     # Run interactive setup if no specific options given
     if args.interactive or (
-        not args.no_completion and not args.no_xla and not args.shell
+        not args.no_completion
+        and not args.no_xla
+        and not args.shell
+        and not args.xla_mode
     ):
         interactive_setup()
         return 0
