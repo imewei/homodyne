@@ -7,7 +7,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
-## [2.22.8] - 2026-03-17
+## [2.22.8] - 2026-03-19
 
 ### CLI Entry Point Commands, Documentation & Shell Completion
 
@@ -15,7 +15,7 @@ Register `hexp` and `hsim` as proper entry point commands, restructure README
 with detailed model documentation, and rewrite shell completion system to align
 with heterodyne's cleaner architecture (-847 net lines).
 
-10 files changed across 8 commits.
+11 files changed across 10 commits.
 
 **Features:**
 
@@ -39,6 +39,12 @@ with heterodyne's cleaner architecture (-847 net lines).
   - Remove braces from `\dot{\gamma}` to avoid GitHub inline math parser issue.
 
 - **docs**: Fix unit notation in shear rate parameter table (`README.md`)
+
+- **docs**: Fix sinc denominator in README equation (`README.md`)
+
+**Fixes:**
+
+- **fix(shell)**: Suppress shellcheck SC2034 and preserve XLA mode (`completion.sh`)
 
 **Refactoring:**
 
