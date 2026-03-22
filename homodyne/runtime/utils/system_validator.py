@@ -202,19 +202,16 @@ class SystemValidator:
             completion_files = []
             missing_files = []
 
-            # Check for completion files (multiple possible configurations)
+            # Check for completion files matching homodyne-post-install output
             potential_files = [
-                # Simple completion mode
-                venv_path / "etc" / "conda" / "activate.d" / "homodyne-completion.sh",
+                # Bash completion
+                venv_path / "etc" / "bash_completion.d" / "homodyne",
+                # Zsh completion
                 venv_path / "etc" / "zsh" / "homodyne-completion.zsh",
-                # Advanced completion mode
-                venv_path
-                / "etc"
-                / "conda"
-                / "activate.d"
-                / "homodyne-advanced-completion.sh",
-                # Future fish support
-                venv_path / "share" / "fish" / "vendor_completions.d" / "homodyne.fish",
+                # Fish completion
+                venv_path / "etc" / "homodyne" / "shell" / "completion.fish",
+                # Main completion source (shared)
+                venv_path / "etc" / "homodyne" / "shell" / "completion.sh",
             ]
 
             # Also check for the main completion source file
@@ -308,17 +305,10 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
 
             execution_time = time.perf_counter() - start_time
             warnings = []
-            # Only warn about critical missing files (not all potential files)
+            # Only warn if no completion files found at all
             critical_missing = []
-            for file_path in potential_files:
-                if not file_path.exists():
-                    # Only warn about files that should definitely exist
-                    if "homodyne-completion.sh" in str(
-                        file_path,
-                    ) or "homodyne-advanced-completion.sh" in str(file_path):
-                        critical_missing.append(file_path)
-                    elif "completion.sh" in str(file_path):  # Main completion source
-                        critical_missing.append(file_path)
+            if not completion_files:
+                critical_missing = missing_files
 
             if critical_missing:
                 warnings.append(
@@ -389,8 +379,8 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
             # Test import of main modules
             import_tests: dict[str, bool | str] = {}
             modules = [
-                "homodyne.run_homodyne",
-                "homodyne.create_config",
+                "homodyne.cli.main",
+                "homodyne.cli.config_generator",
                 "homodyne.post_install",
                 "homodyne.uninstall_scripts",
             ]
@@ -449,15 +439,14 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
         try:
             from importlib.metadata import version
 
-            # Required versions per CLAUDE.md v3.0
+            # Required versions matching pyproject.toml
             requirements = {
-                "jax": {"operator": "==", "version": "0.8.0"},
-                "jaxlib": {"operator": "==", "version": "0.8.0"},
+                "jax": {"operator": ">=", "version": "0.8.2"},
+                "jaxlib": {"operator": ">=", "version": "0.8.2"},
                 "nlsq": {"operator": ">=", "version": "0.1.0"},
                 "numpyro": {
                     "operator": ">=",
-                    "version": "0.18.0",
-                    "upper": "0.20.0",
+                    "version": "0.19.0",
                 },
                 "numpy": {"operator": ">=", "version": "2.0.0", "upper": "3.0.0"},
                 "scipy": {"operator": ">=", "version": "1.14.0"},
@@ -517,15 +506,15 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                         f"jaxlib={results['jaxlib']}. These must match exactly!",
                     )
                     remediation.append(
-                        "pip install jax==0.8.0 jaxlib==0.8.0  # Fix version mismatch",
+                        "pip install 'jax>=0.8.2' 'jaxlib>=0.8.2'  # Fix version mismatch",
                     )
 
             # Add general remediation if errors found
             if errors and not remediation:
                 remediation.append(
-                    "pip install jax==0.8.0 jaxlib==0.8.0 nlsq>=0.1.0",
+                    "pip install 'jax>=0.8.2' 'jaxlib>=0.8.2' 'nlsq>=0.1.0'",
                 )
-                remediation.append("pip install 'numpyro>=0.18.0,<0.20.0'")
+                remediation.append("pip install 'numpyro>=0.19.0'")
                 remediation.append("pip install 'numpy>=2.0.0,<3.0.0'")
 
             execution_time = time.perf_counter() - start_time
@@ -656,8 +645,7 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                 execution_time=execution_time,
                 severity="critical",
                 remediation=[
-                    "pip install jax==0.8.0 jaxlib==0.8.0  # CPU-only (all platforms)",
-                    "pip install jax[cuda12-local]==0.8.0  # GPU (Linux only, after CPU install)",
+                    "pip install 'jax>=0.8.2' 'jaxlib>=0.8.2'  # CPU-only (all platforms)",
                 ],
                 error_code="EJAX_001",
             )
@@ -883,9 +871,11 @@ alias hc-iso >/dev/null 2>&1 && echo "shortcut_alias_works" || echo "shortcut_al
                     details["template_count"] = len(template_files)
                     details["template_files"] = [f.name for f in template_files]
 
-                    # Expected templates per CLAUDE.md
+                    # Expected templates matching actual config/templates/
                     expected_templates = [
-                        "homodyne_streaming_config.yaml",
+                        "homodyne_static.yaml",
+                        "homodyne_laminar_flow.yaml",
+                        "homodyne_master_template.yaml",
                     ]
 
                     missing_templates = [

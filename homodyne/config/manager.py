@@ -1016,13 +1016,20 @@ class ConfigManager:
             "metadata",
             "analysis_mode",
             "analyzer_parameters",
+            "analysis_settings",
             "experimental_data",
+            "phi_filtering",
+            "initial_parameters",
             "parameter_space",
             "optimization",
-            "output",
+            "noise_estimation",
+            "performance",
             "logging",
+            "quality_control",
+            "plotting",
+            "output",
+            "validation",
             "config_version",
-            "initial_parameters",
         }
 
         if not self.config:
