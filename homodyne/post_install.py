@@ -208,10 +208,16 @@ def install_zsh_completion(venv_path: Path, verbose: bool = False) -> bool:
         content = f"""# Zsh completion for homodyne (generated)
 # Source the bash completion in zsh-compatible mode
 
+# Ensure completion system is initialized (may already be loaded from .zshrc)
+if ! type compdef >/dev/null 2>&1; then
+    autoload -Uz compinit
+    compinit -C 2>/dev/null
+fi
 autoload -Uz bashcompinit
 bashcompinit
 
-source "{completion_path}"
+source "{completion_path}" 2>/dev/null
+true  # Ensure zero exit code regardless of completion system state
 """
         dest.write_text(content, encoding="utf-8")
         if verbose:
@@ -425,10 +431,12 @@ def _install_completion_bash_activation(
 
     # Use $VIRTUAL_ENV so paths resolve correctly at activation time.
     # Zsh needs bashcompinit wrapper; bash sources completion directly.
+    # The '2>/dev/null || true' prevents completion system errors (e.g.,
+    # missing compdef in minimal zsh) from breaking 'source activate'.
     addition = f"""
 {marker}
 if [ -n "$ZSH_VERSION" ] && [ -f "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh" ]; then
-    source "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh"
+    source "$VIRTUAL_ENV/etc/zsh/homodyne-completion.zsh" 2>/dev/null || true
 elif [ -f "$VIRTUAL_ENV/etc/bash_completion.d/homodyne" ]; then
     source "$VIRTUAL_ENV/etc/bash_completion.d/homodyne"
 fi
