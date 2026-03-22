@@ -191,7 +191,7 @@ _homodyne_post_install() {
     local cur prev words cword
     _init_completion -s || return
 
-    local opts="--interactive --shell --no-completion --no-xla --xla-mode --help"
+    local opts="--interactive --shell --no-completion --no-xla --xla-mode --verbose --help"
 
     case "$prev" in
         --shell|-s)
@@ -214,7 +214,7 @@ _homodyne_cleanup() {
     local cur prev words cword
     _init_completion -s || return
 
-    local opts="--dry-run --force --interactive --help"
+    local opts="--dry-run --force --interactive --verbose --help"
 
     if [[ "$cur" == -* ]]; then
         mapfile -t COMPREPLY < <(compgen -W "${opts}" -- "${cur}")

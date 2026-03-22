@@ -7,7 +7,23 @@ import sys
 from pathlib import Path
 
 VALID_MODES = ["cmc", "cmc-hpc", "nlsq", "auto"]
-CONFIG_FILE = Path.home() / ".homodyne_xla_mode"
+
+
+def _get_config_file() -> Path:
+    """Get the XLA mode config file path (per-venv > XDG > legacy).
+
+    Uses the same resolution logic as post_install.get_xla_mode_path().
+    """
+    # Prefer per-environment config
+    venv = os.environ.get("VIRTUAL_ENV") or os.environ.get("CONDA_PREFIX")
+    if venv:
+        return Path(venv) / "etc" / "homodyne" / "xla_mode"
+
+    # Fall back to XDG config directory
+    xdg_config = os.environ.get("XDG_CONFIG_HOME", "")
+    if not xdg_config:
+        xdg_config = str(Path.home() / ".config")
+    return Path(xdg_config) / "homodyne" / "xla_mode"
 
 
 def detect_optimal_devices():
@@ -37,11 +53,13 @@ def set_mode(mode: str) -> bool:
         print(f"Valid modes: {', '.join(VALID_MODES)}", file=sys.stderr)
         return False
 
+    config_file = _get_config_file()
     try:
-        CONFIG_FILE.write_text(mode + "\n", encoding="utf-8")
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.write_text(mode + "\n", encoding="utf-8")
     except OSError as e:
         print(
-            f"Error: Cannot write XLA mode config to {CONFIG_FILE}: {e}",
+            f"Error: Cannot write XLA mode config to {config_file}: {e}",
             file=sys.stderr,
         )
         return False
@@ -59,35 +77,19 @@ def set_mode(mode: str) -> bool:
         cores = os.cpu_count() or 4
         print(f"  -> Auto-detect: {devices} devices (detected {cores} CPU cores)")
 
-    # Check if activation scripts exist before suggesting them
-    venv = os.environ.get("VIRTUAL_ENV")
-    if venv:
-        activation_dir = Path(venv) / "etc" / "homodyne" / "activation"
-        bash_script = activation_dir / "xla_config.bash"
-        fish_script = activation_dir / "xla_config.fish"
-        if bash_script.exists() or fish_script.exists():
-            print("\nReload your shell or run:")
-            if bash_script.exists():
-                print(f"  source {bash_script}  # bash/zsh")
-            if fish_script.exists():
-                print(f"  source {fish_script}  # fish")
-        else:
-            print(
-                "\nActivation scripts not found. Run 'homodyne-post-install -i' first."
-            )
-    else:
-        print(
-            "\nNo active virtualenv detected. Activate your venv, then run 'homodyne-post-install -i'."
-        )
+    # Suggest reactivation to pick up the new mode
+    print("\nDeactivate and reactivate your venv to apply the new mode.")
     return True
 
 
 def show_config():
     """Display current XLA configuration."""
+    config_file = _get_config_file()
+
     # Read current mode
-    if CONFIG_FILE.exists():
+    if config_file.exists():
         try:
-            mode = CONFIG_FILE.read_text(encoding="utf-8").strip()
+            mode = config_file.read_text(encoding="utf-8").strip()
         except OSError:
             mode = "cmc (default, config unreadable)"
     else:
@@ -99,7 +101,7 @@ def show_config():
     print("Current XLA Configuration:")
     print(f"  Mode: {mode}")
     print(f"  XLA_FLAGS: {xla_flags}")
-    print(f"  Config file: {CONFIG_FILE}")
+    print(f"  Config file: {config_file}")
 
     # Show JAX devices if available
     try:
