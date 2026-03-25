@@ -7,6 +7,57 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
+## [2.22.9] - 2026-03-25
+
+### Shell Completion & Validation Fixes
+
+Fix XLA mode path resolution, zsh completion initialization, and auto-sourcing
+of completion scripts on venv activation. Sync system validator with current
+codebase state.
+
+8 files changed across 5 commits.
+
+**Fixes:**
+
+- **fix(shell)**: Resolve XLA mode file path mismatch (`completion.sh`, `post_install.py`)
+
+  - Activation scripts only read `~/.homodyne_xla_mode`, but `post_install.py` writes to
+    `$VENV/etc/homodyne/xla_mode` and deletes the legacy file. User's chosen XLA mode was
+    silently ignored after migration. Fix activation scripts to read per-venv > XDG > legacy
+    paths, matching the writer's priority order. Also fix fish `exit 0` killing terminal
+    when sourced with pre-existing `XLA_FLAGS`.
+
+- **fix(shell)**: Auto-source completion on venv activation (`post_install.py`, `completion.sh`)
+
+  - Completion scripts (containing aliases) were installed to the venv but never sourced
+    from the activate script. Users had to manually source from `~/.bashrc` or `~/.zshrc`
+    for aliases like `hm`, `hconfig`, `hexp` to work. Now auto-sourced alongside XLA config
+    on activate, with shell-aware dispatch (zsh via bashcompinit wrapper, bash direct,
+    fish native).
+
+- **fix(shell)**: Load compinit before bashcompinit in zsh wrapper (`completion.sh`)
+
+  - The zsh completion wrapper called `bashcompinit` without `compinit`, causing
+    `command not found: compdef` errors on every `complete -F` call. This broke aliases
+    (non-zero exit from `source activate`) and spammed stderr with 16 error lines.
+
+- **fix(shell)**: Unify XLA mode path resolution across CLI and activation (`xla_config.py`,
+  `completion.sh`)
+
+  - `homodyne-config-xla` hardcoded `~/.homodyne_xla_mode` while `post_install` and
+    activation scripts use per-venv > XDG > legacy hierarchy. CLI settings were silently
+    ignored by the activation scripts. Replace `CONFIG_FILE` constant with
+    `_get_config_file()` using the same resolution order.
+
+- **fix(validate)**: Sync validator with current codebase state (`system_validator.py`,
+  `manager.py`)
+
+  - Update module paths, dependency versions from `pyproject.toml`, installed completion
+    file locations, and config template names. Add missing top-level config keys to
+    `manager.py` known set to suppress false-positive warnings during validation.
+
+______________________________________________________________________
+
 ## [2.22.8] - 2026-03-19
 
 ### CLI Entry Point Commands, Documentation & Shell Completion

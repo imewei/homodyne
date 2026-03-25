@@ -18,7 +18,7 @@
 #   - homodyne_static.yaml: 3-parameter equilibrium diffusion
 #   - homodyne_laminar_flow.yaml: 7-parameter shear flow
 #
-# VERSION: 2.22.8
+# VERSION: 2.22.9
 # UPDATED: 2026-03-12
 # ==============================================================================
 
@@ -28,7 +28,7 @@
 # Template metadata for documentation and validation.
 # The config_version should match the homodyne package version.
 metadata:
-  config_version: "2.22.8"
+  config_version: "2.22.9"
   description: "Master template - comprehensive reference with all configuration options"
   analysis_mode: "laminar_flow"
 
