@@ -719,3 +719,73 @@ def _plot_ess(
         ax.set_xticklabels(param_names, rotation=45, ha="right")
         ax.legend()
         ax.grid(True, alpha=0.3, axis="y")
+
+
+def compute_bfmi(
+    energy: np.ndarray,
+    *,
+    per_chain: bool = False,
+) -> float | np.ndarray:
+    """Compute Bayesian Fraction of Missing Information (BFMI).
+
+    BFMI measures how well the kinetic energy in HMC/NUTS matches
+    the marginal energy distribution. Low BFMI (< 0.3) indicates
+    the sampler is struggling with the posterior geometry (e.g.,
+    funnel shapes, poor mass matrix adaptation).
+
+    Parameters
+    ----------
+    energy : np.ndarray
+        Potential energy trace. Shape: (n_samples,) for single chain,
+        or (n_chains, n_samples) for multi-chain.
+    per_chain : bool, default=False
+        If True and energy is multi-chain, return BFMI per chain.
+        If False, return pooled BFMI across all chains.
+
+    Returns
+    -------
+    float or np.ndarray
+        BFMI value(s). Range [0, inf), typically [0, 2].
+        - < 0.3: Poor energy transitions (flag for review)
+        - 0.3 - 1.0: Acceptable
+        - > 1.0: Good energy mixing
+    """
+    energy = np.asarray(energy, dtype=np.float64)
+
+    if energy.ndim == 1:
+        energy_diff = np.diff(energy)
+        var_diff = np.nanvar(energy_diff)
+        var_energy = np.nanvar(energy)
+        if var_energy == 0.0:
+            return float("nan")
+        return float(var_diff / var_energy)
+
+    if energy.ndim == 2:
+        if per_chain:
+            bfmi_per_chain = np.empty(energy.shape[0])
+            for i in range(energy.shape[0]):
+                chain_energy = energy[i]
+                energy_diff = np.diff(chain_energy)
+                var_diff = np.nanvar(energy_diff)
+                var_energy = np.nanvar(chain_energy)
+                if var_energy == 0.0:
+                    bfmi_per_chain[i] = float("nan")
+                else:
+                    bfmi_per_chain[i] = var_diff / var_energy
+            return bfmi_per_chain
+        else:
+            # Pool all chains
+            all_diffs = []
+            all_energies = []
+            for i in range(energy.shape[0]):
+                all_diffs.append(np.diff(energy[i]))
+                all_energies.append(energy[i])
+            pooled_diffs = np.concatenate(all_diffs)
+            pooled_energies = np.concatenate(all_energies)
+            var_diff = np.nanvar(pooled_diffs)
+            var_energy = np.nanvar(pooled_energies)
+            if var_energy == 0.0:
+                return float("nan")
+            return float(var_diff / var_energy)
+
+    raise ValueError(f"Expected 1D or 2D energy array, got shape {energy.shape}")

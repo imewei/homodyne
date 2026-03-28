@@ -136,12 +136,21 @@ def _plot_3d_experimental_data(
 
         fig, ax = plt.subplots(figsize=(8, 7))
 
+        data_min = float(np.nanmin(angle_data))
+        data_max = float(np.nanmax(angle_data))
+        vmin = max(data_min, 1.0)
+        vmax = min(data_max, 1.5)
+        if vmin >= vmax:
+            vmin, vmax = data_min, data_max
+
         im = ax.imshow(
             angle_data.T,
             aspect="equal",
             cmap="jet",
             origin="lower",
             extent=extent,
+            vmin=vmin,
+            vmax=vmax,
         )
         ax.set_xlabel(xlabel, fontsize=11)
         ax.set_ylabel(ylabel, fontsize=11)
@@ -216,12 +225,21 @@ def _plot_2d_experimental_data(
 ) -> None:
     """Plot 2D experimental data (single correlation matrix)."""
     fig, ax = plt.subplots(figsize=(10, 8))
+    data_min = float(np.nanmin(c2_exp))
+    data_max = float(np.nanmax(c2_exp))
+    vmin = max(data_min, 1.0)
+    vmax = min(data_max, 1.5)
+    if vmin >= vmax:
+        vmin, vmax = data_min, data_max
+
     im = ax.imshow(
         c2_exp.T,
         aspect="equal",
         cmap="jet",
         origin="lower",
         extent=extent,
+        vmin=vmin,
+        vmax=vmax,
     )
     plt.colorbar(im, ax=ax, label="C₂(t₁,t₂)", shrink=0.8)
     ax.set_xlabel(xlabel)
@@ -274,7 +292,12 @@ def plot_fit_comparison(
         axes[0].set_xlabel("Data Point Index")
         axes[0].set_ylabel("C₂")
     else:
-        im0 = axes[0].imshow(c2_exp, aspect="auto", cmap="jet", vmin=1.0, vmax=1.5)
+        fit_vmin = max(float(np.nanmin(c2_exp)), 1.0)
+        fit_vmax = min(float(np.nanmax(c2_exp)), 1.5)
+        if fit_vmin >= fit_vmax:
+            fit_vmin = float(np.nanmin(c2_exp))
+            fit_vmax = float(np.nanmax(c2_exp))
+        im0 = axes[0].imshow(c2_exp, aspect="auto", cmap="jet", vmin=fit_vmin, vmax=fit_vmax)
         plt.colorbar(im0, ax=axes[0], label="C₂")
         axes[0].set_xlabel("t₂ Index")
         axes[0].set_ylabel("φ Index")

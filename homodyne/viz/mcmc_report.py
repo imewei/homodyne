@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from homodyne.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -109,6 +111,26 @@ def generate_mcmc_diagnostic_report(
         logger.info(f"Generated convergence plot: {conv_path}")
     except (ValueError, TypeError, OSError) as e:
         logger.warning(f"Failed to generate convergence plot: {e}")
+
+    # 4b. BFMI diagnostics
+    try:
+        from homodyne.viz.mcmc_diagnostics import compute_bfmi
+
+        bfmi_value = None
+        # Try to extract energy from extra_fields or inference_data
+        if hasattr(result, "extra_fields") and result.extra_fields is not None:
+            energy = result.extra_fields.get("potential_energy")
+            if energy is not None:
+                bfmi_value = compute_bfmi(np.asarray(energy))
+
+        if bfmi_value is not None and np.isfinite(bfmi_value):
+            bfmi_status = "GOOD" if bfmi_value >= 0.3 else "LOW (review mass matrix adaptation)"
+            logger.info(f"BFMI = {bfmi_value:.4f} ({bfmi_status})")
+            paths["bfmi_value"] = bfmi_value  # Store as metadata
+        else:
+            logger.debug("BFMI: potential_energy not available in result")
+    except (ValueError, TypeError, ImportError) as e:
+        logger.debug(f"BFMI computation skipped: {e}")
 
     # 5. CMC-specific plots
     if result.is_cmc_result():
@@ -238,5 +260,20 @@ def print_mcmc_summary(result: Any) -> None:  # MCMCResult type
                 else:
                     status = "FAIL"
                 logger.info("    %20s: %.1f %s", name, value, status)
+
+    # BFMI diagnostics
+    if hasattr(result, "extra_fields") and result.extra_fields is not None:
+        energy = result.extra_fields.get("potential_energy")
+        if energy is not None:
+            try:
+                from homodyne.viz.mcmc_diagnostics import compute_bfmi
+
+                bfmi_value = compute_bfmi(np.asarray(energy))
+                if math.isfinite(bfmi_value):
+                    bfmi_status = "pass" if bfmi_value >= 0.3 else "LOW"
+                    logger.info("  BFMI (target >= 0.3):")
+                    logger.info("    %20s: %.4f %s", "pooled", bfmi_value, bfmi_status)
+            except (ValueError, TypeError, ImportError):
+                pass
 
     logger.info("=" * 60)
