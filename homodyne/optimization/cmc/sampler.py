@@ -828,7 +828,7 @@ def run_nuts_sampling(
         model,
         init_strategy=init_strategy,
         target_accept_prob=effective_target_accept,
-        dense_mass=True,
+        dense_mass=config.dense_mass,
         max_tree_depth=config.max_tree_depth,
     )
 

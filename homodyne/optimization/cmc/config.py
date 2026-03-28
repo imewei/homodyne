@@ -74,6 +74,9 @@ class CMCConfig:
         auto-falls-back to sequential in that case.
     target_accept_prob : float
         Target acceptance probability for NUTS.
+    dense_mass : bool
+        Use dense mass matrix for NUTS. When True, learns parameter
+        correlations for more efficient sampling. Default: True.
     max_r_hat : float
         Maximum R-hat for convergence.
     min_ess : float
@@ -152,6 +155,7 @@ class CMCConfig:
     num_chains: int = 4  # Increased from 2 for better R-hat convergence diagnostics
     chain_method: str = "parallel"  # "parallel" (default) or "sequential"
     target_accept_prob: float = 0.85
+    dense_mass: bool = True  # Dense mass matrix for NUTS (learns parameter correlations)
 
     # Adaptive sampling (Feb 2026): Scale warmup/samples based on shard size
     # Small datasets benefit from fewer samples to reduce NUTS overhead while
@@ -345,6 +349,7 @@ class CMCConfig:
             num_chains=per_shard.get("num_chains", 4),
             chain_method=per_shard.get("chain_method", "parallel"),
             target_accept_prob=per_shard.get("target_accept_prob", 0.85),
+            dense_mass=per_shard.get("dense_mass", True),
             # Adaptive sampling (Feb 2026)
             adaptive_sampling=per_shard.get("adaptive_sampling", True),
             max_tree_depth=per_shard.get("max_tree_depth", 10),

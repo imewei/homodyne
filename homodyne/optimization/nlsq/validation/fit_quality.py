@@ -36,6 +36,14 @@ class FitQualityConfig:
         Whether to enable quality validation. Default: True.
     reduced_chi_squared_threshold : float
         Warn if reduced chi-squared exceeds this. Default: 10.0.
+    chi2_good_threshold : float
+        Reduced chi-squared below which fit is classified as "good". Default: 2.0.
+    chi2_acceptable_threshold : float
+        Reduced chi-squared below which fit is classified as "acceptable". Default: 5.0.
+    min_parameter_significance : float
+        Minimum parameter/uncertainty ratio for significance. Default: 2.0.
+    max_condition_number : float
+        Maximum covariance matrix condition number. Default: 1e12.
     warn_on_max_restarts : bool
         Warn if CMA-ES reached max_restarts. Default: True.
     warn_on_bounds_hit : bool
@@ -48,10 +56,44 @@ class FitQualityConfig:
 
     enable: bool = True
     reduced_chi_squared_threshold: float = 10.0
+    chi2_good_threshold: float = 2.0
+    chi2_acceptable_threshold: float = 5.0
+    min_parameter_significance: float = 2.0
+    max_condition_number: float = 1e12
     warn_on_max_restarts: bool = True
     warn_on_bounds_hit: bool = True
     warn_on_convergence_failure: bool = True
     bounds_tolerance: float = 1e-9
+
+    @classmethod
+    def from_validation_config(
+        cls, validation_config: dict[str, Any] | None
+    ) -> FitQualityConfig:
+        """Create FitQualityConfig from an NLSQValidationConfig dict.
+
+        Parameters
+        ----------
+        validation_config : dict or None
+            Dictionary with keys from NLSQValidationConfig TypedDict.
+            If None, returns defaults.
+
+        Returns
+        -------
+        FitQualityConfig
+            Configuration with values from the dict, falling back to defaults.
+        """
+        if validation_config is None:
+            return cls()
+        return cls(
+            chi2_good_threshold=validation_config.get("chi2_good_threshold", 2.0),
+            chi2_acceptable_threshold=validation_config.get(
+                "chi2_acceptable_threshold", 5.0
+            ),
+            min_parameter_significance=validation_config.get(
+                "min_parameter_significance", 2.0
+            ),
+            max_condition_number=validation_config.get("max_condition_number", 1e12),
+        )
 
 
 @dataclass
@@ -197,6 +239,81 @@ def validate_fit_quality(
             report.warnings.append(warning)
             logger.warning(f"[FitQuality] {warning}")
             report.passed = False
+
+        # Classify fit quality using configurable thresholds
+        if reduced_chi_squared <= config.chi2_good_threshold:
+            report.checks_performed["chi2_quality"] = True
+            logger.info(
+                "[FitQuality] Chi-squared quality: good (%.4g <= %.4g)",
+                reduced_chi_squared,
+                config.chi2_good_threshold,
+            )
+        elif reduced_chi_squared <= config.chi2_acceptable_threshold:
+            report.checks_performed["chi2_quality"] = True
+            logger.info(
+                "[FitQuality] Chi-squared quality: acceptable (%.4g <= %.4g)",
+                reduced_chi_squared,
+                config.chi2_acceptable_threshold,
+            )
+        else:
+            report.checks_performed["chi2_quality"] = False
+            logger.warning(
+                "[FitQuality] Chi-squared quality: poor (%.4g > %.4g)",
+                reduced_chi_squared,
+                config.chi2_acceptable_threshold,
+            )
+
+    # Check 1b: Parameter significance (parameter / uncertainty ratio)
+    params = getattr(result, "parameters", None)
+    uncertainties = getattr(result, "uncertainties", None)
+    if params is not None and uncertainties is not None:
+        try:
+            params_arr = np.asarray(params, dtype=np.float64)
+            uncert_arr = np.asarray(uncertainties, dtype=np.float64)
+            if params_arr.shape == uncert_arr.shape and len(params_arr) > 0:
+                finite_mask = np.isfinite(uncert_arr) & (uncert_arr > 0)
+                if np.any(finite_mask):
+                    significance = np.abs(params_arr[finite_mask]) / uncert_arr[finite_mask]
+                    insignificant = significance < config.min_parameter_significance
+                    if np.any(insignificant):
+                        n_insig = int(np.sum(insignificant))
+                        report.checks_performed["parameter_significance"] = False
+                        warning = (
+                            f"{n_insig} parameter(s) below significance threshold "
+                            f"(|param/uncertainty| < {config.min_parameter_significance}). "
+                            f"These parameters may be poorly constrained."
+                        )
+                        report.warnings.append(warning)
+                        logger.warning(f"[FitQuality] {warning}")
+                    else:
+                        report.checks_performed["parameter_significance"] = True
+        except (TypeError, ValueError):
+            pass
+
+    # Check 1c: Covariance matrix condition number
+    pcov = getattr(result, "covariance", None)
+    if pcov is None:
+        pcov = getattr(result, "pcov", None)
+    if pcov is not None:
+        try:
+            pcov_arr = np.asarray(pcov, dtype=np.float64)
+            if pcov_arr.ndim == 2 and pcov_arr.shape[0] == pcov_arr.shape[1]:
+                cond = np.linalg.cond(pcov_arr)
+                if np.isfinite(cond):
+                    if cond > config.max_condition_number:
+                        report.checks_performed["condition_number"] = False
+                        warning = (
+                            f"Covariance matrix condition number ({cond:.2e}) exceeds "
+                            f"threshold ({config.max_condition_number:.2e}). "
+                            f"Parameters may be highly correlated or poorly determined."
+                        )
+                        report.warnings.append(warning)
+                        logger.warning(f"[FitQuality] {warning}")
+                        report.passed = False
+                    else:
+                        report.checks_performed["condition_number"] = True
+        except (TypeError, ValueError, np.linalg.LinAlgError):
+            pass
 
     # Check 2: CMA-ES max_restarts convergence
     if config.warn_on_max_restarts:
