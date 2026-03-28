@@ -155,7 +155,7 @@ class TestMethodArgumentParsing:
                 break
 
         assert method_action is not None
-        assert set(method_action.choices) == {"nlsq", "cmc"}
+        assert set(method_action.choices) == {"nlsq", "cmc", "both"}
         assert "nuts" not in method_action.choices
         assert "mcmc" not in method_action.choices  # mcmc removed, use cmc
         assert "auto" not in method_action.choices
@@ -388,7 +388,7 @@ class TestDeprecatedMethodRejection:
                 break
 
         assert method_action is not None
-        assert set(method_action.choices) == {"nlsq", "cmc"}
+        assert set(method_action.choices) == {"nlsq", "cmc", "both"}
 
         # Explicitly verify deprecated methods are NOT in choices
         assert "nuts" not in method_action.choices

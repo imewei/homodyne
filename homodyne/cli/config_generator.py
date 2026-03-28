@@ -30,6 +30,47 @@ from homodyne.config.manager import ConfigManager
 from homodyne.utils.path_validation import PathValidationError, validate_save_path
 
 
+def _filter_config(config: dict[str, Any], filter_mode: str) -> dict[str, Any]:
+    """Filter configuration sections based on mode.
+
+    Parameters
+    ----------
+    config : dict
+        Full configuration dictionary.
+    filter_mode : str
+        Filter mode: "full", "minimal", "nlsq_only", "cmc_only".
+
+    Returns
+    -------
+    dict
+        Filtered configuration.
+    """
+    if filter_mode == "full":
+        return config
+
+    if filter_mode == "minimal":
+        minimal_keys = {"metadata", "analysis_mode", "experimental_data"}
+        filtered = {k: v for k, v in config.items() if k in minimal_keys}
+        # Include just the method from optimization
+        if "optimization" in config:
+            filtered["optimization"] = {"method": config["optimization"].get("method", "nlsq")}
+        return filtered
+
+    # Deep copy to avoid mutating original
+    import copy
+    filtered = copy.deepcopy(config)
+    opt = filtered.get("optimization", {})
+
+    if filter_mode == "nlsq_only":
+        opt.pop("cmc", None)
+        opt.pop("mcmc", None)
+    elif filter_mode == "cmc_only":
+        opt.pop("lsq", None)
+        opt.pop("nlsq", None)
+
+    return filtered
+
+
 def _yaml_escape_string(s: str) -> str:
     """Escape a string for safe insertion into YAML double-quoted values."""
     return s.replace("\\", "\\\\").replace('"', '\\"')
@@ -111,6 +152,15 @@ Aliases:
         help="Force overwrite existing configuration file",
     )
 
+    # Config section filter
+    parser.add_argument(
+        "--filter",
+        choices=["full", "minimal", "nlsq_only", "cmc_only"],
+        default="full",
+        help="Config section filter: full (all sections), minimal (essential only), "
+        "nlsq_only (NLSQ sections only), cmc_only (CMC sections only) (default: %(default)s)",
+    )
+
     return parser
 
 
@@ -157,7 +207,7 @@ def get_template_path(mode: str) -> Path:
 
 
 def generate_config(
-    mode: str, output_path: Path, force: bool = False
+    mode: str, output_path: Path, force: bool = False, filter_mode: str = "full"
 ) -> dict[str, Any]:
     """Generate configuration from template.
 
@@ -169,6 +219,8 @@ def generate_config(
         Output file path
     force : bool, optional
         Force overwrite if file exists (default: False)
+    filter_mode : str, optional
+        Config section filter (default: "full")
 
     Returns
     -------
@@ -192,23 +244,37 @@ def generate_config(
     # Get template
     template_path = get_template_path(mode)
 
-    # Copy template directly to preserve all comments and formatting
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(template_path, output_path)
+
+    if filter_mode == "full":
+        # Copy template directly to preserve all comments and formatting
+        shutil.copy2(template_path, output_path)
+    else:
+        # Load, filter, and write (comments are lost for filtered output)
+        with open(template_path, encoding="utf-8") as f:
+            config_data: dict[str, Any] = yaml.safe_load(f)
+        config_data = _filter_config(config_data, filter_mode)
+        with open(output_path, "w", encoding="utf-8") as f:
+            yaml.dump(config_data, f, default_flow_style=False, sort_keys=False)
 
     # Load config for return value (without modifying file)
     with open(template_path, encoding="utf-8") as f:
         config: dict[str, Any] = yaml.safe_load(f)
+    config = _filter_config(config, filter_mode)
 
-    print(f"OK: Generated {mode} configuration: {output_path}")
+    filter_note = f" (filter: {filter_mode})" if filter_mode != "full" else ""
+    print(f"OK: Generated {mode} configuration{filter_note}: {output_path}")
     print(f"  Template: {template_path.name}")
     print(f"  Mode: {mode}")
+    if filter_mode != "full":
+        print(f"  Filter: {filter_mode}")
     print("\nNext steps:")
     print(f"  1. Edit configuration: {output_path}")
     print("  2. Update data file path")
     print("  3. Adjust parameters and bounds")
     print(f"  4. Run analysis: homodyne --config {output_path}")
-    print("\nNote: All template comments and instructions are preserved.")
+    if filter_mode == "full":
+        print("\nNote: All template comments and instructions are preserved.")
 
     return config
 
@@ -521,7 +587,7 @@ def main() -> int:
             args.output = Path(f"homodyne_{args.mode}_config.yaml")
 
         try:
-            generate_config(args.mode, args.output, force=args.force)
+            generate_config(args.mode, args.output, force=args.force, filter_mode=args.filter)
             return 0
         except FileExistsError as e:
             print(f"ERROR: {e}")

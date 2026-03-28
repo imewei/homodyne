@@ -29,6 +29,7 @@ Examples:
   %(prog)s                                    # Run with default NLSQ method
   %(prog)s --method nlsq                      # NLSQ trust-region least squares (default)
   %(prog)s --method cmc                       # Consensus Monte Carlo (per-shard NUTS)
+  %(prog)s --method both                       # Sequential NLSQ then CMC (recommended)
   %(prog)s --config my_config.yaml            # Use custom config file
   %(prog)s --output-dir ./results             # Custom output directory
   %(prog)s --verbose                          # Enable verbose logging
@@ -83,10 +84,11 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
     # Method selection - JAX-first methods only
     parser.add_argument(
         "--method",
-        choices=["nlsq", "cmc"],
+        choices=["nlsq", "cmc", "both"],
         default="nlsq",
         help=(
-            "Optimization method: nlsq (NLSQ trust-region), cmc (Consensus Monte Carlo). "
+            "Optimization method: nlsq (NLSQ trust-region), cmc (Consensus Monte Carlo), "
+            "both (sequential NLSQ then CMC with automatic warm-start). "
             "CMC uses stratified sharding with per-shard NumPyro/BlackJAX NUTS sampling; "
             "configure sharding and initial values via config."
         ),
@@ -336,15 +338,30 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
 
     # Logging
     parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose logging output",
+        "--verbose", "-v",
+        action="count",
+        default=0,
+        help="Increase logging verbosity (-v: INFO, -vv: DEBUG, -vvv: TRACE)",
     )
 
     parser.add_argument(
         "--quiet",
         action="store_true",
         help="Suppress all output except errors",
+    )
+
+    # Runtime tuning
+    runtime_group = parser.add_argument_group("Runtime Options")
+    runtime_group.add_argument(
+        "--threads",
+        type=int,
+        default=None,
+        help="Number of CPU threads for XLA intra-op parallelism (default: all cores)",
+    )
+    runtime_group.add_argument(
+        "--no-jit",
+        action="store_true",
+        help="Disable JAX JIT compilation (useful for debugging)",
     )
 
     return parser
@@ -369,7 +386,7 @@ def validate_args(args: argparse.Namespace) -> bool:
         return False
 
     # Check for conflicting logging options
-    if args.verbose and args.quiet:
+    if args.verbose > 0 and args.quiet:
         print("Error: Cannot specify both --verbose and --quiet")
         return False
 
@@ -380,6 +397,10 @@ def validate_args(args: argparse.Namespace) -> bool:
 
     if args.tolerance <= 0:
         print("Error: Tolerance must be positive")
+        return False
+
+    if hasattr(args, "threads") and args.threads is not None and args.threads <= 0:
+        print("Error: --threads must be positive")
         return False
 
     # Validate MCMC parameters if provided via CLI
@@ -399,7 +420,7 @@ def validate_args(args: argparse.Namespace) -> bool:
         return False
 
     # Warn if CMC arguments provided with non-CMC method
-    if args.method != "cmc":
+    if args.method not in ("cmc", "both"):
         if args.cmc_num_shards is not None:
             print(
                 f"Warning: --cmc-num-shards ignored (not applicable for method={args.method})"

@@ -75,11 +75,32 @@ def main() -> None:
 
         # Configure logging using LogConfiguration (T017, T018)
         # This handles --verbose, --quiet, and creates timestamped log files
+        # Apply --threads: set XLA intra-op parallelism
+        if getattr(args, "threads", None) is not None:
+            os.environ["XLA_FLAGS"] = (
+                os.environ.get("XLA_FLAGS", "")
+                + " --xla_cpu_multi_thread_eigen=true"
+                + f" intra_op_parallelism_threads={args.threads}"
+            )
+
+        # Apply --no-jit: disable JIT compilation for debugging
+        if getattr(args, "no_jit", False):
+            import jax
+            jax.config.update("jax_disable_jit", True)
+
         log_config = LogConfiguration.from_cli_args(
-            verbose=getattr(args, "verbose", False),
+            verbose=getattr(args, "verbose", 0) > 0,
             quiet=getattr(args, "quiet", False),
             log_file=None,  # Auto-generate timestamped log file
         )
+        # Apply granular verbosity: -vv = DEBUG, -vvv = TRACE
+        verbose_level = getattr(args, "verbose", 0)
+        if verbose_level >= 3:
+            import logging as _logging
+            _logging.getLogger("homodyne").setLevel(5)  # TRACE
+        elif verbose_level >= 2:
+            import logging as _logging
+            _logging.getLogger("homodyne").setLevel(_logging.DEBUG)
         log_file = log_config.apply()
         if log_file:
             logger.debug(f"Log file created: {log_file}")

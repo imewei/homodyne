@@ -80,12 +80,14 @@ _homodyne() {
     # Global options
     local global_opts="--config --data-file --method --output-dir --verbose --quiet --help --version"
     local mode_opts="--static-mode --laminar-flow"
-    local output_opts="--output-format --save-plots --plot-experimental-data --plot-simulated-data --plotting-backend --parallel-plots"
+    local output_opts="--output-format --save-plots --plot-experimental-data --plot-simulated-data --plotting-backend --parallel-plots --contrast --offset --phi-angles"
     local nlsq_opts="--max-iterations --tolerance"
-    local cmc_opts="--n-samples --n-warmup --n-chains --cmc-num-shards --cmc-backend --no-nlsq-warmstart --nlsq-result --dense-mass-matrix"
+    local cmc_opts="--n-samples --n-warmup --n-chains --cmc-num-shards --cmc-backend --cmc-plot-diagnostics --no-nlsq-warmstart --nlsq-result --dense-mass-matrix"
+    local override_opts="--initial-d0 --initial-alpha --initial-d-offset --initial-gamma-dot-t0 --initial-beta --initial-gamma-dot-offset --initial-phi0"
+    local runtime_opts="--threads --no-jit"
 
     # Method options
-    local methods="nlsq cmc"
+    local methods="nlsq cmc both"
 
     case "$prev" in
         --config|-c)
@@ -124,15 +126,11 @@ _homodyne() {
             mapfile -t COMPREPLY < <(compgen -W "4 8 10 16 20 32" -- "${cur}")
             return
             ;;
-        --log-level)
-            mapfile -t COMPREPLY < <(compgen -W "DEBUG INFO WARNING ERROR" -- "${cur}")
-            return
-            ;;
     esac
 
     # If current word starts with -, complete options
     if [[ "$cur" == -* ]]; then
-        mapfile -t COMPREPLY < <(compgen -W "${global_opts} ${mode_opts} ${output_opts} ${nlsq_opts} ${cmc_opts}" -- "${cur}")
+        mapfile -t COMPREPLY < <(compgen -W "${global_opts} ${mode_opts} ${output_opts} ${nlsq_opts} ${cmc_opts} ${override_opts} ${runtime_opts}" -- "${cur}")
         return
     fi
 
@@ -145,7 +143,7 @@ _homodyne_config() {
     local cur prev words cword
     _init_completion -s || return
 
-    local opts="--mode --output --interactive --validate --force --help"
+    local opts="--mode --output --interactive --validate --force --filter --help"
 
     case "$prev" in
         --mode|-m)
@@ -158,6 +156,10 @@ _homodyne_config() {
             ;;
         --validate|-v)
             _filedir
+            return
+            ;;
+        --filter)
+            mapfile -t COMPREPLY < <(compgen -W "full minimal nlsq_only cmc_only" -- "${cur}")
             return
             ;;
     esac

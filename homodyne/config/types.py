@@ -373,6 +373,30 @@ class CMCPerShardMCMCConfig(TypedDict, total=False):
     subsample_size: int | str
 
 
+class NLSQValidationConfig(TypedDict, total=False):
+    """NLSQ fit quality validation configuration.
+
+    Configuration for validating NLSQ optimization results.
+    Used by validation/fit_quality.py to classify fit quality.
+
+    Attributes
+    ----------
+    chi2_good_threshold : float
+        Reduced chi-squared below which fit is "good" (default: 2.0)
+    chi2_acceptable_threshold : float
+        Reduced chi-squared below which fit is "acceptable" (default: 5.0)
+    min_parameter_significance : float
+        Minimum parameter/uncertainty ratio for significance (default: 2.0)
+    max_condition_number : float
+        Maximum covariance matrix condition number (default: 1e12)
+    """
+
+    chi2_good_threshold: float
+    chi2_acceptable_threshold: float
+    min_parameter_significance: float
+    max_condition_number: float
+
+
 class CMCValidationConfig(TypedDict, total=False):
     """CMC convergence validation configuration.
 
@@ -465,6 +489,7 @@ class OptimizationConfig(TypedDict, total=False):
     streaming: StreamingConfig
     stratification: StratificationConfig
     sequential: SequentialConfig
+    nlsq_validation: NLSQValidationConfig
 
 
 class HomodyneConfig(TypedDict, total=False):

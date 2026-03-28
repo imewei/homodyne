@@ -146,7 +146,9 @@ def _apply_cli_overrides(config: ConfigManager, args: argparse.Namespace) -> Non
     if "optimization" not in config.config:
         config.config["optimization"] = {}
 
-    config.config["optimization"]["method"] = args.method
+    # Don't overwrite config method for "both" -- it's a CLI-only composite method
+    if args.method != "both":
+        config.config["optimization"]["method"] = args.method
 
     # Load MCMC parameters from config if not provided via CLI
     mcmc_config = config.config.get("optimization", {}).get("mcmc", {})

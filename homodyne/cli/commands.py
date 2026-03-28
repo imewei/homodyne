@@ -189,7 +189,7 @@ def dispatch_command(args: argparse.Namespace) -> dict[str, Any]:
             )
             log_file = configure_logging(
                 logging_cfg,
-                verbose=getattr(args, "verbose", False),
+                verbose=getattr(args, "verbose", 0) > 0,
                 quiet=getattr(args, "quiet", False),
                 output_dir=args.output_dir,
                 run_id=run_id,
@@ -551,6 +551,83 @@ def _run_optimization(
             else:
                 logger.warning(
                     "Cannot generate ArviZ diagnostic plots: inference_data not available"
+                )
+        elif method == "both":
+            # Phase 1: Run NLSQ
+            logger.info("Running sequential NLSQ -> CMC pipeline...")
+            logger.info("Phase 1/2: NLSQ optimization...")
+            nlsq_result = _run_nlsq_optimization(filtered_data, config, args)
+
+            nlsq_time = time.perf_counter() - start_time
+            logger.info(f"Phase 1/2: NLSQ completed in {nlsq_time:.3f}s")
+
+            # Save NLSQ results before proceeding to CMC
+            _save_results(args, nlsq_result, {}, filtered_data, config)
+            logger.info("NLSQ results saved, proceeding to CMC...")
+
+            # Phase 2: Run CMC with NLSQ warm-start
+            logger.info("Phase 2/2: CMC optimization with NLSQ warm-start...")
+            cmc_config = _prepare_cmc_config(args, config)
+
+            config_config = (
+                config.config
+                if hasattr(config, "config") and config.config is not None
+                else {}
+            )
+            analysis_mode_str = cast(
+                str, config_config.get("analysis_mode", "static_isotropic")
+            )
+
+            parameter_space = ParameterSpace.from_config(
+                config_dict=config_config,
+                analysis_mode=analysis_mode_str,
+            )
+
+            pooled = _pool_mcmc_data(filtered_data)
+            mcmc_data = pooled["mcmc_data"]
+            t1_pooled = pooled["t1_pooled"]
+            t2_pooled = pooled["t2_pooled"]
+            phi_pooled = pooled["phi_pooled"]
+
+            initial_values = (
+                config.get_initial_parameters()
+                if hasattr(config, "get_initial_parameters")
+                else {}
+            )
+
+            mcmc_runtime_kwargs = _build_mcmc_runtime_kwargs(args, config)
+
+            result = fit_mcmc_jax(
+                mcmc_data,
+                t1=t1_pooled,
+                t2=t2_pooled,
+                phi=phi_pooled,
+                q=(
+                    filtered_data.get("wavevector_q_list", [1.0])[0]
+                    if (
+                        filtered_data.get("wavevector_q_list") is not None
+                        and len(filtered_data.get("wavevector_q_list", [])) > 0
+                    )
+                    else 1.0
+                ),
+                L=float(
+                    config_config.get("analyzer_parameters", {})
+                    .get("geometry", {})
+                    .get("stator_rotor_gap", 2000000.0)
+                ),
+                analysis_mode=analysis_mode_str,
+                method="cmc",
+                cmc_config=cmc_config,
+                initial_values=initial_values,
+                parameter_space=parameter_space,
+                dt=config_config.get("analyzer_parameters", {}).get("dt"),
+                nlsq_result=nlsq_result,
+                **mcmc_runtime_kwargs,
+            )
+
+            if hasattr(result, "inference_data") and result.inference_data is not None:
+                _generate_cmc_diagnostic_plots(
+                    result, args.output_dir, analysis_mode_str
                 )
         else:
             raise ValueError(f"Unknown optimization method: {method}")
