@@ -95,9 +95,7 @@ class TestHomodyneCompletionParity:
     # Flags auto-added by argparse that need not appear in completion
     SKIP_FLAGS = {"--help", "--version"}
 
-    def test_main_cli_flags_in_completion(
-        self, completion_script_path: Path
-    ) -> None:
+    def test_main_cli_flags_in_completion(self, completion_script_path: Path) -> None:
         """All homodyne main CLI flags should appear in _homodyne()."""
         from homodyne.cli.args_parser import create_parser
 
@@ -116,9 +114,7 @@ class TestHomodyneCompletionParity:
                 "these flags."
             )
 
-    def test_config_cli_flags_in_completion(
-        self, completion_script_path: Path
-    ) -> None:
+    def test_config_cli_flags_in_completion(self, completion_script_path: Path) -> None:
         """All homodyne-config CLI flags should appear in _homodyne_config()."""
         from homodyne.cli.config_generator import create_parser
 
@@ -137,9 +133,7 @@ class TestHomodyneCompletionParity:
                 "these flags."
             )
 
-    def test_completion_no_stale_main_flags(
-        self, completion_script_path: Path
-    ) -> None:
+    def test_completion_no_stale_main_flags(self, completion_script_path: Path) -> None:
         """Flags in _homodyne() should correspond to actual argparse flags."""
         from homodyne.cli.args_parser import create_parser
 
@@ -184,9 +178,7 @@ class TestHomodyneCompletionParity:
                 "the argparse parser. Remove them or add them to argparse."
             )
 
-    def test_method_choices_in_sync(
-        self, completion_script_path: Path
-    ) -> None:
+    def test_method_choices_in_sync(self, completion_script_path: Path) -> None:
         """The --method choices in completion should match argparse choices."""
         from homodyne.cli.args_parser import create_parser
 
@@ -206,9 +198,7 @@ class TestHomodyneCompletionParity:
 
         # Look for: local methods="nlsq cmc both"
         match = re.search(r'local methods="([^"]*)"', content)
-        assert match is not None, (
-            'Could not find local methods="..." in completion.sh'
-        )
+        assert match is not None, 'Could not find local methods="..." in completion.sh'
 
         completion_methods = set(match.group(1).split())
 
@@ -221,9 +211,7 @@ class TestHomodyneCompletionParity:
                 f"Method choices missing from completion.sh: {sorted(missing)}"
             )
         if extra:
-            errors.append(
-                f"Stale method choices in completion.sh: {sorted(extra)}"
-            )
+            errors.append(f"Stale method choices in completion.sh: {sorted(extra)}")
         if errors:
             pytest.fail(". ".join(errors))
 
@@ -258,13 +246,10 @@ class TestCompletionAliases:
 
         if missing_aliases:
             pytest.fail(
-                f"Expected aliases missing from completion.sh: "
-                f"{missing_aliases}"
+                f"Expected aliases missing from completion.sh: {missing_aliases}"
             )
 
-    def test_alias_completions_registered(
-        self, completion_script_path: Path
-    ) -> None:
+    def test_alias_completions_registered(self, completion_script_path: Path) -> None:
         """All aliases should have a 'complete -F' registration."""
         content = completion_script_path.read_text(encoding="utf-8")
 
@@ -276,6 +261,5 @@ class TestCompletionAliases:
 
         if missing_completions:
             pytest.fail(
-                f"Aliases missing 'complete -F' registration: "
-                f"{missing_completions}"
+                f"Aliases missing 'complete -F' registration: {missing_completions}"
             )

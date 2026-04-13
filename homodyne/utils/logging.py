@@ -848,12 +848,11 @@ def _get_memory_gb() -> float | None:
 
         # Get max resident set size (in KB on Linux, bytes on macOS)
         rusage = resource.getrusage(resource.RUSAGE_SELF)
-        # maxrss is in KB on Linux, bytes on macOS
+        # maxrss is in bytes on macOS, KB on Linux
         import sys
 
-        if sys.platform == "darwin":
-            return rusage.ru_maxrss / (1024**3)  # bytes to GB
-        return rusage.ru_maxrss / (1024**2)  # KB to GB
+        scale = (1024**3) if sys.platform == "darwin" else (1024**2)
+        return rusage.ru_maxrss / scale
     except (ImportError, AttributeError):
         return None
 

@@ -155,7 +155,9 @@ class CMCConfig:
     num_chains: int = 4  # Increased from 2 for better R-hat convergence diagnostics
     chain_method: str = "parallel"  # "parallel" (default) or "sequential"
     target_accept_prob: float = 0.85
-    dense_mass: bool = True  # Dense mass matrix for NUTS (learns parameter correlations)
+    dense_mass: bool = (
+        True  # Dense mass matrix for NUTS (learns parameter correlations)
+    )
 
     # Adaptive sampling (Feb 2026): Scale warmup/samples based on shard size
     # Small datasets benefit from fewer samples to reduce NUTS overhead while

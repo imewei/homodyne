@@ -53,11 +53,14 @@ def _filter_config(config: dict[str, Any], filter_mode: str) -> dict[str, Any]:
         filtered = {k: v for k, v in config.items() if k in minimal_keys}
         # Include just the method from optimization
         if "optimization" in config:
-            filtered["optimization"] = {"method": config["optimization"].get("method", "nlsq")}
+            filtered["optimization"] = {
+                "method": config["optimization"].get("method", "nlsq")
+            }
         return filtered
 
     # Deep copy to avoid mutating original
     import copy
+
     filtered = copy.deepcopy(config)
     opt = filtered.get("optimization", {})
 
@@ -587,7 +590,9 @@ def main() -> int:
             args.output = Path(f"homodyne_{args.mode}_config.yaml")
 
         try:
-            generate_config(args.mode, args.output, force=args.force, filter_mode=args.filter)
+            generate_config(
+                args.mode, args.output, force=args.force, filter_mode=args.filter
+            )
             return 0
         except FileExistsError as e:
             print(f"ERROR: {e}")

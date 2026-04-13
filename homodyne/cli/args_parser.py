@@ -338,7 +338,8 @@ Homodyne v{__version__} - CPU-Optimized JAX Architecture
 
     # Logging
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="count",
         default=0,
         help="Increase logging verbosity (-v: INFO, -vv: DEBUG, -vvv: TRACE)",

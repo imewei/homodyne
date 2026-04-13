@@ -297,7 +297,9 @@ def plot_fit_comparison(
         if fit_vmin >= fit_vmax:
             fit_vmin = float(np.nanmin(c2_exp))
             fit_vmax = float(np.nanmax(c2_exp))
-        im0 = axes[0].imshow(c2_exp, aspect="auto", cmap="jet", vmin=fit_vmin, vmax=fit_vmax)
+        im0 = axes[0].imshow(
+            c2_exp, aspect="auto", cmap="jet", vmin=fit_vmin, vmax=fit_vmax
+        )
         plt.colorbar(im0, ax=axes[0], label="C₂")
         axes[0].set_xlabel("t₂ Index")
         axes[0].set_ylabel("φ Index")

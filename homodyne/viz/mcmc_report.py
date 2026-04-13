@@ -124,9 +124,11 @@ def generate_mcmc_diagnostic_report(
                 bfmi_value = compute_bfmi(np.asarray(energy))
 
         if bfmi_value is not None and np.isfinite(bfmi_value):
-            bfmi_status = "GOOD" if bfmi_value >= 0.3 else "LOW (review mass matrix adaptation)"
+            bfmi_status = (
+                "GOOD" if bfmi_value >= 0.3 else "LOW (review mass matrix adaptation)"
+            )
             logger.info(f"BFMI = {bfmi_value:.4f} ({bfmi_status})")
-            paths["bfmi_value"] = bfmi_value  # Store as metadata
+            # BFMI value logged above; not stored in paths (Path-typed dict)
         else:
             logger.debug("BFMI: potential_energy not available in result")
     except (ValueError, TypeError, ImportError) as e:

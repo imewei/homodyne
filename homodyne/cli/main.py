@@ -86,6 +86,7 @@ def main() -> None:
         # Apply --no-jit: disable JIT compilation for debugging
         if getattr(args, "no_jit", False):
             import jax
+
             jax.config.update("jax_disable_jit", True)
 
         log_config = LogConfiguration.from_cli_args(
@@ -97,9 +98,11 @@ def main() -> None:
         verbose_level = getattr(args, "verbose", 0)
         if verbose_level >= 3:
             import logging as _logging
+
             _logging.getLogger("homodyne").setLevel(5)  # TRACE
         elif verbose_level >= 2:
             import logging as _logging
+
             _logging.getLogger("homodyne").setLevel(_logging.DEBUG)
         log_file = log_config.apply()
         if log_file:

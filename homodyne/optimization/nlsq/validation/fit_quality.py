@@ -273,7 +273,9 @@ def validate_fit_quality(
             if params_arr.shape == uncert_arr.shape and len(params_arr) > 0:
                 finite_mask = np.isfinite(uncert_arr) & (uncert_arr > 0)
                 if np.any(finite_mask):
-                    significance = np.abs(params_arr[finite_mask]) / uncert_arr[finite_mask]
+                    significance = (
+                        np.abs(params_arr[finite_mask]) / uncert_arr[finite_mask]
+                    )
                     insignificant = significance < config.min_parameter_significance
                     if np.any(insignificant):
                         n_insig = int(np.sum(insignificant))
