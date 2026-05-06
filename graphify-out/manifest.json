@@ -1,0 +1,1682 @@
+{
+  "/Users/b80985/Projects/homodyne/homodyne/uninstall_scripts.py": {
+    "mtime": 1774563934.8270314,
+    "hash": "89f95a704741cabbf5261e9c8a19d778"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/_version.py": {
+    "mtime": 1776096918.3995264,
+    "hash": "e3b69ec49178f7e819a1bb665f4e03ca"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/__init__.py": {
+    "mtime": 1774563934.8223681,
+    "hash": "9a78ee71628887b07d53fe58bbb55d27"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/post_install.py": {
+    "mtime": 1774563934.8249648,
+    "hash": "56d7fc11ffd04ec04141a5e1272270ad"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/physics_cmc.py": {
+    "mtime": 1772424369.9800813,
+    "hash": "22f91180e33e9f42ca2276e2bf1dad70"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/physics_factors.py": {
+    "mtime": 1772424369.980472,
+    "hash": "7b16857a8e74be61b2ca08eeb664d3a7"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/model_mixins.py": {
+    "mtime": 1772424369.978955,
+    "hash": "b5c54a6953414634b3806f80dc52a814"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/scaling_utils.py": {
+    "mtime": 1772424369.98162,
+    "hash": "7202649bea76164a3eb2fd7ede64a522"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/diagonal_correction.py": {
+    "mtime": 1772424369.9779096,
+    "hash": "866c313f7c6daa5c384602266d544a29"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/models.py": {
+    "mtime": 1773331743.3217485,
+    "hash": "294588011a88c4e924b3625b780b74fb"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/physics_nlsq.py": {
+    "mtime": 1772424369.9806914,
+    "hash": "de38ba8a87c7496219c564d35b889bf7"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/numpy_gradients.py": {
+    "mtime": 1772424369.979696,
+    "hash": "d02746ec091141efbda5ca2504df2ff6"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/__init__.py": {
+    "mtime": 1772424369.977429,
+    "hash": "7017dec5249b8bce9de1ccd70a2c2c82"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/theory.py": {
+    "mtime": 1772424369.981818,
+    "hash": "3b6102bc5946dc98e473272a02ac2bd6"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/physics.py": {
+    "mtime": 1773331743.321949,
+    "hash": "3f86f9bdf730c90a5f99378d8a848c81"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/homodyne_model.py": {
+    "mtime": 1772424369.9784071,
+    "hash": "13ba223419a694342aa3c1010dffed6a"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/fitting.py": {
+    "mtime": 1773331743.321558,
+    "hash": "72d587fce4d960f68881cf6d1cae6887"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/jax_backend.py": {
+    "mtime": 1772576343.3264084,
+    "hash": "39f608178453c33c065994c20960f8a4"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/core/physics_utils.py": {
+    "mtime": 1772424369.9811137,
+    "hash": "faef5f235555f24bcc8eb1bf6fed2fb9"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/config/parameter_manager.py": {
+    "mtime": 1773331743.3189318,
+    "hash": "3b74d3e0b1dff51a7eab74b6731856e0"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/config/__init__.py": {
+    "mtime": 1767464318.1652339,
+    "hash": "4d0c9e15086111f36f0b51aac85e7521"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/config/types.py": {
+    "mtime": 1774718395.0487463,
+    "hash": "ee76ca28abe67f2506d9db5280599125"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/config/parameter_names.py": {
+    "mtime": 1773331743.3192341,
+    "hash": "cc5490692d83355d4d86f1807135b769"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/config/parameter_space.py": {
+    "mtime": 1773331743.3196669,
+    "hash": "236753395630b60f0a74aedcc4cdab86"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/config/parameter_registry.py": {
+    "mtime": 1773331743.319468,
+    "hash": "0f310b72cd8b43af6973bf79079a518f"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/config/physics_validators.py": {
+    "mtime": 1773331743.3199832,
+    "hash": "5bb06db40a1c7821e30e3bd61895d0c9"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/config/manager.py": {
+    "mtime": 1774563934.823396,
+    "hash": "cd58d48839c8f042b2075a2282093383"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/numerical_validation.py": {
+    "mtime": 1772424370.0031693,
+    "hash": "dc59e9ffad209e7ad82eb41cc6eab81d"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/__init__.py": {
+    "mtime": 1772424369.9881072,
+    "hash": "7dcee5466dd3dcd8c67b3fb6004ac712"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/gradient_diagnostics.py": {
+    "mtime": 1772424369.9939911,
+    "hash": "4e8d429454cf5f9cf42c666b1737bb83"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/recovery_strategies.py": {
+    "mtime": 1772424370.003433,
+    "hash": "a1047f1ea6d12604aa02776f29394ee4"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/batch_statistics.py": {
+    "mtime": 1772424369.9883354,
+    "hash": "b1fc0e40fc4fcbb291346b1ee1f4bdda"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/exceptions.py": {
+    "mtime": 1767464318.1792042,
+    "hash": "59f2cb76585d510c0b16fb6768e2413f"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/checkpoint_manager.py": {
+    "mtime": 1772424369.9885073,
+    "hash": "20ce6864b48afd1e2cc4128b88156b8b"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/scaling.py": {
+    "mtime": 1772424369.993658,
+    "hash": "9e29c6703201fb7889e4788798ec6f32"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/config.py": {
+    "mtime": 1776095893.0566993,
+    "hash": "125c1aa3539bfec1d8beaf7be26c153f"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/results.py": {
+    "mtime": 1773331743.3244405,
+    "hash": "b5265ba62352d4372412b0163cdb6e1d"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/diagnostics.py": {
+    "mtime": 1773331743.3232155,
+    "hash": "bc06b54527dbac028bc4aac6a0212df2"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/plotting.py": {
+    "mtime": 1773331743.323875,
+    "hash": "e92524e80e24e21003583e0b7147e192"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/io.py": {
+    "mtime": 1773331743.3235643,
+    "hash": "675707c0fa74d5cdbb9acd64dc751afc"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/__init__.py": {
+    "mtime": 1765354734.6011438,
+    "hash": "d475ee1e7697c874db06cdc393adcd89"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/core.py": {
+    "mtime": 1772424369.9914682,
+    "hash": "33f294eb235df5b4e3a54b0166709289"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/model.py": {
+    "mtime": 1772424369.9923122,
+    "hash": "6f41672751db5f12b3138cbb4d96d55d"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/data_prep.py": {
+    "mtime": 1772424369.9916701,
+    "hash": "04e063fb914624f156e83f8d91ec4d22"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/priors.py": {
+    "mtime": 1773331743.3240697,
+    "hash": "0ea8f79ffcaa1c2c771f61b6e8e69a3d"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/reparameterization.py": {
+    "mtime": 1772424369.9928865,
+    "hash": "4a4e6e196cf6caf46c7a2985b21cde70"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/sampler.py": {
+    "mtime": 1774718395.0501125,
+    "hash": "a924c9e3c57c64666add75c2986a7f91"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/backends/worker_pool.py": {
+    "mtime": 1773331743.32299,
+    "hash": "a7c3000813ee32fb73dce783f9360a47"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/backends/pjit.py": {
+    "mtime": 1772576343.3272638,
+    "hash": "386e9b09041f5091ee1865c3ffdca19a"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/backends/__init__.py": {
+    "mtime": 1765354734.6013408,
+    "hash": "f610cf7d6fd7ddfc4db0556cded5f090"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/backends/multiprocessing.py": {
+    "mtime": 1773331743.3228111,
+    "hash": "21122fb0878d84bb07356088ee34dd85"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/backends/base.py": {
+    "mtime": 1772424369.9887388,
+    "hash": "e608857bf576f949f759106ff75b24ad"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/cmc/backends/pbs.py": {
+    "mtime": 1772576343.3268538,
+    "hash": "59af04aa4777fe9dcb1d6ed4f1d1a0e0"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/fit_computation.py": {
+    "mtime": 1772576343.3291497,
+    "hash": "3f7d509a088f801b363c7bde3f508479"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/transforms.py": {
+    "mtime": 1772424370.0002713,
+    "hash": "3ab639bbd25589cde2e499e3979d6a34"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/jacobian.py": {
+    "mtime": 1772424369.996386,
+    "hash": "41d582405430155d0bfbaade1a8f4ee1"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/parameter_index_mapper.py": {
+    "mtime": 1767464318.1872113,
+    "hash": "856663baeee90caa0ea5d75cb98e4cf7"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/wrapper.py": {
+    "mtime": 1773331743.328266,
+    "hash": "6b4d2374b1522d2819a63dde8c74f4da"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/config.py": {
+    "mtime": 1773331743.325325,
+    "hash": "59abc18fb74be78a4cd45aac6d3b0265"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/recovery.py": {
+    "mtime": 1773331743.32606,
+    "hash": "977693808808372348d3c12cb9b3508f"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/cmaes_wrapper.py": {
+    "mtime": 1773331743.3250613,
+    "hash": "ebca6d33ebd45c76d47dabb54933a1e9"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/memory.py": {
+    "mtime": 1772424369.9966671,
+    "hash": "d3d23d446ee2a65825b7e1b5c0cb4765"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/results.py": {
+    "mtime": 1773331743.3263,
+    "hash": "7be231378ad1ab9a180bf8cac4374ca6"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/fourier_reparam.py": {
+    "mtime": 1768867306.8607166,
+    "hash": "c89b76f10fa747a5fcdfa4aa78809f68"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/hierarchical.py": {
+    "mtime": 1772424369.9961715,
+    "hash": "e69104427c92236d05a4feadc17a9eba"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/adapter.py": {
+    "mtime": 1772424369.9943676,
+    "hash": "9eb74b3cd19c501be909a651a96da1e4"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/parallel_accumulator.py": {
+    "mtime": 1772576343.3300786,
+    "hash": "3a21b7a576eaf396d494c43c2b73f044"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/anti_degeneracy_controller.py": {
+    "mtime": 1772424369.994742,
+    "hash": "dce29a19dc70e539b76fc3e5474b640c"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/__init__.py": {
+    "mtime": 1773331743.32481,
+    "hash": "11dc4255813adecf614e3340d93b2486"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/fallback_chain.py": {
+    "mtime": 1773331743.3259313,
+    "hash": "83c60ebcc837483f43c0ae385526b0d4"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/core.py": {
+    "mtime": 1773331743.3256361,
+    "hash": "5bf0a744b34cac8cb65bd0fb9ae4d0dd"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/result_builder.py": {
+    "mtime": 1772424369.997877,
+    "hash": "82ffefbeef466a0cf734b67fa0d93c8f"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/shear_weighting.py": {
+    "mtime": 1772424369.998952,
+    "hash": "fe1c8df65fd6eca63e4c1c73eb6af47d"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/data_prep.py": {
+    "mtime": 1772424369.9956343,
+    "hash": "f55f7c1608ec719ad853d2a350cd1447"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/parameter_utils.py": {
+    "mtime": 1772424369.997502,
+    "hash": "5a21c33277decb6bab20805fb46b9496"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/multistart.py": {
+    "mtime": 1772576343.3295293,
+    "hash": "5a3441e07286507aa760f9a7e81454e4"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/gradient_monitor.py": {
+    "mtime": 1772424369.9959853,
+    "hash": "20be1ef9e7a8dedada5a8171e6181674"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/adaptive_regularization.py": {
+    "mtime": 1772424369.994545,
+    "hash": "5b197e8f679758b149b1862ba54fae97"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/progress.py": {
+    "mtime": 1772424369.9976912,
+    "hash": "bdaea2f84a2832a6432f14ca6570cd3d"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/adapter_base.py": {
+    "mtime": 1768867306.8585413,
+    "hash": "18539b1946b54059d41c8811834447a4"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/strategies/chunking.py": {
+    "mtime": 1771783288.94076,
+    "hash": "3c9f6c30e2b5fb445e583336341e9496"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/strategies/hybrid_streaming.py": {
+    "mtime": 1773331743.3268745,
+    "hash": "7f68b2ec7d33f377aeaac5514c56a058"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/strategies/residual.py": {
+    "mtime": 1772424369.9993868,
+    "hash": "1bef012f08a723faf3ce724fc50bca56"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/strategies/__init__.py": {
+    "mtime": 1767464318.1894515,
+    "hash": "83b46f7b9462954c390e2fac720f8f3d"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/strategies/sequential.py": {
+    "mtime": 1772424369.9998348,
+    "hash": "36fc732d076096331522b685b317786a"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/strategies/executors.py": {
+    "mtime": 1773331743.3266022,
+    "hash": "af9ad34406a7574df5a070874be88b0d"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/strategies/out_of_core.py": {
+    "mtime": 1773331743.3272393,
+    "hash": "5f87368ed0a3aa23c97af44550e2cf25"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/strategies/stratified_ls.py": {
+    "mtime": 1773331743.3274558,
+    "hash": "bed42e4257b37f142fed7923c4866618"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/strategies/residual_jit.py": {
+    "mtime": 1772424369.9996078,
+    "hash": "2c55094ae704111903ef49bc8de9b3c8"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/validation/__init__.py": {
+    "mtime": 1768783053.0825715,
+    "hash": "8cc6106ba577ee65415ab95ddb6e993b"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/validation/fit_quality.py": {
+    "mtime": 1776095893.0566108,
+    "hash": "dfde87e490d8c3c94e8a6c06fafed56d"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/validation/input_validator.py": {
+    "mtime": 1768867306.863995,
+    "hash": "b973fb9fd8d8a68bee80c97f2f2e8f6a"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/optimization/nlsq/validation/result_validator.py": {
+    "mtime": 1772424370.0016246,
+    "hash": "cf73829db2296a546059032b9256a71a"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/io/nlsq_writers.py": {
+    "mtime": 1772424369.9878747,
+    "hash": "3547ab95807d6d03ecd5a4480a5a549c"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/io/__init__.py": {
+    "mtime": 1764909074.9330938,
+    "hash": "eca015af12d2d07c65d0d7c6c69fe17a"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/io/json_utils.py": {
+    "mtime": 1772424369.9872496,
+    "hash": "fd4c33b698a89d2bad81082f36dbb2fc"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/io/mcmc_writers.py": {
+    "mtime": 1772424369.9874692,
+    "hash": "b76c5f60f5c4e23b20d27b89feecc789"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/runtime/__init__.py": {
+    "mtime": 1774563934.8252697,
+    "hash": "ec593ef2226f97a84d74681f5bd31853"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/runtime/shell/__init__.py": {
+    "mtime": 1774563934.825383,
+    "hash": "0d25fdb1709d78c29c56caff6ebddf84"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/runtime/shell/activation/__init__.py": {
+    "mtime": 1763537475.5507402,
+    "hash": "46ead3aeb6cc2021c0de90a5db745f38"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/runtime/utils/system_validator.py": {
+    "mtime": 1774563934.8267467,
+    "hash": "089085a405dc86d3291c2636fe2c4580"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/runtime/utils/__init__.py": {
+    "mtime": 1774563934.8264463,
+    "hash": "561c8e5b395d603e45238d0a563c4e15"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/utils/logging.py": {
+    "mtime": 1776095992.398018,
+    "hash": "9c19b0f7f055e9b3bd4cb6c8b9e484b0"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/utils/__init__.py": {
+    "mtime": 1765354734.6100953,
+    "hash": "a894fd7c6acb0e7c91296743c2cd5657"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/utils/path_validation.py": {
+    "mtime": 1772424370.0051587,
+    "hash": "df31e66aa304240905f13d1f63b07b4d"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/utils/async_io.py": {
+    "mtime": 1772576343.3321939,
+    "hash": "1f117143eaa2b97f2a70e1de8ca552e7"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/cli/config_handling.py": {
+    "mtime": 1774718395.046779,
+    "hash": "5ff343efbf8e4f662424378652ff7468"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/cli/data_pipeline.py": {
+    "mtime": 1773331743.318068,
+    "hash": "ca05ab228304a817547cd39b8e5a42f8"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/cli/xla_config.py": {
+    "mtime": 1774563934.8230217,
+    "hash": "fc97bc805a9861c8eef93e5b0be01076"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/cli/__init__.py": {
+    "mtime": 1771783288.9243376,
+    "hash": "1b9674fdedcf920dc35e537e7d8c3959"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/cli/args_parser.py": {
+    "mtime": 1776095893.0564315,
+    "hash": "264a368694283c584cbd9e61c047b84a"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/cli/plot_dispatch.py": {
+    "mtime": 1773331743.3184056,
+    "hash": "f11bde44aeb0800bc920843c32308a8c"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/cli/config_generator.py": {
+    "mtime": 1776095893.0567486,
+    "hash": "91c0796614f2de3cd8cc0c7b629faae5"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/cli/main.py": {
+    "mtime": 1776095893.0564346,
+    "hash": "62f75ef0a16f8d5099e713438542613a"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/cli/commands.py": {
+    "mtime": 1774718395.043684,
+    "hash": "a5042ac1dbb38f57ca373cb477c5e37c"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/cli/result_saving.py": {
+    "mtime": 1773331743.3185654,
+    "hash": "d0fc6e9c45e2fb7a25d2d6eb0a6720c4"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/cli/optimization_runner.py": {
+    "mtime": 1773331743.3182232,
+    "hash": "08ae0f47bda10b31f1dd7a84d8a649ae"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/viz/mcmc_plots.py": {
+    "mtime": 1773331743.3301663,
+    "hash": "1ad01bcf88fb17e050ef0b2b44cc2cd0"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/viz/diagnostics.py": {
+    "mtime": 1772424370.0067036,
+    "hash": "5c6fe699363c85bddfe5f23914a65040"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/viz/__init__.py": {
+    "mtime": 1768867306.869629,
+    "hash": "a8dbe77c7883724ebc41bf03f1f0ce60"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/viz/nlsq_plots.py": {
+    "mtime": 1772576343.3324683,
+    "hash": "b91b457a3dca725f3944d6a7212838b7"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/viz/mcmc_report.py": {
+    "mtime": 1776095893.0562322,
+    "hash": "0d0e4add1bc629ebe727bb07759a9901"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/viz/mcmc_dashboard.py": {
+    "mtime": 1773331743.3298016,
+    "hash": "264565c3ca3dbdf480e9dde2bcdccc6e"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/viz/mcmc_diagnostics.py": {
+    "mtime": 1774718395.0517576,
+    "hash": "694dc02301ac5219afe42c98dcacaca9"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/viz/mcmc_arviz.py": {
+    "mtime": 1773331743.3292718,
+    "hash": "4e543f32c8c0550119f81404eb1020ad"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/viz/datashader_backend.py": {
+    "mtime": 1772424370.0055814,
+    "hash": "942f119e606085b51aea0e4910593bc2"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/viz/experimental_plots.py": {
+    "mtime": 1776095893.0559716,
+    "hash": "4ec672175eca04cf9a7bddc672bceaf3"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/viz/mcmc_comparison.py": {
+    "mtime": 1773331743.3295162,
+    "hash": "5b497fedd0273ba35e645ff8f03500a8"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/viz/validation.py": {
+    "mtime": 1771310160.785757,
+    "hash": "2410ccc0312ec5d0347b5566a7d8592b"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/device/config.py": {
+    "mtime": 1772424369.9866893,
+    "hash": "4704cacfe9ec824b5c0c813b9ff9699c"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/device/cpu.py": {
+    "mtime": 1773331743.3223817,
+    "hash": "a1059cb352ed95c277100cd75e8b62db"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/device/__init__.py": {
+    "mtime": 1772424369.9864628,
+    "hash": "c58a86f218d48d75171cf2abe3bcf22a"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/data/memory_manager.py": {
+    "mtime": 1772424369.9832842,
+    "hash": "fb9d82bfec7059b8ebd9d0fd68f559fe"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/data/config.py": {
+    "mtime": 1772424369.9823596,
+    "hash": "120c3fa5b1bb7bc084637eb19f91bfa8"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/data/validators.py": {
+    "mtime": 1772424369.985663,
+    "hash": "091bf7c5724ba52f695aa66a62ddf6a1"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/data/optimization.py": {
+    "mtime": 1772424369.9835174,
+    "hash": "8d7d3d0d83e596078b42eb1a85850a1a"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/data/__init__.py": {
+    "mtime": 1774563934.8246248,
+    "hash": "9de1dd653da8087e22c148c444bd6e08"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/data/types.py": {
+    "mtime": 1767464318.174115,
+    "hash": "fabbf23f9af4db394a2fbcaeb7df4d09"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/data/filtering_utils.py": {
+    "mtime": 1772424369.9827392,
+    "hash": "7ff7df842b11fc57e8e0e8dc8fb895c2"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/data/xpcs_loader.py": {
+    "mtime": 1772424369.986015,
+    "hash": "73f7b10f32c4647846d103b9aaa2b0b6"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/data/performance_engine.py": {
+    "mtime": 1772424369.983767,
+    "hash": "cc3ccf94b0c85c99ad406264c6328cc6"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/data/preprocessing.py": {
+    "mtime": 1772424369.9842532,
+    "hash": "e158bf1c15b71b597f5c90104229ea13"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/data/phi_filtering.py": {
+    "mtime": 1772424369.98401,
+    "hash": "38579f4eeccf86609840d53733fce8f8"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/data/quality_controller.py": {
+    "mtime": 1772424369.9849102,
+    "hash": "d82a612f7fea13a3d3d332050b62ee88"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/data/angle_filtering.py": {
+    "mtime": 1772424369.9821844,
+    "hash": "ce67e06159c18a02329450408dc01df5"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/data/validation.py": {
+    "mtime": 1772424369.985223,
+    "hash": "a6205fc70936938bd8500de30aef806d"
+  },
+  "/Users/b80985/Projects/homodyne/tests/conftest.py": {
+    "mtime": 1772576343.3334885,
+    "hash": "c4645f5da5e5deb0ec5164ff7b0802ef"
+  },
+  "/Users/b80985/Projects/homodyne/tests/__init__.py": {
+    "mtime": 1774563934.8274271,
+    "hash": "fb87efbb148c8d75065107b301c83cd1"
+  },
+  "/Users/b80985/Projects/homodyne/tests/documentation/test_research_content.py": {
+    "mtime": 1771783288.9496422,
+    "hash": "9bfd37c3fc906f9a184d650b681a7e66"
+  },
+  "/Users/b80985/Projects/homodyne/tests/documentation/test_user_guide_content.py": {
+    "mtime": 1772576343.3337011,
+    "hash": "f852ed6e852070341cc814c540a313cb"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_jax_operations.py": {
+    "mtime": 1764909074.9585536,
+    "hash": "9a1549b4df357b6f8a119a874d457e8b"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_cmaes_wrapper.py": {
+    "mtime": 1773331743.337423,
+    "hash": "5f4c5b6f88f78cd95f2f57c527a16ac5"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_stable_prior_fallback.py": {
+    "mtime": 1765354734.6309938,
+    "hash": "f3bf20bb05ea5e69c374596a4d75c548"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_data_loader.py": {
+    "mtime": 1766435962.4603252,
+    "hash": "89d98b38cd75d4fe5e100db15f774706"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_parameter_config.py": {
+    "mtime": 1764909074.9604912,
+    "hash": "8f6d1efb6537013db6189a6fc6a10968"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_config_generator.py": {
+    "mtime": 1771310160.797857,
+    "hash": "063faa365a12de5aa1cec576580c67dd"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_quantile_per_angle_scaling.py": {
+    "mtime": 1768867306.8839705,
+    "hash": "5faff8f4114c4327d00e8fa70c3f977a"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_io_serialization.py": {
+    "mtime": 1772424370.015286,
+    "hash": "92be1c99f6a7f2eed18c8b7ea97f66ee"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_uninstall.py": {
+    "mtime": 1771310160.8015392,
+    "hash": "11db2b13400bc9d81da46deaf6d3667c"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_nlsq_anti_degeneracy.py": {
+    "mtime": 1768867306.8820317,
+    "hash": "2e878d74b6961bfc6775fc3dce3a1df1"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_data_prep.py": {
+    "mtime": 1765826703.0379,
+    "hash": "e267085a28bd9d7fb3b27a76d5c0f3f8"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_nlsq_ooc_routing.py": {
+    "mtime": 1772424370.0159423,
+    "hash": "f30fd2ca62d11c7cae4f33e365957990"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_cmc_multiprocessing_utils.py": {
+    "mtime": 1771783288.9586172,
+    "hash": "6775b90ade53b4b1353cccad62c26c06"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_logging.py": {
+    "mtime": 1772424370.015465,
+    "hash": "09bf069a014144e1d6612fd599cdb86a"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_residual_jit.py": {
+    "mtime": 1770776328.885906,
+    "hash": "89e043208a641d09a5695a9a17ca2863"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_constant_scaling.py": {
+    "mtime": 1769220570.5941753,
+    "hash": "b2a9d9682f9b960511ede6d4cad0d5bf"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_developer_configuration_docs.py": {
+    "mtime": 1772424370.0146837,
+    "hash": "828eaab3b05ece0bbbde10f7f12d28fc"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_parameter_operations.py": {
+    "mtime": 1766435962.4638553,
+    "hash": "e13e2b558e0dd52224b65a1af86c599f"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_api_documentation.py": {
+    "mtime": 1771783288.9577825,
+    "hash": "574d881e1279dd8e1e2969d9f58acfd9"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_adapter_base.py": {
+    "mtime": 1771310160.7969677,
+    "hash": "bd3f314cabf21facb37691fc7dc1a47a"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_nlsq_core.py": {
+    "mtime": 1773331743.338739,
+    "hash": "59078c2996938a040185d33472a5e3a2"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_executors.py": {
+    "mtime": 1771310160.7985506,
+    "hash": "ad8c3828b0fe4827f7bcc28d583583e1"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_stratification_diagnostics.py": {
+    "mtime": 1768867306.884814,
+    "hash": "96a8ffee31b5a9e61e0d099326d116af"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_nlsq_validation.py": {
+    "mtime": 1767798862.407154,
+    "hash": "01c3809f5eac67122511e94e81e4597b"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_multistart.py": {
+    "mtime": 1766435962.4618523,
+    "hash": "027947ccf4f446cd246bdfdd313db79f"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_homodyne_model.py": {
+    "mtime": 1764909074.9577923,
+    "hash": "126f580fc0e31f71bd1ab7dd744078bd"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_stratified_chunking.py": {
+    "mtime": 1768867306.885063,
+    "hash": "dd93d0f379f862c7b63cdb8539159254"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_angle_filtering.py": {
+    "mtime": 1772424370.0126061,
+    "hash": "a3b9ec91a6d3bb988c0681f9b4e9c819"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/__init__.py": {
+    "mtime": 1765354734.6240683,
+    "hash": "de10aa64f3a21f8283f417253ea0696d"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_cmc_core_guards.py": {
+    "mtime": 1766435962.4597116,
+    "hash": "cd809a3305e04cf0efa011b772e4d517"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_path_validation.py": {
+    "mtime": 1771429431.3538265,
+    "hash": "b037519c4fd50821b208254fde88da66"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_sequential_angle.py": {
+    "mtime": 1771310160.800937,
+    "hash": "08de417ab03bdba27d7b80f86bdf2155"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_stratified_residual.py": {
+    "mtime": 1771783288.9607975,
+    "hash": "4ebe37b6e58a53b1f1e026c6e8b34b24"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_core_edge_cases.py": {
+    "mtime": 1773331743.337692,
+    "hash": "a3e34271cae30e4c81e20535857d14c6"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_diagonal_correction.py": {
+    "mtime": 1773331743.3379147,
+    "hash": "c0fd39df08ae1873bc76676e2bd48840"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_failure_injection.py": {
+    "mtime": 1765354734.6284583,
+    "hash": "7fe9b67001532bf5207c983e89176c37"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_jax_backend.py": {
+    "mtime": 1773331743.338215,
+    "hash": "e33b74044ba60ea18ed355eadbc3ae62"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_cli_core.py": {
+    "mtime": 1774718395.0529654,
+    "hash": "310e541a6c645617332389e73cb21690"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_cli_workflows.py": {
+    "mtime": 1773331743.3369808,
+    "hash": "5c0eae3952baab4a5667a220890fe91c"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_config_validation.py": {
+    "mtime": 1772576343.3348563,
+    "hash": "ddb9c9831e622749d4a4f130e0fe6d68"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_completion_parity.py": {
+    "mtime": 1776095893.0559716,
+    "hash": "7784419a9b847ff55a01c4e84904e01d"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_parameter_manager_core.py": {
+    "mtime": 1773331743.3397262,
+    "hash": "0fe91cdee0080248ae7b938b5cf283b9"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_config_error_paths.py": {
+    "mtime": 1771429431.3533337,
+    "hash": "ee31620d2a3500c0390211bb11bf0259"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_result_builder.py": {
+    "mtime": 1772424370.0168934,
+    "hash": "617c209d86e419805d7ad4f2599479da"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_nlsq_saving.py": {
+    "mtime": 1772424370.0161896,
+    "hash": "47efd10d59b4963d3feaf93807ed022a"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_physics.py": {
+    "mtime": 1773331743.339909,
+    "hash": "5d119e7bd3fd71f9ed6da621c6401b9a"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_parameter_index_mapper.py": {
+    "mtime": 1767464318.212896,
+    "hash": "9d01449424f600ed02657230c2ae6e8d"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_fit_computation.py": {
+    "mtime": 1772576343.3351204,
+    "hash": "329857c24aef11093c03e51bf7524fdd"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_anti_degeneracy_controller.py": {
+    "mtime": 1768783053.0899706,
+    "hash": "55893b3edfe3dd2e4ef17e7334799f6e"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_per_angle_scaling_init.py": {
+    "mtime": 1764909074.9622,
+    "hash": "70c8b09c9f06514d116e5dc2ac6a334f"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_async_io.py": {
+    "mtime": 1772576343.334489,
+    "hash": "69a3164881a4a6e16fa4c760441ce8c9"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_nlsq_adapter.py": {
+    "mtime": 1768867306.8815038,
+    "hash": "8ea2c27d98025e5e656b54e52c9d5056"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_nlsq_memory_strategy.py": {
+    "mtime": 1772424370.015652,
+    "hash": "60751e903f137d6200705ac256a7aa3d"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_optimization_edge_cases.py": {
+    "mtime": 1773331743.3392017,
+    "hash": "1d534bf3d8bc3fa7c9ddbba0124876d9"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_nlsq_adapter_base.py": {
+    "mtime": 1768867306.881731,
+    "hash": "2384e3bcc30f4ac0795db9fa013de17d"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_recovery_strategies.py": {
+    "mtime": 1771429431.3544865,
+    "hash": "9c461d915b4e7d55b4bce3ce18233b1b"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_residual_function.py": {
+    "mtime": 1767798862.4084532,
+    "hash": "0e5762ca78b973fec3b635d7205f97ec"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_data_edge_cases.py": {
+    "mtime": 1768867306.878813,
+    "hash": "aa331a174c9aa168cd8080860fb8accd"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_nlsq_chunking.py": {
+    "mtime": 1771783288.9594388,
+    "hash": "199e16b64c8183be992838915b91b3a4"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_device_detection.py": {
+    "mtime": 1771310160.7983682,
+    "hash": "2a8bb10aa70402a0cc8ed13c1576782b"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_checkpoint_core.py": {
+    "mtime": 1765354734.6269226,
+    "hash": "45a677706889168745b7622e91ce2b2f"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_angle_filtering_consistency.py": {
+    "mtime": 1766435962.4591413,
+    "hash": "a8477438d32473db47325809e5343bb4"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_streaming_optimizer.py": {
+    "mtime": 1771429431.3548083,
+    "hash": "7a726d2579f05534d6c46bcc03e729d0"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_xpcs_loader.py": {
+    "mtime": 1772424370.0174048,
+    "hash": "d77380b77aafc385a2a38e3275c084de"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_c2_surface_overlay.py": {
+    "mtime": 1763537475.5586889,
+    "hash": "b63aa80553e7ccf2a790778830829909"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_physics_utils.py": {
+    "mtime": 1771783288.9600425,
+    "hash": "c31bd8f60ceb9bf2977f873ca99db170"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_shear_weighting.py": {
+    "mtime": 1773331743.3401964,
+    "hash": "5942340e6b52740fbaa5b5644483cc10"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_nlsq_wrapper.py": {
+    "mtime": 1768867306.883411,
+    "hash": "894d54ce1161bf72e393d6c292e07a42"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_nlsq_config.py": {
+    "mtime": 1771783288.9598072,
+    "hash": "209297830721c8425405a73ec4c5b5c4"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_simulated_data_fixes.py": {
+    "mtime": 1766435962.465001,
+    "hash": "9ff445eda8e3d9a3681018c4334b7830"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_parameter_space_single_angle.py": {
+    "mtime": 1764909074.9616022,
+    "hash": "97d574a85235c71316ecc8f5c731890d"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_angle_filtering_jax.py": {
+    "mtime": 1760743468.9743047,
+    "hash": "11e0037e59e109e1fccfba8713c1e3f5"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_sphinx_configuration.py": {
+    "mtime": 1772424370.0171037,
+    "hash": "73724eec7f7468f4c1e43f67b1b13767"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/test_hardware_detection.py": {
+    "mtime": 1765354734.6286268,
+    "hash": "1f4027766f79eb3ff6ea9da1b8f3c7b6"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/config/__init__.py": {
+    "mtime": 1771310160.7931218,
+    "hash": "81855e6409afbddce34d9387a047ef29"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/config/test_config_manager.py": {
+    "mtime": 1773331743.3332703,
+    "hash": "fea9b3a220a76f8c5b2c662e76af48c5"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_model.py": {
+    "mtime": 1773331743.3336382,
+    "hash": "1d35938ff80b800778322147d29834a1"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_diagnostics.py": {
+    "mtime": 1771429431.3528018,
+    "hash": "def8b52533924f8a6cbd93ee83ac09cb"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_reparameterization.py": {
+    "mtime": 1771310160.795927,
+    "hash": "c9c5a1e8de81d4a16063638cff485e18"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_results.py": {
+    "mtime": 1765826703.0357752,
+    "hash": "5212aa0d61a2de0672e3aad3d381a205"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_data_prep.py": {
+    "mtime": 1771310160.7943811,
+    "hash": "038355223ef22bc14ecc947510a6dce2"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_timeout_smoke.py": {
+    "mtime": 1773331743.3362904,
+    "hash": "e24c977468a43fb001a96d3373cec319"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_scaling.py": {
+    "mtime": 1773331743.3360484,
+    "hash": "dbb83a4ce132c24cda1c2a3abf83b042"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_priors.py": {
+    "mtime": 1773331743.3353302,
+    "hash": "f76090398b9c21f8117786e5c43a677f"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_core.py": {
+    "mtime": 1771310160.7940526,
+    "hash": "9acc1f9d67ffa85886243bbb2e51ac87"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_cmc_nlsq_comparison.py": {
+    "mtime": 1771429431.3524866,
+    "hash": "c25f06152c02b5cb4fb39116a6a1482e"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_worker_pool.py": {
+    "mtime": 1773331743.3365042,
+    "hash": "353d42c039911a249257e964be170089"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/__init__.py": {
+    "mtime": 1765354734.6243029,
+    "hash": "e31ff037b236c465d3013aa61c97c8f6"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_quantile_estimation.py": {
+    "mtime": 1773331743.3357255,
+    "hash": "af1b6315e5cb4a97e1af98fd03d9bb82"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_io.py": {
+    "mtime": 1765354734.6254876,
+    "hash": "451f614feb60c1dd7bfff56e32f00a01"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_per_angle_modes.py": {
+    "mtime": 1773331743.3344886,
+    "hash": "c76aa153132092fdf70e7e4c59d4401b"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_results_c2.py": {
+    "mtime": 1771783288.9566088,
+    "hash": "3b9de599cfd18a0ce9b32e09018447c1"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_heterogeneity_fixes.py": {
+    "mtime": 1771310160.794771,
+    "hash": "f9026ba0b809e549a478069197b6f124"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_nlsq_warmstart.py": {
+    "mtime": 1773331743.3341103,
+    "hash": "ccde4366c96dde0f6916b79dd7e83207"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_config.py": {
+    "mtime": 1772424370.0110753,
+    "hash": "942e67672abbe0042a7c7549e59e517b"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_backends.py": {
+    "mtime": 1772576343.334277,
+    "hash": "b0a70fc44ecd1738c79a4a7e698cdf3c"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_prior_tempering.py": {
+    "mtime": 1773331743.3348112,
+    "hash": "c78404ab8088d163a9d6bb80e5726d70"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/cmc/test_sampler.py": {
+    "mtime": 1773331743.3358943,
+    "hash": "c92d04510289c42b8b57e71366987f4f"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/nlsq/test_cmaes_nlsq_physics_equivalence.py": {
+    "mtime": 1771783288.9572322,
+    "hash": "1efe77873ccdc7d2b46ff593ae374f52"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/optimization/nlsq/test_parallel_accumulator.py": {
+    "mtime": 1772424370.012427,
+    "hash": "ebe70b632d860100a9c14e32d2a98d4a"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/cli/__init__.py": {
+    "mtime": 1771310160.7927186,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/cli/test_xla_config.py": {
+    "mtime": 1774563934.827607,
+    "hash": "bcebccc575e9cb76a8b6ee1b0372a4d0"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/cli/test_cli_commands.py": {
+    "mtime": 1771310160.792871,
+    "hash": "1fd2afdbf776891dde39fa9c0760ea1a"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/viz/test_plots.py": {
+    "mtime": 1772424370.0176136,
+    "hash": "4006daca808c5977ea3203639a689435"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/viz/__init__.py": {
+    "mtime": 1771310160.8016472,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/b80985/Projects/homodyne/tests/unit/viz/test_viz_validation.py": {
+    "mtime": 1771310160.8018982,
+    "hash": "c0d9940e27dd047e8fed3cf404fc4a86"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_workflows.py": {
+    "mtime": 1771783288.950642,
+    "hash": "eccfa7dec8708f52f7b29d6a21f91834"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/conftest.py": {
+    "mtime": 1771310160.7892106,
+    "hash": "3ca16e486cb40faa1f041c94e5f64661"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_constant_scaling_integration.py": {
+    "mtime": 1771310160.7905252,
+    "hash": "5b01107272d47d24e464dae5950dbc89"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_error_recovery.py": {
+    "mtime": 1771310160.7906303,
+    "hash": "057adb3d2d21445f3b0ac3e06ebcb8ab"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/__init__.py": {
+    "mtime": 1765354734.6192439,
+    "hash": "dd0398124eae88b4a89bdbd901525ef8"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_logging_integration.py": {
+    "mtime": 1773331743.33214,
+    "hash": "6cf2048c385b0a0a664a8833c5717c1b"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_parameter_recovery.py": {
+    "mtime": 1766435962.4511993,
+    "hash": "5dbd1d0042e40c1f51ed01c724d6211a"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_cli_pipeline.py": {
+    "mtime": 1772424370.0095077,
+    "hash": "8aeb3332cfe995e1e439e74cfea7f052"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_physics_data_integration.py": {
+    "mtime": 1768867306.872785,
+    "hash": "e95741bffdc7a2ab59967b628ad69814"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_laminar_flow_many_angles.py": {
+    "mtime": 1768867306.8711612,
+    "hash": "77b9d5e9d5e5c6a69092fcd4bfb31459"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_multistart_integration.py": {
+    "mtime": 1767464318.1979055,
+    "hash": "bb78f5691c99f5243c8442298d300a5f"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_optimization_edge_cases.py": {
+    "mtime": 1766435962.4510427,
+    "hash": "7eeb6080f0a56ccc81a0252b61270318"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_nlsq_api_integration.py": {
+    "mtime": 1768867306.8724036,
+    "hash": "4aa4f6f506d74fda712111d07c8e7285"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_mcmc_integration.py": {
+    "mtime": 1768867306.8717098,
+    "hash": "aa761acb34691ae3862c1611de0885f8"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_nlsq_cmc_consistency.py": {
+    "mtime": 1771310160.7910523,
+    "hash": "d4598b1c5896bdb6361e65bdffe0f17a"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_nlsq_integration.py": {
+    "mtime": 1773331743.3326905,
+    "hash": "4e10a9bb91acecc8ae70d03eba697db5"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/test_hdf5_pipeline.py": {
+    "mtime": 1771429431.351306,
+    "hash": "34f92dba4a61c7cc6cdb3d7c1f7a1157"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/optimization/cmc/test_reparameterization_integration.py": {
+    "mtime": 1771310160.7895644,
+    "hash": "86945c054560ec0c04d55131eac5426a"
+  },
+  "/Users/b80985/Projects/homodyne/tests/integration/optimization/cmc/test_sharding_parity.py": {
+    "mtime": 1771310160.7900276,
+    "hash": "5247789373d159c507fab152e083a85c"
+  },
+  "/Users/b80985/Projects/homodyne/tests/utils/__init__.py": {
+    "mtime": 1765354734.6316698,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/b80985/Projects/homodyne/tests/factories/large_dataset_factory.py": {
+    "mtime": 1771783288.9501534,
+    "hash": "1c5dbda0fe42ee57f538173d08e3ca37"
+  },
+  "/Users/b80985/Projects/homodyne/tests/factories/data_factory.py": {
+    "mtime": 1771310160.7882636,
+    "hash": "2b42168a6db22f7b7a3fb227df3a33b0"
+  },
+  "/Users/b80985/Projects/homodyne/tests/factories/__init__.py": {
+    "mtime": 1765354734.6168234,
+    "hash": "7cb66cbf4a205e22dfc601d26f7a494f"
+  },
+  "/Users/b80985/Projects/homodyne/tests/factories/synthetic_data.py": {
+    "mtime": 1764909074.9460373,
+    "hash": "537d4c091f09898f608f46b6d84d301b"
+  },
+  "/Users/b80985/Projects/homodyne/tests/factories/config_factory.py": {
+    "mtime": 1760743468.9710464,
+    "hash": "c53e70b4ab90cfcfa7703a8faf5fec4e"
+  },
+  "/Users/b80985/Projects/homodyne/tests/factories/optimization_factory.py": {
+    "mtime": 1771429431.3501785,
+    "hash": "2321acd5a73ab6784f4e3e889884687d"
+  },
+  "/Users/b80985/Projects/homodyne/tests/mcmc/__init__.py": {
+    "mtime": 1765354734.6202755,
+    "hash": "01856684bc711a46e8ede3409d665b4a"
+  },
+  "/Users/b80985/Projects/homodyne/tests/mcmc/test_statistical_validation.py": {
+    "mtime": 1766435962.451934,
+    "hash": "3ac55bf2ea571169aa94bf562b27491c"
+  },
+  "/Users/b80985/Projects/homodyne/tests/api/conftest.py": {
+    "mtime": 1773331743.3308098,
+    "hash": "2f754d62d98e34ad0e7761eb8c426e0a"
+  },
+  "/Users/b80985/Projects/homodyne/tests/api/test_compatibility.py": {
+    "mtime": 1773331743.3315184,
+    "hash": "0c23b32e2cc2716a80d279b16f1821ff"
+  },
+  "/Users/b80985/Projects/homodyne/tests/api/__init__.py": {
+    "mtime": 1765354734.615099,
+    "hash": "a78b977f6cb2d8fa52c75ad23713eea3"
+  },
+  "/Users/b80985/Projects/homodyne/tests/regression/test_save_results_compat.py": {
+    "mtime": 1760743468.9739227,
+    "hash": "28307ad1e8e20aa45a669b596d1d8d36"
+  },
+  "/Users/b80985/Projects/homodyne/tests/regression/test_nlsq_regression.py": {
+    "mtime": 1768867306.8759966,
+    "hash": "b3f456606013c45d22350064c1b20342"
+  },
+  "/Users/b80985/Projects/homodyne/tests/regression/test_cmc_potential_energy.py": {
+    "mtime": 1772424370.0104568,
+    "hash": "6f0b7ec8cf9c1478a4e1355e351911b1"
+  },
+  "/Users/b80985/Projects/homodyne/tests/performance/__init__.py": {
+    "mtime": 1765354734.6214316,
+    "hash": "3a5b766f99b9322ecf7f78516b1d99f2"
+  },
+  "/Users/b80985/Projects/homodyne/tests/performance/benchmark_cmc.py": {
+    "mtime": 1771310160.7916179,
+    "hash": "132f0b693f645af3941b768a409905e2"
+  },
+  "/Users/b80985/Projects/homodyne/tests/performance/benchmark_baseline.py": {
+    "mtime": 1767464318.200221,
+    "hash": "1a8a3b7f2d221e83528987b1684c0f90"
+  },
+  "/Users/b80985/Projects/homodyne/tests/validation/test_real_data_stratification.py": {
+    "mtime": 1766435962.4662266,
+    "hash": "355dcccffa549ba04d3286e762562809"
+  },
+  "/Users/b80985/Projects/homodyne/tests/validation/__init__.py": {
+    "mtime": 1760743468.9770546,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/b80985/Projects/homodyne/tests/validation/test_scientific_validation.py": {
+    "mtime": 1766435962.4664228,
+    "hash": "e4310f73a7fc84cd5817771422b02210"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/conf.py": {
+    "mtime": 1774563934.8208444,
+    "hash": "f6fd2ae4f40877aee2bdd1cdb2a2ff95"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/diagnose_gradients.py": {
+    "mtime": 1771429431.3469272,
+    "hash": "ae991b707ee8c035fcd5d6557db5899b"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/laminar_logprob_probe.py": {
+    "mtime": 1772424370.0084229,
+    "hash": "0a69f1e6c9b05bea6d682e1c6b955227"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/debug_cmc_vs_nlsq_physics.py": {
+    "mtime": 1772424370.007956,
+    "hash": "aee352b905c4e690b2aa2d734c5c2ced"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/benchmark_perf_optimizations.py": {
+    "mtime": 1771429431.3445168,
+    "hash": "1b18aa02c9d3288902c566888ae4bd80"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/nlsq_regression_harness.py": {
+    "mtime": 1771429431.34953,
+    "hash": "bc158ca5e5973aed76afed977cb87643"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/nlsq_least_squares_test.py": {
+    "mtime": 1771429431.3493166,
+    "hash": "1ff935f674e20096e0134bb1be13ac41"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/benchmark_jacobian_ad.py": {
+    "mtime": 1771429431.3442461,
+    "hash": "62dfea204039b0858efae3d67793eebf"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/compare_nlsq_cmc_c2.py": {
+    "mtime": 1771429431.3457468,
+    "hash": "7c69a7ae01082fbaf317221185e0724a"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/nlsq/streaming_100m_points.py": {
+    "mtime": 1771429431.34912,
+    "hash": "9a2b2d598ae8e40cf84ec02c6500db58"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/nlsq/overlay_solver_vs_posthoc.py": {
+    "mtime": 1765354734.6132941,
+    "hash": "274d762e885c91f415bd8a3e89299c5e"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/nlsq/laminar_flow_nlsq.py": {
+    "mtime": 1771429431.348432,
+    "hash": "b561e258f277a07a4f018bfb531c526d"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/nlsq/multi_core_batch_processing.py": {
+    "mtime": 1771429431.3487554,
+    "hash": "505c580b7fe882987082fa81889dfc9a"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/nlsq/static_isotropic_nlsq.py": {
+    "mtime": 1771429431.3489552,
+    "hash": "e1c1dc501c655366bb5da471dbe95250"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/nlsq/cpu_optimization.py": {
+    "mtime": 1771429431.3482306,
+    "hash": "01d1149cd8a4313729a8292b006e76df"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/utils/regenerate_line_counts.py": {
+    "mtime": 1772424370.0086238,
+    "hash": "b7c272c13cedfd6c85bd864a85871cc5"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/utils/angle_filtering.py": {
+    "mtime": 1765354734.613896,
+    "hash": "ae4659ccadbf5cafee0d0c94ec807502"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/benchmarks/benchmark_onednn.py": {
+    "mtime": 1771429431.344946,
+    "hash": "ddf66bc21dbe9f5a4fbbe5261f47b2cb"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/benchmarks/cmc_baseline.py": {
+    "mtime": 1771429431.3455179,
+    "hash": "dd0207d27a1dc81a24832b3856911f28"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/mcmc/mcmc_uncertainty.py": {
+    "mtime": 1771429431.3478465,
+    "hash": "5e1a03705342b1606e7dec09906acf8c"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/mcmc/mcmc_integration_demo.py": {
+    "mtime": 1771429431.3476841,
+    "hash": "6a6214f6f535c0ef82d04d079f29d2ac"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/mcmc/cmc_large_dataset.py": {
+    "mtime": 1771429431.3474782,
+    "hash": "92a8e6924cdadbcfb26e6d65f0b9a408"
+  },
+  "/Users/b80985/Projects/homodyne/CHANGELOG.md": {
+    "mtime": 1774563934.8175557,
+    "hash": "0e540c0a736f298971f7084cc5403965"
+  },
+  "/Users/b80985/Projects/homodyne/README.md": {
+    "mtime": 1774563934.8178692,
+    "hash": "f59c73265823bfa720c19537a23dbc25"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/config/templates/homodyne_static.yaml": {
+    "mtime": 1774563934.8244321,
+    "hash": "0d55edcf393bc314f444483ebe83611b"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/config/templates/homodyne_laminar_flow.yaml": {
+    "mtime": 1774563934.82383,
+    "hash": "e9a8a81f0e4db6dcaae860a321e0bde4"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/config/templates/homodyne_master_template.yaml": {
+    "mtime": 1774563934.8241863,
+    "hash": "f3fb50f9d78bf09036cced0758eb506c"
+  },
+  "/Users/b80985/Projects/homodyne/homodyne/runtime/README.md": {
+    "mtime": 1765354734.6080105,
+    "hash": "e2ab231d071aab84f5956e937874c5d4"
+  },
+  "/Users/b80985/Projects/homodyne/tests/README.md": {
+    "mtime": 1771429431.3497381,
+    "hash": "668b83c448b4024330c994bbd5e978cd"
+  },
+  "/Users/b80985/Projects/homodyne/docs/requirements.txt": {
+    "mtime": 1773331743.3094566,
+    "hash": "c968cbdb42a40402b6690cdae0d158fc"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/index.rst": {
+    "mtime": 1772576343.3178554,
+    "hash": "19dedc728c91c940a916727afc34729a"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/contributing.rst": {
+    "mtime": 1771783288.920701,
+    "hash": "00824b88ca516c4d0b04f5337ed69daa"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/quickstart.rst": {
+    "mtime": 1774563934.8219965,
+    "hash": "683b1fc17cf262e07f19780513242d33"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/installation.rst": {
+    "mtime": 1774563934.8218324,
+    "hash": "4ffca418bd3927487fd48426790c70cf"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/developer/index.rst": {
+    "mtime": 1773331743.3147213,
+    "hash": "cf84080f88f940f7493e0e37b96828e8"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/developer/contributing_guide.rst": {
+    "mtime": 1773331743.3145854,
+    "hash": "03575bdca530d65452cf2317e875d046"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/developer/testing_guide.rst": {
+    "mtime": 1772424369.9689713,
+    "hash": "31413983f905d1cb60b7bdd74288ed62"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/developer/parameter_bounds_verification.rst": {
+    "mtime": 1773331743.3148346,
+    "hash": "643c6eae7d1291c199e317329513f921"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/developer/architecture.rst": {
+    "mtime": 1773331743.3142974,
+    "hash": "24f27391a6977c7b1a8743d1378936ee"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/developer/adrs/index.rst": {
+    "mtime": 1773331743.3139246,
+    "hash": "325e3f06515d32ffd5ed9f803e65598f"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/developer/adrs/adr_006_no_consumer_gpu.rst": {
+    "mtime": 1773331743.3135977,
+    "hash": "56fc07a7921743fe03b35a2e463ab5f4"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/developer/adrs/adr_005_per_angle_scaling.rst": {
+    "mtime": 1771429431.326037,
+    "hash": "f572424dd968342f4153574491e02f2a"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/developer/adrs/adr_003_anti_degeneracy.rst": {
+    "mtime": 1771429431.325772,
+    "hash": "7d534f1125c11eb6f6d022efa74e4ed8"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/developer/adrs/adr_004_consensus_monte_carlo.rst": {
+    "mtime": 1771429431.3259048,
+    "hash": "b31b6af3a4e14cb985ee8a823a59b4cc"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/developer/adrs/adr_002_nlsq_cmc_split.rst": {
+    "mtime": 1771429431.3256433,
+    "hash": "67deea9b13611277012918c0a916b2c0"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/developer/adrs/adr_001_jax_cpu_only.rst": {
+    "mtime": 1773331743.3134012,
+    "hash": "d3dbfe43f0b2e8a54d1ece44d09a5027"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/configuration/templates.rst": {
+    "mtime": 1774563934.8216174,
+    "hash": "8a6dc46af0cdc60da35bc00a3ecf3236"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/configuration/index.rst": {
+    "mtime": 1772424369.9679513,
+    "hash": "247668b06575abd72a6c7df076b11659"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/configuration/options.rst": {
+    "mtime": 1774563934.8212419,
+    "hash": "f5088f1aa8d4fd4cfaae06dce18619ba"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/_templates/autosummary/module.rst": {
+    "mtime": 1771429431.3211358,
+    "hash": "76832c3edac7c40e6e187d32ffa799df"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/theory/index.rst": {
+    "mtime": 1772576343.3190572,
+    "hash": "b9543bf1d6c40ca6979ae7d068263dd7"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/theory/heterodyne_scattering.rst": {
+    "mtime": 1772424369.9718206,
+    "hash": "32bfdfdeab7afb0a89ff9bd9d30176bb"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/theory/correlation_functions.rst": {
+    "mtime": 1772424369.9715192,
+    "hash": "83afb42f9c67e5c68d142fa332a6df6a"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/theory/theoretical_framework.rst": {
+    "mtime": 1772424369.9722733,
+    "hash": "64ff0634004a17aaee1303d93fac2fe9"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/theory/analysis_modes.rst": {
+    "mtime": 1773331743.3155336,
+    "hash": "f24c052cae57148bbfd6771a4d40299f"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/theory/citations.rst": {
+    "mtime": 1773331743.3159633,
+    "hash": "90ff5335b59a945891940a913e813920"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/theory/anti_degeneracy_defense.rst": {
+    "mtime": 1772576343.3185537,
+    "hash": "4a5f698f0c6be71d97125d28fef1ead6"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/theory/transport_coefficient.rst": {
+    "mtime": 1772424369.9725828,
+    "hash": "1f514fb24248abf182167339f6e704b8"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/theory/classical_processes.rst": {
+    "mtime": 1772424369.9709067,
+    "hash": "6f409eeac351f71642b7f8cc333f99b8"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/theory/homodyne_scattering.rst": {
+    "mtime": 1772576343.3187754,
+    "hash": "27b5e65dd114c4e82d3472f6c3d0cbf0"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/theory/anti_degeneracy.rst": {
+    "mtime": 1772424369.9700336,
+    "hash": "2b90bec174acf1ea47e829353cf9bc71"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/theory/yielding_dynamics.rst": {
+    "mtime": 1772424369.9729757,
+    "hash": "65823c307880680f8e9ec28f5044894f"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/theory/computational_methods.rst": {
+    "mtime": 1772424369.9711018,
+    "hash": "cd81df5d064addd02c0f9214db088aba"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/index.rst": {
+    "mtime": 1771429431.33337,
+    "hash": "48d418257894f7f3f41254c50b21c47e"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/05_appendices/index.rst": {
+    "mtime": 1771429431.333125,
+    "hash": "9f0f2421f78f66a2883bdf604af5fbed"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/05_appendices/troubleshooting.rst": {
+    "mtime": 1771429431.3332717,
+    "hash": "e6993ddf30d0e470a1a3ab31b886b921"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/05_appendices/faq.rst": {
+    "mtime": 1771429431.3329093,
+    "hash": "cb082b6eb8601a638bd02ce589d1cda3"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/05_appendices/glossary.rst": {
+    "mtime": 1771429431.333042,
+    "hash": "092ef0a96ac503e4269ce74cad597600"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/03_advanced_topics/index.rst": {
+    "mtime": 1771429431.3313537,
+    "hash": "bff9ec316ef6503fef6dc8ff045806e2"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/03_advanced_topics/per_angle_modes.rst": {
+    "mtime": 1772576343.3213973,
+    "hash": "5286439462bd68fb957857ef2ba8b439"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/03_advanced_topics/cmaes_optimization.rst": {
+    "mtime": 1773331743.3169396,
+    "hash": "66e3ee904c3b2a2c2d449b8bee5ea67d"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/03_advanced_topics/bayesian_inference.rst": {
+    "mtime": 1772576343.3206952,
+    "hash": "d6fd81efb1db071a2ac1bdd2ef662aeb"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/03_advanced_topics/laminar_flow.rst": {
+    "mtime": 1772576343.3208892,
+    "hash": "4c28efc5f96703735bd9b8bf05ef3223"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/03_advanced_topics/diagnostics.rst": {
+    "mtime": 1771429431.3312228,
+    "hash": "4939a138a11c9c68820e7b86c45e876a"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/03_advanced_topics/streaming_mode.rst": {
+    "mtime": 1772576343.3215823,
+    "hash": "612c5dac1efa8c3c99a0c9997c94b553"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/04_practical_guides/batch_processing.rst": {
+    "mtime": 1772576343.321855,
+    "hash": "0399f8ca430b3c3e92375f484743986a"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/04_practical_guides/index.rst": {
+    "mtime": 1771429431.3323293,
+    "hash": "eb8c9c93cc764663640ecd05ee4f75ac"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/04_practical_guides/configuration.rst": {
+    "mtime": 1772576343.3223484,
+    "hash": "ff9c93406c214ab4d5b7cacba1c24b3d"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/04_practical_guides/performance_tuning.rst": {
+    "mtime": 1772576343.3225725,
+    "hash": "f54e1f859901a0d0d2562618b5779866"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/04_practical_guides/visualization.rst": {
+    "mtime": 1771429431.3327157,
+    "hash": "bf3799130b9697dfe30df9311737a7a4"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/01_fundamentals/index.rst": {
+    "mtime": 1771429431.3295717,
+    "hash": "bee0a9bfe51bd67259aa6c8682274ea7"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/01_fundamentals/what_is_xpcs.rst": {
+    "mtime": 1771429431.3298843,
+    "hash": "bb36ddcf1d8e42dd4be681c656187dd5"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/01_fundamentals/analysis_modes.rst": {
+    "mtime": 1772576343.319291,
+    "hash": "a2537ac06f39fc3868796c89891376f2"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/01_fundamentals/parameter_guide.rst": {
+    "mtime": 1773331743.3165698,
+    "hash": "2703591391f5b43f250694d1cc36d40b"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/01_fundamentals/homodyne_overview.rst": {
+    "mtime": 1773331743.3162365,
+    "hash": "2efc7b4c99efdb60f75c0b6c5e458099"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/02_data_and_fitting/index.rst": {
+    "mtime": 1771429431.3301995,
+    "hash": "af3310a78fb65aa0a00959524dd9794f"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/02_data_and_fitting/data_loading.rst": {
+    "mtime": 1772576343.3198655,
+    "hash": "bdaf0648d0da2196dbdc74155d503082"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/02_data_and_fitting/model_selection.rst": {
+    "mtime": 1772576343.320042,
+    "hash": "772cbe09698ec04e46d4d48e2f831ecf"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/02_data_and_fitting/nlsq_fitting.rst": {
+    "mtime": 1772576343.3202648,
+    "hash": "98c04834838f495b40dea3d4979b5ddf"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/user_guide/02_data_and_fitting/result_interpretation.rst": {
+    "mtime": 1772576343.3204868,
+    "hash": "eb1d94a6507222bd5d5368a06278ff27"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/architecture/cmc-fitting-architecture.md": {
+    "mtime": 1774563934.81848,
+    "hash": "94b716e588f1b8a1bec0139c6fd937ef"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/architecture/index.rst": {
+    "mtime": 1772576343.3160157,
+    "hash": "7781ce9750b31e0c2e0f47d3da2c8991"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/architecture/homodyne-architecture-overview.md": {
+    "mtime": 1774563934.819462,
+    "hash": "c24318683db6881690840dd15a4ca124"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/architecture/nlsq-fitting-architecture.md": {
+    "mtime": 1774563934.819954,
+    "hash": "1ba19ab64fdffdfda6c4a0bae4d09e7c"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/architecture/data-handler-architecture.md": {
+    "mtime": 1774563934.8190665,
+    "hash": "7b7448ba1059f869157ad2c19cddae46"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/architecture/physical-model-architecture.md": {
+    "mtime": 1774563934.8204129,
+    "hash": "e39f1aea693269e15dcbe1dfd8023c41"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/examples/index.rst": {
+    "mtime": 1772576343.3176818,
+    "hash": "a3a25fd1e19516335bccdabde70aa472"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/nlsq_wrapper.rst": {
+    "mtime": 1773331743.3109508,
+    "hash": "752999ef501e1dee6648c62ccb491997"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/homodyne_model.rst": {
+    "mtime": 1772576343.3137157,
+    "hash": "e2a044c2474e256e40358f5664ea9094"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/optimization.rst": {
+    "mtime": 1773331743.3111901,
+    "hash": "31acf809ca4d7bda7257ef493fd8b1c7"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/index.rst": {
+    "mtime": 1773331743.3104782,
+    "hash": "72c2c2e0b0b2c75613ea2de4aba2a8bd"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/viz.rst": {
+    "mtime": 1773331743.312143,
+    "hash": "cf1b8b3e39b6b343a55c33043bfad697"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/models.rst": {
+    "mtime": 1772576343.3140557,
+    "hash": "c32ce9a26f968fe7539e929f4d71c52e"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/cmc_sampler.rst": {
+    "mtime": 1771429431.3219965,
+    "hash": "6e4879b1ccb2bb360c6690e36eb30a71"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/cmc_backends.rst": {
+    "mtime": 1773331743.3099787,
+    "hash": "fcf60ff943ddf33f0560feb407869a9e"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/cli.rst": {
+    "mtime": 1773331743.3098028,
+    "hash": "6a6474e52a04f8f2debf6aa847d53b58"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/config.rst": {
+    "mtime": 1773331743.3102317,
+    "hash": "8aa2fc2afbfa6b9aa3478c9204b0acb5"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/nlsq_adapter.rst": {
+    "mtime": 1772576343.3142185,
+    "hash": "4d2dfe192e7e00370c82b4d0ee309798"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/io.rst": {
+    "mtime": 1772576343.3138766,
+    "hash": "895ab40fef7ec7444ed24548cd4fa593"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/data.rst": {
+    "mtime": 1772576343.3135474,
+    "hash": "ecd489cdfd1f2dd10a70c19840d0ffa1"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/theory_engine.rst": {
+    "mtime": 1772576343.3152387,
+    "hash": "b25870015841f7ed6fc0389d261c1827"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/optimization_guide.rst": {
+    "mtime": 1773331743.3114507,
+    "hash": "ca81d4f04b36567a380285ded1aa4f32"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/device.rst": {
+    "mtime": 1772424369.9655712,
+    "hash": "b25755b8cdb5e7c303bbc6dabc5086f0"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/cmc.rst": {
+    "mtime": 1772576343.312415,
+    "hash": "7bd7d032dd51339e7f5d2f857acfc1ca"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/jax_backend.rst": {
+    "mtime": 1773331743.31071,
+    "hash": "06557f9732a213f5c76113f8e7d378af"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/cmc_reparameterization.rst": {
+    "mtime": 1772424369.9653778,
+    "hash": "653d04fe7065f5c05a68a0179053155a"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/core.rst": {
+    "mtime": 1771783288.918623,
+    "hash": "2f5cb236f14a86dbad4b97a218973b42"
+  },
+  "/Users/b80985/Projects/homodyne/docs/source/api/utils.rst": {
+    "mtime": 1773331743.3119133,
+    "hash": "d2ae1e150b6fee12a6b217a5301ec922"
+  },
+  "/Users/b80985/Projects/homodyne/docs/architecture/cmc-fitting-architecture.md": {
+    "mtime": 1774563934.81848,
+    "hash": "94b716e588f1b8a1bec0139c6fd937ef"
+  },
+  "/Users/b80985/Projects/homodyne/docs/architecture/homodyne-architecture-overview.md": {
+    "mtime": 1774563934.819462,
+    "hash": "c24318683db6881690840dd15a4ca124"
+  },
+  "/Users/b80985/Projects/homodyne/docs/architecture/nlsq-fitting-architecture.md": {
+    "mtime": 1774563934.819954,
+    "hash": "1ba19ab64fdffdfda6c4a0bae4d09e7c"
+  },
+  "/Users/b80985/Projects/homodyne/docs/architecture/data-handler-architecture.md": {
+    "mtime": 1774563934.8190665,
+    "hash": "7b7448ba1059f869157ad2c19cddae46"
+  },
+  "/Users/b80985/Projects/homodyne/docs/architecture/physical-model-architecture.md": {
+    "mtime": 1774563934.8204129,
+    "hash": "e39f1aea693269e15dcbe1dfd8023c41"
+  },
+  "/Users/b80985/Projects/homodyne/scripts/README.md": {
+    "mtime": 1765354734.612021,
+    "hash": "187ab4cd141681ef33a646b47ddc5ff4"
+  }
+}
