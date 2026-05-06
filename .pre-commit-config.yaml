@@ -18,6 +18,7 @@ repos:
       - id: check-case-conflict
       - id: check-added-large-files
         args: [--maxkb=1000]
+        exclude: ^graphify-out/
       - id: debug-statements
       - id: mixed-line-ending
         args: [--fix=lf]
