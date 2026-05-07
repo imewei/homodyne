@@ -26,6 +26,29 @@ from homodyne.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+def _effective_param_count_for_ooc(
+    per_angle_scaling: bool,
+    n_params: int,
+    n_phi: int,
+    n_physical: int,
+    anti_degeneracy_config: dict | None = None,
+) -> int:
+    """Return the parameter count used for out-of-core covariance scaling."""
+    if not per_angle_scaling:
+        return n_params
+
+    ad_config = anti_degeneracy_config or {}
+    per_angle_mode = ad_config.get("per_angle_mode", "auto")
+    threshold = int(ad_config.get("constant_scaling_threshold", 3))
+
+    if per_angle_mode == "constant":
+        return n_physical
+    if per_angle_mode == "auto" and n_phi >= threshold and n_params == n_physical + 2:
+        return 2 * n_phi + n_physical
+
+    return n_params
+
+
 def fit_with_out_of_core_accumulation(
     stratified_data: Any,
     data: Any,
@@ -177,12 +200,16 @@ def fit_with_out_of_core_accumulation(
     n_physical = len(physical_param_names)
 
     # Effective parameter count for DOF in s^2 computation.
-    # In auto_averaged mode, n_params = 2 + n_physical (compressed), but the
-    # model effectively uses 2*n_phi + n_physical DOF.
-    if per_angle_scaling and n_params < 2 * n_phi + n_physical:
-        n_params_effective = 2 * n_phi + n_physical
-    else:
-        n_params_effective = n_params
+    # auto_averaged uses a compressed vector (contrast_avg, offset_avg, physical)
+    # but consumes expanded DOF; constant mode keeps scaling fixed and must not
+    # be expanded or covariance is over-inflated.
+    n_params_effective = _effective_param_count_for_ooc(
+        per_angle_scaling,
+        n_params,
+        n_phi,
+        n_physical,
+        anti_degeneracy_config,
+    )
 
     log.info(
         f"Full Physics Setup: n_phi={n_phi}, n_t1={n_t1}, n_t2={n_t2}, "

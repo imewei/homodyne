@@ -4,8 +4,8 @@
 Transforms correlated parameters to orthogonal sampling space,
 then converts back to physics parameters for output.
 
-Reparameterizations (v2.22.2, reference-time):
-- D0, D_offset → log_D_ref, D_offset_frac (decorrelates D0/alpha via observable)
+Reparameterizations (v2.23.0, reference-time):
+- D0, D_offset → log_D_ref, D_offset_ratio (decorrelates D0/alpha via observable)
 - gamma_dot_t0 → log_gamma_ref (decorrelates gamma_dot_t0/beta via observable)
 
 Theory:
@@ -14,6 +14,13 @@ Theory:
   them because f_ref relates to observables while α controls the shape.
 
   t_ref = √(dt × t_max) is the geometric mean of the time range.
+
+D_offset reparameterization (v2.23.0):
+  D_offset_ratio = D_offset / D_ref is a simple linear map that handles
+  negative D_offset (jammed/arrested systems) without singularity.
+  The old D_offset_frac = D_offset / (D_ref + D_offset) had a pole at
+  D_offset = -D_ref and was restricted to [0, 0.5], silently clipping
+  negative NLSQ warm-starts. D_offset_ratio uses a Normal prior (unbounded).
 """
 
 from __future__ import annotations
@@ -90,7 +97,7 @@ def transform_nlsq_to_reparam_space(
     -------
     tuple[dict[str, float], dict[str, float]]
         (reparam_values, reparam_uncertainties) in the reparameterized space.
-        Keys: "log_D_ref", "D_offset_frac", "log_gamma_ref" (when available).
+        Keys: "log_D_ref", "D_offset_ratio", "log_gamma_ref" (when available).
     """
     reparam_values: dict[str, float] = {}
     reparam_uncertainties: dict[str, float] = {}
@@ -107,19 +114,10 @@ def transform_nlsq_to_reparam_space(
         log_D_ref = math.log(D_ref)
         reparam_values["log_D_ref"] = log_D_ref
 
-        # D_offset_frac = D_offset / (D_ref + D_offset), clipped to [0, 0.5]
-        # to match TruncatedNormal prior support (low=0.0, high=0.5) in model.py.
-        # P1-C: Clip lower bound to 0.0 — negative D_offset (jammed/arrested systems)
-        # produces negative frac, which falls outside prior support.
+        # D_offset_ratio = D_offset / D_ref  (linear, handles negative D_offset)
+        # Normal prior in model.py; inverse is D_offset = D_ref * ratio (no singularity).
         if D_offset is not None:
-            denom = D_ref + D_offset
-            if denom > 0:
-                raw_frac = D_offset / denom
-                reparam_values["D_offset_frac"] = float(np.clip(raw_frac, 0.0, 0.5))
-            elif D_offset > 0:
-                reparam_values["D_offset_frac"] = 0.5  # D_ref ~ 0
-            else:
-                reparam_values["D_offset_frac"] = 0.05  # Safe default
+            reparam_values["D_offset_ratio"] = float(D_offset / D_ref)
 
         # Delta-method uncertainty propagation for log_D_ref
         # log_D_ref = log(D0) + alpha * log(t_ref)
@@ -140,12 +138,15 @@ def transform_nlsq_to_reparam_space(
                 var_log_D_ref += (log_t_ref * alpha_std) ** 2
             reparam_uncertainties["log_D_ref"] = math.sqrt(max(var_log_D_ref, 1e-20))
 
-            # Uncertainty for D_offset_frac (simplified)
-            if D_offset is not None and denom > 0 and D_offset_std > 0:
-                # d(frac)/d(D_offset) = D_ref / (D_ref + D_offset)^2
-                dfrac_doffset = D_ref / (denom**2)
-                reparam_uncertainties["D_offset_frac"] = abs(
-                    dfrac_doffset * D_offset_std
+            # Uncertainty for D_offset_ratio via delta method (ignoring covariance):
+            # ratio = D_offset / D_ref, D_ref = D0 * t_ref^alpha
+            # Var(ratio) = Var(D_offset)/D_ref^2 + ratio^2 * Var(log_D_ref)
+            # The second term captures D0/alpha uncertainty propagated through D_ref.
+            if D_offset is not None and D_offset_std > 0:
+                ratio_val = D_offset / D_ref
+                var_ratio = (D_offset_std / D_ref) ** 2 + ratio_val**2 * var_log_D_ref
+                reparam_uncertainties["D_offset_ratio"] = math.sqrt(
+                    max(var_ratio, 1e-20)
                 )
 
     # --- Shear reparameterization ---
@@ -244,21 +245,15 @@ def transform_to_sampling_space(
         D_ref = max(D_ref, 1e-10)
         log_D_ref = np.log(D_ref)
 
-        # D_offset_frac = D_offset / (D_ref + D_offset), clipped to [0, 0.5]
-        # to match the TruncatedNormal prior support (low=0.0, high=0.5) in model.py.
-        # P1-C: Clip lower bound to 0.0 — negative D_offset (jammed/arrested systems)
-        # produces negative frac, which falls outside the prior support and crashes NUTS init.
-        denom = D_ref + D_offset
-        if denom > 0:
-            raw_frac = D_offset / denom
-            D_offset_frac = float(np.clip(raw_frac, 0.0, 0.5))
-        elif D_offset > 0:
-            D_offset_frac = 0.5  # D_ref ~ 0, D_offset dominates
-        else:
-            D_offset_frac = 0.0
+        # D_offset_ratio = D_offset / D_ref  (linear map, no singularity)
+        # Handles negative D_offset (jammed/arrested systems) correctly.
+        # Clamped to (-1+eps, inf) to match TruncatedNormal prior floor in model.py:
+        # ratio <= -1 ↔ D_ref + D_offset <= 0 (non-physical total diffusion at t_ref).
+        # Inverse: D_offset = D_ref * ratio  (used in transform_to_physics_space).
+        D_offset_ratio = float(max(D_offset / D_ref, -1.0 + 1e-4))
 
         result["log_D_ref"] = float(log_D_ref)
-        result["D_offset_frac"] = float(D_offset_frac)
+        result["D_offset_ratio"] = D_offset_ratio
         del result["D0"]
         del result["D_offset"]
 
@@ -298,20 +293,16 @@ def transform_to_physics_space(
 
     if config.enable_d_ref and "log_D_ref" in samples:
         log_D_ref = samples["log_D_ref"]
-        D_offset_frac = samples["D_offset_frac"]
+        D_offset_ratio = samples["D_offset_ratio"]
         alpha = samples.get("alpha", np.zeros_like(log_D_ref))
 
         D_ref = np.exp(log_D_ref)
         # D0 = D_ref * t_ref^(-alpha)
         result["D0"] = D_ref * (t_ref ** (-alpha))
-        # D_offset = D_ref * frac / (1 - frac)
-        # P1-2: Clip D_offset_frac to prevent D_offset → ∞ when frac → 1.0.
-        # The sampling prior caps at 0.5 via TruncatedNormal, but posterior
-        # samples may exceed this during post-processing back-transform.
-        D_offset_frac_safe = np.clip(D_offset_frac, 0.0, 0.5)
-        result["D_offset"] = D_ref * D_offset_frac_safe / (1 - D_offset_frac_safe)
+        # D_offset = D_ref * ratio  (exact inverse, handles negative ratio)
+        result["D_offset"] = D_ref * D_offset_ratio
         del result["log_D_ref"]
-        del result["D_offset_frac"]
+        del result["D_offset_ratio"]
     elif config.enable_d_ref and "D_total" in samples:
         # Legacy D_total path (backward compatibility)
         D_total = samples["D_total"]

@@ -44,7 +44,7 @@ logger = get_logger(__name__)
 def validate_model_output(
     c2_theory: jnp.ndarray,
     params: jnp.ndarray,
-) -> bool:
+) -> bool | jnp.ndarray:
     """Validate that model output is physically reasonable.
 
     Parameters
@@ -59,15 +59,17 @@ def validate_model_output(
     bool
         True if output is valid.
     """
-    # Check for NaN/inf
-    if jnp.any(jnp.isnan(c2_theory)) or jnp.any(jnp.isinf(c2_theory)):
-        return False
+    del params  # Reserved for future parameter-aware checks.
 
-    # Check physical range (C2 should be roughly [0, 2] with some tolerance)
-    if jnp.any(c2_theory < -1.0) or jnp.any(c2_theory > 10.0):
-        return False
-
-    return True
+    valid = (
+        jnp.all(jnp.isfinite(c2_theory))
+        & jnp.all(c2_theory >= -1.0)
+        & jnp.all(c2_theory <= 10.0)
+    )
+    try:
+        return bool(valid)
+    except TypeError:
+        return valid
 
 
 def get_model_param_count(
@@ -885,11 +887,15 @@ def xpcs_model_reparameterized(
 
     This model transforms correlated parameters to orthogonal sampling space:
     - D0, alpha → log_D_ref, alpha where D_ref = D0 * t_ref^alpha (decorrelates)
-    - D_offset → D_offset_frac = D_offset / (D_ref + D_offset)
+    - D_offset → D_offset_ratio = D_offset / D_ref  (linear, handles negative D_offset)
     - gamma_dot_t0, beta → log_gamma_ref, beta where gamma_ref = gamma_dot_t0 * t_ref^beta
 
     The original physics parameters (D0, D_offset, gamma_dot_t0) are computed
     as deterministic transforms and included in the trace for output.
+
+    D_offset_ratio uses a TruncatedNormal prior (low=-1+ε), supporting negative
+    D_offset for jammed/arrested systems while enforcing D_ref + D_offset > 0 at
+    t_ref. Inverse: D_offset = D_ref * ratio.
 
     Parameters
     ----------
@@ -995,28 +1001,28 @@ def xpcs_model_reparameterized(
         )
         D_ref = jnp.exp(log_D_ref)
 
-        # D_offset_frac in [0, 0.5]
-        frac_loc = reparam_vals.get("D_offset_frac", 0.05)
-        frac_scale = reparam_uncs.get("D_offset_frac", 0.1)
-        # P0-2: Cap tempered scale at half the support width [0, 0.5].
-        # Unbounded priors (Normal) benefit from sqrt(K) tempering, but for a
-        # TruncatedNormal with tight bounds, an over-wide scale makes the prior
-        # nearly uniform, losing NLSQ warm-start information.
-        frac_scale_tempered = jnp.minimum(frac_scale * prior_scale, 0.24)
-        D_offset_frac = numpyro.sample(
-            "D_offset_frac",
+        # D_offset_ratio = D_offset / D_ref  (TruncatedNormal prior)
+        # Handles negative D_offset for jammed/arrested systems.
+        # Physical lower bound: ratio > -1 ensures D_ref + D_offset > 0 at t_ref.
+        # Values <= -1 make total diffusion non-positive, which is unphysical and
+        # causes physics_cmc.py to enter the zero-gradient clamp region under NUTS.
+        # Inverse: D_offset = D_ref * ratio  (exact, no clipping needed).
+        ratio_loc = reparam_vals.get("D_offset_ratio", 0.0)
+        ratio_scale = reparam_uncs.get("D_offset_ratio", 0.5)
+        # Cap at 2.0: avoids near-uniform prior under large K shard counts.
+        ratio_scale_tempered = min(ratio_scale * prior_scale, 2.0)
+        D_offset_ratio = numpyro.sample(
+            "D_offset_ratio",
             dist.TruncatedNormal(
-                loc=frac_loc, scale=frac_scale_tempered, low=0.0, high=0.5
+                loc=ratio_loc,
+                scale=ratio_scale_tempered,
+                low=-1.0 + 1e-4,  # physical floor: D_ref + D_offset > 0 at t_ref
             ),
         )
 
         # Recover physics parameters as deterministics
         D0 = numpyro.deterministic("D0", D_ref * effective_t_ref ** (-alpha))
-        _denom = 1 - D_offset_frac
-        D_offset = numpyro.deterministic(
-            "D_offset",
-            D_ref * D_offset_frac / jnp.where(_denom > 1e-10, _denom, 1e-10),
-        )
+        D_offset = numpyro.deterministic("D_offset", D_ref * D_offset_ratio)
     else:
         # Standard sampling
         D0 = _sample_param("D0")

@@ -122,7 +122,7 @@ class TestTransformToSamplingSpace:
     """Tests for transform_to_sampling_space function."""
 
     def test_d_ref_transform(self):
-        """D0, D_offset → log_D_ref, D_offset_frac."""
+        """D0, D_offset → log_D_ref, D_offset_ratio."""
         from homodyne.optimization.cmc.reparameterization import (
             ReparamConfig,
             transform_to_sampling_space,
@@ -140,14 +140,71 @@ class TestTransformToSamplingSpace:
         # D_ref = D0 * t_ref^alpha
         D_ref_expected = D0 * (t_ref**alpha)
         assert "log_D_ref" in result
-        assert "D_offset_frac" in result
+        assert "D_offset_ratio" in result
         assert "D0" not in result
         assert "D_offset" not in result
         assert result["log_D_ref"] == pytest.approx(np.log(D_ref_expected))
-        assert result["D_offset_frac"] == pytest.approx(
-            D_offset / (D_ref_expected + D_offset)
-        )
+        assert result["D_offset_ratio"] == pytest.approx(D_offset / D_ref_expected)
         assert result["alpha"] == -1.0  # Unchanged
+
+    def test_negative_d_offset_transform(self):
+        """Negative D_offset (jammed/arrested systems) maps to negative ratio."""
+        from homodyne.optimization.cmc.reparameterization import (
+            ReparamConfig,
+            transform_to_sampling_space,
+        )
+
+        t_ref = 3.16
+        config = ReparamConfig(enable_d_ref=True, enable_gamma_ref=False, t_ref=t_ref)
+        D0 = 20000.0
+        alpha = -1.0
+        D_offset = -5000.0  # jammed/arrested regime
+        params = {"D0": D0, "D_offset": D_offset, "alpha": alpha}
+
+        result = transform_to_sampling_space(params, config)
+
+        D_ref_expected = D0 * (t_ref**alpha)
+        assert result["D_offset_ratio"] == pytest.approx(D_offset / D_ref_expected)
+        assert result["D_offset_ratio"] < 0
+
+    def test_extreme_negative_d_offset_clamped_to_floor(self):
+        """D_offset so negative that ratio < -1 is clamped to physical floor."""
+        from homodyne.optimization.cmc.reparameterization import (
+            ReparamConfig,
+            transform_to_sampling_space,
+        )
+
+        t_ref = 3.16
+        config = ReparamConfig(enable_d_ref=True, enable_gamma_ref=False, t_ref=t_ref)
+        D0 = 20000.0
+        alpha = -1.0
+        D_ref = D0 * (t_ref**alpha)
+        # D_offset so large negative it would make ratio < -1 (D_total at t_ref < 0)
+        D_offset = -D_ref * 2.0  # ratio would be -2 without clamping
+        params = {"D0": D0, "D_offset": D_offset, "alpha": alpha}
+
+        result = transform_to_sampling_space(params, config)
+
+        # Must be clamped to the physical floor
+        assert result["D_offset_ratio"] >= -1.0 + 1e-4
+
+    def test_d_ref_floor_prevents_nan_ratio(self):
+        """Near-zero D_ref (tiny D0) uses 1e-10 floor, preventing Inf ratio."""
+        from homodyne.optimization.cmc.reparameterization import (
+            ReparamConfig,
+            transform_to_sampling_space,
+        )
+
+        config = ReparamConfig(enable_d_ref=True, enable_gamma_ref=False, t_ref=1.0)
+        # D0 so tiny that D_ref would be essentially 0
+        params = {"D0": 1e-20, "D_offset": 1000.0, "alpha": -1.0}
+
+        result = transform_to_sampling_space(params, config)
+
+        assert math.isfinite(result["log_D_ref"])
+        assert math.isfinite(result["D_offset_ratio"])
+        # ratio is clamped to floor, not +Inf
+        assert result["D_offset_ratio"] >= -1.0 + 1e-4
 
     def test_gamma_ref_transform(self):
         """gamma_dot_t0 → log_gamma_ref."""
@@ -189,6 +246,7 @@ class TestTransformToSamplingSpace:
         result = transform_to_sampling_space(params, config)
 
         assert "log_D_ref" in result
+        assert "D_offset_ratio" in result
         assert "log_gamma_ref" in result
 
 
@@ -196,7 +254,7 @@ class TestTransformToPhysicsSpace:
     """Tests for transform_to_physics_space function."""
 
     def test_d_ref_inverse(self):
-        """log_D_ref, D_offset_frac → D0, D_offset."""
+        """log_D_ref, D_offset_ratio → D0, D_offset."""
         from homodyne.optimization.cmc.reparameterization import (
             ReparamConfig,
             transform_to_physics_space,
@@ -212,11 +270,11 @@ class TestTransformToPhysicsSpace:
         D_ref = D0_true * (t_ref**alpha_true)
 
         log_D_ref = np.log(D_ref)
-        D_offset_frac = D_offset_true / (D_ref + D_offset_true)
+        D_offset_ratio = D_offset_true / D_ref
 
         samples = {
             "log_D_ref": np.array([log_D_ref]),
-            "D_offset_frac": np.array([D_offset_frac]),
+            "D_offset_ratio": np.array([D_offset_ratio]),
             "alpha": np.array([alpha_true]),
         }
 
@@ -225,8 +283,31 @@ class TestTransformToPhysicsSpace:
         assert "D0" in result
         assert "D_offset" in result
         assert "log_D_ref" not in result
+        assert "D_offset_ratio" not in result
         np.testing.assert_allclose(result["D0"], [D0_true], rtol=1e-10)
-        np.testing.assert_allclose(result["D_offset"], [D_offset_true], rtol=1e-6)
+        np.testing.assert_allclose(result["D_offset"], [D_offset_true], rtol=1e-10)
+
+    def test_negative_d_offset_roundtrip(self):
+        """Negative D_offset (jammed/arrested systems) roundtrips exactly."""
+        from homodyne.optimization.cmc.reparameterization import (
+            ReparamConfig,
+            transform_to_physics_space,
+            transform_to_sampling_space,
+        )
+
+        config = ReparamConfig(enable_d_ref=True, enable_gamma_ref=False, t_ref=3.16)
+        original = {"D0": 20000.0, "D_offset": -5000.0, "alpha": -1.0}
+
+        sampling = transform_to_sampling_space(original, config)
+        assert sampling["D_offset_ratio"] < 0  # negative ratio for negative D_offset
+
+        sampling_arrays = {k: np.array([v]) for k, v in sampling.items()}
+        recovered = transform_to_physics_space(sampling_arrays, config)
+
+        np.testing.assert_allclose(recovered["D0"][0], original["D0"], rtol=1e-10)
+        np.testing.assert_allclose(
+            recovered["D_offset"][0], original["D_offset"], rtol=1e-10
+        )
 
     def test_gamma_ref_inverse(self):
         """log_gamma_ref → gamma_dot_t0."""
@@ -382,7 +463,8 @@ class TestTransformNlsqToReparamSpace:
         # D_ref = D0 * t_ref^alpha = 20000 * 3.16^(-1) ≈ 6329
         D_ref_expected = 20000.0 * (t_ref ** (-1.0))
         assert reparam_vals["log_D_ref"] == pytest.approx(math.log(D_ref_expected))
-        assert "D_offset_frac" in reparam_vals
+        assert "D_offset_ratio" in reparam_vals
+        assert reparam_vals["D_offset_ratio"] == pytest.approx(1000.0 / D_ref_expected)
         assert "log_gamma_ref" in reparam_vals
         assert reparam_uncs == {}  # No uncertainties provided
 
@@ -416,8 +498,19 @@ class TestTransformNlsqToReparamSpace:
         assert reparam_uncs["log_D_ref"] > 0
         assert math.isfinite(reparam_uncs["log_D_ref"])
 
-        # D_offset_frac uncertainty
-        assert reparam_uncs["D_offset_frac"] > 0
+        # D_offset_ratio uncertainty includes D_ref uncertainty contribution
+        # (full delta method: Var(ratio) = Var(D_offset)/D_ref^2 + ratio^2 * Var(log_D_ref))
+        t_ref_val = 3.16
+        D_ref = 20000.0 * (t_ref_val ** (-1.0))
+        ratio = 1000.0 / D_ref
+        var_log_D_ref = (2000.0 / 20000.0) ** 2 + (math.log(t_ref_val) * 0.1) ** 2
+        expected_ratio_std = math.sqrt((500.0 / D_ref) ** 2 + ratio**2 * var_log_D_ref)
+        assert reparam_uncs["D_offset_ratio"] == pytest.approx(
+            expected_ratio_std, rel=1e-6
+        )
+        assert reparam_uncs["D_offset_ratio"] > abs(
+            500.0 / D_ref
+        )  # exceeds D_offset-only term
 
         # log_gamma_ref uncertainty
         assert reparam_uncs["log_gamma_ref"] > 0
@@ -433,7 +526,7 @@ class TestTransformNlsqToReparamSpace:
         reparam_vals, _ = transform_nlsq_to_reparam_space(nlsq_values, None, 3.16)
 
         assert "log_D_ref" in reparam_vals
-        assert "D_offset_frac" in reparam_vals
+        assert "D_offset_ratio" in reparam_vals
         assert "log_gamma_ref" not in reparam_vals
 
 

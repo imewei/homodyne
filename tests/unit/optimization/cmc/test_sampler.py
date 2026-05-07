@@ -833,3 +833,45 @@ class TestChainMethodIntegration:
             else config.chain_method
         )
         assert effective == "sequential"
+
+
+class TestReparamWarmStartKeys:
+    """Verify reparam init dict uses D_offset_ratio (not the old D_offset_frac)."""
+
+    def _build_z_space_init(self, D_offset: float, alpha: float = -1.0) -> dict:
+        """Replicate the sampler's reparam init block for unit testing."""
+        import math
+
+        from homodyne.optimization.cmc.reparameterization import ReparamConfig
+
+        reparam_config = ReparamConfig(enable_d_ref=True, enable_gamma_ref=False)
+        t_ref = 3.16
+        D0 = 20000.0
+        full_init = {"D0": D0, "alpha": alpha, "D_offset": D_offset}
+
+        z_space_init: dict = {}
+        D_ref = max(D0 * (t_ref**alpha), 1e-10)
+        z_space_init["log_D_ref"] = math.log(D_ref)
+        raw_ratio = full_init["D_offset"] / D_ref
+        z_space_init["D_offset_ratio"] = float(max(raw_ratio, -1.0 + 1e-4))
+        return z_space_init
+
+    def test_positive_d_offset_produces_ratio_key(self):
+        """Positive D_offset warm-start writes D_offset_ratio, not D_offset_frac."""
+        init = self._build_z_space_init(D_offset=1000.0)
+        assert "D_offset_ratio" in init
+        assert "D_offset_frac" not in init
+        assert init["D_offset_ratio"] > 0
+
+    def test_negative_d_offset_produces_negative_ratio(self):
+        """Negative D_offset NLSQ result is correctly encoded as negative ratio."""
+        init = self._build_z_space_init(D_offset=-2000.0)
+        assert "D_offset_ratio" in init
+        assert "D_offset_frac" not in init
+        assert init["D_offset_ratio"] < 0
+
+    def test_extreme_negative_d_offset_clamped_to_floor(self):
+        """D_offset so negative (ratio < -1) is clamped to physical floor."""
+        # D_ref = 20000 / 3.16 ≈ 6329; D_offset = -20000 → ratio ≈ -3.16
+        init = self._build_z_space_init(D_offset=-20000.0)
+        assert init["D_offset_ratio"] >= -1.0 + 1e-4

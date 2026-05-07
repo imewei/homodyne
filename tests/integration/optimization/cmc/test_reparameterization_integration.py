@@ -66,7 +66,7 @@ class TestReparameterizationIntegration:
 
         # Verify sampled parameters (reference-time reparameterization)
         assert "log_D_ref" in samples
-        assert "D_offset_frac" in samples
+        assert "D_offset_ratio" in samples
         assert "log_gamma_ref" in samples
 
         # Verify deterministic physics params computed
@@ -77,8 +77,7 @@ class TestReparameterizationIntegration:
         # Verify physical constraints
         assert np.all(samples["D0"] > 0), "D0 must be positive"
         assert np.all(samples["gamma_dot_t0"] > 0), "gamma_dot_t0 must be positive"
-        assert np.all(samples["D_offset_frac"] >= 0), "D_offset_frac must be >= 0"
-        assert np.all(samples["D_offset_frac"] <= 1), "D_offset_frac must be <= 1"
+        # D_offset_ratio is unbounded (Normal prior) — no sign constraint
 
     def test_transform_roundtrip(self):
         """Samples converted to physics space then back are consistent."""

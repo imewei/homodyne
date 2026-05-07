@@ -531,7 +531,7 @@ with NLSQ warm-start present.
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-### xpcs_model_reparameterized() Structure (v2.22.2)
+### xpcs_model_reparameterized() Structure (v2.23.0)
 
 Transforms correlated parameters to orthogonal sampling space for better NUTS
 exploration:
@@ -543,7 +543,9 @@ exploration:
 │  REPARAMETERIZATION TRANSFORMS:                                          │
 │    D0, alpha     → log_D_ref, alpha                                      │
 │                     where D_ref = D0 * t_ref^alpha (decorrelates)        │
-│    D_offset      → D_offset_frac = D_offset / (D_ref + D_offset)        │
+│    D_offset      → D_offset_ratio = D_offset / D_ref                    │
+│                     TruncatedNormal(low=-1+ε): supports negative D_offset│
+│                     (jammed/arrested systems); ratio ≤ -1 non-physical   │
 │    gamma_dot_t0  → log_gamma_ref                                         │
 │                     where gamma_ref = gamma_dot_t0 * t_ref^beta          │
 │                                                                           │
@@ -551,12 +553,12 @@ exploration:
 │                                                                           │
 │  1. AVERAGED SCALING (sampled, as in xpcs_model_averaged)                │
 │  2. REPARAMETERIZED PHYSICAL PARAMETERS                                  │
-│     log_D_ref, alpha, D_offset_frac                                      │
+│     log_D_ref, alpha, D_offset_ratio                                     │
 │     + log_gamma_ref, beta, gamma_dot_t_offset, phi0 (laminar_flow)       │
 │  3. DETERMINISTIC TRANSFORMS (in trace for output)                       │
 │     D0, D_offset, gamma_dot_t0 computed from reparameterized values      │
 │  4. NOISE PARAMETER                                                      │
-│     sigma ~ HalfNormal(scale=noise_scale × 3.0)                          │
+│     sigma ~ HalfNormal(scale=noise_scale × 1.5)                          │
 │                                                                           │
 │  EXTRA INPUT: t_ref (reference time, from compute_t_ref(dt, t_max))      │
 │  EXTRA INPUT: reparam_config (ReparamConfig, optional)                    │
@@ -1502,10 +1504,11 @@ points along the D₀ + D_offset = const ridge | | `D_offset` spans positive and
 | Ridge crosses zero for D_offset | | High `D₀` range despite good NLSQ fit |
 Compensating D_offset values |
 
-**Mitigation (automatic in v2.21.0+):** CMC internally reparameterizes to
-`D_total = D₀ + D_offset` and `D_offset_frac = D_offset / D_total`, which are orthogonal
-and well-constrained. Results are automatically converted back to D₀/D_offset for
-output.
+**Mitigation (automatic in v2.23.0+):** CMC internally reparameterizes to
+`log_D_ref = log(D₀ × t_ref^α)` and `D_offset_ratio = D_offset / D_ref`, which are
+orthogonal and well-constrained. `D_offset_ratio` supports negative values (jammed/arrested
+systems) via a `TruncatedNormal(low=-1+ε)` prior. Results are automatically converted
+back to D₀/D_offset for output.
 
 **2. γ̇₀/β Multiplicative Correlation**
 

@@ -593,7 +593,7 @@ class TestReparameterizedModel:
 
         # Get sampled values
         log_D_ref = float(trace["log_D_ref"]["value"])
-        D_offset_frac = float(trace["D_offset_frac"]["value"])
+        D_offset_ratio = float(trace["D_offset_ratio"]["value"])
         alpha = float(trace["alpha"]["value"])
         log_gamma_ref = float(trace["log_gamma_ref"]["value"])
         beta = float(trace["beta"]["value"])
@@ -603,10 +603,10 @@ class TestReparameterizedModel:
         D_offset = float(trace["D_offset"]["value"])
         gamma_dot_t0 = float(trace["gamma_dot_t0"]["value"])
 
-        # Verify D_ref transforms: D0 = D_ref * t_ref^(-alpha)
+        # Verify D_ref transforms: D0 = D_ref * t_ref^(-alpha), D_offset = D_ref * ratio
         D_ref = np.exp(log_D_ref)
         expected_D0 = D_ref * t_ref ** (-alpha)
-        expected_D_offset = D_ref * D_offset_frac / max(1 - D_offset_frac, 1e-10)
+        expected_D_offset = D_ref * D_offset_ratio
         expected_gamma = np.exp(log_gamma_ref) * t_ref ** (-beta)
 
         np.testing.assert_allclose(D0, expected_D0, rtol=1e-5)

@@ -48,15 +48,19 @@ The following transforms are applied when reparameterization is enabled:
      - ``log_D_ref``
      - ``log(D₀ × t_ref^α)``
    * - ``D_offset``
-     - ``D_offset_frac``
-     - ``D_offset / D₀`` ∈ [0, 1)
+     - ``D_offset_ratio``
+     - ``D_offset / D_ref`` ∈ (−1+ε, ∞); supports negative D_offset
    * - ``γ̇₀`` (shear rate)
      - ``log_gamma_ref``
      - ``log(γ̇₀ × t_ref)``
 
-The back-transform in ``transform_to_physics_space()`` clips ``D_offset_frac``
-to ``[0, 1 - 1e-6]`` to prevent numerical instability in the ``D_offset``
-reconstruction.
+The prior on ``D_offset_ratio`` is ``TruncatedNormal(low=-1+ε)``. The lower
+bound enforces ``D_ref + D_offset > 0`` at ``t_ref`` (non-negative total
+diffusion coefficient at the reference time). Negative values of
+``D_offset_ratio`` in the range ``(-1, 0)`` correspond to jammed/arrested
+systems where ``D_offset < 0`` physically reduces diffusion.
+
+The back-transform is exact: ``D_offset = D_ref × D_offset_ratio``.
 
 ----
 
@@ -113,7 +117,7 @@ NLSQ warm-start to reparameterized priors
    reparam_vals, reparam_unc = transform_nlsq_to_reparam_space(
        nlsq_values, nlsq_uncert, t_ref
    )
-   # reparam_vals contains: log_D_ref, D_offset_frac, log_gamma_ref, alpha, beta
+   # reparam_vals contains: log_D_ref, D_offset_ratio, log_gamma_ref, alpha, beta
 
 Converting MCMC samples back to physics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -132,7 +136,7 @@ Converting MCMC samples back to physics
    samples = {
        "log_D_ref": np.random.normal(-2.0, 0.1, size=4000),
        "alpha": np.random.normal(1.5, 0.05, size=4000),
-       "D_offset_frac": np.random.uniform(0.0, 0.01, size=4000),
+       "D_offset_ratio": np.random.normal(0.05, 0.1, size=4000),  # D_offset / D_ref
        "log_gamma_ref": np.random.normal(-5.5, 0.2, size=4000),
        "beta": np.random.normal(0.8, 0.03, size=4000),
    }

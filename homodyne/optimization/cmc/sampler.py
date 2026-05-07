@@ -717,7 +717,7 @@ def run_nuts_sampling(
     )
 
     # =========================================================================
-    # REPARAMETERIZED INIT VALUES: Add log_D_ref, D_offset_frac, log_gamma_ref
+    # REPARAMETERIZED INIT VALUES: Add log_D_ref, D_offset_ratio, log_gamma_ref
     # =========================================================================
     # When using the reparameterized model, the sampled parameters are different
     # from the z-space params. Add init values for the reparam parameters.
@@ -734,10 +734,11 @@ def run_nuts_sampling(
             D_ref_init = D0_init * (t_ref_init**alpha_init)
             D_ref_init = max(D_ref_init, 1e-10)
             z_space_init["log_D_ref"] = float(np.log(D_ref_init))
-            denom = D_ref_init + D_offset_init
-            z_space_init["D_offset_frac"] = (
-                float(np.clip(D_offset_init / denom, 0.0, 0.5)) if denom > 0 else 0.05
-            )
+            # D_offset_ratio = D_offset / D_ref (linear, handles negative D_offset).
+            # Clamp to (-1+eps, inf) to match the TruncatedNormal prior floor in model.py:
+            # ratio <= -1 means D_ref + D_offset <= 0 (non-physical at t_ref).
+            raw_ratio = D_offset_init / D_ref_init
+            z_space_init["D_offset_ratio"] = float(max(raw_ratio, -1.0 + 1e-4))
 
         if (
             getattr(reparam_config, "enable_gamma_ref", False)
@@ -753,7 +754,7 @@ def run_nuts_sampling(
             f"Reparameterized init: t_ref={t_ref_init:.4g}, "
             + ", ".join(
                 f"{k}={z_space_init[k]:.4g}"
-                for k in ["log_D_ref", "D_offset_frac", "log_gamma_ref"]
+                for k in ["log_D_ref", "D_offset_ratio", "log_gamma_ref"]
                 if k in z_space_init
             )
         )

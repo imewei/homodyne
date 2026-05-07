@@ -754,11 +754,11 @@ def compute_bfmi(
 
     if energy.ndim == 1:
         energy_diff = np.diff(energy)
-        var_diff = np.nanvar(energy_diff)
+        mean_sq_diff = np.nanmean(energy_diff**2)
         var_energy = np.nanvar(energy)
         if var_energy == 0.0:
             return float("nan")
-        return float(var_diff / var_energy)
+        return float(mean_sq_diff / var_energy)
 
     if energy.ndim == 2:
         if per_chain:
@@ -766,12 +766,12 @@ def compute_bfmi(
             for i in range(energy.shape[0]):
                 chain_energy = energy[i]
                 energy_diff = np.diff(chain_energy)
-                var_diff = np.nanvar(energy_diff)
+                mean_sq_diff = np.nanmean(energy_diff**2)
                 var_energy = np.nanvar(chain_energy)
                 if var_energy == 0.0:
                     bfmi_per_chain[i] = float("nan")
                 else:
-                    bfmi_per_chain[i] = var_diff / var_energy
+                    bfmi_per_chain[i] = mean_sq_diff / var_energy
             return bfmi_per_chain
         else:
             # Pool all chains
@@ -782,10 +782,10 @@ def compute_bfmi(
                 all_energies.append(energy[i])
             pooled_diffs = np.concatenate(all_diffs)
             pooled_energies = np.concatenate(all_energies)
-            var_diff = np.nanvar(pooled_diffs)
+            mean_sq_diff = np.nanmean(pooled_diffs**2)
             var_energy = np.nanvar(pooled_energies)
             if var_energy == 0.0:
                 return float("nan")
-            return float(var_diff / var_energy)
+            return float(mean_sq_diff / var_energy)
 
     raise ValueError(f"Expected 1D or 2D energy array, got shape {energy.shape}")
