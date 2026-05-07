@@ -842,9 +842,6 @@ class TestReparamWarmStartKeys:
         """Replicate the sampler's reparam init block for unit testing."""
         import math
 
-        from homodyne.optimization.cmc.reparameterization import ReparamConfig
-
-        reparam_config = ReparamConfig(enable_d_ref=True, enable_gamma_ref=False)
         t_ref = 3.16
         D0 = 20000.0
         full_init = {"D0": D0, "alpha": alpha, "D_offset": D_offset}
