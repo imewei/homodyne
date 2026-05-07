@@ -109,7 +109,7 @@ from homodyne.utils.logging import get_logger, log_performance
 logger = get_logger(__name__)
 
 # Performance tracking for fallback warnings
-_performance_warned = set()
+_performance_warned: set[str] = set()
 _fallback_stats = {
     "gradient_calls": 0,
     "hessian_calls": 0,

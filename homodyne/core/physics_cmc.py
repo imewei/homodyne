@@ -335,7 +335,7 @@ def _compute_g1_total_with_precomputed(
     # g1_shear (sinc²) is exactly zero at Phi=n*pi; without this floor, d(g2)/dparams=0
     # at those points, stalling NUTS leapfrog.
     epsilon = 1e-10
-    return jnp.where(g1_total > epsilon, g1_total, epsilon)  # type: ignore[no-any-return]
+    return jnp.where(g1_total > epsilon, g1_total, epsilon)
 
 
 # =============================================================================
@@ -532,7 +532,7 @@ def _compute_g1_total_elementwise(
     g1_total = g1_diff_broadcasted * g1_shear
     # P1-B: Gradient-safe lower floor — consistent with all other g1_total implementations.
     epsilon = 1e-10
-    return jnp.where(g1_total > epsilon, g1_total, epsilon)  # type: ignore[no-any-return]
+    return jnp.where(g1_total > epsilon, g1_total, epsilon)
 
 
 # =============================================================================
