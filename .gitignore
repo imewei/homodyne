@@ -57,7 +57,6 @@ htmlcov/
 .nox/
 .coverage
 .coverage.*
-.cache
 nosetests.xml
 coverage.xml
 *.cover
@@ -66,10 +65,9 @@ coverage.xml
 .pytest_cache/
 cover/
 .benchmarks/
-test_report.html
+test_report*/
 test_reports/
-bandit_re*.json
-bandit-re*.json
+bandit*re*.json
 pip_audit_report.json
 
 # ----------------------------------------------------------------------------
@@ -91,9 +89,6 @@ conda-env/
 # ----------------------------------------------------------------------------
 # Pipenv
 Pipfile.lock
-
-# UV
-uv.lock
 
 # Poetry
 poetry.lock
@@ -198,20 +193,22 @@ dmypy.json
 # AI-Powered Development Tools
 # ----------------------------------------------------------------------------
 .claude-progress.md
+.agents/
 .agent/
 .claude/
 .code/
-.specify/
 .codex/
-.gemini/
-agent-os/
-specs/
 .cursor/
 .cursorignore
 .cursorindexingignore
-.abstra/
+.gemini/
+.remember/
 .serena/
+.specify/
 .ultra-think/
+.abstra/
+agent-os/
+specs/
 AGENTS.md
 CLAUDE.md
 codex.md
@@ -239,6 +236,7 @@ Desktop.ini
 # Logs & Temporary Files
 # ----------------------------------------------------------------------------
 *.log
+.research-log.jsonl
 *.tmp
 *.temp
 *.bak
@@ -315,7 +313,6 @@ homodyne_analysis_results.json
 cmc_temp_*/
 
 # Run artifacts
-run.log
 phi_angles_list.txt
 
 # Development scripts
@@ -356,8 +353,8 @@ profiling/
 # Graphify semantic cache (ephemeral build artifacts)
 graphify-out/cache/
 
-# Claude session scratch files in docs
-docs/.claude-progress.md
+# Claude session scratch files
+# .claude-progress.md is covered by global pattern
 
 # Graphify internal working state files
 graphify-out/.graphify_*.json
