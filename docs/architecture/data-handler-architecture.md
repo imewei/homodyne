@@ -3,7 +3,7 @@
 Complete documentation of the data loading, configuration, and result writing systems in
 homodyne.
 
-**Version:** 2.22.9 **Last Updated:** March 2026
+**Version:** 2.22.9 **Last Updated:** May 2026
 
 ## Table of Contents
 
@@ -176,6 +176,30 @@ initial_parameters:
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
+### JSON Configuration Support
+
+`data/config.py` also supports JSON config files with migration utilities:
+
+```python
+# Load JSON config (same structure as YAML)
+load_json_config(path: str | Path) -> dict
+
+# Migrate legacy JSON config to modern nested YAML structure
+migrate_json_to_yaml_config(json_config: dict) -> dict
+
+# Apply default values to partially-specified config dict
+apply_config_defaults(config: dict) -> dict
+
+# Validate config structure, return result with issues list
+validate_config(config: dict) -> ConfigValidationResult
+
+# Generate a complete example YAML config (for homodyne-config)
+create_example_yaml_config(mode: str = "laminar_flow") -> str
+```
+
+`ConfigValidationResult` reports missing required sections, type errors, and
+out-of-range values without raising exceptions—callers decide how to handle issues.
+
 ### ParameterSpace (for CMC)
 
 ```python
@@ -264,6 +288,20 @@ class XPCSDataLoader:
 │     ├─ _validate_loaded_data() → shape/dtype checks                     │
 │     └─ Return data dict                                                 │
 └───────────────────────────────────────────────────────────────────────────┘
+```
+
+### Convenience Function: load_xpcs_data()
+
+```python
+# Module-level convenience wrapper — avoids constructing XPCSDataLoader directly
+from homodyne.data import load_xpcs_data
+
+data = load_xpcs_data(
+    config_path: str | None = None,
+    config_dict: dict | None = None,
+)
+# Equivalent to: XPCSDataLoader(...).load_experimental_data()
+# Preferred for one-shot scripts; XPCSDataLoader for repeated loads (caches state)
 ```
 
 ### Return Data Structure
@@ -584,7 +622,7 @@ ______________________________________________________________________
 │    ├─ Metadata: q-vector hash for validity check                        │
 │    └─ _validate_cache_q_vector() → reject stale cache                   │
 │                                                                           │
-│  Level 2: Memory Cache (PerformanceEngine)                               │
+│  Level 2: Memory Cache (PerformanceEngine → MultiLevelCache)            │
 │    ├─ In-memory LRU cache for repeated accesses                         │
 │    ├─ Thread-safe access with RLock                                     │
 │    └─ Automatic eviction by access time (LRU)                           │
@@ -599,6 +637,41 @@ ______________________________________________________________________
 │    └─ No implicit cache: user controls via cache_file_path              │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
+
+### AdaptiveChunker
+
+Part of `performance_engine.py`. Automatically sizes data chunks for streaming
+operations based on real-time memory pressure feedback:
+
+```
+AdaptiveChunker
+    ├─ Initial chunk_size = available_memory / (3 * element_size)
+    ├─ Shrinks chunk if MemoryPressureMonitor signals warning/critical
+    ├─ Grows chunk if memory is stable across N consecutive chunks
+    └─ Tracks ChunkInfo per batch for provenance logging
+```
+
+### Async I/O Utilities
+
+`data/performance_engine.py` exposes two async helpers for pipeline overlap:
+
+```python
+class PrefetchLoader:
+    """Background thread prefetches the next HDF5 batch while current is processed."""
+    def __init__(self, load_fn: Callable, paths: list[Path], buffer_size: int = 2)
+    def __iter__(self) -> Iterator[np.ndarray]
+    def shutdown(self) -> None            # Safe to call twice
+
+class AsyncWriter:
+    """Writes result arrays to disk in a background thread (non-blocking)."""
+    def __init__(self, write_fn: Callable, max_queue: int = 4)
+    def submit(self, data: np.ndarray, path: Path) -> None
+    def wait_all(self) -> list[Exception]  # Returns errors rather than raising
+    def shutdown(self) -> None
+```
+
+Use `PrefetchLoader` when loading many HDF5 files sequentially; use `AsyncWriter`
+when saving large NPZ result files without blocking the optimization loop.
 
 ### Cache NPZ Format
 
@@ -1059,19 +1132,21 @@ ______________________________________________________________________
 
 ### Data Loading (`homodyne/data/`)
 
-| File | Lines | Purpose | |------|-------|---------| | **xpcs_loader.py** | ~2107 |
-Main loader: HDF5 reading, format detection, caching, filtering | | **config.py** | ~752
-| YAML/JSON config loading and schema validation | | **filtering_utils.py** | ~613 |
-Q-range, phi, quality, and frame-based filtering | | **preprocessing.py** | ~1153 |
-Multi-stage preprocessing pipeline with provenance | | **quality_controller.py** | ~1646
-| Progressive quality control with auto-repair | | **validation.py** | ~1115 | Data
-quality validation (NaN, shape, range checks) | | **performance_engine.py** | ~1502 |
-Multi-level caching, LRU eviction, thread-safe access | | **memory_manager.py** | ~1030
-| Dynamic memory monitoring and pressure management | | **optimization.py** | ~971 |
-Size-aware processing strategies (standard/chunked/mmap) | | **angle_filtering.py** |
-~413 | Angle normalization and filtering utilities | | **phi_filtering.py** | ~385 |
-Vectorized phi angle filtering | | **validators.py** | ~296 | Input validation at I/O
-boundaries | | **types.py** | ~44 | Shared data types (prevents circular imports) |
+| File | Lines | Purpose |
+|------|-------|---------|
+| **xpcs_loader.py** | ~2107 | XPCSDataLoader + `load_xpcs_data()` convenience function; HDF5 reading, format detection, caching, filtering |
+| **config.py** | ~752 | YAML/JSON config loading, `ConfigValidationResult`, `load_json_config()`, `migrate_json_to_yaml_config()`, `create_example_yaml_config()` |
+| **filtering_utils.py** | ~613 | Q-range, phi, quality, and frame-based filtering |
+| **preprocessing.py** | ~1153 | Multi-stage preprocessing pipeline with provenance |
+| **quality_controller.py** | ~1646 | Progressive quality control with auto-repair |
+| **validation.py** | ~1115 | Data quality validation (NaN, shape, range checks) |
+| **performance_engine.py** | ~1502 | Multi-level caching (MultiLevelCache), AdaptiveChunker, PrefetchLoader, AsyncWriter |
+| **memory_manager.py** | ~1030 | Dynamic memory monitoring and pressure management |
+| **optimization.py** | ~971 | Size-aware processing strategies (standard/chunked/mmap) |
+| **angle_filtering.py** | ~413 | Angle normalization and filtering utilities |
+| **phi_filtering.py** | ~385 | Vectorized phi angle filtering |
+| **validators.py** | ~296 | Input validation at I/O boundaries |
+| **types.py** | ~44 | Shared data types (prevents circular imports) |
 
 ### Configuration (`homodyne/config/`)
 

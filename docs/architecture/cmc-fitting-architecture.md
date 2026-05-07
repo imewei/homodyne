@@ -2,7 +2,7 @@
 
 Complete documentation of the CMC (Consensus Monte Carlo) fitting system in homodyne.
 
-**Version:** 2.22.9 **Last Updated:** March 2026
+**Version:** 2.22.9 **Last Updated:** May 2026
 
 ## Table of Contents
 
@@ -795,17 +795,27 @@ def select_backend(config: CMCConfig) -> CMCBackend:
 │  1. Pre-generate all shard PRNG keys in single JAX call                    │
 │     (_generate_shard_keys - amortizes JAX compilation)                     │
 │                                                                            │
-│  2. Create worker pool with adaptive thread limiting                       │
+│  2. Compute LPT schedule via _compute_lpt_schedule()                       │
+│     Noise-weighted Longest Processing Time ordering:                       │
+│     cost = n_points * (1 + normalized_noise)                               │
+│     Largest/noisiest shards dispatched first → minimize tail latency       │
+│                                                                            │
+│  3. Create worker pool with adaptive thread limiting                       │
 │     physical_cores = psutil.cpu_count(logical=False)                       │
 │     threads_per_worker = physical_cores // n_workers                       │
+│     (see also: backends/worker_pool.py for pool management)               │
 │                                                                            │
-│  3. Submit shards to queue-based workers                                   │
+│  4. Load shard data arrays via shared memory                               │
+│     _load_shared_shard_data() / _load_shared_array()                       │
+│     Eliminates per-process serialization overhead                          │
 │                                                                            │
-│  4. Monitor with progress bar and timeout handling                         │
+│  5. Submit shards to queue-based workers                                   │
+│                                                                            │
+│  6. Monitor with progress bar and timeout handling                         │
 │     • Adaptive polling interval (reduces CPU spinning)                     │
 │     • Event.wait() with timeout (efficient heartbeat)                      │
 │                                                                            │
-│  5. Combine results via combine_shard_samples()                            │
+│  7. Combine results via combine_shard_samples()                            │
 └───────────────────────────────────────────────────────────────────────────┘
 
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -815,6 +825,24 @@ def select_backend(config: CMCConfig) -> CMCBackend:
 │  • Import JAX, deserialize parameter_space                                 │
 │  • Call run_nuts_sampling() on shard                                       │
 │  • Return serialized MCMCSamples                                           │
+└───────────────────────────────────────────────────────────────────────────┘
+
+### WorkerPool Manager
+
+**File:** `backends/worker_pool.py` (354 lines)
+
+Manages process pool lifecycle, health monitoring, and graceful shutdown
+separate from the dispatch logic in `multiprocessing.py`.
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ Worker Pool Responsibilities                                               │
+│                                                                            │
+│  • Process pool creation with spawn context                                │
+│  • Worker health monitoring (detect hung/dead workers)                     │
+│  • Graceful shutdown with configurable timeout                             │
+│  • Restart of failed workers up to max_restarts limit                     │
+│  • Thread count enforcement (OMP_NUM_THREADS per worker)                   │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1030,6 +1058,44 @@ class CMCResult:
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
+### Additional Diagnostics Functions
+
+**File:** `diagnostics.py`
+
+Beyond R-hat/ESS, `diagnostics.py` provides post-run analysis utilities:
+
+```python
+# Posterior quality vs NLSQ baseline
+compute_nlsq_comparison_metrics(
+    cmc_result: CMCResult,
+    nlsq_result: dict,
+    tolerance_sigma: float = 3.0,
+) -> dict
+# Returns: per-parameter {diff_pct, z_score, status} table
+# Flags parameters exceeding tolerance (default 3σ)
+
+# Posterior uncertainty contraction (CMC vs prior)
+compute_posterior_contraction(
+    cmc_result: CMCResult,
+    prior_std: dict[str, float],
+) -> dict[str, float]
+# Values near 1.0 = strong data constraint; near 0.0 = prior-dominated
+
+# Precision analysis for parameter absorption detection
+compute_precision_analysis(
+    cmc_result: CMCResult,
+    nlsq_result: dict | None = None,
+) -> dict
+
+# End-of-run structured log summary
+log_analysis_summary(
+    cmc_result: CMCResult,
+    logger: logging.Logger,
+    nlsq_result: dict | None = None,
+) -> None
+# Emits: shard count, divergence rate, R-hat table, NLSQ comparison (if provided)
+```
+
 ### Convergence Status Determination
 
 ```
@@ -1199,20 +1265,23 @@ ______________________________________________________________________
 
 ## Key Files Reference
 
-| File | Lines | Purpose | |------|-------|---------| | **core.py** | ~1566 | Main
-orchestration, shard size selection, runtime estimation | | **data_prep.py** | ~848 |
-Validation, sharding (stratified & random), noise estimation | | **sampler.py** | ~1326
-| NUTS sampling, SamplingPlan, preflight checks, adaptive scaling | | **model.py** |
-~1168 | 5 model variants (scaled, constant, averaged, constant_averaged,
-reparameterized) | | **priors.py** | ~1100 | Prior distributions, NLSQ-informed priors,
-data-driven estimation | | **results.py** | ~789 | CMCResult dataclass, convergence
-diagnostics, quality flags | | **config.py** | ~887 | CMCConfig parsing, validation,
-defaults, effective mode selection | | **diagnostics.py** | ~1269 | R-hat, ESS, bimodal
-detection, cross-shard analysis | | **reparameterization.py** | ~336 | t_ref
-computation, log-space transforms, ReparamConfig | | **backends/base.py** | ~887 |
-Abstract backend, combine_shard_samples(), robust consensus MC | |
-**backends/multiprocessing.py** | ~1953 | Parallel execution, shared memory, LPT
-scheduling, worker pool | | **io.py** | ~430 | Result serialization (JSON/NPZ) |
+| File | Lines | Purpose |
+|------|-------|---------|
+| **core.py** | ~1566 | Main orchestration, shard size selection, runtime estimation |
+| **data_prep.py** | ~848 | Validation, sharding (stratified & random), noise estimation |
+| **sampler.py** | ~1326 | NUTS sampling, SamplingPlan, preflight checks, adaptive scaling |
+| **model.py** | ~1168 | 5 model variants (scaled, constant, averaged, constant_averaged, reparameterized) |
+| **priors.py** | ~1100 | Prior distributions, NLSQ-informed priors, data-driven estimation |
+| **results.py** | ~789 | CMCResult dataclass, convergence diagnostics, quality flags |
+| **config.py** | ~887 | CMCConfig parsing, validation, defaults, effective mode selection |
+| **diagnostics.py** | ~1269 | R-hat, ESS, bimodal detection, cross-shard analysis, `log_analysis_summary()`, `compute_posterior_contraction()`, `compute_nlsq_comparison_metrics()` |
+| **reparameterization.py** | ~336 | t_ref computation, log-space transforms, ReparamConfig |
+| **backends/base.py** | ~887 | Abstract backend, `combine_shard_samples()`, robust consensus MC, `select_backend()` |
+| **backends/multiprocessing.py** | ~1953 | Parallel execution, shared memory, LPT scheduling, divergence filtering |
+| **backends/worker_pool.py** | ~354 | Worker pool lifecycle, health monitoring, graceful shutdown |
+| **backends/pbs.py** | ~494 | PBS/Torque HPC cluster backend |
+| **backends/pjit.py** | ~269 | Single-process sequential backend (debug) |
+| **io.py** | ~430 | Result serialization (JSON/NPZ), `save_all_results()` orchestrator |
 
 ______________________________________________________________________
 

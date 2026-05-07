@@ -2,7 +2,7 @@
 
 Complete documentation of the NLSQ (Nonlinear Least Squares) fitting system in homodyne.
 
-**Version:** 2.22.9 **Last Updated:** March 2026
+**Version:** 2.22.9 **Last Updated:** May 2026
 
 ## Table of Contents
 
@@ -1069,7 +1069,58 @@ class OptimizationResult:
         recovery_actions: list    # List of recovery attempts
         peak_memory_gb: float     # Estimated peak memory
         n_chunks: int             # Number of chunks (if chunked)
+
+# Alias used in some contexts (same type)
+NLSQResult = OptimizationResult
 ```
+
+### Related Dataclasses
+
+```python
+@dataclass
+class FallbackInfo:
+    """Tracks adapter → wrapper fallback within a single fit attempt."""
+    occurred: bool
+    reason: str          # Exception message that triggered fallback
+    adapter_time: float  # Time spent in adapter before fallback
+    wrapper_time: float  # Time spent in wrapper after fallback
+
+@dataclass
+class FunctionEvaluationCounter:
+    """Counts residual and Jacobian evaluations across all strategy stages."""
+    n_residual_evals: int = 0
+    n_jacobian_evals: int = 0
+    n_chunk_passes: int = 0      # For out-of-core / streaming strategies
+
+    def total_forward_passes(self) -> int:
+        return self.n_residual_evals + self.n_jacobian_evals
+```
+
+Both are embedded in `OptimizationResult.device_info` and surfaced in the
+analysis summary log.
+
+### ResultBuilder Fluent Interface
+
+`result_builder.py` provides a fluent builder that populates `OptimizationResult`
+across different pipeline stages without a giant constructor call:
+
+```python
+result = (
+    ResultBuilder()
+    .set_parameters(params, uncertainties, covariance)
+    .set_chi_squared(chi_sq, n_points, n_params_effective)
+    .set_status(success=True, message="...", iterations=42)
+    .set_start_time(t0)              # execution_time computed on build()
+    .set_recovery_actions(["bounds_reset"])
+    .set_optimization_info({"adapter": "NLSQWrapper", "strategy": "out_of_core"})
+    .set_stratification_diagnostics(diag_dict)
+    .build()                         # → OptimizationResult
+)
+```
+
+`build()` validates that required fields are set and computes derived fields
+(`execution_time`, `quality_flag`, `convergence_status`). Raises `ValueError`
+if mandatory fields are missing.
 
 ### Quality Flag Determination
 
@@ -1109,25 +1160,28 @@ ______________________________________________________________________
 
 ## Key Files Reference
 
-| File | Purpose | |------|---------| | `core.py` | Entry points: `fit_nlsq_jax()`,
-`fit_nlsq_multistart()` (line ~1402) | | `multistart.py` | Lower-level
-`run_multistart_nlsq()` (called by `fit_nlsq_multistart()`) | | `cmaes_wrapper.py` |
-CMA-ES global optimization: `CMAESWrapper`, `fit_with_cmaes()` | | `config.py` |
-`NLSQConfig` with CMA-ES and refinement settings | | `memory.py` |
-`select_nlsq_strategy()`, memory estimation (6.5× factor) | | `adapter.py` | NLSQAdapter
-with model caching | | `wrapper.py` | NLSQWrapper with full feature set + 3-attempt
-recovery | | `strategies/chunking.py` | `create_angle_stratified_data()`,
-`should_use_stratification()` | | `strategies/residual.py` |
-`StratifiedResidualFunction` (Python-callable) | | `strategies/residual_jit.py` |
-`StratifiedResidualFunctionJIT` (JIT-compiled) | | `strategies/executors.py` |
-StandardExecutor, LargeDatasetExecutor, StreamingExecutor | |
-`anti_degeneracy_controller.py` | 5-layer defense orchestration | | `fourier_reparam.py`
-| Layer 1: Fourier parameter compression | | `hierarchical.py` | Layer 2: Alternating
-physical/per-angle stages | | `adaptive_regularization.py` | Layer 3: CV-based
-regularization | | `gradient_monitor.py` | Layer 4: Runtime collapse detection | |
-`shear_weighting.py` | Layer 5: Angle-dependent loss weighting | | `multistart.py` |
-Multi-start optimization with LHS | | `result_builder.py` | Result construction and
-quality assessment |
+| File | Purpose |
+|------|---------|
+| `core.py` | Entry points: `fit_nlsq_jax()`, `fit_nlsq_multistart()` (line ~1402) |
+| `multistart.py` | Lower-level `run_multistart_nlsq()` (called by `fit_nlsq_multistart()`) |
+| `cmaes_wrapper.py` | CMA-ES global optimization: `CMAESWrapper`, `fit_with_cmaes()` |
+| `config.py` | `NLSQConfig` with CMA-ES and refinement settings |
+| `memory.py` | `select_nlsq_strategy()`, memory estimation (6.5× factor) |
+| `adapter.py` | NLSQAdapter with model caching via `get_or_create_model()` |
+| `wrapper.py` | NLSQWrapper with full feature set + 3-attempt recovery |
+| `result_builder.py` | `ResultBuilder` fluent API → `OptimizationResult`; computes quality_flag, convergence_status |
+| `results.py` | `OptimizationResult`, `NLSQResult` alias, `FallbackInfo`, `FunctionEvaluationCounter` |
+| `parallel_accumulator.py` | `OOCComputePool`, `OOCSharedArrays`, `accumulate_chunks_parallel()` |
+| `strategies/chunking.py` | `create_angle_stratified_data()`, `should_use_stratification()` |
+| `strategies/residual.py` | `StratifiedResidualFunction` (Python-callable) |
+| `strategies/residual_jit.py` | `StratifiedResidualFunctionJIT` (JIT-compiled via vmap) |
+| `strategies/executors.py` | StandardExecutor, LargeDatasetExecutor, StreamingExecutor |
+| `anti_degeneracy_controller.py` | 5-layer defense orchestration |
+| `fourier_reparam.py` | Layer 1: Fourier parameter compression |
+| `hierarchical.py` | Layer 2: Alternating physical/per-angle stages |
+| `adaptive_regularization.py` | Layer 3: CV-based regularization |
+| `gradient_monitor.py` | Layer 4: Runtime collapse detection |
+| `shear_weighting.py` | Layer 5: Angle-dependent loss weighting |
 
 ______________________________________________________________________
 

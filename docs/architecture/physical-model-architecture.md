@@ -2,7 +2,7 @@
 
 Complete documentation of the physical model implementation in homodyne.
 
-**Version:** 2.22.9 **Last Updated:** March 2026
+**Version:** 2.22.9 **Last Updated:** May 2026
 
 ## Table of Contents
 
@@ -1321,8 +1321,9 @@ correction | | `core/model_mixins.py` | 520 | Gradient, benchmark, recommendatio
 `core/physics_nlsq.py` | 480 | NLSQ meshgrid physics | | `core/physics_factors.py` | 369
 | PhysicsFactors pre-computation | | `core/physics_utils.py` | 369 | Shared safe_sinc,
 D(t), gamma(t), integrals | | `core/scaling_utils.py` | 335 | Per-angle quantile
-estimation | | `core/backend_api.py` | 192 | Backend selection API | |
-`core/__init__.py` | 80 | Package init and public exports | | **Total** | **~9,399** | |
+estimation | | `core/backend_api.py` | 192 | Backend selection API — `select_physics_backend()`, `get_device_info()`, capability detection; routes callers to JAX vs NumPy path |
+| `core/__init__.py` | 80 | Package init and public exports |
+| **Total** | **~9,399** | |
 
 ### Integration Points
 

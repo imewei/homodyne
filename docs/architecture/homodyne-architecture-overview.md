@@ -2,7 +2,7 @@
 
 Comprehensive system-level architecture documentation for the homodyne XPCS analysis package.
 
-**Version:** 2.22.9 **Last Updated:** March 2026 **Codebase:** ~89,000 lines Python + ~780 lines shell
+**Version:** 2.22.9 **Last Updated:** May 2026 **Codebase:** ~89,000 lines Python + ~780 lines shell
 
 ## Table of Contents
 
@@ -166,14 +166,15 @@ homodyne/                              # Root package (358 lines)
 │   └── __init__.py            80 L
 │
 ├── data/                  12,302 L    # HDF5 loading & preprocessing
-│   ├── xpcs_loader.py     2,107 L    #   XPCSDataLoader (main entry)
+│   ├── xpcs_loader.py     2,107 L    #   XPCSDataLoader (main entry) + load_xpcs_data()
 │   ├── quality_controller.py 1,646 L  #   Data quality assessment
-│   ├── performance_engine.py 1,502 L  #   Multi-level cache (memory + disk)
+│   ├── performance_engine.py 1,502 L  #   Multi-level cache, AdaptiveChunker,
+│   │                                  #   PrefetchLoader, AsyncWriter
 │   ├── preprocessing.py    1,153 L    #   Pipeline: standardize → diagonal → trim
 │   ├── validation.py       1,115 L    #   Shape/dtype/NaN validators
 │   ├── memory_manager.py   1,030 L    #   Memory tracking & pressure detection
 │   ├── optimization.py       971 L    #   Dataset optimization strategies
-│   ├── config.py             752 L    #   DataConfig from YAML
+│   ├── config.py             752 L    #   DataConfig from YAML/JSON, ConfigValidationResult
 │   ├── filtering_utils.py    613 L    #   Angle/Q-range filtering
 │   ├── angle_filtering.py    413 L    #   Angle-specific filtering
 │   ├── phi_filtering.py      385 L    #   Phi-angle filtering
@@ -220,8 +221,8 @@ homodyne/                              # Root package (358 lines)
 │   │   ├── memory.py         420 L    #     Memory estimation & routing
 │   │   ├── adapter_base.py   366 L    #     Adapter ABC
 │   │   ├── data_prep.py      319 L    #     Data preprocessing
-│   │   ├── result_builder.py 479 L    #     NLSQResult construction
-│   │   ├── results.py        245 L    #     Result dataclass
+│   │   ├── result_builder.py 479 L    #     ResultBuilder (fluent API) → OptimizationResult
+│   │   ├── results.py        245 L    #     OptimizationResult, FallbackInfo, FunctionEvaluationCounter
 │   │   ├── parameter_index_mapper.py 255 L
 │   │   ├── jacobian.py       250 L    #     Jacobian inspection
 │   │   ├── fallback_chain.py 406 L    #     OptimizationStrategy enum, fallback logic
@@ -254,11 +255,12 @@ homodyne/                              # Root package (358 lines)
 │       ├── scaling.py        344 L    #     Per-angle scaling for CMC
 │       ├── reparameterization.py 336 L #    Log-space transforms
 │       ├── backends/                  #     Execution backends
-│       │   ├── multiprocessing.py 1,953 L  # Primary: process pool
-│       │   ├── base.py       887 L    #       ABC + scheduling
-│       │   ├── pbs.py        494 L    #       PBS/Torque cluster
-│       │   ├── worker_pool.py 354 L   #       Worker pool management
-│       │   └── pjit.py       269 L    #       pjit single-process
+│       │   ├── multiprocessing.py 1,953 L  # Primary: LPT scheduling, shared mem,
+│       │   │                               #   divergence filter, shard dispatch
+│       │   ├── base.py       887 L    #       ABC + combine_shard_samples(), select_backend()
+│       │   ├── worker_pool.py 354 L   #       Process pool lifecycle, health monitoring
+│       │   ├── pbs.py        494 L    #       PBS/Torque HPC cluster
+│       │   └── pjit.py       269 L    #       Single-process sequential (debug)
 │       └── __init__.py        37 L
 │
 ├── io/                       953 L    # Result serialization
@@ -977,6 +979,11 @@ ______________________________________________________________________
 
 ### Checkpoint Manager (`checkpoint_manager.py`, 507 lines)
 
+The knowledge graph identifies `CheckpointManager` as one of the 10 most-connected
+nodes (79 edges), at the same centrality level as `ParameterSpace`. Every NLSQ
+execution strategy (standard, out-of-core, hybrid streaming) and the CMC
+multiprocessing backend all checkpoint their state independently through this module.
+
 ```
 HDF5-based fault-tolerant checkpointing
     │
@@ -985,10 +992,21 @@ HDF5-based fault-tolerant checkpointing
     │   ├── Version metadata for forward compatibility
     │   └── Compression for large arrays
     │
-    └── load_checkpoint(path)
-        ├── Version check (warn if mismatch)
-        └── Graceful degradation for missing fields
+    ├── load_checkpoint(path)
+    │   ├── Version check (warn if mismatch)
+    │   └── Graceful degradation for missing fields
+    │
+    ├── find_latest_checkpoint(output_dir) → Path | None
+    │   └── Glob + mtime sort; used by recovery on restart
+    │
+    └── cleanup_old_checkpoints(output_dir, keep_n=3)
+        └── Removes stale checkpoints to limit disk usage
 ```
+
+**Consumers:** `NLSQWrapper` (per-iteration), `LargeDatasetExecutor` (per-chunk
+batch), `StreamingExecutor` (per L-M iteration), `MultiprocessingBackend`
+(per-shard completion). The shared interface means any strategy can resume from
+the same checkpoint format.
 
 ### Exception Hierarchy (`exceptions.py`, 352 lines)
 
@@ -1222,6 +1240,29 @@ ______________________________________________________________________
               ▼
            cli/
 ```
+
+### Cross-Module Hub Nodes
+
+Knowledge-graph analysis (May 2026, 12,329 nodes · 18,082 edges) identifies the
+10 most-connected nodes by edge count. These are the true architectural hubs —
+changing any of them has the widest blast radius:
+
+| Rank | Node | Edges | Role |
+|------|------|------:|------|
+| 1 | `ConfigManager` | 227 | Config consumer in every subsystem |
+| 2 | `NLSQWrapper` | 184 | Full-feature NLSQ engine, fallback target |
+| 3 | `ParameterManager` | 182 | Bounds/initial-value source for all paths |
+| 4 | `CMCConfig` | 113 | CMC configuration consumed by every CMC module |
+| 5 | `XPCSDataLoader` | 100 | Single HDF5 entry point across CLI + API |
+| 6 | `MCMCSamples` | 96 | Central CMC result carrier between all backends |
+| 7 | `AntiDegeneracyController` | 95 | Laminar-flow defense orchestrator |
+| 8 | `ParameterSpace` | 79 | MCMC prior/bounds hub |
+| 9 | `CheckpointManager` | 79 | Fault-tolerance hub used by all strategies |
+| 10 | `AntiDegeneracyConfig` | 72 | Companion config to controller |
+
+`NLSQWrapper` (betweenness centrality 0.203) is the single largest cross-community
+bridge in the graph — it connects large-dataset factories, memory/recovery, results,
+and every execution strategy.
 
 ### External Dependencies
 
