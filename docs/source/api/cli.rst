@@ -36,7 +36,7 @@ runs NLSQ and/or CMC fitting, and writes results to the output directory.
 
 .. code-block:: text
 
-   usage: homodyne [--config CONFIG] [--method {nlsq,cmc}]
+   usage: homodyne [--config CONFIG] [--method {nlsq,cmc,both}]
                    [--output-dir DIR] [--nlsq-result DIR]
                    [--static-mode | --laminar-flow]
                    [--plot-experimental-data | --plot-simulated-data]
@@ -56,8 +56,9 @@ Arguments
      - Description
    * - ``--config FILE``
      - Path to YAML configuration file (default: ``homodyne_config.yaml``)
-   * - ``--method {nlsq,cmc}``
-     - Optimisation method. ``nlsq`` = trust-region NLSQ (default); ``cmc`` = Consensus Monte Carlo
+   * - ``--method {nlsq,cmc,both}``
+     - Optimisation method. ``nlsq`` = trust-region NLSQ (default); ``cmc`` = Consensus Monte Carlo;
+       ``both`` = sequential NLSQ then CMC with automatic warm-start (recommended full pipeline)
    * - ``--output-dir DIR``
      - Output directory for results (default: ``./results``)
    * - ``--nlsq-result DIR``
@@ -94,7 +95,10 @@ Usage Examples
    # Run NLSQ explicitly
    homodyne --method nlsq --config config.yaml --output-dir results/
 
-   # Run CMC with NLSQ warm-start (recommended two-step workflow)
+   # Run NLSQ then CMC in one command (recommended full pipeline)
+   homodyne --method both --config config.yaml --output-dir results/
+
+   # Run CMC with NLSQ warm-start (manual two-step equivalent)
    homodyne --method nlsq --config config.yaml --output-dir results/
    homodyne --method cmc  --config config.yaml \
             --nlsq-result results/ \

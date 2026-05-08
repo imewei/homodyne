@@ -7,6 +7,56 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
+## [Unreleased] — post-2.22.9
+
+### CMC Reparameterization: D_offset_ratio (v2.23.0)
+
+Replace `D_offset_frac` with `D_offset_ratio` in CMC sampling space. The old
+transform `D_offset / (D_ref + D_offset)` had a singularity at
+`D_offset = -D_ref` and was restricted to `[0, 0.5]`, silently clipping
+warm-starts for jammed/arrested systems where `D_offset < 0`.
+
+**Changes:**
+
+- **fix(cmc)**: Replace `D_offset_frac` with `D_offset_ratio` reparameterization
+  (`reparameterization.py`, `model.py`, `sampler.py`)
+
+  - New forward transform: `D_offset_ratio = D_offset / D_ref` (linear, no singularity)
+  - Prior: `TruncatedNormal(low=-1+ε)` enforces `D_ref + D_offset > 0` at `t_ref`
+  - Inverse: `D_offset = D_ref × ratio` (exact, no clipping required)
+  - Warm-start key corrected: sampler now writes `D_offset_ratio` instead of dead
+    key `D_offset_frac` (NLSQ D_offset warm-start was silently discarded before)
+  - Uncertainty: full delta-method propagation `Var(ratio) = (σ_D/D_ref)² + ratio²·Var(log_D_ref)`
+  - Legacy `D_total / D_offset_frac` backward-compat path preserved
+
+- **fix(cmc)**: Correct `out_of_core.py` DOF expansion for constant per-angle mode
+
+- **fix(cmc)**: Correct BFMI formula in `mcmc_diagnostics.py`
+  (was `Var(diff)`, now `mean(diff²)` per Betancourt 2016)
+
+- **fix(cmc)**: Fix `validate_model_output()` `TracerBoolConversionError` under `jax.jit`
+
+### CLI: `--method both`
+
+Add `both` as a valid `--method` choice. Runs NLSQ then CMC sequentially in a
+single command, automatically passing the NLSQ result as a CMC warm-start.
+
+- **feat(cli)**: `--method both` sequential NLSQ → CMC pipeline
+  (`args_parser.py`, `config_handling.py`, `optimization_runner.py`)
+
+  - Does not overwrite `config["optimization"]["method"]` (CLI-only composite)
+  - CMC arguments (`--cmc-num-shards`, `--n-samples`, etc.) are honoured for the CMC phase
+
+- **feat(cli)**: `--filter` options for `homodyne-config` configuration generation
+
+### Fixes
+
+- **fix(types)**: Resolve mypy errors breaking CI
+
+- **build(repo)**: Track `uv.lock`; optimise `.gitignore`
+
+______________________________________________________________________
+
 ## [2.22.9] - 2026-03-25
 
 ### Shell Completion & Validation Fixes
