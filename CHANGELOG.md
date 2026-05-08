@@ -7,7 +7,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
-## [Unreleased] — post-2.22.9
+## [2.23.0] — 2026-05-08
 
 ### CMC Reparameterization: D_offset_ratio (v2.23.0)
 
