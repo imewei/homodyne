@@ -113,7 +113,7 @@ logging.getLogger("jax._src.compiler").setLevel(logging.ERROR)
 # Version handling
 try:
     from homodyne._version import __version__
-except ImportError:
+except ImportError:  # pragma: no cover
     __version__ = "2.23.0"
 
 # ---------------------------------------------------------------------------

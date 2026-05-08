@@ -19,7 +19,7 @@ try:
 
     # Strip any .post or +dirty suffixes to get the clean base version
     version = _pkg_version.split(".post")[0].split("+")[0]
-except ImportError:
+except ImportError:  # pragma: no cover
     version = "2.23.0"
 
 release = version
