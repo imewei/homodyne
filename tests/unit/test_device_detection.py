@@ -23,6 +23,19 @@ if HAS_CPU_MODULE:
 class TestDeviceConfiguration:
     """Tests for device configuration functions."""
 
+    @pytest.fixture(autouse=True)
+    def isolate_xla_flags(self, monkeypatch):
+        """Restore XLA_FLAGS after each test so configure_optimal_device()
+        side-effects don't bleed into worker-pool or CLI subprocess tests."""
+        import os
+
+        original = os.environ.get("XLA_FLAGS")
+        yield
+        if original is None:
+            monkeypatch.delenv("XLA_FLAGS", raising=False)
+        else:
+            monkeypatch.setenv("XLA_FLAGS", original)
+
     def test_configure_optimal_device_returns_dict(self):
         """Test that configure_optimal_device returns a configuration dict."""
         config = configure_optimal_device()

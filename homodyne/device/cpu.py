@@ -322,7 +322,8 @@ def _configure_jax_cpu(
                     "--xla_cpu_enable_fast_math=true",
                     "--xla_cpu_fast_math_honor_nans=true",
                     "--xla_cpu_fast_math_honor_infs=true",
-                    "--xla_cpu_enable_xla_runtime=false",
+                    # --xla_cpu_enable_xla_runtime removed: dropped in JAX 0.8+,
+                    # now causes FATAL parse error from parse_flags_from_env.cc.
                 ]
             )
             jax_config["optimizations"] = "avx512_enabled"
