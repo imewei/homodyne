@@ -7,6 +7,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
+## [2.23.1] — 2026-05-08
+
+### Fixes
+
+- **fix(xla)**: Remove deprecated `--xla_cpu_enable_xla_runtime` flag (dropped in JAX 0.8+)
+- **fix(coverage)**: Resolve codecov patch coverage failure for version string diff
+
+______________________________________________________________________
+
 ## [2.23.0] — 2026-05-08
 
 ### CMC Reparameterization: D_offset_ratio (v2.23.0)
