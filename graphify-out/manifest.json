@@ -1,7 +1,7 @@
 {
   "/home/wei/Documents/GitHub/homodyne/docs/source/conf.py": {
-    "mtime": 1778202505.5070322,
-    "hash": "fa88b793bd365f4525fc11d5a0e39b6b"
+    "mtime": 1778212808.716535,
+    "hash": "8b2a9e1289ce4dac77769cda4771b063"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/source/_build/html/_static/scripts/furo.js": {
     "mtime": 1772594430.3276901,
@@ -24,12 +24,12 @@
     "hash": "56d7fc11ffd04ec04141a5e1272270ad"
   },
   "/home/wei/Documents/GitHub/homodyne/homodyne/__init__.py": {
-    "mtime": 1778202504.5130336,
-    "hash": "80f0178472c4e93c5aab489e4d764a62"
+    "mtime": 1778212806.4575326,
+    "hash": "2893bbb075c792c2f3641023e8d5d097"
   },
   "/home/wei/Documents/GitHub/homodyne/homodyne/_version.py": {
-    "mtime": 1778206335.721838,
-    "hash": "72dd900c120ef6389e95dd9f22e78fc4"
+    "mtime": 1779463325.2459671,
+    "hash": "d05d70aef5a513400adf8745cf4d0a77"
   },
   "/home/wei/Documents/GitHub/homodyne/homodyne/uninstall_scripts.py": {
     "mtime": 1773809890.847147,
@@ -348,8 +348,8 @@
     "hash": "e158bf1c15b71b597f5c90104229ea13"
   },
   "/home/wei/Documents/GitHub/homodyne/homodyne/data/__init__.py": {
-    "mtime": 1778198926.359587,
-    "hash": "74990156bc9eab5ff5a0aa183bc8a895"
+    "mtime": 1778212807.695534,
+    "hash": "baf270373a636c1322a61e448684bbe5"
   },
   "/home/wei/Documents/GitHub/homodyne/homodyne/data/types.py": {
     "mtime": 1767339443.657324,
@@ -368,8 +368,8 @@
     "hash": "091bf7c5724ba52f695aa66a62ddf6a1"
   },
   "/home/wei/Documents/GitHub/homodyne/homodyne/data/xpcs_loader.py": {
-    "mtime": 1772277085.4047914,
-    "hash": "73f7b10f32c4647846d103b9aaa2b0b6"
+    "mtime": 1779483950.2055006,
+    "hash": "c5256dbe41ed806e8efce8d54b75339e"
   },
   "/home/wei/Documents/GitHub/homodyne/homodyne/data/filtering_utils.py": {
     "mtime": 1772300900.2421467,
@@ -604,8 +604,8 @@
     "hash": "8547ababc4f66cd2afb51071a8df61b3"
   },
   "/home/wei/Documents/GitHub/homodyne/tests/__init__.py": {
-    "mtime": 1778199080.9060323,
-    "hash": "ecb8880bfbd71332f94c346f14999404"
+    "mtime": 1778212807.9765344,
+    "hash": "3f70953fb03b6c82545511c786e89e0b"
   },
   "/home/wei/Documents/GitHub/homodyne/tests/conftest.py": {
     "mtime": 1772546008.9647124,
@@ -1292,32 +1292,32 @@
     "hash": "c968cbdb42a40402b6690cdae0d158fc"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/architecture/cmc-fitting-architecture.md": {
-    "mtime": 1778199092.8349907,
-    "hash": "84aea9f9183c475e967c7ca5f8beb292"
+    "mtime": 1778212858.1725845,
+    "hash": "a92a76feaafe634514ed3b3ec29fe149"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/architecture/physical-model-architecture.md": {
-    "mtime": 1778199093.1169899,
-    "hash": "9f42f7a56c0dc485ff79f28440184dda"
+    "mtime": 1778212871.582596,
+    "hash": "25e0eb328e3d10837cb5898cd4c66f1f"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/architecture/data-handler-architecture.md": {
-    "mtime": 1778199092.3949924,
-    "hash": "157a7981bee9220feebbb3aeea6c385c"
+    "mtime": 1778212872.4465969,
+    "hash": "d00ca47dbb39269814035e9c9b3685b6"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/architecture/homodyne-architecture-overview.md": {
-    "mtime": 1778199092.1689932,
-    "hash": "a8192bc01a3ac60989018f9c37dbe91a"
+    "mtime": 1778212852.5705795,
+    "hash": "13181be9bd864e2fc48d9f1ce46ccebd"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/architecture/nlsq-fitting-architecture.md": {
-    "mtime": 1778199092.6289916,
-    "hash": "23026979adc1ab8fd9e59d96caeee70c"
+    "mtime": 1778212870.4465952,
+    "hash": "09f31ccd41b6b0e08d808f9b092d04d9"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/source/quickstart.rst": {
-    "mtime": 1778199079.1730382,
-    "hash": "a51264f10dacda5054dceb9612c9223a"
+    "mtime": 1778212821.464549,
+    "hash": "6441ef5c5fdd3ff832529e053d36a802"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/source/installation.rst": {
-    "mtime": 1778199077.833043,
-    "hash": "7ef78b40466f24c175644ccecc84e39d"
+    "mtime": 1778212820.7285483,
+    "hash": "baec8399b477ab005ce52b2dc164cf54"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/source/contributing.rst": {
     "mtime": 1771453458.8796027,
@@ -1444,24 +1444,24 @@
     "hash": "bee0a9bfe51bd67259aa6c8682274ea7"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/source/architecture/cmc-fitting-architecture.md": {
-    "mtime": 1778199092.8349907,
-    "hash": "84aea9f9183c475e967c7ca5f8beb292"
+    "mtime": 1778212858.1725845,
+    "hash": "a92a76feaafe634514ed3b3ec29fe149"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/source/architecture/physical-model-architecture.md": {
-    "mtime": 1778199093.1169899,
-    "hash": "9f42f7a56c0dc485ff79f28440184dda"
+    "mtime": 1778212871.582596,
+    "hash": "25e0eb328e3d10837cb5898cd4c66f1f"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/source/architecture/data-handler-architecture.md": {
-    "mtime": 1778199092.3949924,
-    "hash": "157a7981bee9220feebbb3aeea6c385c"
+    "mtime": 1778212872.4465969,
+    "hash": "d00ca47dbb39269814035e9c9b3685b6"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/source/architecture/homodyne-architecture-overview.md": {
-    "mtime": 1778199092.1689932,
-    "hash": "a8192bc01a3ac60989018f9c37dbe91a"
+    "mtime": 1778212852.5705795,
+    "hash": "13181be9bd864e2fc48d9f1ce46ccebd"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/source/architecture/nlsq-fitting-architecture.md": {
-    "mtime": 1778199092.6289916,
-    "hash": "23026979adc1ab8fd9e59d96caeee70c"
+    "mtime": 1778212870.4465952,
+    "hash": "09f31ccd41b6b0e08d808f9b092d04d9"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/source/architecture/index.rst": {
     "mtime": 1772472654.8955889,
@@ -1608,12 +1608,12 @@
     "hash": "76832c3edac7c40e6e187d32ffa799df"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/source/configuration/options.rst": {
-    "mtime": 1778199080.0730352,
-    "hash": "81bc24c147ad2fe01faedcc395c77377"
+    "mtime": 1778212822.30755,
+    "hash": "dfe985dcf51cc9631a0be70556d21a15"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/source/configuration/templates.rst": {
-    "mtime": 1778199083.7320225,
-    "hash": "59987b2e73b21bd48a16232777968491"
+    "mtime": 1778212831.3635592,
+    "hash": "c28facc4719ce2859b642bd92d88819b"
   },
   "/home/wei/Documents/GitHub/homodyne/docs/source/configuration/index.rst": {
     "mtime": 1771814910.8825421,
@@ -1672,16 +1672,16 @@
     "hash": "b9543bf1d6c40ca6979ae7d068263dd7"
   },
   "/home/wei/Documents/GitHub/homodyne/homodyne/config/templates/homodyne_laminar_flow.yaml": {
-    "mtime": 1778199085.0510178,
-    "hash": "1af10c4e5a65a5e0ba528b860cc7b906"
+    "mtime": 1778212832.5035603,
+    "hash": "11f9a30d27b3bdb3ef3c408d61964601"
   },
   "/home/wei/Documents/GitHub/homodyne/homodyne/config/templates/homodyne_static.yaml": {
-    "mtime": 1778199086.3840132,
-    "hash": "7e86b65f1ead387af3542c247b7d676a"
+    "mtime": 1778212833.2865613,
+    "hash": "2bc52ebe5f2505aec12753fd71d794dc"
   },
   "/home/wei/Documents/GitHub/homodyne/homodyne/config/templates/homodyne_master_template.yaml": {
-    "mtime": 1778199087.28501,
-    "hash": "e64b8fe967907a9d45352e4a709465ee"
+    "mtime": 1778212834.0025618,
+    "hash": "9856c621e000ae0a0f2d365d9ce17a62"
   },
   "/home/wei/Documents/GitHub/homodyne/homodyne/runtime/README.md": {
     "mtime": 1765055324.1976461,

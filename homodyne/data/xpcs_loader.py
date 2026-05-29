@@ -749,20 +749,49 @@ class XPCSDataLoader:
         Returns 1D time arrays for both NLSQ (regenerates meshgrids) and CMC (uses 1D).
         Only supports new 1D array cache format. Old 2D caches must be regenerated.
         """
-        with np.load(cache_path, allow_pickle=True, mmap_mode="r") as data:
-            # Validate q-vector compatibility if metadata exists
-            if "cache_metadata" in data:
-                metadata = data["cache_metadata"].item()  # Convert numpy scalar to dict
+        with np.load(cache_path, allow_pickle=False, mmap_mode="r") as data:
+            if "cache_metadata_json" in data:
+                metadata_text = str(np.asarray(data["cache_metadata_json"]).item())
+                try:
+                    metadata = json.loads(metadata_text)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(
+                        f"Cache {cache_path} has malformed cache_metadata_json "
+                        f"(not valid JSON): {exc}"
+                    ) from exc
+                if not isinstance(metadata, dict):
+                    raise ValueError(
+                        f"Cache {cache_path}: cache_metadata_json must encode a "
+                        f"JSON object, got {type(metadata).__name__}"
+                    )
                 self._validate_cache_q_vector(metadata)
                 logger.debug(f"Cache metadata validation passed: {metadata}")
+            elif "cache_metadata" in data.files:
+                # Legacy object-array metadata format is refused for safety:
+                # object deserialization from a config-controlled path allows
+                # arbitrary code execution. Delete the cache file and regenerate;
+                # the new format stores metadata as JSON under 'cache_metadata_json'.
+                raise ValueError(
+                    f"Cache {cache_path} uses the legacy 'cache_metadata' "
+                    "object-array format (unsafe object deserialization). "
+                    "Delete the cache file and regenerate with current code."
+                )
 
             # Extract correlation data — np.array() copies from mmap before
-            # the context manager closes the file (prevents dangling mmap views)
-            c2_exp = np.array(data["c2_exp"])
-
-            # Load 1D time arrays (only 1D format supported)
-            t1 = np.array(data["t1"])
-            t2 = np.array(data["t2"])
+            # the context manager closes the file (prevents dangling mmap views).
+            # allow_pickle=False causes object-dtype arrays to raise here; we
+            # surface that as a clearer error rather than letting numpy leak it.
+            try:
+                c2_exp = np.array(data["c2_exp"])
+                t1 = np.array(data["t1"])
+                t2 = np.array(data["t2"])
+                wavevector_q_list = np.array(data["wavevector_q_list"])
+                phi_angles_list = np.array(data["phi_angles_list"])
+            except ValueError as exc:
+                raise ValueError(
+                    f"Cache {cache_path} contains an object-dtype array under "
+                    "a data key. Delete the cache file and regenerate."
+                ) from exc
 
             # Reject old 2D meshgrid cache format
             if t1.ndim == 2 or t2.ndim == 2:
@@ -773,8 +802,8 @@ class XPCSDataLoader:
                 )
 
             return {
-                "wavevector_q_list": np.array(data["wavevector_q_list"]),
-                "phi_angles_list": np.array(data["phi_angles_list"]),
+                "wavevector_q_list": wavevector_q_list,
+                "phi_angles_list": phi_angles_list,
                 "t1": t1,  # 1D array: [0, dt, 2*dt, ...]
                 "t2": t2,  # 1D array: [0, dt, 2*dt, ...]
                 "c2_exp": c2_exp,
@@ -1663,7 +1692,9 @@ class XPCSDataLoader:
             "selective_q_caching": True,
         }
 
-        cache_data["cache_metadata"] = cache_metadata
+        # Metadata is stored as a JSON-encoded scalar (not via object serialization)
+        # so the loader can read it with allow_pickle=False.
+        cache_data["cache_metadata_json"] = np.asarray(json.dumps(cache_metadata))
 
         # Save with compression if specified
         if self.exp_config.get("cache_compression", True):
