@@ -114,7 +114,7 @@ logging.getLogger("jax._src.compiler").setLevel(logging.ERROR)
 try:
     from homodyne._version import __version__
 except ImportError:  # pragma: no cover
-    __version__ = "2.23.1"
+    __version__ = "2.23.2"
 
 # ---------------------------------------------------------------------------
 # Lazy public API

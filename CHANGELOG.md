@@ -7,6 +7,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ______________________________________________________________________
 
+## [2.23.2] — 2026-05-30
+
+### Security
+
+- **fix(data)**: Replace legacy object-array cache metadata with a JSON-encoded
+  scalar (`cache_metadata_json`) and enforce `allow_pickle=False` during NPZ
+  cache loading. This prevents arbitrary object deserialization from cache files
+  at config-controlled paths. Caches written in the old `cache_metadata`
+  object-array format are now refused with a clear error and must be
+  regenerated; object-dtype data arrays are likewise rejected with a clearer
+  message instead of being unpickled.
+
+______________________________________________________________________
+
 ## [2.23.1] — 2026-05-08
 
 ### Fixes

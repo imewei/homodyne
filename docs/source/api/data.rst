@@ -85,6 +85,15 @@ Set ``use_cache=False`` in the YAML config to disable caching:
      use_cache: false
      cache_dir: null    # defaults to same directory as HDF5 file
 
+.. note::
+
+   Caches are loaded with ``allow_pickle=False`` (since v2.23.2). Cache metadata
+   is stored as a JSON-encoded scalar (``cache_metadata_json``) and parsed with
+   ``json.loads()`` rather than unpickled, so a cache file at a config-controlled
+   path cannot trigger arbitrary object deserialization. Legacy caches that used
+   the older ``cache_metadata`` object-array format are rejected with a clear
+   error — delete the stale ``.npz`` and it regenerates on the next load.
+
 ----
 
 Data Validation

@@ -3,7 +3,7 @@
 Complete documentation of the data loading, configuration, and result writing systems in
 homodyne.
 
-**Version:** 2.23.1 **Last Updated:** May 2026
+**Version:** 2.23.2 **Last Updated:** May 2026
 
 ## Table of Contents
 
@@ -683,8 +683,9 @@ np.savez_compressed(cache_path,
     t1=...,                   # (n_time,)
     t2=...,                   # (n_time,)
     c2_exp=...,               # (n_phi, n_time, n_time)
-    # Metadata dict stored as cache_metadata array:
-    cache_metadata=...,       # dict with keys:
+    # Metadata stored as a JSON-encoded scalar (NOT object serialization):
+    cache_metadata_json=np.asarray(json.dumps(cache_metadata)),
+                              # JSON object with keys:
                               #   config_wavevector_q, actual_wavevector_q,
                               #   q_variance, q_count,
                               #   start_frame, end_frame,
@@ -693,6 +694,28 @@ np.savez_compressed(cache_path,
 )
 # Note: q_vector_hash and dt are NOT stored in the cache NPZ.
 ```
+
+#### Safe Cache Loading (since v2.23.2)
+
+`_load_from_cache()` opens every cache with **`allow_pickle=False`**. Cache
+files live at config-controlled paths, so deserializing arbitrary Python
+objects from them is a code-execution risk. Metadata is therefore read from the
+JSON-encoded `cache_metadata_json` scalar and parsed with `json.loads()`, never
+unpickled.
+
+```
+_load_from_cache(cache_path)
+    ├─ np.load(..., allow_pickle=False)              # refuses object arrays
+    ├─ "cache_metadata_json" present?
+    │     ├─ json.loads(scalar) → dict               # malformed JSON → ValueError
+    │     └─ _validate_cache_q_vector(metadata)
+    ├─ legacy "cache_metadata" object array present?  → ValueError (refuse + regenerate)
+    └─ any data key is object-dtype?                  → ValueError (refuse + regenerate)
+```
+
+Pre-v2.23.2 caches used a `cache_metadata` object array; they are now
+**rejected with a clear error** rather than loaded. Delete the stale `.npz`
+and it is regenerated transparently on the next load.
 
 ______________________________________________________________________
 
