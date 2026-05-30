@@ -361,3 +361,7 @@ graphify-out/.graphify_*.json
 graphify-out/.graphify_*.txt
 graphify-out/.obsidian/
 graphify-out/_COMMUNITY_*.md
+
+# MCP & Codecov Configurations
+.mcp.json
+codecov.yml
